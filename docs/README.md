@@ -33,6 +33,7 @@ together.
 | `business_model.md` | Packaging, pricing hypotheses, customer segments, and distribution. |
 | `roadmap.md` | Phases, milestones, sequencing, and proof points. |
 | `founder_notes.md` | Distilled founder/product decisions from conversations. |
+| `development.md` | How to run the current app/runtime skeleton and what is not wired yet. |
 
 ## Update Rules
 

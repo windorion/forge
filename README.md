@@ -466,6 +466,8 @@ Detailed documents live under `docs/`:
   too early.
 - `docs/founder_notes.md`: distilled founder decisions and collaboration
   pattern.
+- `docs/development.md`: how to run the current app/runtime skeleton and what
+  is not wired yet.
 
 Agent-specific repository instructions live in `AGENTS.md`.
 
@@ -722,6 +724,41 @@ Next:
 - Start the Phase 1/2 implementation: SwiftUI app shell plus local TypeScript
   runtime skeleton.
 
+### 2026-07-04 04:04:01 CST +0800
+
+Conversation summary:
+
+- User said the basic preparation was done and asked about the next step for
+  writing code.
+
+Done:
+
+- Started Phase 1/2 implementation.
+- Added a SwiftPM-based SwiftUI macOS app shell named `ForgeApp`.
+- Added a task-centered workspace UI with task list, planner, agent status,
+  runtime events, review panel, and runtime controls.
+- Added a local TypeScript runtime skeleton under `runtime/`.
+- Implemented runtime endpoints: `GET /health`, `GET /tasks`, `POST /tasks`,
+  and `GET /events` for Server-Sent Events.
+- Added `docs/development.md` and runtime run instructions.
+- Verified `swift build` succeeds.
+- Verified `npm run check` and `npm run build` succeed for the runtime.
+- Verified runtime `/health` and `POST /tasks` responses locally.
+
+Not done:
+
+- Did not wire the SwiftUI app to consume the SSE event stream yet.
+- Did not add SQLite persistence.
+- Did not add repository scanning, LLM calls, or file editing tools.
+- Did not add a license yet.
+
+Next:
+
+- Wire runtime event streaming into the SwiftUI app.
+- Add SQLite-backed task persistence to replace in-memory runtime tasks.
+- Add repository picker and workspace records.
+- Decide and add the initial license strategy.
+
 ## Decision Log
 
 ### 2026-07-04
@@ -744,6 +781,8 @@ Next:
   be open-core or service-led rather than relying on goodwill. License remains
   undecided.
 - Public GitHub repository created at `https://github.com/windorion/forge`.
+- First implementation slice started with a SwiftUI app shell and local
+  TypeScript runtime skeleton.
 
 ## Open Questions
 
