@@ -853,6 +853,35 @@ Next:
   needed.
 - Continue with runtime auto-start, SSE consumption, or SQLite persistence.
 
+### 2026-07-04 04:30:00 CST +0800
+
+Conversation summary:
+
+- User noted that the current product still does not feel like an agent and
+  asked whether that is because no model has been connected yet.
+
+Done:
+
+- Clarified that the current implementation is still an app/runtime skeleton.
+- Identified that the missing "agent feeling" comes from the lack of LLM
+  provider integration, tool calling, repository context, planning,
+  execution, validation, and visible agent progress.
+
+Not done:
+
+- Did not change product code in this turn.
+- Did not connect an LLM provider yet.
+- Did not implement the agent loop yet.
+
+Next:
+
+- Build the first true agent loop: task input, context builder, model call,
+  tool proposal, visible plan, and human review gate.
+- Add a fake/local planner first if needed, then replace it with a real model
+  provider.
+- Make the UI show observable agent behavior rather than only static task
+  panels.
+
 ## Decision Log
 
 ### 2026-07-04
