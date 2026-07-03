@@ -695,6 +695,33 @@ Next:
 - Decide the license strategy after the first working vertical slice, or sooner
   if public contributions begin.
 
+### 2026-07-04 03:54:55 CST +0800
+
+Conversation summary:
+
+- User confirmed GitHub login was complete and asked to configure the remote
+  repository and push the project.
+
+Done:
+
+- Verified GitHub CLI authentication outside the sandbox.
+- Confirmed `windorion/forge` did not already exist.
+- Created the public GitHub repository `windorion/forge`.
+- Added `origin` as `https://github.com/windorion/forge.git`.
+- Pushed local `main` to GitHub.
+
+Not done:
+
+- Did not add a license yet.
+- Did not scaffold the SwiftUI app or TypeScript runtime yet.
+
+Next:
+
+- Decide whether to add a temporary "all rights reserved" notice, Apache 2.0,
+  AGPL, or another license.
+- Start the Phase 1/2 implementation: SwiftUI app shell plus local TypeScript
+  runtime skeleton.
+
 ## Decision Log
 
 ### 2026-07-04
@@ -716,6 +743,7 @@ Next:
 - Forge can be public and possibly open source, but the commercial model should
   be open-core or service-led rather than relying on goodwill. License remains
   undecided.
+- Public GitHub repository created at `https://github.com/windorion/forge`.
 
 ## Open Questions
 
