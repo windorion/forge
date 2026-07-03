@@ -25,6 +25,9 @@ Runtime endpoint:
 http://127.0.0.1:17373
 ```
 
+Opening that URL in a browser shows a small runtime status page. The full app
+UI still runs through the SwiftUI app.
+
 ## Run macOS App
 
 From the repository root:

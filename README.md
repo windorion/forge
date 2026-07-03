@@ -759,6 +759,36 @@ Next:
 - Add repository picker and workspace records.
 - Decide and add the initial license strategy.
 
+### 2026-07-04 04:14:57 CST +0800
+
+Conversation summary:
+
+- User reported that opening `http://127.0.0.1:17373/` in the in-app browser
+  showed "site can't be reached."
+
+Done:
+
+- Started the local Forge runtime on `127.0.0.1:17373`.
+- Verified `GET /health` returns `200 OK`.
+- Found that root path `/` returned `404` even when the runtime was healthy.
+- Added a browser-friendly root status page for `GET /`.
+- Updated runtime and development docs to mention the root status page.
+- Verified `GET /` and `GET /health` both return `200 OK`.
+
+Not done:
+
+- Did not start the SwiftUI app in this turn.
+- Did not wire SSE into the SwiftUI app.
+- Did not add SQLite persistence.
+
+Next:
+
+- Keep the runtime running while testing the browser page.
+- Run `swift run ForgeApp` in another terminal to test the app shell against the
+  running runtime.
+- Next implementation step remains app-side SSE consumption or SQLite task
+  persistence.
+
 ## Decision Log
 
 ### 2026-07-04

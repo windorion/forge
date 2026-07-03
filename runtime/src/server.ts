@@ -28,6 +28,11 @@ const server = createServer(async (request, response) => {
   const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
 
   try {
+    if (request.method === "GET" && url.pathname === "/") {
+      writeHtml(response, 200, renderRuntimeHome());
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === "/health") {
       writeJson(response, 200, {
         ok: true,
@@ -148,6 +153,69 @@ function applyCors(response: ServerResponse): void {
 function writeJson(response: ServerResponse, status: number, body: unknown): void {
   response.writeHead(status, { "Content-Type": "application/json" });
   response.end(JSON.stringify(body, null, 2));
+}
+
+function writeHtml(response: ServerResponse, status: number, body: string): void {
+  response.writeHead(status, { "Content-Type": "text/html; charset=utf-8" });
+  response.end(body);
+}
+
+function renderRuntimeHome(): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Forge Runtime</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f6f5f2;
+      color: #171717;
+    }
+    main {
+      max-width: 760px;
+      margin: 72px auto;
+      padding: 0 28px;
+    }
+    h1 {
+      font-size: 34px;
+      margin-bottom: 8px;
+      letter-spacing: 0;
+    }
+    p {
+      color: #555;
+      line-height: 1.6;
+    }
+    code {
+      background: #e9e6df;
+      border-radius: 6px;
+      padding: 2px 6px;
+    }
+    ul {
+      margin-top: 24px;
+      padding-left: 20px;
+      line-height: 1.8;
+    }
+    a {
+      color: #1756a9;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Forge Runtime is running</h1>
+    <p>This local service powers the Forge macOS app. The full product UI runs through <code>swift run ForgeApp</code>.</p>
+    <ul>
+      <li><a href="/health">GET /health</a></li>
+      <li><a href="/tasks">GET /tasks</a></li>
+      <li><code>POST /tasks</code></li>
+      <li><code>GET /events</code></li>
+    </ul>
+  </main>
+</body>
+</html>`;
 }
 
 async function readJson<T>(request: IncomingMessage): Promise<T> {

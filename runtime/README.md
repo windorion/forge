@@ -4,6 +4,7 @@ The runtime is the local agent execution process for Forge.
 
 This first slice is intentionally small:
 
+- `GET /`
 - `GET /health`
 - `GET /tasks`
 - `POST /tasks`
