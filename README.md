@@ -827,6 +827,32 @@ Next:
   terminal processes.
 - Continue with SQLite persistence or SSE event consumption.
 
+### 2026-07-04 04:23:56 CST +0800
+
+Conversation summary:
+
+- User asked to stop the local services and commit the current state.
+
+Done:
+
+- Stopped the running Forge runtime process.
+- Closed the running Forge macOS app process.
+- Verified `127.0.0.1:17373` no longer responds to `/health`.
+- Confirmed the working tree had no code changes before adding this log.
+
+Not done:
+
+- Did not make product or code changes in this turn.
+- Did not restart the runtime or app after stopping them.
+
+Next:
+
+- Restart runtime with `cd runtime && npm run dev` when backend testing is
+  needed.
+- Launch the native app with `./script/build_and_run.sh` when UI testing is
+  needed.
+- Continue with runtime auto-start, SSE consumption, or SQLite persistence.
+
 ## Decision Log
 
 ### 2026-07-04
