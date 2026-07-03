@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct ForgeApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var workspace = WorkspaceModel()
 
     var body: some Scene {

@@ -30,7 +30,15 @@ UI still runs through the SwiftUI app.
 
 ## Run macOS App
 
-From the repository root:
+From the repository root, prefer the app bundle runner:
+
+```bash
+./script/build_and_run.sh
+```
+
+This builds `dist/Forge.app` and launches it as a native macOS app.
+
+You can also build the SwiftPM target directly:
 
 ```bash
 swift run ForgeApp

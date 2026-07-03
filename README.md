@@ -471,6 +471,9 @@ Detailed documents live under `docs/`:
 
 Agent-specific repository instructions live in `AGENTS.md`.
 
+The local macOS run entrypoint is `./script/build_and_run.sh`. It builds the
+SwiftPM target, stages `dist/Forge.app`, and launches the native app bundle.
+
 ## Implementation Roadmap
 
 ### Phase 0: Foundation
@@ -789,6 +792,41 @@ Next:
 - Next implementation step remains app-side SSE consumption or SQLite task
   persistence.
 
+### 2026-07-04 04:19:44 CST +0800
+
+Conversation summary:
+
+- User asked why `http://127.0.0.1:17373/` was not a Mac app and why the page
+  preview did not show the product UI.
+
+Done:
+
+- Clarified that the browser URL is only the local runtime service, not the
+  SwiftUI macOS app.
+- Added `script/build_and_run.sh` as the project-local macOS build/run
+  entrypoint.
+- Added `.codex/environments/environment.toml` so Codex can expose a Run action
+  for the native app.
+- Updated development docs to prefer `./script/build_and_run.sh`.
+- Added app activation logic so the SwiftUI window is more likely to come to
+  the foreground when launched as `dist/Forge.app`.
+- Verified the app builds and launches through `./script/build_and_run.sh
+  --verify`.
+
+Not done:
+
+- Did not replace the runtime status page with the main product UI.
+- Did not bundle or auto-start the runtime from inside the app yet.
+- Did not add persistence or real agent execution.
+
+Next:
+
+- Keep using `./script/build_and_run.sh` or the Codex Run action to launch the
+  native app.
+- Add runtime auto-start from the macOS app so users do not need two separate
+  terminal processes.
+- Continue with SQLite persistence or SSE event consumption.
+
 ## Decision Log
 
 ### 2026-07-04
@@ -813,6 +851,9 @@ Next:
 - Public GitHub repository created at `https://github.com/windorion/forge`.
 - First implementation slice started with a SwiftUI app shell and local
   TypeScript runtime skeleton.
+- Native macOS app launch should go through `./script/build_and_run.sh`, which
+  builds and opens `dist/Forge.app`; `127.0.0.1:17373` is only the runtime
+  service.
 
 ## Open Questions
 
