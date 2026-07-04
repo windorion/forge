@@ -13,9 +13,9 @@ workspace and make agent work resumable and auditable.
 The first runtime persistence slice stores task snapshots in local SQLite at
 `.forge/forge.sqlite` by default. The current `tasks` table records basic task
 index fields and a full JSON payload so the app can recover task state,
-events, tool calls, context files, approval history, execution proposals, edit
-proposals, edit proposal validations, edit proposal decisions, and review
-state after a runtime restart.
+events, tool calls, validation runs, context files, approval history,
+execution proposals, edit proposals, edit proposal validations, edit proposal
+decisions, and review state after a runtime restart.
 
 This is intentionally smaller than the full conceptual schema below. Future
 migrations should split runs, messages, tool calls, commands, file changes,
@@ -109,6 +109,35 @@ Fields:
 - exit code
 - stdout path or text
 - stderr path or text
+- started at
+- ended at
+
+### Validation Runs
+
+Stores post-apply validation attempts.
+
+Fields:
+
+- id
+- task id
+- trigger
+- status
+- summary
+- started at
+- ended at
+
+### Validation Command Results
+
+Stores command-level validation outcomes.
+
+Fields:
+
+- id
+- validation run id
+- name
+- command
+- status
+- output summary
 - started at
 - ended at
 

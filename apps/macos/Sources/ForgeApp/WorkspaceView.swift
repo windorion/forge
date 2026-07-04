@@ -537,6 +537,50 @@ private struct ReviewPanel: View {
                     }
                 }
 
+                if !task.validationRuns.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Validation Runs")
+                            .font(.headline)
+
+                        ForEach(task.validationRuns.reversed()) { run in
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Label("\(run.trigger) / \(run.status)", systemImage: statusSystemImage(run.status))
+                                        .font(.subheadline.weight(.semibold))
+                                    Spacer()
+                                    Text(run.endedAt ?? run.startedAt)
+                                        .font(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                }
+
+                                Text(run.summary)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+
+                                ForEach(run.commands) { command in
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Label("\(command.name) / \(command.status)", systemImage: statusSystemImage(command.status))
+                                            .font(.caption.weight(.semibold))
+                                        Text(command.command)
+                                            .font(.caption2.monospaced())
+                                            .foregroundStyle(.secondary)
+                                        Text(command.outputSummary)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .padding(8)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(.quaternary)
+                                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                                }
+                            }
+                            .padding(10)
+                            .background(.background)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                    }
+                }
+
                 if !task.approvals.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Approval History")
@@ -605,6 +649,14 @@ private struct ReviewPanel: View {
                             .frame(maxWidth: .infinity)
                     }
                     .disabled(!canRejectEditProposal)
+
+                    Button {
+                        workspace.runValidation(for: task)
+                    } label: {
+                        Label(runValidationButtonTitle, systemImage: "play.circle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .disabled(!canRunValidation)
                 }
 
                 Text("Task ID: \(task.id)")
@@ -688,6 +740,10 @@ private struct ReviewPanel: View {
         workspace.isRejectingEditProposal(taskID: task.id)
     }
 
+    private var isRunningValidation: Bool {
+        workspace.isRunningValidation(taskID: task.id)
+    }
+
     private var canApplyEditProposal: Bool {
         task.editProposal?.status == "Proposed" &&
             validationAllowsApply &&
@@ -728,13 +784,46 @@ private struct ReviewPanel: View {
         return "Request Changes"
     }
 
+    private var canRunValidation: Bool {
+        task.editProposal?.status == "Applied" && task.status != "Testing" && !isRunningValidation
+    }
+
+    private var runValidationButtonTitle: String {
+        if isRunningValidation {
+            return "Running Validation"
+        }
+
+        if !task.validationRuns.isEmpty {
+            return "Run Validation Again"
+        }
+
+        return "Run Validation"
+    }
+
     private func validationSystemImage(_ status: String) -> String {
         status == "Ready" ? "checkmark.shield" : "exclamationmark.triangle"
+    }
+
+    private func statusSystemImage(_ status: String) -> String {
+        switch status {
+        case "Passed":
+            return "checkmark.circle"
+        case "Failed", "Blocked":
+            return "exclamationmark.triangle"
+        case "Running":
+            return "hourglass"
+        default:
+            return "circle"
+        }
     }
 
     private var emptyChangedFilesMessage: String {
         if task.status == "Running" {
             return "No file changes yet. Controlled execution is open."
+        }
+
+        if task.status == "Testing" {
+            return "Changes are being validated."
         }
 
         if task.status == "Human Review" {

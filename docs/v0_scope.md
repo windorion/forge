@@ -51,6 +51,7 @@ The product should show:
 - safe edit proposals
 - edit proposal validation
 - explicit apply/reject actions for edit proposals
+- post-apply validation runs
 - no automatic file changes
 
 ## V0 Not Included
@@ -82,6 +83,8 @@ V0 is complete when:
   Markdown append operation.
 - A generated edit proposal can be validated before apply, and blocked if the
   workspace no longer matches the safe append boundary.
+- Applying an edit proposal runs controlled built-in validation before the task
+  is marked completed.
 
 ## V0 Next After Completion
 
@@ -100,4 +103,5 @@ remote or local LLM providers are still future work.
 Safe edit proposals have started: Forge can create a proposed diff preview and
 return the task to human review without mutating files. A proposal can now be
 validated, rejected without touching files, or applied through a narrow
-append-text operation against existing Markdown files.
+append-text operation against existing Markdown files. Applied proposals now
+run built-in validation before completion.

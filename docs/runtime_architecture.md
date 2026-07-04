@@ -130,6 +130,19 @@ The v0 implementation only supports append-text edits to existing Markdown
 files in `README.md` or `docs/`, revalidates before writing, and records
 rejected proposals without touching files.
 
+### Validation Runner
+
+Runs controlled post-apply validation and records command-level results. The
+v0 runner uses built-in `forge:` commands rather than arbitrary shell commands:
+
+- `forge:changed-files-exist`
+- `forge:applied-proposal-recorded`
+- `forge:ready-validation-retained`
+
+Tasks enter `Testing` after apply and only move to `Completed` after
+validation passes. Failed validation moves the task to `Failed` with command
+results preserved for review.
+
 ### Permission Manager
 
 Decides whether an action can run automatically or requires user approval.

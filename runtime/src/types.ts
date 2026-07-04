@@ -112,6 +112,26 @@ export interface ToolCall {
   endedAt?: string;
 }
 
+export interface ValidationCommandResult {
+  id: string;
+  name: string;
+  command: string;
+  status: "Running" | "Passed" | "Failed";
+  outputSummary: string;
+  startedAt: string;
+  endedAt?: string;
+}
+
+export interface ValidationRun {
+  id: string;
+  trigger: "PostApply" | "Manual";
+  status: "Running" | "Passed" | "Failed";
+  summary: string;
+  startedAt: string;
+  endedAt?: string;
+  commands: ValidationCommandResult[];
+}
+
 export interface ContextFile {
   path: string;
   summary: string;
@@ -130,6 +150,7 @@ export interface ForgeTask {
   events: RuntimeEvent[];
   approvals: ApprovalRecord[];
   toolCalls: ToolCall[];
+  validationRuns: ValidationRun[];
   contextFiles: ContextFile[];
   executionProposal?: ExecutionProposal;
   editProposal?: EditProposal;

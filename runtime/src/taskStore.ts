@@ -102,6 +102,7 @@ function parseTaskPayload(payload: unknown): ForgeTask {
   return {
     ...parsed,
     approvals: parsed.approvals ?? [],
+    validationRuns: parsed.validationRuns ?? [],
     executionProposal: parsed.executionProposal,
     editProposal: parsed.editProposal
   };

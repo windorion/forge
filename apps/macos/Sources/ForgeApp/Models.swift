@@ -13,6 +13,7 @@ struct ForgeTask: Identifiable, Codable, Hashable {
     var events: [RuntimeEvent]
     var approvals: [ApprovalRecord]
     var toolCalls: [ToolCall]
+    var validationRuns: [ValidationRun]
     var contextFiles: [ContextFile]
     var executionProposal: ExecutionProposal?
     var editProposal: EditProposal?
@@ -45,6 +46,7 @@ struct ForgeTask: Identifiable, Codable, Hashable {
         ],
         approvals: [],
         toolCalls: [],
+        validationRuns: [],
         contextFiles: [],
         executionProposal: nil,
         editProposal: nil,
@@ -90,6 +92,26 @@ struct ToolCall: Identifiable, Codable, Hashable {
     var outputSummary: String
     var startedAt: String
     var endedAt: String?
+}
+
+struct ValidationCommandResult: Identifiable, Codable, Hashable {
+    var id: String
+    var name: String
+    var command: String
+    var status: String
+    var outputSummary: String
+    var startedAt: String
+    var endedAt: String?
+}
+
+struct ValidationRun: Identifiable, Codable, Hashable {
+    var id: String
+    var trigger: String
+    var status: String
+    var summary: String
+    var startedAt: String
+    var endedAt: String?
+    var commands: [ValidationCommandResult]
 }
 
 struct ContextFile: Identifiable, Codable, Hashable {

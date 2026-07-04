@@ -1212,6 +1212,48 @@ Next:
 - Add proposal revision history for multiple attempts.
 - Add a concrete remote or local LLM provider implementation.
 
+### 2026-07-04 18:10:38 CST +0800
+
+Conversation summary:
+
+- User asked Codex to continue with a longer next task and use the remaining
+  work budget productively.
+
+Done:
+
+- Added post-apply validation runs to runtime and Swift task models.
+- Added `POST /tasks/:taskID/run-validation`.
+- Changed edit proposal apply flow so applied tasks enter `Testing`, run
+  controlled validation, and only become `Completed` after validation passes.
+- Added built-in validation commands:
+  `forge:changed-files-exist`, `forge:applied-proposal-recorded`, and
+  `forge:ready-validation-retained`.
+- Stored command-level validation results with trigger, status, output summary,
+  start time, and end time.
+- Added macOS Review panel UI for `Validation Runs` and a `Run Validation
+  Again` action after an applied proposal exists.
+- Updated runtime, development, security, database, edit proposal, runtime
+  architecture, and v0 scope docs.
+- Verified `npm run check`, `npm run build`, `swift build`, post-apply
+  validation, manual validation rerun, SQLite recovery of validation runs, and
+  stopped the local runtime after verification.
+
+Not done:
+
+- Did not run arbitrary shell commands as validation yet.
+- Did not wire project-specific test commands such as `npm test` or
+  `swift test`.
+- Did not add command permission prompts.
+- Did not normalize validation runs into dedicated SQLite tables.
+- Did not connect a real LLM provider.
+
+Next:
+
+- Add a permissioned command runner for project test commands.
+- Add validation command presets and per-workspace settings.
+- Add richer patch proposal format beyond append-text.
+- Add proposal revision history for multiple attempts.
+
 ## Decision Log
 
 ### 2026-07-04
@@ -1261,6 +1303,9 @@ Next:
 - Edit proposal validation is a runtime-owned safety gate. Proposals are
   validated when generated and revalidated immediately before apply; blocked
   validation returns the task to human review without writing files.
+- Post-apply validation is now part of the task lifecycle. Applied proposals
+  enter `Testing`, run controlled built-in `forge:` validation commands, and
+  only become `Completed` after validation passes.
 
 ## Open Questions
 

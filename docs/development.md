@@ -102,6 +102,18 @@ Requesting changes calls `POST /tasks/:taskID/reject-edit-proposal`, records
 the rejection, leaves files unchanged, and allows another edit proposal to be
 generated.
 
+After a proposal is applied, the runtime enters `Testing` and runs controlled
+built-in validation commands. The Review panel shows `Validation Runs`,
+including each command name, status, command id, and output summary. The user
+can manually rerun validation with `POST /tasks/:taskID/run-validation` through
+the `Run Validation Again` button after an applied proposal exists.
+
+Current built-in validation commands:
+
+- `forge:changed-files-exist`
+- `forge:applied-proposal-recorded`
+- `forge:ready-validation-retained`
+
 ## Build Checks
 
 ```bash
@@ -117,6 +129,8 @@ cd runtime && npm run check
   append-text operations on existing Markdown files in `README.md` or `docs/`.
   Validation blocks unsupported paths, unsupported operations, oversized edits,
   missing files, and duplicate append text at the file end.
+- Post-apply validation currently uses built-in `forge:` checks rather than
+  arbitrary shell commands.
 - SQLite currently stores full task snapshots plus basic task index fields; the
   full normalized runs/messages/tool-calls schema is still ahead.
 - No repository scanner yet.

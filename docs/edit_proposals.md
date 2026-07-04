@@ -33,7 +33,8 @@ empty until the user explicitly applies the proposal.
 When a proposal is rejected, Forge records the rejection, leaves files
 unchanged, and allows another proposal to be generated. When a proposal is
 applied, Forge validates the proposal again, records an approval decision, and
-updates `changedFiles`.
+updates `changedFiles`. The runtime then runs controlled post-apply validation
+before marking the task completed.
 
 ## Runtime Data
 
@@ -66,6 +67,15 @@ Validation stores:
 - per-file status
 - per-file check messages
 
+Post-apply validation stores:
+
+- trigger
+- overall status
+- summary
+- started timestamp
+- ended timestamp
+- command-level results
+
 ## Safety Rules
 
 - Proposed file changes are not real workspace changes until explicitly
@@ -81,6 +91,8 @@ Validation stores:
   rejected.
 - Apply is blocked if the proposed append text is already present at the target
   file end.
+- Applying a proposal moves the task into `Testing` and runs built-in
+  validation commands before completion.
 - Commit or push actions remain separate from edit application.
 
 ## Future Work

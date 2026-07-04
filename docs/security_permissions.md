@@ -45,6 +45,11 @@ Examples:
 
 May run automatically based on settings, but should be logged and visible.
 
+Current v0 post-apply validation uses built-in `forge:` checks rather than
+arbitrary shell commands. These checks are logged and visible, but they do not
+execute user-provided commands. Future project test commands should move
+through the command risk model before automatic execution is allowed.
+
 ### High Risk
 
 Examples:
@@ -81,6 +86,7 @@ Forge should record:
 - when approval happened
 - what was approved
 - command output
+- validation command results
 - file changes
 - git operations
 - external tool calls

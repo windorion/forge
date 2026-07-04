@@ -19,7 +19,9 @@ import type {
   PlanStep,
   ProposedFileChange,
   RuntimeEvent,
-  ToolCall
+  ToolCall,
+  ValidationCommandResult,
+  ValidationRun
 } from "./types.js";
 
 const startedAt = Date.now();
@@ -152,6 +154,13 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    const runValidationTaskID = taskIDFromActionPath(url.pathname, "run-validation");
+    if (request.method === "POST" && runValidationTaskID) {
+      const task = await runValidation(runValidationTaskID, "Manual");
+      writeJson(response, 200, task);
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === "/events") {
       openEventStream(response);
       return;
@@ -239,6 +248,7 @@ function createTask(input: CreateTaskRequest): ForgeTask {
     events: [event],
     approvals: [],
     toolCalls: [],
+    validationRuns: [],
     contextFiles: [],
     changedFiles: [],
     executionProposal: undefined,
@@ -496,8 +506,8 @@ async function applyEditProposal(
     task.editProposal.status = "Applied";
     task.editProposal.decidedAt = now;
     task.editProposal.decisionNote = input.note?.trim() || undefined;
-    task.status = "Completed";
-    task.currentPhase = "Edit Proposal Applied";
+    task.status = "Testing";
+    task.currentPhase = "Awaiting Validation";
     task.changedFiles = [...new Set(appliedFiles)];
     task.approvals.push({
       id: randomUUID(),
@@ -507,10 +517,10 @@ async function applyEditProposal(
       decidedAt: now,
       userNote: input.note?.trim() || undefined
     });
-    task.reviewSummary = "Approved edit proposal applied. The task now has real changed files to inspect.";
+    task.reviewSummary = "Approved edit proposal applied. Running controlled validation.";
     setAgent(task, "Coder", "Done", "Applied the reviewed edit proposal.");
-    setAgent(task, "Tester", "Ready", "Ready to run validation on the changed files.");
-    setAgent(task, "Reviewer", "Done", "Controlled apply completed; review the resulting diff.");
+    setAgent(task, "Tester", "Active", "Running controlled post-apply validation.");
+    setAgent(task, "Reviewer", "Idle", "Waiting for validation results.");
     upsertPlanStep(task, {
       id: "review-edit-proposal",
       title: "Review edit proposal",
@@ -527,7 +537,7 @@ async function applyEditProposal(
     const applied = event("edit.proposal.applied", "Approved edit proposal was applied to the workspace.");
     applied.createdAt = now;
     saveAndBroadcast(task, applied);
-    return task;
+    return runValidation(task.id, "PostApply");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     task.status = "Failed";
@@ -594,6 +604,189 @@ function rejectEditProposal(taskID: string, input: EditProposalDecisionRequest):
   rejected.createdAt = now;
   saveAndBroadcast(task, rejected);
   return task;
+}
+
+async function runValidation(
+  taskID: string,
+  trigger: ValidationRun["trigger"]
+): Promise<ForgeTask> {
+  const task = tasks.get(taskID);
+  if (!task) {
+    throw new HttpError(404, `Task not found: ${taskID}`);
+  }
+
+  if (task.editProposal?.status !== "Applied") {
+    throw new HttpError(409, "Validation requires an applied edit proposal.");
+  }
+
+  const startedAt = new Date().toISOString();
+  const validationRun: ValidationRun = {
+    id: randomUUID(),
+    trigger,
+    status: "Running",
+    summary: "Controlled validation is running.",
+    startedAt,
+    commands: []
+  };
+
+  task.validationRuns.push(validationRun);
+  task.status = "Testing";
+  task.currentPhase = "Validation";
+  task.reviewSummary = "Running controlled post-apply validation.";
+  setAgent(task, "Tester", "Active", "Running controlled validation commands.");
+  setAgent(task, "Reviewer", "Idle", "Waiting for validation results.");
+  upsertPlanStep(task, {
+    id: "run-validation",
+    title: "Run validation",
+    status: "Active",
+    summary: "Running built-in post-apply validation commands."
+  });
+
+  const started = event("validation.started", "Controlled post-apply validation started.");
+  started.createdAt = startedAt;
+  saveAndBroadcast(task, started);
+
+  const commands: Array<{
+    name: string;
+    command: string;
+    execute: () => Promise<string>;
+  }> = [
+    {
+      name: "Changed files exist",
+      command: "forge:changed-files-exist",
+      execute: () => validateChangedFiles(task)
+    },
+    {
+      name: "Applied proposal recorded",
+      command: "forge:applied-proposal-recorded",
+      execute: () => validateAppliedProposalRecorded(task)
+    },
+    {
+      name: "Ready validation retained",
+      command: "forge:ready-validation-retained",
+      execute: () => validateReadyProposalValidation(task)
+    }
+  ];
+
+  for (const command of commands) {
+    const result = await runValidationCommand(command.name, command.command, command.execute);
+    validationRun.commands.push(result);
+    task.updatedAt = result.endedAt ?? new Date().toISOString();
+    saveTask(task);
+    emit("validation.command.completed", {
+      taskID: task.id,
+      validationRunID: validationRun.id,
+      command: result,
+      task
+    });
+  }
+
+  const failedCommands = validationRun.commands.filter((command) => command.status === "Failed");
+  const endedAt = new Date().toISOString();
+  validationRun.endedAt = endedAt;
+  validationRun.status = failedCommands.length === 0 ? "Passed" : "Failed";
+  validationRun.summary =
+    failedCommands.length === 0
+      ? `Validation passed with ${validationRun.commands.length} command(s).`
+      : `Validation failed: ${failedCommands.length} of ${validationRun.commands.length} command(s) failed.`;
+
+  task.status = validationRun.status === "Passed" ? "Completed" : "Failed";
+  task.currentPhase = validationRun.status === "Passed" ? "Validation Passed" : "Validation Failed";
+  task.reviewSummary = validationRun.summary;
+  setAgent(
+    task,
+    "Tester",
+    validationRun.status === "Passed" ? "Done" : "Blocked",
+    validationRun.summary
+  );
+  setAgent(
+    task,
+    "Reviewer",
+    validationRun.status === "Passed" ? "Active" : "Blocked",
+    validationRun.status === "Passed"
+      ? "Validation passed; ready to review final changed files."
+      : "Validation failed; review failed commands before continuing."
+  );
+  upsertPlanStep(task, {
+    id: "run-validation",
+    title: "Run validation",
+    status: validationRun.status === "Passed" ? "Done" : "Blocked",
+    summary: validationRun.summary
+  });
+
+  const finished = event(
+    validationRun.status === "Passed" ? "validation.passed" : "validation.failed",
+    validationRun.summary
+  );
+  finished.createdAt = endedAt;
+  saveAndBroadcast(task, finished);
+  return task;
+}
+
+async function runValidationCommand(
+  name: string,
+  command: string,
+  execute: () => Promise<string>
+): Promise<ValidationCommandResult> {
+  const startedAt = new Date().toISOString();
+  const result: ValidationCommandResult = {
+    id: randomUUID(),
+    name,
+    command,
+    status: "Running",
+    outputSummary: "Running",
+    startedAt
+  };
+
+  try {
+    result.outputSummary = await execute();
+    result.status = "Passed";
+  } catch (error) {
+    result.status = "Failed";
+    result.outputSummary = error instanceof Error ? error.message : String(error);
+  }
+
+  result.endedAt = new Date().toISOString();
+  return result;
+}
+
+async function validateChangedFiles(task: ForgeTask): Promise<string> {
+  if (task.changedFiles.length === 0) {
+    throw new Error("No changed files were recorded for validation.");
+  }
+
+  const validatedFiles: string[] = [];
+  for (const changedFile of task.changedFiles) {
+    const { absolutePath, relativePath } = resolveMarkdownWorkspacePath(changedFile);
+    const fileStat = await stat(absolutePath);
+    if (!fileStat.isFile()) {
+      throw new Error(`Changed file is no longer a file: ${relativePath}`);
+    }
+    validatedFiles.push(relativePath);
+  }
+
+  return `Validated ${validatedFiles.length} changed file(s): ${validatedFiles.join(", ")}.`;
+}
+
+async function validateAppliedProposalRecorded(task: ForgeTask): Promise<string> {
+  if (task.editProposal?.status !== "Applied") {
+    throw new Error("Edit proposal is not marked Applied.");
+  }
+
+  const applyApproval = task.approvals.find((approval) => approval.action === "Apply Edit Proposal");
+  if (!applyApproval) {
+    throw new Error("No Apply Edit Proposal approval record exists.");
+  }
+
+  return `Applied proposal ${task.editProposal.id} is recorded with approval ${applyApproval.id}.`;
+}
+
+async function validateReadyProposalValidation(task: ForgeTask): Promise<string> {
+  if (task.editProposal?.validation?.status !== "Ready") {
+    throw new Error("Applied proposal does not retain a Ready validation result.");
+  }
+
+  return `Ready validation retained from ${task.editProposal.validation.checkedAt}.`;
 }
 
 async function buildEditProposalValidation(fileChanges: ProposedFileChange[]): Promise<EditProposalValidation> {
@@ -1082,6 +1275,7 @@ function renderRuntimeHome(): string {
       <li><code>POST /tasks/:taskID/validate-edit-proposal</code></li>
       <li><code>POST /tasks/:taskID/apply-edit-proposal</code></li>
       <li><code>POST /tasks/:taskID/reject-edit-proposal</code></li>
+      <li><code>POST /tasks/:taskID/run-validation</code></li>
       <li><code>GET /events</code></li>
     </ul>
   </main>

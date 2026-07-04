@@ -13,6 +13,7 @@ This first slice is intentionally small:
 - `POST /tasks/:taskID/validate-edit-proposal`
 - `POST /tasks/:taskID/apply-edit-proposal`
 - `POST /tasks/:taskID/reject-edit-proposal`
+- `POST /tasks/:taskID/run-validation`
 - `GET /events` as a Server-Sent Events stream
 
 Creating a task starts Agent Loop v0. It is deterministic for now: the Manager
@@ -25,7 +26,14 @@ It is validated when generated and is not applied to the workspace until the
 user explicitly applies it. The apply path revalidates against the current
 workspace before writing. The current apply path is intentionally narrow: it
 only supports append-text operations on existing Markdown files in `README.md`
-or `docs/`.
+or `docs/`. After apply, the runtime runs controlled built-in validation
+commands and only marks the task completed if validation passes.
+
+Current built-in validation commands:
+
+- `forge:changed-files-exist`
+- `forge:applied-proposal-recorded`
+- `forge:ready-validation-retained`
 
 Task state is persisted locally in SQLite. By default the runtime stores task
 snapshots in:
@@ -79,4 +87,7 @@ curl -X POST http://127.0.0.1:17373/tasks/<task-id>/apply-edit-proposal \
 curl -X POST http://127.0.0.1:17373/tasks/<task-id>/reject-edit-proposal \
   -H 'Content-Type: application/json' \
   -d '{"note":"Needs a narrower change."}'
+curl -X POST http://127.0.0.1:17373/tasks/<task-id>/run-validation \
+  -H 'Content-Type: application/json' \
+  -d '{}'
 ```

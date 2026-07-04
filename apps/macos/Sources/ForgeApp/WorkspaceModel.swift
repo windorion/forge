@@ -12,6 +12,7 @@ final class WorkspaceModel: ObservableObject {
     @Published private var validatingEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var applyingEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var rejectingEditProposalTaskIDs = Set<ForgeTask.ID>()
+    @Published private var runningValidationTaskIDs = Set<ForgeTask.ID>()
 
     private let runtime = RuntimeClient()
     private var eventStreamTask: Task<Void, Never>?
@@ -168,6 +169,28 @@ final class WorkspaceModel: ObservableObject {
 
     func isRejectingEditProposal(taskID: ForgeTask.ID) -> Bool {
         rejectingEditProposalTaskIDs.contains(taskID)
+    }
+
+    func runValidation(for task: ForgeTask) {
+        runningValidationTaskIDs.insert(task.id)
+
+        Task {
+            do {
+                let updatedTask = try await runtime.runValidation(taskID: task.id)
+                upsert(updatedTask)
+                selectedTaskID = updatedTask.id
+                statusMessage = "Validation run completed."
+                startEventStream()
+            } catch {
+                statusMessage = "Run validation failed: \(error.localizedDescription)"
+            }
+
+            runningValidationTaskIDs.remove(task.id)
+        }
+    }
+
+    func isRunningValidation(taskID: ForgeTask.ID) -> Bool {
+        runningValidationTaskIDs.contains(taskID)
     }
 
     private func startEventStream() {
