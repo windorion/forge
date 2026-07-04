@@ -14,6 +14,15 @@ Creating a task starts Agent Loop v0. It is deterministic for now: the Manager
 and Planner update task state, plan steps, events, and the review gate without
 calling a model.
 
+Task state is persisted locally in SQLite. By default the runtime stores task
+snapshots in:
+
+```text
+.forge/forge.sqlite
+```
+
+Set `FORGE_RUNTIME_DB_PATH` to use a different SQLite file.
+
 ## Development
 
 ```bash

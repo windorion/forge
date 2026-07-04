@@ -956,6 +956,45 @@ Next:
   a controlled execution phase.
 - Add a model-provider abstraction and wire the first real planner model.
 
+### 2026-07-04 16:26:32 CST +0800
+
+Conversation summary:
+
+- User asked Codex to continue with the next step after defining and verifying
+  the v0 local context tool layer.
+
+Done:
+
+- Added SQLite-backed runtime task persistence.
+- Added `runtime/src/taskStore.ts` with schema setup, task snapshot loading,
+  and task saving.
+- Changed the runtime to load tasks from SQLite on startup and save task state
+  during creation, tool calls, agent loop updates, and failure handling.
+- Added `.forge/` to `.gitignore`; the default database path is
+  `.forge/forge.sqlite`.
+- Added runtime health persistence metadata with database path and task count.
+- Updated development, runtime, and database docs for the current persistence
+  model.
+- Verified `npm run check`, `npm run build`, `swift build`, task creation,
+  progression to `Human Review`, runtime restart, and task recovery from
+  SQLite.
+
+Not done:
+
+- Did not implement the full normalized runs/messages/tool-calls/commands
+  schema yet.
+- Did not add explicit plan approval UI yet.
+- Did not connect a real LLM provider yet.
+- Did not keep the local runtime running after verification.
+
+Next:
+
+- Add an explicit plan approval action and UI so a task can move from human
+  review into a controlled execution phase.
+- Split the task snapshot store into normalized audit tables as the runtime
+  starts executing real tools.
+- Add the model-provider abstraction for the first real planner.
+
 ## Decision Log
 
 ### 2026-07-04
@@ -988,6 +1027,10 @@ Next:
 - V0 endpoint: a native app can create a task, the runtime can inspect real
   local project docs through visible read-only tool calls, the UI shows context
   and progress, and the task stops at human review with no file changes.
+- Runtime task state now persists to local SQLite at `.forge/forge.sqlite` by
+  default, with `FORGE_RUNTIME_DB_PATH` as an override. The first persistence
+  slice stores full task snapshots plus basic task index fields; normalized
+  audit tables come later.
 
 ## Open Questions
 

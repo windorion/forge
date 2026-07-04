@@ -8,6 +8,17 @@ retention rules for Forge.
 SQLite is the default local database. It should store the durable memory of the
 workspace and make agent work resumable and auditable.
 
+## Current Implementation
+
+The first runtime persistence slice stores task snapshots in local SQLite at
+`.forge/forge.sqlite` by default. The current `tasks` table records basic task
+index fields and a full JSON payload so the app can recover task state,
+events, tool calls, context files, and review state after a runtime restart.
+
+This is intentionally smaller than the full conceptual schema below. Future
+migrations should split runs, messages, tool calls, commands, file changes,
+and approvals into dedicated auditable tables.
+
 ## Core Entities
 
 ### Workspaces

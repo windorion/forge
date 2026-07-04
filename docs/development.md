@@ -12,7 +12,7 @@ Forge currently has two implementation pieces:
 The first vertical slice is app-runtime connectivity, not LLM execution.
 The current slice adds Agent Loop v0: a deterministic local planner loop that
 updates task state, agent status, plan steps, review summary, tool calls,
-context files, and SSE events.
+context files, SSE events, and SQLite task persistence.
 
 ## Run Runtime
 
@@ -30,6 +30,14 @@ http://127.0.0.1:17373
 
 Opening that URL in a browser shows a small runtime status page. The full app
 UI still runs through the SwiftUI app.
+
+By default, runtime task history is stored in:
+
+```text
+.forge/forge.sqlite
+```
+
+Use `FORGE_RUNTIME_DB_PATH` to point the runtime at a different SQLite file.
 
 ## Run macOS App
 
@@ -73,8 +81,8 @@ cd runtime && npm run check
 ## Current Limitations
 
 - No LLM provider is wired yet.
-- No SQLite persistence yet.
+- SQLite currently stores full task snapshots plus basic task index fields; the
+  full normalized runs/messages/tool-calls schema is still ahead.
 - No repository scanner yet.
-- The runtime stores tasks in memory.
 - Agent Loop v0 is deterministic and local; it simulates the planning and
   review gate before real model execution exists.

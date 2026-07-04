@@ -4,14 +4,16 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { URL } from "node:url";
 import { fileURLToPath } from "node:url";
+import { SqliteTaskStore } from "./taskStore.js";
 import type { AgentState, ContextFile, CreateTaskRequest, ForgeTask, PlanStep, RuntimeEvent, ToolCall } from "./types.js";
 
 const startedAt = Date.now();
 const port = Number(process.env.FORGE_RUNTIME_PORT ?? 17373);
-const tasks = new Map<string, ForgeTask>();
 const eventClients = new Set<ServerResponse>();
 const runtimeDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = path.resolve(runtimeDir, "..");
+const taskStore = new SqliteTaskStore(resolveDatabasePath());
+const tasks = new Map<string, ForgeTask>(taskStore.loadTasks().map((task) => [task.id, task]));
 
 const defaultAgents: AgentState[] = [
   { role: "Manager", status: "Active", summary: "Owns task lifecycle and constraints" },
@@ -70,13 +72,17 @@ const server = createServer(async (request, response) => {
         ok: true,
         service: "forge-runtime",
         version: "0.1.0",
-        uptimeSeconds: (Date.now() - startedAt) / 1000
+        uptimeSeconds: (Date.now() - startedAt) / 1000,
+        persistence: {
+          databasePath: taskStore.dbPath,
+          taskCount: tasks.size
+        }
       });
       return;
     }
 
     if (request.method === "GET" && url.pathname === "/tasks") {
-      writeJson(response, 200, { tasks: [...tasks.values()] });
+      writeJson(response, 200, { tasks: listTasks() });
       return;
     }
 
@@ -84,6 +90,7 @@ const server = createServer(async (request, response) => {
       const input = await readJson<CreateTaskRequest>(request);
       const task = createTask(input);
       tasks.set(task.id, task);
+      taskStore.saveTask(task);
       emit("task.created", { taskID: task.id, title: task.title, task });
       runAgentLoopV0(task.id);
       writeJson(response, 201, task);
@@ -106,7 +113,33 @@ const server = createServer(async (request, response) => {
 
 server.listen(port, "127.0.0.1", () => {
   console.log(`Forge runtime listening on http://127.0.0.1:${port}`);
+  console.log(`Forge task store: ${taskStore.dbPath}`);
 });
+
+process.once("SIGINT", () => shutdown(130));
+process.once("SIGTERM", () => shutdown(143));
+
+function resolveDatabasePath(): string {
+  const configured = process.env.FORGE_RUNTIME_DB_PATH;
+  if (configured) {
+    return path.resolve(repoRoot, configured);
+  }
+
+  return path.join(repoRoot, ".forge", "forge.sqlite");
+}
+
+function listTasks(): ForgeTask[] {
+  return [...tasks.values()].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+}
+
+function saveTask(task: ForgeTask): void {
+  taskStore.saveTask(task);
+}
+
+function shutdown(exitCode: number): never {
+  taskStore.close();
+  process.exit(exitCode);
+}
 
 function createTask(input: CreateTaskRequest): ForgeTask {
   const now = new Date().toISOString();
@@ -203,6 +236,7 @@ function runAgentLoopV0(taskID: string): void {
           task.events.push(stamped);
           task.updatedAt = stamped.createdAt;
           tasks.set(taskID, task);
+          saveTask(task);
           emit(stamped.type, { taskID, message: stamped.message, task });
           emit("task.updated", { taskID, task });
         })
@@ -214,6 +248,7 @@ function runAgentLoopV0(taskID: string): void {
           setAgent(task, "Planner", "Blocked", "A local read-only tool failed.");
           setPlanStep(task, "build-context", "Blocked", failed.message);
           tasks.set(taskID, task);
+          saveTask(task);
           emit(failed.type, { taskID, message: failed.message, task });
           emit("task.updated", { taskID, task });
         });
@@ -295,6 +330,8 @@ async function runTool<T>(
     startedAt
   };
   task.toolCalls.push(toolCall);
+  task.updatedAt = startedAt;
+  saveTask(task);
   emit("tool.started", { taskID: task.id, toolCall });
 
   try {
@@ -302,12 +339,16 @@ async function runTool<T>(
     toolCall.status = "Completed";
     toolCall.endedAt = new Date().toISOString();
     toolCall.outputSummary = summarizeToolOutput(output);
+    task.updatedAt = toolCall.endedAt;
+    saveTask(task);
     emit("tool.completed", { taskID: task.id, toolCall });
     return output;
   } catch (error) {
     toolCall.status = "Failed";
     toolCall.endedAt = new Date().toISOString();
     toolCall.outputSummary = error instanceof Error ? error.message : String(error);
+    task.updatedAt = toolCall.endedAt;
+    saveTask(task);
     emit("tool.failed", { taskID: task.id, toolCall });
     throw error;
   }
