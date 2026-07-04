@@ -7,6 +7,7 @@ final class WorkspaceModel: ObservableObject {
     @Published var runtimeHealth: RuntimeHealth?
     @Published var statusMessage = "Runtime not checked"
     @Published var eventStreamStatus = "Event stream disconnected"
+    @Published private var approvingTaskIDs = Set<ForgeTask.ID>()
 
     private let runtime = RuntimeClient()
     private var eventStreamTask: Task<Void, Never>?
@@ -53,6 +54,28 @@ final class WorkspaceModel: ObservableObject {
                 statusMessage = "Create task failed: \(error.localizedDescription)"
             }
         }
+    }
+
+    func approvePlan(for task: ForgeTask) {
+        approvingTaskIDs.insert(task.id)
+
+        Task {
+            do {
+                let approvedTask = try await runtime.approvePlan(taskID: task.id)
+                upsert(approvedTask)
+                selectedTaskID = approvedTask.id
+                statusMessage = "Plan approved. Controlled execution opened."
+                startEventStream()
+            } catch {
+                statusMessage = "Approve plan failed: \(error.localizedDescription)"
+            }
+
+            approvingTaskIDs.remove(task.id)
+        }
+    }
+
+    func isApprovingPlan(taskID: ForgeTask.ID) -> Bool {
+        approvingTaskIDs.contains(taskID)
     }
 
     private func startEventStream() {

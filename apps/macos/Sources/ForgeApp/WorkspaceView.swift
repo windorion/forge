@@ -389,6 +389,8 @@ private struct EventPanel: View {
 }
 
 private struct ReviewPanel: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
+
     var task: ForgeTask
 
     var body: some View {
@@ -400,7 +402,7 @@ private struct ReviewPanel: View {
                 Text("Changed files")
                     .font(.headline)
                 if task.changedFiles.isEmpty {
-                    Text("No file changes yet. Agent Loop v0 stops at the human review gate.")
+                    Text(emptyChangedFilesMessage)
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(task.changedFiles, id: \.self) { file in
@@ -416,12 +418,48 @@ private struct ReviewPanel: View {
                     .foregroundStyle(.secondary)
             }
 
+            if !task.approvals.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Approval History")
+                        .font(.headline)
+                    ForEach(task.approvals.reversed()) { approval in
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack {
+                                Label(approval.decision, systemImage: "checkmark.seal.fill")
+                                    .font(.subheadline.weight(.semibold))
+                                Spacer()
+                                Text(approval.decidedAt)
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            }
+                            Text(approval.summary)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(10)
+                        .background(.background)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                }
+            }
+
             VStack(alignment: .leading, spacing: 8) {
                 Text("Approval")
                     .font(.headline)
-                Button("Approve Plan") {}
-                    .disabled(true)
-                Button("Request Changes") {}
+                Button {
+                    workspace.approvePlan(for: task)
+                } label: {
+                    Label(approveButtonTitle, systemImage: "checkmark.seal")
+                        .frame(maxWidth: .infinity)
+                }
+                .disabled(!canApprovePlan)
+                .keyboardShortcut(.return, modifiers: [.command])
+
+                Button {
+                } label: {
+                    Label("Request Changes", systemImage: "arrow.uturn.backward")
+                        .frame(maxWidth: .infinity)
+                }
                     .disabled(true)
             }
 
@@ -432,6 +470,38 @@ private struct ReviewPanel: View {
                 .foregroundStyle(.tertiary)
         }
         .padding(20)
+    }
+
+    private var isApproving: Bool {
+        workspace.isApprovingPlan(taskID: task.id)
+    }
+
+    private var canApprovePlan: Bool {
+        task.status == "Human Review" && !isApproving
+    }
+
+    private var approveButtonTitle: String {
+        if isApproving {
+            return "Approving"
+        }
+
+        if task.status == "Running" {
+            return "Plan Approved"
+        }
+
+        return "Approve Plan"
+    }
+
+    private var emptyChangedFilesMessage: String {
+        if task.status == "Running" {
+            return "No file changes yet. Controlled execution is open."
+        }
+
+        if task.status == "Human Review" {
+            return "No file changes yet. Review the plan before approving execution."
+        }
+
+        return "No file changes yet."
     }
 }
 

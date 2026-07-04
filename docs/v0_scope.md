@@ -78,5 +78,7 @@ After v0, Forge should move toward v0.1:
 - SQLite task persistence
 - model provider abstraction
 - read/search tools powered by real task intent
-- explicit plan approval action
 - first safe file-edit proposal flow
+
+The explicit plan approval action has started: approval is recorded and opens
+controlled execution preparation, but it does not yet run model-driven edits.

@@ -995,6 +995,48 @@ Next:
   starts executing real tools.
 - Add the model-provider abstraction for the first real planner.
 
+### 2026-07-04 17:07:01 CST +0800
+
+Conversation summary:
+
+- User asked Codex to continue with the next step after SQLite task
+  persistence.
+
+Done:
+
+- Added a real plan approval flow.
+- Added `POST /tasks/:taskID/approve-plan` to the runtime.
+- Added approval records to the task model and persisted them in SQLite task
+  snapshots.
+- Changed approved tasks to move from `Human Review` into `Running` with
+  `Execution Preparation` as the current phase.
+- Added plan steps for controlled execution preparation and waiting for edit
+  tools.
+- Added Swift runtime client support for approving a plan.
+- Enabled the Review panel `Approve Plan` button when a task is waiting for
+  human review.
+- Added visible approval history in the macOS Review panel.
+- Updated runtime, development, database, and v0 scope docs.
+- Verified `npm run check`, `npm run build`, `swift build`, task creation,
+  plan approval, duplicate approval rejection with `409`, and SQLite recovery
+  of approval history after runtime restart.
+
+Not done:
+
+- Did not implement request-changes behavior yet.
+- Did not run model-driven edits after approval.
+- Did not add file diffs, command execution, tests, or normalized approval
+  tables yet.
+- Did not keep the local runtime running after verification.
+
+Next:
+
+- Add the first model-provider abstraction so the approved execution phase can
+  be driven by a real planner model.
+- Add a safe edit proposal flow that creates a reviewable diff without
+  silently changing files.
+- Add request-changes handling so users can send a plan back to the Planner.
+
 ## Decision Log
 
 ### 2026-07-04
@@ -1031,6 +1073,9 @@ Next:
   default, with `FORGE_RUNTIME_DB_PATH` as an override. The first persistence
   slice stores full task snapshots plus basic task index fields; normalized
   audit tables come later.
+- Plan approval is now an explicit runtime and UI action: a task waiting at
+  `Human Review` can be approved, the approval is recorded, and the task moves
+  into `Running` / `Execution Preparation` without applying file changes.
 
 ## Open Questions
 

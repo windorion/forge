@@ -20,6 +20,15 @@ export interface RuntimeEvent {
   createdAt: string;
 }
 
+export interface ApprovalRecord {
+  id: string;
+  action: "Approve Plan";
+  decision: "Approved" | "Rejected";
+  summary: string;
+  decidedAt: string;
+  userNote?: string;
+}
+
 export interface PlanStep {
   id: string;
   title: string;
@@ -53,6 +62,7 @@ export interface ForgeTask {
   agentStates: AgentState[];
   planSteps: PlanStep[];
   events: RuntimeEvent[];
+  approvals: ApprovalRecord[];
   toolCalls: ToolCall[];
   contextFiles: ContextFile[];
   changedFiles: string[];
@@ -62,4 +72,8 @@ export interface ForgeTask {
 export interface CreateTaskRequest {
   title?: string;
   objective?: string;
+}
+
+export interface ApprovePlanRequest {
+  note?: string;
 }

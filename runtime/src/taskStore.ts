@@ -98,5 +98,9 @@ function parseTaskPayload(payload: unknown): ForgeTask {
     throw new Error("Invalid task payload in SQLite store.");
   }
 
-  return JSON.parse(payload) as ForgeTask;
+  const parsed = JSON.parse(payload) as ForgeTask;
+  return {
+    ...parsed,
+    approvals: parsed.approvals ?? []
+  };
 }

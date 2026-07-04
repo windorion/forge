@@ -12,7 +12,7 @@ Forge currently has two implementation pieces:
 The first vertical slice is app-runtime connectivity, not LLM execution.
 The current slice adds Agent Loop v0: a deterministic local planner loop that
 updates task state, agent status, plan steps, review summary, tool calls,
-context files, SSE events, and SQLite task persistence.
+context files, approval history, SSE events, and SQLite task persistence.
 
 ## Run Runtime
 
@@ -70,6 +70,10 @@ Agent Loop v0 currently runs local read-only tools:
 
 The app shows those tool calls and the resulting context file summaries before
 the task stops at the human review gate.
+
+When a task reaches `Human Review`, the Review panel enables `Approve Plan`.
+That action calls `POST /tasks/:taskID/approve-plan`, records approval history,
+and moves the task into `Execution Preparation` without changing files.
 
 ## Build Checks
 

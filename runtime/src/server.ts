@@ -5,7 +5,17 @@ import path from "node:path";
 import { URL } from "node:url";
 import { fileURLToPath } from "node:url";
 import { SqliteTaskStore } from "./taskStore.js";
-import type { AgentState, ContextFile, CreateTaskRequest, ForgeTask, PlanStep, RuntimeEvent, ToolCall } from "./types.js";
+import type {
+  AgentState,
+  ApprovalRecord,
+  ApprovePlanRequest,
+  ContextFile,
+  CreateTaskRequest,
+  ForgeTask,
+  PlanStep,
+  RuntimeEvent,
+  ToolCall
+} from "./types.js";
 
 const startedAt = Date.now();
 const port = Number(process.env.FORGE_RUNTIME_PORT ?? 17373);
@@ -97,6 +107,14 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    const approvePlanTaskID = taskIDFromActionPath(url.pathname, "approve-plan");
+    if (request.method === "POST" && approvePlanTaskID) {
+      const input = await readJson<ApprovePlanRequest>(request);
+      const task = approvePlan(approvePlanTaskID, input);
+      writeJson(response, 200, task);
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === "/events") {
       openEventStream(response);
       return;
@@ -104,7 +122,8 @@ const server = createServer(async (request, response) => {
 
     writeJson(response, 404, { error: "not_found" });
   } catch (error) {
-    writeJson(response, 500, {
+    const status = error instanceof HttpError ? error.status : 500;
+    writeJson(response, status, {
       error: "runtime_error",
       message: error instanceof Error ? error.message : String(error)
     });
@@ -136,9 +155,27 @@ function saveTask(task: ForgeTask): void {
   taskStore.saveTask(task);
 }
 
+function saveAndBroadcast(task: ForgeTask, runtimeEvent: RuntimeEvent): void {
+  task.events.push(runtimeEvent);
+  task.updatedAt = runtimeEvent.createdAt;
+  tasks.set(task.id, task);
+  saveTask(task);
+  emit(runtimeEvent.type, { taskID: task.id, message: runtimeEvent.message, task });
+  emit("task.updated", { taskID: task.id, task });
+}
+
 function shutdown(exitCode: number): never {
   taskStore.close();
   process.exit(exitCode);
+}
+
+class HttpError extends Error {
+  constructor(
+    readonly status: number,
+    message: string
+  ) {
+    super(message);
+  }
 }
 
 function createTask(input: CreateTaskRequest): ForgeTask {
@@ -162,11 +199,61 @@ function createTask(input: CreateTaskRequest): ForgeTask {
     agentStates: cloneAgents(defaultAgents),
     planSteps: clonePlanSteps(defaultPlanSteps),
     events: [event],
+    approvals: [],
     toolCalls: [],
     contextFiles: [],
     changedFiles: [],
     reviewSummary: "No review yet. The planner is preparing a first plan."
   };
+}
+
+function approvePlan(taskID: string, input: ApprovePlanRequest): ForgeTask {
+  const task = tasks.get(taskID);
+  if (!task) {
+    throw new HttpError(404, `Task not found: ${taskID}`);
+  }
+
+  if (task.status !== "Human Review") {
+    throw new HttpError(409, "Only tasks waiting for human review can have their plan approved.");
+  }
+
+  const now = new Date().toISOString();
+  const approval: ApprovalRecord = {
+    id: randomUUID(),
+    action: "Approve Plan",
+    decision: "Approved",
+    summary: "Approved the current plan and opened controlled execution preparation.",
+    decidedAt: now,
+    userNote: input.note?.trim() || undefined
+  };
+
+  task.approvals.push(approval);
+  task.status = "Running";
+  task.currentPhase = "Execution Preparation";
+  task.changedFiles = [];
+  task.reviewSummary = "Plan approved. Forge entered controlled execution preparation; v0 still applies no file changes.";
+  setAgent(task, "Manager", "Active", "Recorded plan approval and opened the execution phase.");
+  setAgent(task, "Planner", "Done", "Plan approved by the user.");
+  setAgent(task, "Coder", "Ready", "Approved plan received; waiting for real edit tools.");
+  setAgent(task, "Tester", "Idle", "Waiting for code changes or validation commands.");
+  setAgent(task, "Reviewer", "Idle", "No diff to review yet.");
+  upsertPlanStep(task, {
+    id: "prepare-execution",
+    title: "Prepare controlled execution",
+    status: "Done",
+    summary: "Plan approved and execution phase opened. No files changed in v0."
+  });
+  upsertPlanStep(task, {
+    id: "await-edit-tools",
+    title: "Await edit tools",
+    status: "Active",
+    summary: "Next runtime slice will connect model-driven edits, validation, and diff review."
+  });
+
+  const approved = event("approval.plan.approved", "User approved the plan. Controlled execution preparation is open.");
+  approved.createdAt = now;
+  saveAndBroadcast(task, approved);
+  return task;
 }
 
 function runAgentLoopV0(taskID: string): void {
@@ -398,6 +485,24 @@ function setPlanStep(
   task.planSteps = task.planSteps.map((step) =>
     step.id === id ? { ...step, status, summary } : step
   );
+}
+
+function upsertPlanStep(task: ForgeTask, planStep: PlanStep): void {
+  const index = task.planSteps.findIndex((step) => step.id === planStep.id);
+  if (index >= 0) {
+    task.planSteps[index] = planStep;
+  } else {
+    task.planSteps.push(planStep);
+  }
+}
+
+function taskIDFromActionPath(pathname: string, action: string): string | undefined {
+  const parts = pathname.split("/").filter(Boolean);
+  if (parts.length === 3 && parts[0] === "tasks" && parts[2] === action) {
+    return parts[1];
+  }
+
+  return undefined;
 }
 
 function openEventStream(response: ServerResponse): void {

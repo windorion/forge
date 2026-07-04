@@ -30,6 +30,21 @@ struct RuntimeClient {
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
 
+    func approvePlan(taskID: ForgeTask.ID, note: String? = nil) async throws -> ForgeTask {
+        let url = baseURL
+            .appending(path: "tasks")
+            .appending(path: taskID)
+            .appending(path: "approve-plan")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(ApprovePlanRequest(note: note))
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response)
+        return try JSONDecoder().decode(ForgeTask.self, from: data)
+    }
+
     func events() -> AsyncThrowingStream<RuntimeStreamEvent, Error> {
         AsyncThrowingStream { continuation in
             let streamTask = Task {
