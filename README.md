@@ -451,6 +451,10 @@ Detailed documents live under `docs/`:
 - `docs/multi_agent.md`: agent roles, handoffs, orchestration, and task state.
 - `docs/runtime_architecture.md`: local runtime modules, app-runtime
   communication, tools, and event streams.
+- `docs/model_providers.md`: model-provider boundary, configuration, and
+  provider implementation rules.
+- `docs/edit_proposals.md`: safe edit proposal flow and distinction between
+  proposed and applied changes.
 - `docs/local_first.md`: local indexing, privacy, memory, context, and offline
   behavior.
 - `docs/database.md`: SQLite responsibilities, conceptual schema, vector
@@ -1037,6 +1041,136 @@ Next:
   silently changing files.
 - Add request-changes handling so users can send a plan back to the Planner.
 
+### 2026-07-04 17:19:46 CST +0800
+
+Conversation summary:
+
+- User asked Codex to continue with the next step after the plan approval
+  flow.
+
+Done:
+
+- Added the first model-provider abstraction in the runtime.
+- Added a default local deterministic provider that requires no API key.
+- Added provider metadata to runtime health.
+- Added execution proposals to task state.
+- Changed plan approval so it records approval, asks the provider for a safe
+  execution proposal, records `model.execution.proposed`, and still applies no
+  file changes.
+- Added Swift models and Review panel UI for execution proposals.
+- Added `docs/model_providers.md` and updated the documentation index,
+  runtime architecture, development docs, database docs, runtime README, and
+  v0 scope.
+- Verified `npm run check`, `npm run build`, `swift build`, provider metadata
+  in `/health`, execution proposal generation after approval, and SQLite
+  recovery of execution proposals after runtime restart.
+
+Not done:
+
+- Did not connect a real remote LLM provider yet.
+- Did not add API key settings or model selection UI yet.
+- Did not generate or apply file edits yet.
+- Did not keep the local runtime running after verification.
+
+Next:
+
+- Add a safe edit proposal flow that turns execution proposals into a
+  reviewable diff without silently changing files.
+- Add a concrete remote or local LLM provider implementation behind the new
+  provider interface.
+- Add request-changes handling so users can send a plan or proposal back to the
+  Planner.
+
+### 2026-07-04 17:29:54 CST +0800
+
+Conversation summary:
+
+- User asked Codex to continue with a longer next task after the
+  model-provider abstraction work.
+
+Done:
+
+- Added the safe edit proposal flow.
+- Added `POST /tasks/:taskID/generate-edit-proposal` to the runtime.
+- Extended the model-provider interface so providers can generate proposed
+  file changes and diff previews.
+- Added `editProposal` to runtime and Swift task models.
+- Added proposed file change data with path, change type, rationale, and diff
+  preview.
+- Changed the runtime so generated edit proposals return the task to
+  `Human Review` with current phase `Edit Proposal Review`.
+- Kept the safety boundary: generated proposals do not mutate files, and
+  `changedFiles` remains empty.
+- Added macOS Review panel UI for edit proposals, proposed files, and diff
+  previews.
+- Made the Review panel scroll so longer proposal details remain usable.
+- Added `docs/edit_proposals.md` and updated documentation indexes, runtime
+  architecture, development docs, database docs, runtime README, model-provider
+  docs, v0 scope, and this README.
+- Verified `npm run check`, `npm run build`, `swift build`, task creation,
+  plan approval, edit proposal generation, no changed files, and SQLite
+  recovery of edit proposals after runtime restart.
+
+Not done:
+
+- Did not add apply/reject controls for edit proposals yet.
+- Did not mutate workspace files.
+- Did not connect a real remote LLM provider.
+- Did not normalize edit proposals into dedicated database tables yet.
+- Did not keep the local runtime running after verification.
+
+Next:
+
+- Add approve/apply/reject controls for edit proposals while preserving an
+  explicit human approval boundary.
+- Add patch applicability validation before any apply step can write files.
+- Add a concrete remote or local LLM provider implementation behind the model
+  provider interface.
+
+### 2026-07-04 17:38:45 CST +0800
+
+Conversation summary:
+
+- User asked Codex to continue the task and preferred a substantial longer
+  work session.
+
+Done:
+
+- Added explicit edit proposal decision endpoints:
+  `POST /tasks/:taskID/apply-edit-proposal` and
+  `POST /tasks/:taskID/reject-edit-proposal`.
+- Added restricted `AppendText` apply operations to proposed file changes.
+- Added runtime path safety checks for proposal application:
+  repo-local paths only, existing Markdown files only, limited to `README.md`
+  or `docs/*.md`, with `.git`, `.forge`, absolute paths, and parent traversal
+  rejected.
+- Added task state transitions for rejected and applied proposals.
+- Recorded apply/reject decisions in approval history.
+- Updated Swift models, runtime client, workspace state, and Review panel
+  buttons for applying or requesting changes on edit proposals.
+- Allowed rejected proposals to be regenerated.
+- Updated edit proposal, development, runtime, architecture, model-provider,
+  and v0 scope docs to match the new apply/reject boundary.
+- Verified `npm run check`, `npm run build`, `swift build`, and an end-to-end
+  runtime smoke test covering create task, approve plan, generate proposal,
+  reject proposal with no changed files, regenerate proposal, and apply
+  proposal with `changedFiles` recorded.
+
+Not done:
+
+- Did not add a general patch interpreter.
+- Did not add real model-generated code edits.
+- Did not add test-runner integration after apply.
+- Did not connect a remote LLM provider.
+- Did not normalize proposal decisions into dedicated database tables.
+
+Next:
+
+- Add patch applicability validation and preview against the live working tree.
+- Add a real provider implementation behind the model-provider interface.
+- Add post-apply validation commands and visible test results.
+- Add stronger revision history for multiple proposal attempts.
+
 ## Decision Log
 
 ### 2026-07-04
@@ -1076,6 +1210,13 @@ Next:
 - Plan approval is now an explicit runtime and UI action: a task waiting at
   `Human Review` can be approved, the approval is recorded, and the task moves
   into `Running` / `Execution Preparation` without applying file changes.
+- Model access now goes through a runtime-owned provider abstraction. The
+  default provider is local deterministic and produces execution proposals
+  without external API calls; real LLM providers come later.
+- Edit proposals are review artifacts until explicitly applied. The runtime
+  can generate proposed file changes, reject them without touching files, or
+  apply them through a narrow append-text operation for existing Markdown files
+  after human approval.
 
 ## Open Questions
 

@@ -90,12 +90,38 @@ Required tools:
 - read file
 - search files
 - search text
+- propose edit
 - edit file
 - run command
 - git status
 - git diff
 - run tests
 - request approval
+
+### Model Providers
+
+Defines the boundary between agent orchestration and LLM/local model backends.
+
+The provider layer should:
+
+- expose provider id, display name, model name, and local/remote mode
+- accept structured task context
+- return structured proposals or model outputs
+- avoid direct file, command, git, or network side effects
+- make missing credentials or unsupported providers explicit
+
+### Edit Proposal Generator
+
+Creates proposed file changes and diff previews without mutating the working
+tree. This sits before real edit/apply tools and gives the user a reviewable
+artifact while preserving the human approval boundary.
+
+### Edit Proposal Applier
+
+Applies an explicitly approved proposal through restricted file operations.
+The v0 implementation only supports append-text edits to existing Markdown
+files in `README.md` or `docs/`, and records rejected proposals without
+touching files.
 
 ### Permission Manager
 

@@ -101,6 +101,8 @@ function parseTaskPayload(payload: unknown): ForgeTask {
   const parsed = JSON.parse(payload) as ForgeTask;
   return {
     ...parsed,
-    approvals: parsed.approvals ?? []
+    approvals: parsed.approvals ?? [],
+    executionProposal: parsed.executionProposal,
+    editProposal: parsed.editProposal
   };
 }

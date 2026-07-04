@@ -9,12 +9,20 @@ This first slice is intentionally small:
 - `GET /tasks`
 - `POST /tasks`
 - `POST /tasks/:taskID/approve-plan`
+- `POST /tasks/:taskID/generate-edit-proposal`
+- `POST /tasks/:taskID/apply-edit-proposal`
+- `POST /tasks/:taskID/reject-edit-proposal`
 - `GET /events` as a Server-Sent Events stream
 
 Creating a task starts Agent Loop v0. It is deterministic for now: the Manager
 and Planner update task state, plan steps, events, and the review gate without
 calling a model. Approving a plan records an approval and opens the controlled
-execution preparation phase without applying file changes.
+execution preparation phase. The runtime then asks the configured model
+provider for a safe execution proposal without applying file changes.
+After that, a safe edit proposal can be generated as a proposed diff preview.
+It is not applied to the workspace until the user explicitly applies it.
+The current apply path is intentionally narrow: it only supports append-text
+operations on existing Markdown files in `README.md` or `docs/`.
 
 Task state is persisted locally in SQLite. By default the runtime stores task
 snapshots in:
@@ -24,6 +32,13 @@ snapshots in:
 ```
 
 Set `FORGE_RUNTIME_DB_PATH` to use a different SQLite file.
+
+The default model provider is local and deterministic:
+
+```text
+FORGE_MODEL_PROVIDER=local
+FORGE_MODEL_NAME=local-deterministic-v0
+```
 
 ## Development
 
@@ -49,4 +64,13 @@ curl -X POST http://127.0.0.1:17373/tasks \
 curl -X POST http://127.0.0.1:17373/tasks/<task-id>/approve-plan \
   -H 'Content-Type: application/json' \
   -d '{}'
+curl -X POST http://127.0.0.1:17373/tasks/<task-id>/generate-edit-proposal \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+curl -X POST http://127.0.0.1:17373/tasks/<task-id>/apply-edit-proposal \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+curl -X POST http://127.0.0.1:17373/tasks/<task-id>/reject-edit-proposal \
+  -H 'Content-Type: application/json' \
+  -d '{"note":"Needs a narrower change."}'
 ```

@@ -394,82 +394,181 @@ private struct ReviewPanel: View {
     var task: ForgeTask
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Label("Review", systemImage: "doc.text.magnifyingglass")
-                .font(.title3.weight(.semibold))
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Label("Review", systemImage: "doc.text.magnifyingglass")
+                    .font(.title3.weight(.semibold))
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Changed files")
-                    .font(.headline)
-                if task.changedFiles.isEmpty {
-                    Text(emptyChangedFilesMessage)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(task.changedFiles, id: \.self) { file in
-                        Label(file, systemImage: "doc.text")
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Changed files")
+                        .font(.headline)
+                    if task.changedFiles.isEmpty {
+                        Text(emptyChangedFilesMessage)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(task.changedFiles, id: \.self) { file in
+                            Label(file, systemImage: "doc.text")
+                        }
                     }
                 }
-            }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Review Summary")
-                    .font(.headline)
-                Text(task.reviewSummary ?? "No review summary yet.")
-                    .foregroundStyle(.secondary)
-            }
-
-            if !task.approvals.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Approval History")
+                    Text("Review Summary")
                         .font(.headline)
-                    ForEach(task.approvals.reversed()) { approval in
-                        VStack(alignment: .leading, spacing: 3) {
-                            HStack {
-                                Label(approval.decision, systemImage: "checkmark.seal.fill")
-                                    .font(.subheadline.weight(.semibold))
-                                Spacer()
-                                Text(approval.decidedAt)
-                                    .font(.caption2)
-                                    .foregroundStyle(.tertiary)
-                            }
-                            Text(approval.summary)
+                    Text(task.reviewSummary ?? "No review summary yet.")
+                        .foregroundStyle(.secondary)
+                }
+
+                if let proposal = task.executionProposal {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Execution Proposal")
+                            .font(.headline)
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            Label("\(proposal.provider.name) / \(proposal.provider.model)", systemImage: "cpu")
+                                .font(.subheadline.weight(.semibold))
+                            Text(proposal.summary)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+
+                            Label("Risk: \(proposal.riskLevel)", systemImage: "shield")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
                         }
-                        .padding(10)
-                        .background(.background)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                        VStack(alignment: .leading, spacing: 5) {
+                            ForEach(Array(proposal.proposedActions.enumerated()), id: \.offset) { index, action in
+                                HStack(alignment: .top, spacing: 8) {
+                                    Text("\(index + 1).")
+                                        .font(.caption.monospacedDigit())
+                                        .foregroundStyle(.secondary)
+                                    Text(action)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
                     }
                 }
-            }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Approval")
-                    .font(.headline)
-                Button {
-                    workspace.approvePlan(for: task)
-                } label: {
-                    Label(approveButtonTitle, systemImage: "checkmark.seal")
-                        .frame(maxWidth: .infinity)
+                if let editProposal = task.editProposal {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Edit Proposal")
+                            .font(.headline)
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            Label("\(editProposal.provider.name) / \(editProposal.provider.model)", systemImage: "pencil.and.list.clipboard")
+                                .font(.subheadline.weight(.semibold))
+                            Text(editProposal.summary)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Label("Status: \(editProposal.status)", systemImage: "list.bullet.clipboard")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
+                            Label("Risk: \(editProposal.riskLevel)", systemImage: "shield")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
+                        }
+
+                        ForEach(editProposal.fileChanges) { change in
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Label(change.path, systemImage: "doc.text")
+                                        .font(.subheadline.weight(.semibold))
+                                    Spacer()
+                                    Text(change.changeType)
+                                        .font(.caption2.weight(.medium))
+                                        .padding(.horizontal, 7)
+                                        .padding(.vertical, 3)
+                                        .background(.quaternary)
+                                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                                }
+                                Text(change.rationale)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text(change.diffPreview)
+                                    .font(.caption.monospaced())
+                                    .textSelection(.enabled)
+                                    .padding(8)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(.quaternary)
+                                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                            }
+                            .padding(10)
+                            .background(.background)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                    }
                 }
-                .disabled(!canApprovePlan)
-                .keyboardShortcut(.return, modifiers: [.command])
 
-                Button {
-                } label: {
-                    Label("Request Changes", systemImage: "arrow.uturn.backward")
-                        .frame(maxWidth: .infinity)
+                if !task.approvals.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Approval History")
+                            .font(.headline)
+                        ForEach(task.approvals.reversed()) { approval in
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack {
+                                    Label(approval.decision, systemImage: "checkmark.seal.fill")
+                                        .font(.subheadline.weight(.semibold))
+                                    Spacer()
+                                    Text(approval.decidedAt)
+                                        .font(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                }
+                                Text(approval.summary)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(10)
+                            .background(.background)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                    }
                 }
-                    .disabled(true)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Approval")
+                        .font(.headline)
+                    Button {
+                        workspace.approvePlan(for: task)
+                    } label: {
+                        Label(approveButtonTitle, systemImage: "checkmark.seal")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .disabled(!canApprovePlan)
+                    .keyboardShortcut(.return, modifiers: [.command])
+
+                    Button {
+                        workspace.generateEditProposal(for: task)
+                    } label: {
+                        Label(generateEditProposalButtonTitle, systemImage: "doc.badge.plus")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .disabled(!canGenerateEditProposal)
+
+                    Button {
+                        workspace.applyEditProposal(for: task)
+                    } label: {
+                        Label(applyEditProposalButtonTitle, systemImage: "checkmark.circle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .disabled(!canApplyEditProposal)
+
+                    Button {
+                        workspace.rejectEditProposal(for: task)
+                    } label: {
+                        Label(rejectEditProposalButtonTitle, systemImage: "arrow.uturn.backward")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .disabled(!canRejectEditProposal)
+                }
+
+                Text("Task ID: \(task.id)")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
-
-            Spacer()
-
-            Text("Task ID: \(task.id)")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+            .padding(20)
         }
-        .padding(20)
     }
 
     private var isApproving: Bool {
@@ -477,7 +576,7 @@ private struct ReviewPanel: View {
     }
 
     private var canApprovePlan: Bool {
-        task.status == "Human Review" && !isApproving
+        task.status == "Human Review" && task.approvals.isEmpty && !isApproving
     }
 
     private var approveButtonTitle: String {
@@ -485,11 +584,73 @@ private struct ReviewPanel: View {
             return "Approving"
         }
 
-        if task.status == "Running" {
+        if !task.approvals.isEmpty {
             return "Plan Approved"
         }
 
         return "Approve Plan"
+    }
+
+    private var isGeneratingEditProposal: Bool {
+        workspace.isGeneratingEditProposal(taskID: task.id)
+    }
+
+    private var canGenerateEditProposal: Bool {
+        task.executionProposal != nil &&
+            (task.editProposal == nil || task.editProposal?.status == "Rejected") &&
+            !isGeneratingEditProposal
+    }
+
+    private var generateEditProposalButtonTitle: String {
+        if isGeneratingEditProposal {
+            return "Generating Edit Proposal"
+        }
+
+        if task.editProposal != nil {
+            return "Edit Proposal Ready"
+        }
+
+        return "Generate Edit Proposal"
+    }
+
+    private var isApplyingEditProposal: Bool {
+        workspace.isApplyingEditProposal(taskID: task.id)
+    }
+
+    private var isRejectingEditProposal: Bool {
+        workspace.isRejectingEditProposal(taskID: task.id)
+    }
+
+    private var canApplyEditProposal: Bool {
+        task.editProposal?.status == "Proposed" && !isApplyingEditProposal && !isRejectingEditProposal
+    }
+
+    private var applyEditProposalButtonTitle: String {
+        if isApplyingEditProposal {
+            return "Applying Edit Proposal"
+        }
+
+        if task.editProposal?.status == "Applied" {
+            return "Edit Proposal Applied"
+        }
+
+        return "Apply Edit Proposal"
+    }
+
+    private var canRejectEditProposal: Bool {
+        task.editProposal?.status == "Proposed" && !isApplyingEditProposal && !isRejectingEditProposal
+    }
+
+    private var rejectEditProposalButtonTitle: String {
+        if isRejectingEditProposal {
+            return "Requesting Changes"
+        }
+
+        if task.editProposal?.status == "Rejected" {
+            return "Changes Requested"
+        }
+
+        return "Request Changes"
     }
 
     private var emptyChangedFilesMessage: String {

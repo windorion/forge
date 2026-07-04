@@ -14,6 +14,8 @@ struct ForgeTask: Identifiable, Codable, Hashable {
     var approvals: [ApprovalRecord]
     var toolCalls: [ToolCall]
     var contextFiles: [ContextFile]
+    var executionProposal: ExecutionProposal?
+    var editProposal: EditProposal?
     var changedFiles: [String]
     var reviewSummary: String?
 
@@ -44,6 +46,8 @@ struct ForgeTask: Identifiable, Codable, Hashable {
         approvals: [],
         toolCalls: [],
         contextFiles: [],
+        executionProposal: nil,
+        editProposal: nil,
         changedFiles: [],
         reviewSummary: "No runtime review yet."
     )
@@ -94,11 +98,54 @@ struct ContextFile: Identifiable, Codable, Hashable {
     var summary: String
 }
 
+struct ModelProviderInfo: Codable, Hashable {
+    var id: String
+    var name: String
+    var model: String
+    var mode: String
+}
+
+struct ExecutionProposal: Identifiable, Codable, Hashable {
+    var id: String
+    var provider: ModelProviderInfo
+    var summary: String
+    var proposedActions: [String]
+    var riskLevel: String
+    var generatedAt: String
+}
+
+struct ProposedFileChange: Identifiable, Codable, Hashable {
+    var id: String
+    var path: String
+    var changeType: String
+    var rationale: String
+    var diffPreview: String
+    var applyOperation: ProposedFileOperation?
+}
+
+struct ProposedFileOperation: Codable, Hashable {
+    var kind: String
+    var text: String?
+}
+
+struct EditProposal: Identifiable, Codable, Hashable {
+    var id: String
+    var provider: ModelProviderInfo
+    var summary: String
+    var fileChanges: [ProposedFileChange]
+    var riskLevel: String
+    var status: String
+    var generatedAt: String
+    var decidedAt: String?
+    var decisionNote: String?
+}
+
 struct RuntimeHealth: Codable, Hashable {
     var ok: Bool
     var service: String
     var version: String
     var uptimeSeconds: Double
+    var modelProvider: ModelProviderInfo?
 }
 
 struct CreateTaskRequest: Encodable {
@@ -107,6 +154,10 @@ struct CreateTaskRequest: Encodable {
 }
 
 struct ApprovePlanRequest: Encodable {
+    var note: String?
+}
+
+struct EditProposalDecisionRequest: Encodable {
     var note: String?
 }
 

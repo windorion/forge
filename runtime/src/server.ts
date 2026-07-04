@@ -1,9 +1,10 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
-import { readdir, readFile, stat } from "node:fs/promises";
+import { appendFile, readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { URL } from "node:url";
 import { fileURLToPath } from "node:url";
+import { createModelProviderFromEnv } from "./modelProvider.js";
 import { SqliteTaskStore } from "./taskStore.js";
 import type {
   AgentState,
@@ -11,8 +12,10 @@ import type {
   ApprovePlanRequest,
   ContextFile,
   CreateTaskRequest,
+  EditProposalDecisionRequest,
   ForgeTask,
   PlanStep,
+  ProposedFileChange,
   RuntimeEvent,
   ToolCall
 } from "./types.js";
@@ -24,6 +27,7 @@ const runtimeDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".
 const repoRoot = path.resolve(runtimeDir, "..");
 const taskStore = new SqliteTaskStore(resolveDatabasePath());
 const tasks = new Map<string, ForgeTask>(taskStore.loadTasks().map((task) => [task.id, task]));
+const modelProvider = createModelProviderFromEnv();
 
 const defaultAgents: AgentState[] = [
   { role: "Manager", status: "Active", summary: "Owns task lifecycle and constraints" },
@@ -83,6 +87,7 @@ const server = createServer(async (request, response) => {
         service: "forge-runtime",
         version: "0.1.0",
         uptimeSeconds: (Date.now() - startedAt) / 1000,
+        modelProvider: modelProvider.info,
         persistence: {
           databasePath: taskStore.dbPath,
           taskCount: tasks.size
@@ -110,7 +115,30 @@ const server = createServer(async (request, response) => {
     const approvePlanTaskID = taskIDFromActionPath(url.pathname, "approve-plan");
     if (request.method === "POST" && approvePlanTaskID) {
       const input = await readJson<ApprovePlanRequest>(request);
-      const task = approvePlan(approvePlanTaskID, input);
+      const task = await approvePlan(approvePlanTaskID, input);
+      writeJson(response, 200, task);
+      return;
+    }
+
+    const generateEditProposalTaskID = taskIDFromActionPath(url.pathname, "generate-edit-proposal");
+    if (request.method === "POST" && generateEditProposalTaskID) {
+      const task = await generateEditProposal(generateEditProposalTaskID);
+      writeJson(response, 200, task);
+      return;
+    }
+
+    const applyEditProposalTaskID = taskIDFromActionPath(url.pathname, "apply-edit-proposal");
+    if (request.method === "POST" && applyEditProposalTaskID) {
+      const input = await readJson<EditProposalDecisionRequest>(request);
+      const task = await applyEditProposal(applyEditProposalTaskID, input);
+      writeJson(response, 200, task);
+      return;
+    }
+
+    const rejectEditProposalTaskID = taskIDFromActionPath(url.pathname, "reject-edit-proposal");
+    if (request.method === "POST" && rejectEditProposalTaskID) {
+      const input = await readJson<EditProposalDecisionRequest>(request);
+      const task = rejectEditProposal(rejectEditProposalTaskID, input);
       writeJson(response, 200, task);
       return;
     }
@@ -133,6 +161,7 @@ const server = createServer(async (request, response) => {
 server.listen(port, "127.0.0.1", () => {
   console.log(`Forge runtime listening on http://127.0.0.1:${port}`);
   console.log(`Forge task store: ${taskStore.dbPath}`);
+  console.log(`Forge model provider: ${modelProvider.info.name} (${modelProvider.info.model})`);
 });
 
 process.once("SIGINT", () => shutdown(130));
@@ -203,11 +232,13 @@ function createTask(input: CreateTaskRequest): ForgeTask {
     toolCalls: [],
     contextFiles: [],
     changedFiles: [],
+    executionProposal: undefined,
+    editProposal: undefined,
     reviewSummary: "No review yet. The planner is preparing a first plan."
   };
 }
 
-function approvePlan(taskID: string, input: ApprovePlanRequest): ForgeTask {
+async function approvePlan(taskID: string, input: ApprovePlanRequest): Promise<ForgeTask> {
   const task = tasks.get(taskID);
   if (!task) {
     throw new HttpError(404, `Task not found: ${taskID}`);
@@ -231,10 +262,10 @@ function approvePlan(taskID: string, input: ApprovePlanRequest): ForgeTask {
   task.status = "Running";
   task.currentPhase = "Execution Preparation";
   task.changedFiles = [];
-  task.reviewSummary = "Plan approved. Forge entered controlled execution preparation; v0 still applies no file changes.";
+  task.reviewSummary = "Plan approved. The model provider is preparing a safe execution proposal.";
   setAgent(task, "Manager", "Active", "Recorded plan approval and opened the execution phase.");
   setAgent(task, "Planner", "Done", "Plan approved by the user.");
-  setAgent(task, "Coder", "Ready", "Approved plan received; waiting for real edit tools.");
+  setAgent(task, "Coder", "Active", `Preparing an execution proposal with ${modelProvider.info.name}.`);
   setAgent(task, "Tester", "Idle", "Waiting for code changes or validation commands.");
   setAgent(task, "Reviewer", "Idle", "No diff to review yet.");
   upsertPlanStep(task, {
@@ -244,16 +275,290 @@ function approvePlan(taskID: string, input: ApprovePlanRequest): ForgeTask {
     summary: "Plan approved and execution phase opened. No files changed in v0."
   });
   upsertPlanStep(task, {
-    id: "await-edit-tools",
-    title: "Await edit tools",
+    id: "generate-execution-proposal",
+    title: "Generate execution proposal",
     status: "Active",
-    summary: "Next runtime slice will connect model-driven edits, validation, and diff review."
+    summary: `Using ${modelProvider.info.name} to draft a safe next-step proposal.`
   });
 
   const approved = event("approval.plan.approved", "User approved the plan. Controlled execution preparation is open.");
   approved.createdAt = now;
   saveAndBroadcast(task, approved);
+
+  const proposal = await modelProvider.createExecutionProposal({ task });
+  task.executionProposal = proposal;
+  task.reviewSummary = "Execution proposal generated. No files changed; the next slice will turn this into a reviewable diff.";
+  setAgent(task, "Coder", "Ready", "Execution proposal generated; waiting for safe edit proposal tooling.");
+  upsertPlanStep(task, {
+    id: "generate-execution-proposal",
+    title: "Generate execution proposal",
+    status: "Done",
+    summary: `Generated by ${proposal.provider.name} (${proposal.provider.model}).`
+  });
+  upsertPlanStep(task, {
+    id: "await-safe-diff",
+    title: "Await safe diff proposal",
+    status: "Active",
+    summary: "Next runtime slice will create a reviewable diff before any file mutation."
+  });
+
+  const proposed = event("model.execution.proposed", "Model provider generated a safe execution proposal after plan approval.");
+  proposed.createdAt = proposal.generatedAt;
+  saveAndBroadcast(task, proposed);
   return task;
+}
+
+async function generateEditProposal(taskID: string): Promise<ForgeTask> {
+  const task = tasks.get(taskID);
+  if (!task) {
+    throw new HttpError(404, `Task not found: ${taskID}`);
+  }
+
+  if (!task.executionProposal) {
+    throw new HttpError(409, "An execution proposal is required before generating edit proposals.");
+  }
+
+  if (task.editProposal?.status === "Proposed") {
+    throw new HttpError(409, "This task already has a proposed edit awaiting review.");
+  }
+
+  task.status = "Running";
+  task.currentPhase = "Edit Proposal Generation";
+  task.reviewSummary = "Generating a safe edit proposal. No files will be changed.";
+  setAgent(task, "Coder", "Active", `Generating a safe edit proposal with ${modelProvider.info.name}.`);
+  setAgent(task, "Reviewer", "Idle", "Waiting for a proposed diff to review.");
+  upsertPlanStep(task, {
+    id: "generate-safe-edit-proposal",
+    title: "Generate safe edit proposal",
+    status: "Active",
+    summary: "Drafting a proposed diff without touching the working tree."
+  });
+
+  const started = event("edit.proposal.started", "Generating a safe edit proposal without applying file changes.");
+  started.createdAt = new Date().toISOString();
+  saveAndBroadcast(task, started);
+
+  const proposal = await modelProvider.createEditProposal({ task });
+  task.editProposal = proposal;
+  task.status = "Human Review";
+  task.currentPhase = "Edit Proposal Review";
+  task.changedFiles = [];
+  task.reviewSummary = "Edit proposal ready for review. No file changes have been applied.";
+  setAgent(task, "Coder", "Done", "Prepared a proposed diff without modifying files.");
+  setAgent(task, "Reviewer", "Active", "Review the proposed file changes before any apply step exists.");
+  upsertPlanStep(task, {
+    id: "generate-safe-edit-proposal",
+    title: "Generate safe edit proposal",
+    status: "Done",
+    summary: `Proposed ${proposal.fileChanges.length} file change(s). No files changed.`
+  });
+  upsertPlanStep(task, {
+    id: "review-edit-proposal",
+    title: "Review edit proposal",
+    status: "Active",
+    summary: "Human review required before a future apply step can mutate files."
+  });
+
+  const ready = event("edit.proposal.ready", "Safe edit proposal is ready for human review. No files changed.");
+  ready.createdAt = proposal.generatedAt;
+  saveAndBroadcast(task, ready);
+  return task;
+}
+
+async function applyEditProposal(
+  taskID: string,
+  input: EditProposalDecisionRequest
+): Promise<ForgeTask> {
+  const task = tasks.get(taskID);
+  if (!task) {
+    throw new HttpError(404, `Task not found: ${taskID}`);
+  }
+
+  if (task.editProposal?.status !== "Proposed") {
+    throw new HttpError(409, "A proposed edit is required before applying changes.");
+  }
+
+  task.status = "Running";
+  task.currentPhase = "Applying Edit Proposal";
+  task.reviewSummary = "Applying the approved edit proposal with restricted file operations.";
+  setAgent(task, "Coder", "Active", "Applying the approved append-only edit proposal.");
+  setAgent(task, "Reviewer", "Active", "Watching the controlled apply step.");
+  upsertPlanStep(task, {
+    id: "apply-edit-proposal",
+    title: "Apply edit proposal",
+    status: "Active",
+    summary: "Applying reviewed file changes with repo-local path checks."
+  });
+
+  const started = event("edit.proposal.apply.started", "Applying approved edit proposal.");
+  started.createdAt = new Date().toISOString();
+  saveAndBroadcast(task, started);
+
+  try {
+    const appliedFiles: string[] = [];
+    for (const change of task.editProposal.fileChanges) {
+      const appliedPath = await applyProposedFileChange(change);
+      appliedFiles.push(appliedPath);
+    }
+
+    const now = new Date().toISOString();
+    task.editProposal.status = "Applied";
+    task.editProposal.decidedAt = now;
+    task.editProposal.decisionNote = input.note?.trim() || undefined;
+    task.status = "Completed";
+    task.currentPhase = "Edit Proposal Applied";
+    task.changedFiles = [...new Set(appliedFiles)];
+    task.approvals.push({
+      id: randomUUID(),
+      action: "Apply Edit Proposal",
+      decision: "Approved",
+      summary: `Applied ${task.changedFiles.length} reviewed file change(s).`,
+      decidedAt: now,
+      userNote: input.note?.trim() || undefined
+    });
+    task.reviewSummary = "Approved edit proposal applied. The task now has real changed files to inspect.";
+    setAgent(task, "Coder", "Done", "Applied the reviewed edit proposal.");
+    setAgent(task, "Tester", "Ready", "Ready to run validation on the changed files.");
+    setAgent(task, "Reviewer", "Done", "Controlled apply completed; review the resulting diff.");
+    upsertPlanStep(task, {
+      id: "review-edit-proposal",
+      title: "Review edit proposal",
+      status: "Done",
+      summary: "Human review completed by applying the proposal."
+    });
+    upsertPlanStep(task, {
+      id: "apply-edit-proposal",
+      title: "Apply edit proposal",
+      status: "Done",
+      summary: `Applied ${task.changedFiles.join(", ")}.`
+    });
+
+    const applied = event("edit.proposal.applied", "Approved edit proposal was applied to the workspace.");
+    applied.createdAt = now;
+    saveAndBroadcast(task, applied);
+    return task;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    task.status = "Failed";
+    task.currentPhase = "Apply Failed";
+    task.reviewSummary = message;
+    setAgent(task, "Coder", "Blocked", "Could not apply the approved edit proposal.");
+    setAgent(task, "Reviewer", "Active", "Review the apply failure before retrying.");
+    upsertPlanStep(task, {
+      id: "apply-edit-proposal",
+      title: "Apply edit proposal",
+      status: "Blocked",
+      summary: message
+    });
+
+    const failed = event("edit.proposal.apply.failed", message);
+    failed.createdAt = new Date().toISOString();
+    saveAndBroadcast(task, failed);
+    throw error;
+  }
+}
+
+function rejectEditProposal(taskID: string, input: EditProposalDecisionRequest): ForgeTask {
+  const task = tasks.get(taskID);
+  if (!task) {
+    throw new HttpError(404, `Task not found: ${taskID}`);
+  }
+
+  if (task.editProposal?.status !== "Proposed") {
+    throw new HttpError(409, "A proposed edit is required before requesting changes.");
+  }
+
+  const now = new Date().toISOString();
+  task.editProposal.status = "Rejected";
+  task.editProposal.decidedAt = now;
+  task.editProposal.decisionNote = input.note?.trim() || undefined;
+  task.status = "Human Review";
+  task.currentPhase = "Edit Proposal Rejected";
+  task.changedFiles = [];
+  task.approvals.push({
+    id: randomUUID(),
+    action: "Reject Edit Proposal",
+    decision: "Rejected",
+    summary: "Rejected the proposed edit without changing files.",
+    decidedAt: now,
+    userNote: input.note?.trim() || undefined
+  });
+  task.reviewSummary = "Edit proposal rejected. No file changes were applied; another proposal can be generated.";
+  setAgent(task, "Coder", "Ready", "Waiting to generate a revised edit proposal.");
+  setAgent(task, "Reviewer", "Done", "Rejected the current proposed diff.");
+  upsertPlanStep(task, {
+    id: "review-edit-proposal",
+    title: "Review edit proposal",
+    status: "Done",
+    summary: "Human review rejected the proposal without applying changes."
+  });
+  upsertPlanStep(task, {
+    id: "revise-edit-proposal",
+    title: "Revise edit proposal",
+    status: "Active",
+    summary: "A new edit proposal can be generated after rejection."
+  });
+
+  const rejected = event("edit.proposal.rejected", "Edit proposal rejected. No files changed.");
+  rejected.createdAt = now;
+  saveAndBroadcast(task, rejected);
+  return task;
+}
+
+async function applyProposedFileChange(change: ProposedFileChange): Promise<string> {
+  if (change.changeType !== "Modify") {
+    throw new HttpError(409, `Only modify changes can be applied in v0: ${change.path}`);
+  }
+
+  if (change.applyOperation?.kind !== "AppendText") {
+    throw new HttpError(409, `Only append-text edit operations can be applied in v0: ${change.path}`);
+  }
+
+  if (change.applyOperation.text.length > 10_000) {
+    throw new HttpError(409, `Edit operation is too large for v0 apply: ${change.path}`);
+  }
+
+  const { absolutePath, relativePath } = resolveMarkdownWorkspacePath(change.path);
+  const fileStat = await stat(absolutePath);
+  if (!fileStat.isFile()) {
+    throw new HttpError(409, `Can only append to existing files in v0: ${relativePath}`);
+  }
+
+  await appendFile(absolutePath, change.applyOperation.text, "utf8");
+  return relativePath;
+}
+
+function resolveMarkdownWorkspacePath(inputPath: string): { absolutePath: string; relativePath: string } {
+  if (inputPath.includes("\0") || path.isAbsolute(inputPath)) {
+    throw new HttpError(409, `Unsafe edit path: ${inputPath}`);
+  }
+
+  const normalized = path.posix.normalize(inputPath.replaceAll("\\", "/"));
+  if (
+    normalized === "." ||
+    normalized === ".." ||
+    normalized.startsWith("../") ||
+    normalized.startsWith("/") ||
+    normalized.startsWith(".git/") ||
+    normalized.startsWith(".forge/")
+  ) {
+    throw new HttpError(409, `Unsafe edit path: ${inputPath}`);
+  }
+
+  if (normalized !== "README.md" && !normalized.startsWith("docs/")) {
+    throw new HttpError(409, `Only README.md and docs/*.md paths can be edited in v0: ${inputPath}`);
+  }
+
+  if (!normalized.endsWith(".md")) {
+    throw new HttpError(409, `Only Markdown files can be edited in v0: ${inputPath}`);
+  }
+
+  const absolutePath = path.resolve(repoRoot, normalized);
+  if (!absolutePath.startsWith(`${repoRoot}${path.sep}`)) {
+    throw new HttpError(409, `Unsafe edit path: ${inputPath}`);
+  }
+
+  return { absolutePath, relativePath: normalized };
 }
 
 function runAgentLoopV0(taskID: string): void {

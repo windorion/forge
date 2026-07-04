@@ -22,7 +22,7 @@ export interface RuntimeEvent {
 
 export interface ApprovalRecord {
   id: string;
-  action: "Approve Plan";
+  action: "Approve Plan" | "Apply Edit Proposal" | "Reject Edit Proposal";
   decision: "Approved" | "Rejected";
   summary: string;
   decidedAt: string;
@@ -34,6 +34,54 @@ export interface PlanStep {
   title: string;
   status: "Pending" | "Active" | "Done" | "Blocked";
   summary: string;
+}
+
+export interface ModelProviderInfo {
+  id: string;
+  name: string;
+  model: string;
+  mode: "local" | "remote";
+}
+
+export interface ExecutionProposal {
+  id: string;
+  provider: ModelProviderInfo;
+  summary: string;
+  proposedActions: string[];
+  riskLevel: "Low" | "Medium" | "High";
+  generatedAt: string;
+}
+
+export interface ProposedFileChange {
+  id: string;
+  path: string;
+  changeType: "Create" | "Modify" | "Delete";
+  rationale: string;
+  diffPreview: string;
+  applyOperation?: ProposedFileOperation;
+}
+
+export interface AppendTextOperation {
+  kind: "AppendText";
+  text: string;
+}
+
+export type ProposedFileOperation = AppendTextOperation;
+
+export interface EditProposalDecisionRequest {
+  note?: string;
+}
+
+export interface EditProposal {
+  id: string;
+  provider: ModelProviderInfo;
+  summary: string;
+  fileChanges: ProposedFileChange[];
+  riskLevel: "Low" | "Medium" | "High";
+  status: "Proposed" | "Rejected" | "Superseded" | "Applied";
+  generatedAt: string;
+  decidedAt?: string;
+  decisionNote?: string;
 }
 
 export interface ToolCall {
@@ -65,6 +113,8 @@ export interface ForgeTask {
   approvals: ApprovalRecord[];
   toolCalls: ToolCall[];
   contextFiles: ContextFile[];
+  executionProposal?: ExecutionProposal;
+  editProposal?: EditProposal;
   changedFiles: string[];
   reviewSummary?: string;
 }

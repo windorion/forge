@@ -25,6 +25,8 @@ together.
 | `macos_native.md` | macOS-specific features, permissions, distribution, and native integrations. |
 | `multi_agent.md` | Agent roles, responsibilities, handoffs, orchestration, and state transitions. |
 | `runtime_architecture.md` | Local runtime modules, app-runtime boundaries, tool execution, and event streams. |
+| `model_providers.md` | Model-provider boundary, configuration, and provider implementation rules. |
+| `edit_proposals.md` | Safe edit proposal flow and distinction between proposed and applied changes. |
 | `local_first.md` | Local indexing, privacy model, context cache, embeddings, and offline behavior. |
 | `database.md` | Local database responsibilities, conceptual schema, and data retention rules. |
 | `git_workflow.md` | Branch, diff, commit, review, and pull request workflows. |

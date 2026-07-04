@@ -16,6 +16,8 @@ The user should be able to:
 4. Watch the agent inspect real local project context.
 5. See tool calls, context files, plan steps, agent states, and runtime events.
 6. Reach a human review gate before any code changes are applied.
+7. Approve a generated edit proposal before a narrow, controlled file change is
+   applied.
 
 ## V0 Product Feeling
 
@@ -43,6 +45,11 @@ The product should show:
 - visible context files
 - visible plan steps
 - human review gate
+- SQLite task persistence
+- model-provider abstraction
+- execution proposals
+- safe edit proposals
+- explicit apply/reject actions for edit proposals
 - no automatic file changes
 
 ## V0 Not Included
@@ -52,7 +59,6 @@ The product should show:
 - command execution
 - test runner
 - git diff generation
-- SQLite persistence
 - full repository index
 - Tree-sitter parsing
 - model settings UI
@@ -70,15 +76,25 @@ V0 is complete when:
 - The task reaches `Human Review`.
 - The UI shows tool calls and context files.
 - No code changes are made without approval.
+- A generated edit proposal can be rejected without changing files.
+- A generated edit proposal can be explicitly applied through a restricted
+  Markdown append operation.
 
 ## V0 Next After Completion
 
 After v0, Forge should move toward v0.1:
 
-- SQLite task persistence
-- model provider abstraction
 - read/search tools powered by real task intent
-- first safe file-edit proposal flow
+- richer file-edit proposal flow
 
 The explicit plan approval action has started: approval is recorded and opens
 controlled execution preparation, but it does not yet run model-driven edits.
+
+The model-provider abstraction has also started: the default local
+deterministic provider creates an execution proposal after plan approval. Real
+remote or local LLM providers are still future work.
+
+Safe edit proposals have started: Forge can create a proposed diff preview and
+return the task to human review without mutating files. A proposal can now be
+rejected without touching files or applied through a narrow append-text
+operation against existing Markdown files.

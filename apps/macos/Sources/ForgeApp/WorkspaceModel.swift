@@ -8,6 +8,9 @@ final class WorkspaceModel: ObservableObject {
     @Published var statusMessage = "Runtime not checked"
     @Published var eventStreamStatus = "Event stream disconnected"
     @Published private var approvingTaskIDs = Set<ForgeTask.ID>()
+    @Published private var generatingEditProposalTaskIDs = Set<ForgeTask.ID>()
+    @Published private var applyingEditProposalTaskIDs = Set<ForgeTask.ID>()
+    @Published private var rejectingEditProposalTaskIDs = Set<ForgeTask.ID>()
 
     private let runtime = RuntimeClient()
     private var eventStreamTask: Task<Void, Never>?
@@ -76,6 +79,72 @@ final class WorkspaceModel: ObservableObject {
 
     func isApprovingPlan(taskID: ForgeTask.ID) -> Bool {
         approvingTaskIDs.contains(taskID)
+    }
+
+    func generateEditProposal(for task: ForgeTask) {
+        generatingEditProposalTaskIDs.insert(task.id)
+
+        Task {
+            do {
+                let updatedTask = try await runtime.generateEditProposal(taskID: task.id)
+                upsert(updatedTask)
+                selectedTaskID = updatedTask.id
+                statusMessage = "Edit proposal ready for review."
+                startEventStream()
+            } catch {
+                statusMessage = "Generate edit proposal failed: \(error.localizedDescription)"
+            }
+
+            generatingEditProposalTaskIDs.remove(task.id)
+        }
+    }
+
+    func isGeneratingEditProposal(taskID: ForgeTask.ID) -> Bool {
+        generatingEditProposalTaskIDs.contains(taskID)
+    }
+
+    func applyEditProposal(for task: ForgeTask) {
+        applyingEditProposalTaskIDs.insert(task.id)
+
+        Task {
+            do {
+                let updatedTask = try await runtime.applyEditProposal(taskID: task.id)
+                upsert(updatedTask)
+                selectedTaskID = updatedTask.id
+                statusMessage = "Edit proposal applied. Review the changed files."
+                startEventStream()
+            } catch {
+                statusMessage = "Apply edit proposal failed: \(error.localizedDescription)"
+            }
+
+            applyingEditProposalTaskIDs.remove(task.id)
+        }
+    }
+
+    func isApplyingEditProposal(taskID: ForgeTask.ID) -> Bool {
+        applyingEditProposalTaskIDs.contains(taskID)
+    }
+
+    func rejectEditProposal(for task: ForgeTask) {
+        rejectingEditProposalTaskIDs.insert(task.id)
+
+        Task {
+            do {
+                let updatedTask = try await runtime.rejectEditProposal(taskID: task.id)
+                upsert(updatedTask)
+                selectedTaskID = updatedTask.id
+                statusMessage = "Edit proposal rejected. No files were changed."
+                startEventStream()
+            } catch {
+                statusMessage = "Reject edit proposal failed: \(error.localizedDescription)"
+            }
+
+            rejectingEditProposalTaskIDs.remove(task.id)
+        }
+    }
+
+    func isRejectingEditProposal(taskID: ForgeTask.ID) -> Bool {
+        rejectingEditProposalTaskIDs.contains(taskID)
     }
 
     private func startEventStream() {
