@@ -9,6 +9,7 @@ final class WorkspaceModel: ObservableObject {
     @Published var workspaceValidationPresetConfig: WorkspaceValidationPresetConfig?
     @Published var statusMessage = "Runtime not checked"
     @Published var eventStreamStatus = "Event stream disconnected"
+    @Published private var validationPermissionSnapshots: [ForgeTask.ID: [ValidationPresetPermission]] = [:]
     @Published private var approvingTaskIDs = Set<ForgeTask.ID>()
     @Published private var generatingEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var validatingEditProposalTaskIDs = Set<ForgeTask.ID>()
@@ -35,6 +36,7 @@ final class WorkspaceModel: ObservableObject {
                 statusMessage = "Runtime connected"
                 try await refreshTasks()
                 try await refreshValidationPresets()
+                await refreshValidationPermissionSnapshotIfPossible(for: selectedTaskID)
                 startEventStream()
             } catch {
                 runtimeHealth = nil
@@ -58,6 +60,7 @@ final class WorkspaceModel: ObservableObject {
                 upsert(task)
                 selectedTaskID = task.id
                 statusMessage = "Task created. Agent Loop v0 started."
+                await refreshValidationPermissionSnapshotIfPossible(for: task.id)
                 startEventStream()
             } catch {
                 statusMessage = "Create task failed: \(error.localizedDescription)"
@@ -74,6 +77,7 @@ final class WorkspaceModel: ObservableObject {
                 upsert(approvedTask)
                 selectedTaskID = approvedTask.id
                 statusMessage = "Plan approved. Controlled execution opened."
+                await refreshValidationPermissionSnapshotIfPossible(for: approvedTask.id)
                 startEventStream()
             } catch {
                 statusMessage = "Approve plan failed: \(error.localizedDescription)"
@@ -96,6 +100,7 @@ final class WorkspaceModel: ObservableObject {
                 upsert(updatedTask)
                 selectedTaskID = updatedTask.id
                 statusMessage = "Edit proposal ready for review."
+                await refreshValidationPermissionSnapshotIfPossible(for: updatedTask.id)
                 startEventStream()
             } catch {
                 statusMessage = "Generate edit proposal failed: \(error.localizedDescription)"
@@ -118,6 +123,7 @@ final class WorkspaceModel: ObservableObject {
                 upsert(updatedTask)
                 selectedTaskID = updatedTask.id
                 statusMessage = "Edit proposal validation refreshed."
+                await refreshValidationPermissionSnapshotIfPossible(for: updatedTask.id)
                 startEventStream()
             } catch {
                 statusMessage = "Validate edit proposal failed: \(error.localizedDescription)"
@@ -140,6 +146,7 @@ final class WorkspaceModel: ObservableObject {
                 upsert(updatedTask)
                 selectedTaskID = updatedTask.id
                 statusMessage = "Edit proposal applied. Review the changed files."
+                await refreshValidationPermissionSnapshotIfPossible(for: updatedTask.id)
                 startEventStream()
             } catch {
                 statusMessage = "Apply edit proposal failed: \(error.localizedDescription)"
@@ -162,6 +169,7 @@ final class WorkspaceModel: ObservableObject {
                 upsert(updatedTask)
                 selectedTaskID = updatedTask.id
                 statusMessage = "Edit proposal rejected. No files were changed."
+                await refreshValidationPermissionSnapshotIfPossible(for: updatedTask.id)
                 startEventStream()
             } catch {
                 statusMessage = "Reject edit proposal failed: \(error.localizedDescription)"
@@ -185,6 +193,7 @@ final class WorkspaceModel: ObservableObject {
                 upsert(updatedTask)
                 selectedTaskID = updatedTask.id
                 statusMessage = "Validation preset approved."
+                await refreshValidationPermissionSnapshotIfPossible(for: updatedTask.id)
                 startEventStream()
             } catch {
                 statusMessage = "Approve validation preset failed: \(error.localizedDescription)"
@@ -208,6 +217,7 @@ final class WorkspaceModel: ObservableObject {
                 upsert(updatedTask)
                 selectedTaskID = updatedTask.id
                 statusMessage = "Validation run completed."
+                await refreshValidationPermissionSnapshotIfPossible(for: updatedTask.id)
                 startEventStream()
             } catch {
                 statusMessage = "Run validation failed: \(error.localizedDescription)"
@@ -219,6 +229,16 @@ final class WorkspaceModel: ObservableObject {
 
     func isRunningValidation(taskID: ForgeTask.ID, presetID: ValidationPreset.ID? = nil) -> Bool {
         runningValidationTaskIDs.contains(validationPresetActionKey(taskID: taskID, presetID: presetID ?? "forge-post-apply"))
+    }
+
+    func validationPermissions(for taskID: ForgeTask.ID) -> [ValidationPresetPermission] {
+        validationPermissionSnapshots[taskID] ?? []
+    }
+
+    func refreshValidationPermissions(for taskID: ForgeTask.ID?) {
+        Task {
+            await refreshValidationPermissionSnapshotIfPossible(for: taskID)
+        }
     }
 
     private func startEventStream() {
@@ -243,6 +263,7 @@ final class WorkspaceModel: ObservableObject {
 
         do {
             try await refreshTasks()
+            await refreshValidationPermissionSnapshotIfPossible(for: selectedTaskID)
         } catch {
             statusMessage = "Refresh after event failed: \(error.localizedDescription)"
         }
@@ -262,6 +283,23 @@ final class WorkspaceModel: ObservableObject {
         let envelope = try await runtime.listValidationPresets()
         validationPresets = envelope.presets
         workspaceValidationPresetConfig = envelope.workspaceConfig
+    }
+
+    private func refreshValidationPermissionSnapshotIfPossible(for taskID: ForgeTask.ID?) async {
+        guard let taskID else {
+            return
+        }
+
+        guard tasks.contains(where: { $0.id == taskID && $0.id != ForgeTask.sample.id }) else {
+            return
+        }
+
+        do {
+            let envelope = try await runtime.validationPermissions(taskID: taskID)
+            validationPermissionSnapshots[taskID] = envelope.permissions
+        } catch {
+            statusMessage = "Refresh validation permissions failed: \(error.localizedDescription)"
+        }
     }
 
     private func upsert(_ task: ForgeTask) {

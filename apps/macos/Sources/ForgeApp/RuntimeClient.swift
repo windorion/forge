@@ -25,6 +25,16 @@ struct RuntimeClient {
         return try JSONDecoder().decode(ValidationPresetListEnvelope.self, from: data)
     }
 
+    func validationPermissions(taskID: ForgeTask.ID) async throws -> ValidationPermissionEnvelope {
+        let url = baseURL
+            .appending(path: "tasks")
+            .appending(path: taskID)
+            .appending(path: "validation-permissions")
+        let (data, response) = try await URLSession.shared.data(from: url)
+        try validate(response)
+        return try JSONDecoder().decode(ValidationPermissionEnvelope.self, from: data)
+    }
+
     func createTask(title: String, objective: String) async throws -> ForgeTask {
         let url = baseURL.appending(path: "tasks")
         var request = URLRequest(url: url)

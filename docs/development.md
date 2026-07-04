@@ -121,9 +121,11 @@ workspace config.
 
 Medium-risk validation presets require task-level approval through
 `POST /tasks/:taskID/approve-validation-preset` before they can run. The Review
-panel shows project validation presets with their source, commands, cwd, risk
-level, approval button, and run button. The Settings window shows the loaded
-workspace validation config path and any config issues.
+panel shows command permission requests with source, approval state, execution
+state, blocked reasons, command manifest, cwd, risk level, approval button, and
+run button. The runtime provides the task-specific permission state through
+`GET /tasks/:taskID/validation-permissions`. The Settings window shows the
+loaded workspace validation config path and any config issues.
 
 ## Build Checks
 
@@ -143,6 +145,8 @@ cd runtime && npm run check
 - Post-apply validation defaults to built-in `forge:` checks. Medium-risk
   project validation commands are allowlisted runtime presets, run without a
   shell, and require explicit task-level approval before execution.
+- Command permission cards are a visibility and approval surface for
+  allowlisted validation presets; they are not arbitrary shell execution.
 - SQLite currently stores full task snapshots plus basic task index fields; the
   full normalized runs/messages/tool-calls schema is still ahead.
 - No repository scanner yet.

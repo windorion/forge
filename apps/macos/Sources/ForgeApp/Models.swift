@@ -130,6 +130,8 @@ struct ValidationCommandDefinition: Identifiable, Codable, Hashable {
     var kind: String
     var riskLevel: String
     var cwd: String?
+    var executionMode: String
+    var boundary: String
 }
 
 struct ValidationPreset: Identifiable, Codable, Hashable {
@@ -146,6 +148,39 @@ struct WorkspaceValidationPresetConfig: Codable, Hashable {
     var path: String
     var exists: Bool
     var issues: [String]
+}
+
+struct ValidationPresetPermission: Identifiable, Codable, Hashable {
+    var id: String { preset.id }
+    var preset: ValidationPreset
+    var approvalState: String
+    var executionState: String
+    var canApprove: Bool
+    var canRun: Bool
+    var blockedReasons: [String]
+    var approval: ValidationPermissionApproval?
+    var lastRun: ValidationPermissionLastRun?
+}
+
+struct ValidationPermissionApproval: Identifiable, Codable, Hashable {
+    var id: String
+    var decidedAt: String
+    var summary: String
+}
+
+struct ValidationPermissionLastRun: Identifiable, Codable, Hashable {
+    var id: String
+    var status: String
+    var summary: String
+    var startedAt: String
+    var endedAt: String?
+}
+
+struct ValidationPermissionEnvelope: Codable, Hashable {
+    var taskID: String
+    var taskStatus: String
+    var currentPhase: String
+    var permissions: [ValidationPresetPermission]
 }
 
 struct ContextFile: Identifiable, Codable, Hashable {

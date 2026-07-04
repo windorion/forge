@@ -8,6 +8,7 @@ This first slice is intentionally small:
 - `GET /health`
 - `GET /tasks`
 - `GET /validation-presets`
+- `GET /tasks/:taskID/validation-permissions`
 - `POST /tasks`
 - `POST /tasks/:taskID/approve-plan`
 - `POST /tasks/:taskID/generate-edit-proposal`
@@ -50,6 +51,9 @@ commands.
 
 Project validation commands are allowlisted by the runtime, run without a
 shell, use repo-local cwd values, and record exit code plus output summary.
+`GET /tasks/:taskID/validation-permissions` returns a task-specific permission
+snapshot for each preset, including approval state, execution state, blocked
+reasons, command execution mode, and the last run for that preset.
 
 Task state is persisted locally in SQLite. By default the runtime stores task
 snapshots in:
@@ -104,6 +108,7 @@ curl -X POST http://127.0.0.1:17373/tasks/<task-id>/reject-edit-proposal \
   -H 'Content-Type: application/json' \
   -d '{"note":"Needs a narrower change."}'
 curl http://127.0.0.1:17373/validation-presets
+curl http://127.0.0.1:17373/tasks/<task-id>/validation-permissions
 curl -X POST http://127.0.0.1:17373/tasks/<task-id>/approve-validation-preset \
   -H 'Content-Type: application/json' \
   -d '{"presetID":"runtime-typescript"}'

@@ -64,6 +64,26 @@ Example:
 The runtime computes risk from the referenced commands. Presets containing
 medium- or high-risk commands require task-level approval before execution.
 
+## Permission Snapshots
+
+The runtime exposes task-specific preset permission state at:
+
+```text
+GET /tasks/:taskID/validation-permissions
+```
+
+Each permission snapshot includes:
+
+- preset source and risk level
+- approval state: `NotRequired`, `NeedsApproval`, or `Approved`
+- execution state: `Blocked`, `NeedsApproval`, `Ready`, or `Running`
+- blocked reasons
+- command execution mode and boundary
+- last validation run for the preset, if one exists
+
+The macOS Review panel uses this endpoint to show command permission requests.
+The UI should not locally invent a different permission policy.
+
 ## Safety Rules
 
 - Workspace preset ids must be lowercase, dash-separated identifiers.
@@ -71,6 +91,7 @@ medium- or high-risk commands require task-level approval before execution.
 - Unknown command ids are reported as config issues.
 - Project commands run with `spawn`, `shell: false`.
 - Command cwd values are runtime-owned and must resolve inside the repo.
+- Permission cards show command boundaries before approval or execution.
 - Exit code and output summary are recorded for every command.
 - Failed commands make the validation run fail.
 

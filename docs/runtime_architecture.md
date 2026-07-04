@@ -146,6 +146,12 @@ Medium-risk presets require task-level approval before execution. Project
 commands are allowlisted by the runtime, run without a shell, use repo-local
 cwd values, and preserve exit code plus output summary.
 
+The runtime also exposes task-specific validation permission snapshots through
+`GET /tasks/:taskID/validation-permissions`. The snapshot includes approval
+state, execution state, blocked reasons, command execution mode, and last run
+metadata so the app can show permission requests without guessing runtime
+policy locally.
+
 Tasks enter `Testing` after apply and only move to `Completed` after
 validation passes. Failed validation moves the task to `Failed` with command
 results preserved for review.
@@ -153,6 +159,9 @@ results preserved for review.
 ### Permission Manager
 
 Decides whether an action can run automatically or requires user approval.
+For validation presets, it derives `Blocked`, `NeedsApproval`, `Ready`, or
+`Running` from task state, preset risk, approval records, and active validation
+runs.
 
 ### Sandbox Manager
 

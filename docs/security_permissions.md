@@ -51,6 +51,9 @@ check` and `npm run build`, after task-level approval. These commands are
 logged and visible, run without a shell, use repo-local cwd values, and are not
 accepted from arbitrary user input. Workspace validation config can compose
 runtime-known command IDs, but it cannot provide raw command strings.
+The Review panel now presents these commands as task-specific permission
+requests with approval state, blocked reasons, command boundary, and last-run
+metadata before the user approves or runs them.
 
 ### High Risk
 

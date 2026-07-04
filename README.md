@@ -1347,6 +1347,59 @@ Next:
 - Add richer patch proposal formats beyond append-only Markdown edits.
 - Add proposal revision history for multiple attempts.
 
+### 2026-07-05 03:07:50 CST +0800
+
+Conversation summary:
+
+- User asked Codex to continue the next step as a long task and use the
+  available work budget.
+
+Done:
+
+- Added runtime validation permission snapshots at
+  `GET /tasks/:taskID/validation-permissions`.
+- Added task-specific approval state, execution state, blocked reasons,
+  command execution mode, command boundary, and last-run metadata for validation
+  presets.
+- Added a runtime guard that prevents starting a second validation run while
+  another run is still active.
+- Extended validation command manifests with `BuiltIn` and `SpawnNoShell`
+  execution modes plus user-facing boundary text.
+- Updated macOS models and runtime client to decode validation permission
+  snapshots.
+- Updated `WorkspaceModel` to refresh permission snapshots after task updates,
+  validation approvals, validation runs, event-stream updates, and task
+  selection changes.
+- Reworked the Review panel from a simple preset list into command permission
+  request cards that show runtime-derived state, approval status, blocked
+  reasons, command manifest, command boundary, and last run.
+- Updated runtime, development, architecture, security, validation preset, and
+  v0 scope docs.
+- Verified `npm run check`, `npm run build`, `git diff --check`, and one
+  successful `swift build` after the Swift UI/model changes.
+
+Not done:
+
+- Could not run the final local runtime API smoke test because sandboxed
+  localhost binding failed and the required escalation was rejected by the
+  current Codex usage limit.
+- Could not rerun the final `swift build` after docs-only edits for the same
+  usage-limit reason, although Swift had already passed after the code changes.
+- Did not commit or push this checkpoint because git index/remote writes need
+  escalation and escalation is currently blocked by usage limits.
+- Did not expand the validation command catalog beyond runtime TypeScript
+  checks.
+- Did not add an in-app editor for workspace validation preset config.
+
+Next:
+
+- After usage resets, run the permission endpoint API smoke test with a
+  temporary runtime database.
+- Rerun final `swift build`.
+- Commit and push the permission surface checkpoint.
+- Add macOS app build/test entries to the validation command catalog.
+- Add richer patch proposal formats beyond append-only Markdown edits.
+
 ## Decision Log
 
 ### 2026-07-04
@@ -1413,6 +1466,12 @@ Next:
   command strings.
 - The app should surface validation preset config status in Settings so users
   can see the active config path and any parse or safety issues.
+- Validation permission policy should be derived by the runtime and exposed as
+  task-specific snapshots. The app should render those snapshots instead of
+  inventing its own command execution policy locally.
+- Project command permission cards should show command boundary, execution
+  mode, approval state, blocked reasons, and last-run metadata before allowing
+  approval or execution.
 
 ## Open Questions
 

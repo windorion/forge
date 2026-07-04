@@ -29,6 +29,9 @@ struct WorkspaceView: View {
                 }
             }
         }
+        .onChange(of: workspace.selectedTaskID) { _, taskID in
+            workspace.refreshValidationPermissions(for: taskID)
+        }
     }
 }
 
@@ -584,36 +587,67 @@ private struct ReviewPanel: View {
                     }
                 }
 
-                if !projectValidationPresets.isEmpty {
+                if !projectValidationPermissions.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Project Validation Presets")
+                        Text("Command Permission Requests")
                             .font(.headline)
 
-                        ForEach(projectValidationPresets) { preset in
+                        ForEach(projectValidationPermissions) { permission in
                             VStack(alignment: .leading, spacing: 6) {
                                 HStack {
-                                    Label("\(preset.name) / \(preset.riskLevel)", systemImage: statusSystemImage(presetApprovalStatus(preset)))
+                                    Label(
+                                        "\(permission.preset.name) / \(permission.preset.riskLevel)",
+                                        systemImage: statusSystemImage(permission.executionState)
+                                    )
                                         .font(.subheadline.weight(.semibold))
                                     Spacer()
-                                    Text(presetApprovalStatus(preset))
+                                    Text(permission.executionState)
                                         .font(.caption2.weight(.medium))
                                         .foregroundStyle(.secondary)
                                 }
 
-                                Label(preset.source, systemImage: "folder")
+                                Label("\(permission.preset.source) / \(permission.approvalState)", systemImage: "person.crop.circle.badge.checkmark")
                                     .font(.caption.weight(.medium))
                                     .foregroundStyle(.secondary)
 
-                                Text(preset.description)
+                                Text(permission.preset.description)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
 
-                                ForEach(preset.commands) { command in
+                                if let approval = permission.approval {
+                                    Label("Approved \(approval.decidedAt)", systemImage: "checkmark.seal")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                if let lastRun = permission.lastRun {
+                                    Label("Last run: \(lastRun.status) / \(lastRun.endedAt ?? lastRun.startedAt)", systemImage: statusSystemImage(lastRun.status))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                ForEach(permission.blockedReasons, id: \.self) { reason in
+                                    Label(reason, systemImage: "exclamationmark.triangle")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                Text("Command Manifest")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+
+                                ForEach(permission.preset.commands) { command in
                                     VStack(alignment: .leading, spacing: 3) {
                                         Label("\(command.name) / \(command.riskLevel)", systemImage: "terminal")
                                             .font(.caption.weight(.semibold))
                                         Text(command.command)
                                             .font(.caption2.monospaced())
+                                            .foregroundStyle(.secondary)
+                                        Label(command.executionMode, systemImage: "shield.lefthalf.filled")
+                                            .font(.caption2.weight(.medium))
+                                            .foregroundStyle(.secondary)
+                                        Text(command.boundary)
+                                            .font(.caption2)
                                             .foregroundStyle(.secondary)
                                         if let cwd = command.cwd {
                                             Text(cwd)
@@ -629,26 +663,34 @@ private struct ReviewPanel: View {
 
                                 HStack {
                                     Button {
-                                        workspace.approveValidationPreset(for: task, presetID: preset.id)
+                                        workspace.approveValidationPreset(for: task, presetID: permission.preset.id)
                                     } label: {
-                                        Label(approvePresetButtonTitle(preset), systemImage: "checkmark.seal")
+                                        Label(approvePermissionButtonTitle(permission), systemImage: "checkmark.seal")
                                             .frame(maxWidth: .infinity)
                                     }
-                                    .disabled(!canApproveValidationPreset(preset))
+                                    .disabled(!canApproveValidationPermission(permission))
 
                                     Button {
-                                        workspace.runValidation(for: task, presetID: preset.id)
+                                        workspace.runValidation(for: task, presetID: permission.preset.id)
                                     } label: {
-                                        Label(runPresetButtonTitle(preset), systemImage: "play.circle")
+                                        Label(runPermissionButtonTitle(permission), systemImage: "play.circle")
                                             .frame(maxWidth: .infinity)
                                     }
-                                    .disabled(!canRunValidationPreset(preset))
+                                    .disabled(!canRunValidationPermission(permission))
                                 }
                             }
                             .padding(10)
                             .background(.background)
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                         }
+                    }
+                } else if !workspace.validationPresets.filter({ $0.id != "forge-post-apply" }).isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Command Permission Requests")
+                            .font(.headline)
+                        Label("Check Runtime to load task permission state.", systemImage: "hourglass")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
@@ -815,8 +857,8 @@ private struct ReviewPanel: View {
         workspace.isRunningValidation(taskID: task.id)
     }
 
-    private var projectValidationPresets: [ValidationPreset] {
-        workspace.validationPresets.filter { $0.id != "forge-post-apply" }
+    private var projectValidationPermissions: [ValidationPresetPermission] {
+        workspace.validationPermissions(for: task.id).filter { $0.preset.id != "forge-post-apply" }
     }
 
     private var canApplyEditProposal: Bool {
@@ -875,54 +917,34 @@ private struct ReviewPanel: View {
         return "Run Validation"
     }
 
-    private func presetApprovalStatus(_ preset: ValidationPreset) -> String {
-        if !preset.requiresApproval {
-            return "Ready"
-        }
-
-        return hasValidationPresetApproval(preset) ? "Approved" : "Needs Approval"
+    private func canApproveValidationPermission(_ permission: ValidationPresetPermission) -> Bool {
+        permission.canApprove &&
+            !workspace.isApprovingValidationPreset(taskID: task.id, presetID: permission.preset.id)
     }
 
-    private func hasValidationPresetApproval(_ preset: ValidationPreset) -> Bool {
-        task.approvals.contains { approval in
-            approval.action == "Approve Validation Preset" &&
-                approval.decision == "Approved" &&
-                approval.targetID == preset.id
-        }
-    }
-
-    private func canApproveValidationPreset(_ preset: ValidationPreset) -> Bool {
-        task.editProposal?.status == "Applied" &&
-            preset.requiresApproval &&
-            !hasValidationPresetApproval(preset) &&
-            !workspace.isApprovingValidationPreset(taskID: task.id, presetID: preset.id)
-    }
-
-    private func approvePresetButtonTitle(_ preset: ValidationPreset) -> String {
-        if workspace.isApprovingValidationPreset(taskID: task.id, presetID: preset.id) {
+    private func approvePermissionButtonTitle(_ permission: ValidationPresetPermission) -> String {
+        if workspace.isApprovingValidationPreset(taskID: task.id, presetID: permission.preset.id) {
             return "Approving"
         }
 
-        if hasValidationPresetApproval(preset) {
+        if permission.approvalState == "Approved" {
             return "Approved"
         }
 
-        return "Approve"
+        return "Approve Permission"
     }
 
-    private func canRunValidationPreset(_ preset: ValidationPreset) -> Bool {
-        task.editProposal?.status == "Applied" &&
-            task.status != "Testing" &&
-            (!preset.requiresApproval || hasValidationPresetApproval(preset)) &&
-            !workspace.isRunningValidation(taskID: task.id, presetID: preset.id)
+    private func canRunValidationPermission(_ permission: ValidationPresetPermission) -> Bool {
+        permission.canRun &&
+            !workspace.isRunningValidation(taskID: task.id, presetID: permission.preset.id)
     }
 
-    private func runPresetButtonTitle(_ preset: ValidationPreset) -> String {
-        if workspace.isRunningValidation(taskID: task.id, presetID: preset.id) {
+    private func runPermissionButtonTitle(_ permission: ValidationPresetPermission) -> String {
+        if workspace.isRunningValidation(taskID: task.id, presetID: permission.preset.id) {
             return "Running"
         }
 
-        return "Run"
+        return "Run Preset"
     }
 
     private func validationSystemImage(_ status: String) -> String {
@@ -931,8 +953,10 @@ private struct ReviewPanel: View {
 
     private func statusSystemImage(_ status: String) -> String {
         switch status {
-        case "Passed":
+        case "Passed", "Ready", "Approved", "NotRequired":
             return "checkmark.circle"
+        case "NeedsApproval":
+            return "exclamationmark.shield"
         case "Failed", "Blocked":
             return "exclamationmark.triangle"
         case "Running":

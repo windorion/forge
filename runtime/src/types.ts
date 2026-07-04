@@ -152,6 +152,8 @@ export interface ValidationCommandDefinition {
   kind: "BuiltIn" | "ProjectCommand";
   riskLevel: "Low" | "Medium" | "High";
   cwd?: string;
+  executionMode: "BuiltIn" | "SpawnNoShell";
+  boundary: string;
 }
 
 export interface ValidationPreset {
@@ -162,6 +164,41 @@ export interface ValidationPreset {
   riskLevel: "Low" | "Medium" | "High";
   requiresApproval: boolean;
   commands: ValidationCommandDefinition[];
+}
+
+export type ValidationPresetApprovalState = "NotRequired" | "NeedsApproval" | "Approved";
+export type ValidationPresetExecutionState = "Blocked" | "NeedsApproval" | "Ready" | "Running";
+
+export interface ValidationPermissionApproval {
+  id: string;
+  decidedAt: string;
+  summary: string;
+}
+
+export interface ValidationPermissionLastRun {
+  id: string;
+  status: ValidationRun["status"];
+  summary: string;
+  startedAt: string;
+  endedAt?: string;
+}
+
+export interface ValidationPresetPermission {
+  preset: ValidationPreset;
+  approvalState: ValidationPresetApprovalState;
+  executionState: ValidationPresetExecutionState;
+  canApprove: boolean;
+  canRun: boolean;
+  blockedReasons: string[];
+  approval?: ValidationPermissionApproval;
+  lastRun?: ValidationPermissionLastRun;
+}
+
+export interface ValidationPermissionEnvelope {
+  taskID: string;
+  taskStatus: TaskStatus;
+  currentPhase: string;
+  permissions: ValidationPresetPermission[];
 }
 
 export interface ContextFile {

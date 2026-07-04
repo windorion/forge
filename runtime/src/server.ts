@@ -25,6 +25,9 @@ import type {
   ToolCall,
   ValidationCommandDefinition,
   ValidationCommandResult,
+  ValidationPermissionEnvelope,
+  ValidationPermissionLastRun,
+  ValidationPresetPermission,
   ValidationPreset,
   ValidationRun
 } from "./types.js";
@@ -39,7 +42,7 @@ const tasks = new Map<string, ForgeTask>(taskStore.loadTasks().map((task) => [ta
 const modelProvider = createModelProviderFromEnv();
 const validationCommandTimeoutMs = 60_000;
 
-type InternalValidationCommand = ValidationCommandDefinition & {
+type InternalValidationCommand = Omit<ValidationCommandDefinition, "executionMode" | "boundary"> & {
   executable?: string;
   args?: string[];
   executeBuiltIn?: (task: ForgeTask) => Promise<string>;
@@ -216,6 +219,12 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    const validationPermissionsTaskID = taskIDFromActionPath(url.pathname, "validation-permissions");
+    if (request.method === "GET" && validationPermissionsTaskID) {
+      writeJson(response, 200, await listValidationPermissions(validationPermissionsTaskID));
+      return;
+    }
+
     if (request.method === "POST" && url.pathname === "/tasks") {
       const input = await readJson<CreateTaskRequest>(request);
       const task = createTask(input);
@@ -337,7 +346,84 @@ function stripInternalCommandFields(command: InternalValidationCommand): Validat
     command: command.command,
     kind: command.kind,
     riskLevel: command.riskLevel,
-    cwd: command.cwd
+    cwd: command.cwd,
+    executionMode: command.kind === "BuiltIn" ? "BuiltIn" : "SpawnNoShell",
+    boundary: command.kind === "BuiltIn"
+      ? "Runs inside the Forge runtime without spawning a project process."
+      : `Runs with shell disabled from ${command.cwd ?? "the repository root"}.`
+  };
+}
+
+async function listValidationPermissions(taskID: string): Promise<ValidationPermissionEnvelope> {
+  const task = tasks.get(taskID);
+  if (!task) {
+    throw new HttpError(404, `Task not found: ${taskID}`);
+  }
+
+  const registry = await loadValidationPresetRegistry();
+  return {
+    taskID: task.id,
+    taskStatus: task.status,
+    currentPhase: task.currentPhase,
+    permissions: registry.presets.map((preset) => buildValidationPermission(task, preset))
+  };
+}
+
+function buildValidationPermission(
+  task: ForgeTask,
+  preset: InternalValidationPreset
+): ValidationPresetPermission {
+  const approval = findValidationPresetApproval(task, preset.id);
+  const approvalState: ValidationPresetPermission["approvalState"] = !preset.requiresApproval
+    ? "NotRequired"
+    : approval
+      ? "Approved"
+      : "NeedsApproval";
+  const blockedReasons: string[] = [];
+
+  if (task.editProposal?.status !== "Applied") {
+    blockedReasons.push("Validation requires an applied edit proposal.");
+  }
+
+  if (hasRunningValidationRun(task)) {
+    blockedReasons.push("Another validation run is already active.");
+  }
+
+  if (preset.requiresApproval && !approval) {
+    blockedReasons.push("Preset requires task-level approval before execution.");
+  }
+
+  const executionState: ValidationPresetPermission["executionState"] = hasRunningValidationRun(task)
+    ? "Running"
+    : task.editProposal?.status !== "Applied"
+      ? "Blocked"
+      : preset.requiresApproval && !approval
+        ? "NeedsApproval"
+        : "Ready";
+
+  return {
+    preset: {
+      id: preset.id,
+      name: preset.name,
+      description: preset.description,
+      source: preset.source,
+      riskLevel: preset.riskLevel,
+      requiresApproval: preset.requiresApproval,
+      commands: preset.commands.map(stripInternalCommandFields)
+    },
+    approvalState,
+    executionState,
+    canApprove: executionState === "NeedsApproval",
+    canRun: executionState === "Ready",
+    blockedReasons,
+    approval: approval
+      ? {
+          id: approval.id,
+          decidedAt: approval.decidedAt,
+          summary: approval.summary
+        }
+      : undefined,
+    lastRun: findLastValidationRun(task, preset.id)
   };
 }
 
@@ -961,6 +1047,10 @@ async function runValidation(
     throw new HttpError(409, "Validation requires an applied edit proposal.");
   }
 
+  if (hasRunningValidationRun(task)) {
+    throw new HttpError(409, "Another validation run is already active.");
+  }
+
   const preset = await findValidationPreset(presetID);
   if (preset.requiresApproval && !hasValidationPresetApproval(task, preset.id)) {
     throw new HttpError(409, `Validation preset requires approval before it can run: ${preset.name}`);
@@ -1290,12 +1380,35 @@ async function findValidationPreset(presetID: string): Promise<InternalValidatio
 }
 
 function hasValidationPresetApproval(task: ForgeTask, presetID: string): boolean {
-  return task.approvals.some(
+  return findValidationPresetApproval(task, presetID) !== undefined;
+}
+
+function findValidationPresetApproval(task: ForgeTask, presetID: string): ApprovalRecord | undefined {
+  return task.approvals.find(
     (approval) =>
       approval.action === "Approve Validation Preset" &&
       approval.decision === "Approved" &&
       approval.targetID === presetID
   );
+}
+
+function hasRunningValidationRun(task: ForgeTask): boolean {
+  return task.validationRuns.some((run) => run.status === "Running");
+}
+
+function findLastValidationRun(task: ForgeTask, presetID: string): ValidationPermissionLastRun | undefined {
+  const run = [...task.validationRuns].reverse().find((candidate) => candidate.presetID === presetID);
+  if (!run) {
+    return undefined;
+  }
+
+  return {
+    id: run.id,
+    status: run.status,
+    summary: run.summary,
+    startedAt: run.startedAt,
+    endedAt: run.endedAt
+  };
 }
 
 async function applyProposedFileChange(change: ProposedFileChange): Promise<string> {
