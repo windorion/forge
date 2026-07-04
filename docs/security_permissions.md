@@ -49,7 +49,8 @@ Current v0 post-apply validation defaults to built-in `forge:` checks. It can
 also run allowlisted project validation presets, such as runtime `npm run
 check` and `npm run build`, after task-level approval. These commands are
 logged and visible, run without a shell, use repo-local cwd values, and are not
-accepted from arbitrary user input.
+accepted from arbitrary user input. Workspace validation config can compose
+runtime-known command IDs, but it cannot provide raw command strings.
 
 ### High Risk
 

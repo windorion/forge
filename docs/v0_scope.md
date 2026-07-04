@@ -53,6 +53,7 @@ The product should show:
 - explicit apply/reject actions for edit proposals
 - post-apply validation runs
 - approved runtime validation preset
+- workspace validation preset config
 - no automatic file changes
 
 ## V0 Not Included
@@ -88,6 +89,8 @@ V0 is complete when:
   is marked completed.
 - A task can approve and run the `runtime-typescript` validation preset for
   `npm run check` and `npm run build`.
+- Runtime can load workspace validation presets from
+  `.forge/validation-presets.json`.
 
 ## V0 Next After Completion
 
@@ -108,4 +111,5 @@ return the task to human review without mutating files. A proposal can now be
 validated, rejected without touching files, or applied through a narrow
 append-text operation against existing Markdown files. Applied proposals now
 run built-in validation before completion. Approved runtime validation presets
-can also run allowlisted project checks after completion.
+can also run allowlisted project checks after completion, including presets
+composed from workspace config.

@@ -114,6 +114,7 @@ struct ValidationRun: Identifiable, Codable, Hashable {
     var trigger: String
     var presetID: String
     var presetName: String
+    var presetSource: String
     var riskLevel: String
     var status: String
     var summary: String
@@ -135,9 +136,16 @@ struct ValidationPreset: Identifiable, Codable, Hashable {
     var id: String
     var name: String
     var description: String
+    var source: String
     var riskLevel: String
     var requiresApproval: Bool
     var commands: [ValidationCommandDefinition]
+}
+
+struct WorkspaceValidationPresetConfig: Codable, Hashable {
+    var path: String
+    var exists: Bool
+    var issues: [String]
 }
 
 struct ContextFile: Identifiable, Codable, Hashable {

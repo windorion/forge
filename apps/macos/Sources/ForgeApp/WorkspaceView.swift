@@ -556,6 +556,9 @@ private struct ReviewPanel: View {
                                 Text(run.summary)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                Label("\(run.presetName) / \(run.presetSource) / \(run.riskLevel)", systemImage: "checklist")
+                                    .font(.caption.weight(.medium))
+                                    .foregroundStyle(.secondary)
 
                                 ForEach(run.commands) { command in
                                     VStack(alignment: .leading, spacing: 3) {
@@ -596,6 +599,10 @@ private struct ReviewPanel: View {
                                         .font(.caption2.weight(.medium))
                                         .foregroundStyle(.secondary)
                                 }
+
+                                Label(preset.source, systemImage: "folder")
+                                    .font(.caption.weight(.medium))
+                                    .foregroundStyle(.secondary)
 
                                 Text(preset.description)
                                     .font(.caption)

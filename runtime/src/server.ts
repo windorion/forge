@@ -49,68 +49,89 @@ type InternalValidationPreset = Omit<ValidationPreset, "commands"> & {
   commands: InternalValidationCommand[];
 };
 
-const validationPresets: InternalValidationPreset[] = [
+interface WorkspacePresetConfigStatus {
+  path: string;
+  exists: boolean;
+  issues: string[];
+}
+
+interface ValidationPresetRegistry {
+  presets: InternalValidationPreset[];
+  workspaceConfig: WorkspacePresetConfigStatus;
+}
+
+const builtInValidationCommands: InternalValidationCommand[] = [
+  {
+    id: "changed-files-exist",
+    name: "Changed files exist",
+    command: "forge:changed-files-exist",
+    kind: "BuiltIn",
+    riskLevel: "Low",
+    executeBuiltIn: validateChangedFiles
+  },
+  {
+    id: "applied-proposal-recorded",
+    name: "Applied proposal recorded",
+    command: "forge:applied-proposal-recorded",
+    kind: "BuiltIn",
+    riskLevel: "Low",
+    executeBuiltIn: validateAppliedProposalRecorded
+  },
+  {
+    id: "ready-validation-retained",
+    name: "Ready validation retained",
+    command: "forge:ready-validation-retained",
+    kind: "BuiltIn",
+    riskLevel: "Low",
+    executeBuiltIn: validateReadyProposalValidation
+  }
+];
+
+const projectValidationCommands: InternalValidationCommand[] = [
+  {
+    id: "runtime-npm-check",
+    name: "Runtime type-check",
+    command: "npm run check",
+    kind: "ProjectCommand",
+    riskLevel: "Medium",
+    cwd: "runtime",
+    executable: "npm",
+    args: ["run", "check"]
+  },
+  {
+    id: "runtime-npm-build",
+    name: "Runtime build",
+    command: "npm run build",
+    kind: "ProjectCommand",
+    riskLevel: "Medium",
+    cwd: "runtime",
+    executable: "npm",
+    args: ["run", "build"]
+  }
+];
+
+const validationCommandCatalog = new Map(
+  [...builtInValidationCommands, ...projectValidationCommands].map((command) => [command.id, command])
+);
+
+const builtInValidationPresets: InternalValidationPreset[] = [
   {
     id: "forge-post-apply",
     name: "Forge Post-Apply Checks",
     description: "Built-in checks that confirm the applied proposal and changed files are still auditable.",
+    source: "BuiltIn",
     riskLevel: "Low",
     requiresApproval: false,
-    commands: [
-      {
-        id: "changed-files-exist",
-        name: "Changed files exist",
-        command: "forge:changed-files-exist",
-        kind: "BuiltIn",
-        riskLevel: "Low",
-        executeBuiltIn: validateChangedFiles
-      },
-      {
-        id: "applied-proposal-recorded",
-        name: "Applied proposal recorded",
-        command: "forge:applied-proposal-recorded",
-        kind: "BuiltIn",
-        riskLevel: "Low",
-        executeBuiltIn: validateAppliedProposalRecorded
-      },
-      {
-        id: "ready-validation-retained",
-        name: "Ready validation retained",
-        command: "forge:ready-validation-retained",
-        kind: "BuiltIn",
-        riskLevel: "Low",
-        executeBuiltIn: validateReadyProposalValidation
-      }
-    ]
+    commands: builtInValidationCommands
   },
   {
     id: "runtime-typescript",
     name: "Runtime TypeScript Checks",
     description: "Approved project checks for the local TypeScript runtime: type-check and build.",
+    source: "BuiltIn",
     riskLevel: "Medium",
     requiresApproval: true,
-    commands: [
-      {
-        id: "runtime-npm-check",
-        name: "Runtime type-check",
-        command: "npm run check",
-        kind: "ProjectCommand",
-        riskLevel: "Medium",
-        cwd: "runtime",
-        executable: "npm",
-        args: ["run", "check"]
-      },
-      {
-        id: "runtime-npm-build",
-        name: "Runtime build",
-        command: "npm run build",
-        kind: "ProjectCommand",
-        riskLevel: "Medium",
-        cwd: "runtime",
-        executable: "npm",
-        args: ["run", "build"]
-      }
-    ]
+    commands: projectValidationCommands
   }
 ];
 
@@ -187,7 +208,11 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && url.pathname === "/validation-presets") {
-      writeJson(response, 200, { presets: listValidationPresets() });
+      const registry = await loadValidationPresetRegistry();
+      writeJson(response, 200, {
+        presets: listValidationPresets(registry),
+        workspaceConfig: registry.workspaceConfig
+      });
       return;
     }
 
@@ -243,7 +268,7 @@ const server = createServer(async (request, response) => {
     const approveValidationPresetTaskID = taskIDFromActionPath(url.pathname, "approve-validation-preset");
     if (request.method === "POST" && approveValidationPresetTaskID) {
       const input = await readJson<ApproveValidationPresetRequest>(request);
-      const task = approveValidationPreset(approveValidationPresetTaskID, input);
+      const task = await approveValidationPreset(approveValidationPresetTaskID, input);
       writeJson(response, 200, task);
       return;
     }
@@ -293,11 +318,12 @@ function listTasks(): ForgeTask[] {
   return [...tasks.values()].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 
-function listValidationPresets(): ValidationPreset[] {
-  return validationPresets.map((preset) => ({
+function listValidationPresets(registry: ValidationPresetRegistry): ValidationPreset[] {
+  return registry.presets.map((preset) => ({
     id: preset.id,
     name: preset.name,
     description: preset.description,
+    source: preset.source,
     riskLevel: preset.riskLevel,
     requiresApproval: preset.requiresApproval,
     commands: preset.commands.map(stripInternalCommandFields)
@@ -313,6 +339,164 @@ function stripInternalCommandFields(command: InternalValidationCommand): Validat
     riskLevel: command.riskLevel,
     cwd: command.cwd
   };
+}
+
+async function loadValidationPresetRegistry(): Promise<ValidationPresetRegistry> {
+  const workspaceConfig = await loadWorkspaceValidationPresets();
+  const usedIDs = new Set(builtInValidationPresets.map((preset) => preset.id));
+  const workspacePresets: InternalValidationPreset[] = [];
+
+  for (const preset of workspaceConfig.presets) {
+    if (usedIDs.has(preset.id)) {
+      workspaceConfig.status.issues.push(`Skipped duplicate preset id: ${preset.id}`);
+      continue;
+    }
+
+    usedIDs.add(preset.id);
+    workspacePresets.push(preset);
+  }
+
+  return {
+    presets: [...builtInValidationPresets, ...workspacePresets],
+    workspaceConfig: workspaceConfig.status
+  };
+}
+
+async function loadWorkspaceValidationPresets(): Promise<{
+  status: WorkspacePresetConfigStatus;
+  presets: InternalValidationPreset[];
+}> {
+  const configPath = resolveWorkspaceValidationPresetConfigPath();
+  const status: WorkspacePresetConfigStatus = {
+    path: configPath,
+    exists: false,
+    issues: []
+  };
+
+  let rawConfig: string;
+  try {
+    rawConfig = await readFile(configPath, "utf8");
+    status.exists = true;
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return { status, presets: [] };
+    }
+
+    status.issues.push(error instanceof Error ? error.message : String(error));
+    return { status, presets: [] };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawConfig);
+  } catch (error) {
+    status.issues.push(`Invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
+    return { status, presets: [] };
+  }
+
+  if (!isRecord(parsed) || !Array.isArray(parsed.presets)) {
+    status.issues.push("Config must be an object with a presets array.");
+    return { status, presets: [] };
+  }
+
+  const presets: InternalValidationPreset[] = [];
+  for (const candidate of parsed.presets) {
+    const preset = parseWorkspacePreset(candidate, status.issues);
+    if (preset) {
+      presets.push(preset);
+    }
+  }
+
+  return { status, presets };
+}
+
+function parseWorkspacePreset(
+  candidate: unknown,
+  issues: string[]
+): InternalValidationPreset | undefined {
+  if (!isRecord(candidate)) {
+    issues.push("Skipped workspace preset because it is not an object.");
+    return undefined;
+  }
+
+  const id = typeof candidate.id === "string" ? candidate.id.trim() : "";
+  if (!/^[a-z0-9][a-z0-9-]{2,63}$/.test(id)) {
+    issues.push(`Skipped workspace preset with invalid id: ${id || "<missing>"}`);
+    return undefined;
+  }
+
+  const name = typeof candidate.name === "string" && candidate.name.trim()
+    ? candidate.name.trim()
+    : id;
+  const description = typeof candidate.description === "string"
+    ? candidate.description.trim()
+    : "Workspace validation preset.";
+  const commandIDs = Array.isArray(candidate.commandIDs) ? candidate.commandIDs : [];
+  if (commandIDs.length === 0) {
+    issues.push(`Skipped workspace preset ${id}: commandIDs must be a non-empty array.`);
+    return undefined;
+  }
+
+  const commands: InternalValidationCommand[] = [];
+  for (const commandID of commandIDs) {
+    if (typeof commandID !== "string") {
+      issues.push(`Skipped non-string command id in workspace preset ${id}.`);
+      continue;
+    }
+
+    const command = validationCommandCatalog.get(commandID);
+    if (!command) {
+      issues.push(`Skipped unknown command id in workspace preset ${id}: ${commandID}`);
+      continue;
+    }
+
+    commands.push(command);
+  }
+
+  if (commands.length === 0) {
+    issues.push(`Skipped workspace preset ${id}: no valid commands remained.`);
+    return undefined;
+  }
+
+  const riskLevel = maxRiskLevel(commands.map((command) => command.riskLevel));
+  return {
+    id,
+    name,
+    description,
+    source: "Workspace",
+    riskLevel,
+    requiresApproval: riskLevel !== "Low",
+    commands
+  };
+}
+
+function maxRiskLevel(riskLevels: Array<ValidationPreset["riskLevel"]>): ValidationPreset["riskLevel"] {
+  if (riskLevels.includes("High")) {
+    return "High";
+  }
+
+  if (riskLevels.includes("Medium")) {
+    return "Medium";
+  }
+
+  return "Low";
+}
+
+function resolveWorkspaceValidationPresetConfigPath(): string {
+  const configured = process.env.FORGE_VALIDATION_PRESET_CONFIG_PATH;
+  if (configured) {
+    return path.resolve(repoRoot, configured);
+  }
+
+  return path.join(repoRoot, ".forge", "validation-presets.json");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
 }
 
 function saveTask(task: ForgeTask): void {
@@ -723,13 +907,13 @@ function rejectEditProposal(taskID: string, input: EditProposalDecisionRequest):
   return task;
 }
 
-function approveValidationPreset(taskID: string, input: ApproveValidationPresetRequest): ForgeTask {
+async function approveValidationPreset(taskID: string, input: ApproveValidationPresetRequest): Promise<ForgeTask> {
   const task = tasks.get(taskID);
   if (!task) {
     throw new HttpError(404, `Task not found: ${taskID}`);
   }
 
-  const preset = findValidationPreset(input.presetID);
+  const preset = await findValidationPreset(input.presetID);
   if (!preset.requiresApproval) {
     throw new HttpError(409, `Validation preset does not require approval: ${preset.id}`);
   }
@@ -777,7 +961,7 @@ async function runValidation(
     throw new HttpError(409, "Validation requires an applied edit proposal.");
   }
 
-  const preset = findValidationPreset(presetID);
+  const preset = await findValidationPreset(presetID);
   if (preset.requiresApproval && !hasValidationPresetApproval(task, preset.id)) {
     throw new HttpError(409, `Validation preset requires approval before it can run: ${preset.name}`);
   }
@@ -788,6 +972,7 @@ async function runValidation(
     trigger,
     presetID: preset.id,
     presetName: preset.name,
+    presetSource: preset.source,
     riskLevel: preset.riskLevel,
     status: "Running",
     summary: `${preset.name} is running.`,
@@ -1094,8 +1279,9 @@ function blockedValidation(
   };
 }
 
-function findValidationPreset(presetID: string): InternalValidationPreset {
-  const preset = validationPresets.find((candidate) => candidate.id === presetID);
+async function findValidationPreset(presetID: string): Promise<InternalValidationPreset> {
+  const registry = await loadValidationPresetRegistry();
+  const preset = registry.presets.find((candidate) => candidate.id === presetID);
   if (!preset) {
     throw new HttpError(404, `Validation preset not found: ${presetID}`);
   }

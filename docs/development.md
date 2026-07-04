@@ -114,10 +114,16 @@ Current validation presets:
 - `runtime-typescript`: medium-risk project checks for the runtime
   (`npm run check` and `npm run build` from `runtime/`).
 
+Workspace validation presets can be declared in `.forge/validation-presets.json`.
+They can only reference runtime-known command IDs such as `runtime-npm-check`
+and `runtime-npm-build`; raw shell command strings are not accepted from the
+workspace config.
+
 Medium-risk validation presets require task-level approval through
 `POST /tasks/:taskID/approve-validation-preset` before they can run. The Review
-panel shows project validation presets with their commands, cwd, risk level,
-approval button, and run button.
+panel shows project validation presets with their source, commands, cwd, risk
+level, approval button, and run button. The Settings window shows the loaded
+workspace validation config path and any config issues.
 
 ## Build Checks
 

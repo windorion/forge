@@ -27,6 +27,7 @@ together.
 | `runtime_architecture.md` | Local runtime modules, app-runtime boundaries, tool execution, and event streams. |
 | `model_providers.md` | Model-provider boundary, configuration, and provider implementation rules. |
 | `edit_proposals.md` | Safe edit proposal flow and distinction between proposed and applied changes. |
+| `validation_presets.md` | Validation preset sources, workspace config, approval rules, and command boundaries. |
 | `local_first.md` | Local indexing, privacy model, context cache, embeddings, and offline behavior. |
 | `database.md` | Local database responsibilities, conceptual schema, and data retention rules. |
 | `git_workflow.md` | Branch, diff, commit, review, and pull request workflows. |

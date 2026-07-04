@@ -139,6 +139,9 @@ v0 runner has a preset registry:
 - `runtime-typescript`: medium-risk project commands for `runtime`
   (`npm run check` and `npm run build`).
 
+Workspace presets can be loaded from `.forge/validation-presets.json`. They
+compose runtime-known command IDs and cannot introduce raw shell commands.
+
 Medium-risk presets require task-level approval before execution. Project
 commands are allowlisted by the runtime, run without a shell, use repo-local
 cwd values, and preserve exit code plus output summary.

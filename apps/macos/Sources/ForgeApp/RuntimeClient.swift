@@ -18,12 +18,11 @@ struct RuntimeClient {
         return envelope.tasks
     }
 
-    func listValidationPresets() async throws -> [ValidationPreset] {
+    func listValidationPresets() async throws -> ValidationPresetListEnvelope {
         let url = baseURL.appending(path: "validation-presets")
         let (data, response) = try await URLSession.shared.data(from: url)
         try validate(response)
-        let envelope = try JSONDecoder().decode(ValidationPresetListEnvelope.self, from: data)
-        return envelope.presets
+        return try JSONDecoder().decode(ValidationPresetListEnvelope.self, from: data)
     }
 
     func createTask(title: String, objective: String) async throws -> ForgeTask {
@@ -197,8 +196,9 @@ private struct TaskListEnvelope: Decodable {
     var tasks: [ForgeTask]
 }
 
-private struct ValidationPresetListEnvelope: Decodable {
+struct ValidationPresetListEnvelope: Decodable {
     var presets: [ValidationPreset]
+    var workspaceConfig: WorkspaceValidationPresetConfig
 }
 
 enum RuntimeClientError: LocalizedError {

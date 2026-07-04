@@ -38,6 +38,16 @@ Validation presets:
   (`npm run check` and `npm run build`). This preset requires task-level
   approval before it can run.
 
+Workspace presets can be loaded from:
+
+```text
+.forge/validation-presets.json
+```
+
+Workspace presets can only reference runtime-known command IDs such as
+`runtime-npm-check` and `runtime-npm-build`; they cannot define raw shell
+commands.
+
 Project validation commands are allowlisted by the runtime, run without a
 shell, use repo-local cwd values, and record exit code plus output summary.
 

@@ -102,7 +102,14 @@ function parseTaskPayload(payload: unknown): ForgeTask {
   return {
     ...parsed,
     approvals: parsed.approvals ?? [],
-    validationRuns: parsed.validationRuns ?? [],
+    validationRuns: (parsed.validationRuns ?? []).map((run) => ({
+      ...run,
+      presetID: run.presetID ?? "forge-post-apply",
+      presetName: run.presetName ?? "Forge Post-Apply Checks",
+      presetSource: run.presetSource ?? "BuiltIn",
+      riskLevel: run.riskLevel ?? "Low",
+      commands: run.commands ?? []
+    })),
     executionProposal: parsed.executionProposal,
     editProposal: parsed.editProposal
   };

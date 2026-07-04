@@ -455,6 +455,8 @@ Detailed documents live under `docs/`:
   provider implementation rules.
 - `docs/edit_proposals.md`: safe edit proposal flow and distinction between
   proposed and applied changes.
+- `docs/validation_presets.md`: validation preset sources, workspace config,
+  approval rules, and command boundaries.
 - `docs/local_first.md`: local indexing, privacy, memory, context, and offline
   behavior.
 - `docs/database.md`: SQLite responsibilities, conceptual schema, vector
@@ -1298,6 +1300,53 @@ Next:
 - Add richer patch proposal format beyond append-text.
 - Add proposal revision history for multiple attempts.
 
+### 2026-07-05 02:46:13 CST +0800
+
+Conversation summary:
+
+- User asked Codex to continue the next step as a long task.
+
+Done:
+
+- Added workspace validation preset config support through
+  `.forge/validation-presets.json`.
+- Added `FORGE_VALIDATION_PRESET_CONFIG_PATH` for runtime validation preset
+  config overrides.
+- Restricted workspace presets to runtime-known command IDs instead of raw
+  command strings.
+- Added workspace preset source metadata and config status to
+  `GET /validation-presets`.
+- Added validation run `presetSource` persistence and migration for older task
+  payloads.
+- Updated the macOS Review panel to show preset source and validation run
+  source.
+- Updated the macOS Settings window to show workspace validation preset config
+  path, existence, and parsing issues.
+- Added `docs/validation_presets.md` and updated runtime, development,
+  architecture, security, database, and v0 scope docs.
+- Verified the workflow with `npm run check`, `npm run build`, `swift build`,
+  and an end-to-end API smoke test covering workspace config loading,
+  unapproved preset blocking, approval, command execution, and persistence
+  after runtime restart.
+- Stopped the temporary local runtime service and cleaned temporary smoke-test
+  files.
+
+Not done:
+
+- Did not allow workspace config to define arbitrary shell commands.
+- Did not add an in-app editor for `.forge/validation-presets.json`.
+- Did not normalize validation presets, config issues, or validation runs into
+  dedicated SQLite tables.
+- Did not add non-runtime command catalog entries yet.
+- Did not connect a real LLM provider.
+
+Next:
+
+- Add a visible permission prompt surface for project command execution.
+- Expand the validation command catalog to cover app build and test commands.
+- Add richer patch proposal formats beyond append-only Markdown edits.
+- Add proposal revision history for multiple attempts.
+
 ## Decision Log
 
 ### 2026-07-04
@@ -1358,6 +1407,12 @@ Next:
   approval before execution.
 - Project validation commands are allowlisted by the runtime, run without a
   shell, use repo-local cwd values, and record exit code plus output summary.
+- Workspace validation presets live in `.forge/validation-presets.json` by
+  default, with an environment override for testing or alternate workspaces.
+  They can only compose runtime-known command IDs and cannot introduce raw
+  command strings.
+- The app should surface validation preset config status in Settings so users
+  can see the active config path and any parse or safety issues.
 
 ## Open Questions
 

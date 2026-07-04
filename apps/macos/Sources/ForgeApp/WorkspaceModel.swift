@@ -6,6 +6,7 @@ final class WorkspaceModel: ObservableObject {
     @Published var selectedTaskID: ForgeTask.ID? = ForgeTask.sample.id
     @Published var runtimeHealth: RuntimeHealth?
     @Published var validationPresets: [ValidationPreset] = []
+    @Published var workspaceValidationPresetConfig: WorkspaceValidationPresetConfig?
     @Published var statusMessage = "Runtime not checked"
     @Published var eventStreamStatus = "Event stream disconnected"
     @Published private var approvingTaskIDs = Set<ForgeTask.ID>()
@@ -258,7 +259,9 @@ final class WorkspaceModel: ObservableObject {
     }
 
     private func refreshValidationPresets() async throws {
-        validationPresets = try await runtime.listValidationPresets()
+        let envelope = try await runtime.listValidationPresets()
+        validationPresets = envelope.presets
+        workspaceValidationPresetConfig = envelope.workspaceConfig
     }
 
     private func upsert(_ task: ForgeTask) {

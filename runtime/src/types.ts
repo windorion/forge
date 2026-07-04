@@ -136,6 +136,7 @@ export interface ValidationRun {
   trigger: "PostApply" | "Manual";
   presetID: string;
   presetName: string;
+  presetSource: "BuiltIn" | "Workspace";
   riskLevel: "Low" | "Medium" | "High";
   status: "Running" | "Passed" | "Failed";
   summary: string;
@@ -157,6 +158,7 @@ export interface ValidationPreset {
   id: string;
   name: string;
   description: string;
+  source: "BuiltIn" | "Workspace";
   riskLevel: "Low" | "Medium" | "High";
   requiresApproval: boolean;
   commands: ValidationCommandDefinition[];
