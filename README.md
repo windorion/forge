@@ -468,6 +468,7 @@ Detailed documents live under `docs/`:
   pattern.
 - `docs/development.md`: how to run the current app/runtime skeleton and what
   is not wired yet.
+- `docs/v0_scope.md`: first end-to-end product target and completion criteria.
 
 Agent-specific repository instructions live in `AGENTS.md`.
 
@@ -919,6 +920,42 @@ Next:
   planner.
 - Add SQLite persistence so tasks survive runtime restarts.
 
+### 2026-07-04 16:18:52 CST +0800
+
+Conversation summary:
+
+- User asked what the next step is, asked Codex to keep pushing forward, and
+  asked what the v0 endpoint should look like.
+
+Done:
+
+- Defined the v0 endpoint in `docs/v0_scope.md`: native app plus local runtime,
+  task creation, real local context inspection, visible tool calls/context
+  files, visible agent progress, and a human review gate before changes.
+- Added local read-only runtime tools for listing project docs and reading
+  selected context files.
+- Added `toolCalls` and `contextFiles` to the runtime task model and macOS app
+  model.
+- Added macOS panels for context files and tool calls.
+- Updated docs indexes and development docs for the new v0 scope and local
+  tool layer.
+- Verified `npm run check`, `npm run build`, `swift build`, and runtime task
+  creation through `Human Review` with no changed files.
+
+Not done:
+
+- Did not connect a real LLM provider yet.
+- Did not implement autonomous file edits, command execution, tests, git diff
+  generation, or SQLite persistence.
+- Did not keep the local runtime running after verification.
+
+Next:
+
+- Add SQLite persistence so tasks and tool-call history survive restarts.
+- Add explicit plan approval UI so the user can advance from human review into
+  a controlled execution phase.
+- Add a model-provider abstraction and wire the first real planner model.
+
 ## Decision Log
 
 ### 2026-07-04
@@ -948,6 +985,9 @@ Next:
   service.
 - Agent Loop v0 is deterministic and local: it simulates Manager/Planner
   progress and stops at a human review gate before real model/tool execution.
+- V0 endpoint: a native app can create a task, the runtime can inspect real
+  local project docs through visible read-only tool calls, the UI shows context
+  and progress, and the task stops at human review with no file changes.
 
 ## Open Questions
 

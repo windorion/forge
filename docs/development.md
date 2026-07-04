@@ -11,7 +11,8 @@ Forge currently has two implementation pieces:
 
 The first vertical slice is app-runtime connectivity, not LLM execution.
 The current slice adds Agent Loop v0: a deterministic local planner loop that
-updates task state, agent status, plan steps, review summary, and SSE events.
+updates task state, agent status, plan steps, review summary, tool calls,
+context files, and SSE events.
 
 ## Run Runtime
 
@@ -54,6 +55,14 @@ Use the toolbar buttons:
 Use the sidebar composer to create a custom task. The app connects to
 `GET /events` and refreshes tasks as runtime events arrive.
 
+Agent Loop v0 currently runs local read-only tools:
+
+- `list_project_files`: lists root and docs markdown files.
+- `read_context_file`: reads selected project memory files.
+
+The app shows those tool calls and the resulting context file summaries before
+the task stops at the human review gate.
+
 ## Build Checks
 
 ```bash
@@ -68,4 +77,4 @@ cd runtime && npm run check
 - No repository scanner yet.
 - The runtime stores tasks in memory.
 - Agent Loop v0 is deterministic and local; it simulates the planning and
-  review gate before real model/tool execution exists.
+  review gate before real model execution exists.

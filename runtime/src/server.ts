@@ -1,12 +1,17 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
+import { readdir, readFile, stat } from "node:fs/promises";
+import path from "node:path";
 import { URL } from "node:url";
-import type { AgentState, CreateTaskRequest, ForgeTask, PlanStep, RuntimeEvent } from "./types.js";
+import { fileURLToPath } from "node:url";
+import type { AgentState, ContextFile, CreateTaskRequest, ForgeTask, PlanStep, RuntimeEvent, ToolCall } from "./types.js";
 
 const startedAt = Date.now();
 const port = Number(process.env.FORGE_RUNTIME_PORT ?? 17373);
 const tasks = new Map<string, ForgeTask>();
 const eventClients = new Set<ServerResponse>();
+const runtimeDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = path.resolve(runtimeDir, "..");
 
 const defaultAgents: AgentState[] = [
   { role: "Manager", status: "Active", summary: "Owns task lifecycle and constraints" },
@@ -124,13 +129,15 @@ function createTask(input: CreateTaskRequest): ForgeTask {
     agentStates: cloneAgents(defaultAgents),
     planSteps: clonePlanSteps(defaultPlanSteps),
     events: [event],
+    toolCalls: [],
+    contextFiles: [],
     changedFiles: [],
     reviewSummary: "No review yet. The planner is preparing a first plan."
   };
 }
 
 function runAgentLoopV0(taskID: string): void {
-  const updates: Array<[number, (task: ForgeTask) => RuntimeEvent]> = [
+  const updates: Array<[number, (task: ForgeTask) => Promise<RuntimeEvent> | RuntimeEvent]> = [
     [
       500,
       (task) => {
@@ -145,11 +152,15 @@ function runAgentLoopV0(taskID: string): void {
     ],
     [
       1300,
-      (task) => {
-        setAgent(task, "Planner", "Active", "Found initial docs and runtime boundaries to inspect.");
-        setPlanStep(task, "build-context", "Done", "Found README, docs/runtime_architecture.md, and docs/multi_agent.md as relevant context.");
+      async (task) => {
+        setAgent(task, "Planner", "Active", "Running local read-only tools against project memory.");
+        const projectFiles = await runTool(task, "list_project_files", "README.md and docs/*.md", listProjectFiles);
+        const contextFiles = await buildContextFiles(task, projectFiles);
+        task.contextFiles = contextFiles;
+        setAgent(task, "Planner", "Active", `Read ${contextFiles.length} context files from the local repo.`);
+        setPlanStep(task, "build-context", "Done", `Inspected ${contextFiles.map((file) => file.path).join(", ")}.`);
         setPlanStep(task, "draft-plan", "Active", "Drafting the safest next implementation slice.");
-        return event("tool.search.completed", "Planner found project memory and runtime architecture docs.");
+        return event("tool.context.completed", `Planner inspected ${contextFiles.length} local context files.`);
       }
     ],
     [
@@ -158,11 +169,11 @@ function runAgentLoopV0(taskID: string): void {
         setAgent(task, "Planner", "Done", "Prepared a reviewable implementation plan.");
         setAgent(task, "Coder", "Ready", "Waiting for human approval before file changes.");
         setAgent(task, "Reviewer", "Ready", "Ready to review plan risk before execution.");
-        setPlanStep(task, "draft-plan", "Done", "Plan prepared: add context, propose changes, wait for review, then execute.");
+        setPlanStep(task, "draft-plan", "Done", "Plan prepared from real local project docs: add context, propose changes, wait for review, then execute.");
         setPlanStep(task, "request-review", "Active", "Human approval required before code changes.");
         task.status = "Human Review";
         task.currentPhase = "Plan Review";
-        task.reviewSummary = "Agent Loop v0 prepared a plan and stopped before modifying files. This is the first trust gate.";
+        task.reviewSummary = "Agent Loop v0 read local project context and prepared a plan. It stopped before modifying files.";
         return event("plan.ready", "Planner prepared a plan and is waiting for human review.");
       }
     ],
@@ -186,15 +197,132 @@ function runAgentLoopV0(taskID: string): void {
         return;
       }
 
-      const stamped = update(task);
-      stamped.createdAt = new Date().toISOString();
-      task.events.push(stamped);
-      task.updatedAt = stamped.createdAt;
-      tasks.set(taskID, task);
-      emit(stamped.type, { taskID, message: stamped.message, task });
-      emit("task.updated", { taskID, task });
+      void Promise.resolve(update(task))
+        .then((stamped) => {
+          stamped.createdAt = new Date().toISOString();
+          task.events.push(stamped);
+          task.updatedAt = stamped.createdAt;
+          tasks.set(taskID, task);
+          emit(stamped.type, { taskID, message: stamped.message, task });
+          emit("task.updated", { taskID, task });
+        })
+        .catch((error) => {
+          const failed = event("tool.failed", error instanceof Error ? error.message : String(error));
+          failed.createdAt = new Date().toISOString();
+          task.events.push(failed);
+          task.updatedAt = failed.createdAt;
+          setAgent(task, "Planner", "Blocked", "A local read-only tool failed.");
+          setPlanStep(task, "build-context", "Blocked", failed.message);
+          tasks.set(taskID, task);
+          emit(failed.type, { taskID, message: failed.message, task });
+          emit("task.updated", { taskID, task });
+        });
     }, delay);
   }
+}
+
+async function listProjectFiles(): Promise<string[]> {
+  const docsDir = path.join(repoRoot, "docs");
+  const docEntries = await readdir(docsDir);
+  const docFiles = docEntries
+    .filter((entry) => entry.endsWith(".md"))
+    .sort()
+    .map((entry) => `docs/${entry}`);
+  return ["README.md", ...docFiles];
+}
+
+async function buildContextFiles(task: ForgeTask, files: string[]): Promise<ContextFile[]> {
+  const preferred = [
+    "README.md",
+    "docs/runtime_architecture.md",
+    "docs/multi_agent.md",
+    "docs/v0_scope.md"
+  ];
+  const selected = preferred.filter((file) => files.includes(file));
+  const contextFiles: ContextFile[] = [];
+
+  for (const file of selected) {
+    const content = await runTool(task, "read_context_file", file, () => runReadOnlyFileTool(file));
+    contextFiles.push({
+      path: file,
+      summary: summarizeMarkdown(content)
+    });
+  }
+
+  return contextFiles;
+}
+
+async function runReadOnlyFileTool(relativePath: string): Promise<string> {
+  const absolutePath = path.resolve(repoRoot, relativePath);
+  if (!absolutePath.startsWith(`${repoRoot}${path.sep}`)) {
+    throw new Error(`Refusing to read outside repo: ${relativePath}`);
+  }
+
+  const fileStat = await stat(absolutePath);
+  if (!fileStat.isFile()) {
+    throw new Error(`Not a file: ${relativePath}`);
+  }
+
+  return readFile(absolutePath, "utf8");
+}
+
+function summarizeMarkdown(content: string): string {
+  const heading = content
+    .split("\n")
+    .find((line) => line.startsWith("# "))
+    ?.replace(/^#\s+/, "")
+    .trim();
+  const firstParagraph = content
+    .split(/\n\s*\n/)
+    .map((part) => part.replace(/\s+/g, " ").trim())
+    .find((part) => part.length > 30 && !part.startsWith("#"));
+  return [heading, firstParagraph].filter(Boolean).join(" - ").slice(0, 220);
+}
+
+async function runTool<T>(
+  task: ForgeTask,
+  name: string,
+  input: string,
+  execute: () => Promise<T>
+): Promise<T> {
+  const startedAt = new Date().toISOString();
+  const toolCall: ToolCall = {
+    id: randomUUID(),
+    name,
+    status: "Started",
+    input,
+    outputSummary: "Running",
+    startedAt
+  };
+  task.toolCalls.push(toolCall);
+  emit("tool.started", { taskID: task.id, toolCall });
+
+  try {
+    const output = await execute();
+    toolCall.status = "Completed";
+    toolCall.endedAt = new Date().toISOString();
+    toolCall.outputSummary = summarizeToolOutput(output);
+    emit("tool.completed", { taskID: task.id, toolCall });
+    return output;
+  } catch (error) {
+    toolCall.status = "Failed";
+    toolCall.endedAt = new Date().toISOString();
+    toolCall.outputSummary = error instanceof Error ? error.message : String(error);
+    emit("tool.failed", { taskID: task.id, toolCall });
+    throw error;
+  }
+}
+
+function summarizeToolOutput(output: unknown): string {
+  if (Array.isArray(output)) {
+    return `${output.length} result(s): ${output.slice(0, 4).join(", ")}`;
+  }
+
+  if (typeof output === "string") {
+    return `${output.length} characters read`;
+  }
+
+  return "Completed";
 }
 
 function event(type: string, message: string): RuntimeEvent {

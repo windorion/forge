@@ -27,6 +27,21 @@ export interface PlanStep {
   summary: string;
 }
 
+export interface ToolCall {
+  id: string;
+  name: string;
+  status: "Started" | "Completed" | "Failed";
+  input: string;
+  outputSummary: string;
+  startedAt: string;
+  endedAt?: string;
+}
+
+export interface ContextFile {
+  path: string;
+  summary: string;
+}
+
 export interface ForgeTask {
   id: string;
   title: string;
@@ -38,6 +53,8 @@ export interface ForgeTask {
   agentStates: AgentState[];
   planSteps: PlanStep[];
   events: RuntimeEvent[];
+  toolCalls: ToolCall[];
+  contextFiles: ContextFile[];
   changedFiles: string[];
   reviewSummary?: string;
 }

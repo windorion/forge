@@ -11,6 +11,8 @@ struct ForgeTask: Identifiable, Codable, Hashable {
     var agentStates: [AgentState]
     var planSteps: [PlanStep]
     var events: [RuntimeEvent]
+    var toolCalls: [ToolCall]
+    var contextFiles: [ContextFile]
     var changedFiles: [String]
     var reviewSummary: String?
 
@@ -38,6 +40,8 @@ struct ForgeTask: Identifiable, Codable, Hashable {
         events: [
             RuntimeEvent(type: "workspace.ready", message: "Forge workspace shell is ready.", createdAt: "local")
         ],
+        toolCalls: [],
+        contextFiles: [],
         changedFiles: [],
         reviewSummary: "No runtime review yet."
     )
@@ -61,6 +65,22 @@ struct RuntimeEvent: Identifiable, Codable, Hashable {
     var type: String
     var message: String
     var createdAt: String
+}
+
+struct ToolCall: Identifiable, Codable, Hashable {
+    var id: String
+    var name: String
+    var status: String
+    var input: String
+    var outputSummary: String
+    var startedAt: String
+    var endedAt: String?
+}
+
+struct ContextFile: Identifiable, Codable, Hashable {
+    var id: String { path }
+    var path: String
+    var summary: String
 }
 
 struct RuntimeHealth: Codable, Hashable {

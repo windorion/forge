@@ -34,6 +34,7 @@ together.
 | `roadmap.md` | Phases, milestones, sequencing, and proof points. |
 | `founder_notes.md` | Distilled founder/product decisions from conversations. |
 | `development.md` | How to run the current app/runtime skeleton and what is not wired yet. |
+| `v0_scope.md` | Defines the first end-to-end product target and completion criteria. |
 
 ## Update Rules
 

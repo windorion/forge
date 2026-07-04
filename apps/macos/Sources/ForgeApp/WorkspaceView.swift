@@ -152,6 +152,8 @@ private struct TaskWorkspaceView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         PlannerPanel(task: task)
+                        ContextPanel(task: task)
+                        ToolCallPanel(task: task)
                         AgentPanel(task: task)
                         EventPanel(task: task)
                     }
@@ -241,6 +243,93 @@ private struct PlannerPanel: View {
             return .orange
         default:
             return .secondary
+        }
+    }
+}
+
+private struct ContextPanel: View {
+    var task: ForgeTask
+
+    var body: some View {
+        Panel(title: "Context Files", systemImage: "folder.badge.gearshape") {
+            if task.contextFiles.isEmpty {
+                Text("No local context files inspected yet.")
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(task.contextFiles) { file in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Label(file.path, systemImage: "doc.text")
+                                .font(.subheadline.weight(.semibold))
+                            Text(file.summary)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct ToolCallPanel: View {
+    var task: ForgeTask
+
+    var body: some View {
+        Panel(title: "Tool Calls", systemImage: "wrench.and.screwdriver") {
+            if task.toolCalls.isEmpty {
+                Text("No tools have run yet.")
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(task.toolCalls) { call in
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: iconName(for: call.status))
+                                .foregroundStyle(iconColor(for: call.status))
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(call.name)
+                                    .font(.subheadline.weight(.semibold))
+                                Text(call.input)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text(call.outputSummary)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text(call.status)
+                                .font(.caption2.weight(.medium))
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(.quaternary)
+                                .clipShape(RoundedRectangle(cornerRadius: 5))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func iconName(for status: String) -> String {
+        switch status {
+        case "Completed":
+            return "checkmark.circle.fill"
+        case "Failed":
+            return "exclamationmark.triangle.fill"
+        default:
+            return "arrow.triangle.2.circlepath.circle.fill"
+        }
+    }
+
+    private func iconColor(for status: String) -> Color {
+        switch status {
+        case "Completed":
+            return .green
+        case "Failed":
+            return .orange
+        default:
+            return .blue
         }
     }
 }
