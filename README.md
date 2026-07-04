@@ -1254,6 +1254,50 @@ Next:
 - Add richer patch proposal format beyond append-text.
 - Add proposal revision history for multiple attempts.
 
+### 2026-07-05 02:25:09 CST +0800
+
+Conversation summary:
+
+- User asked Codex to continue with a long task and use the remaining work
+  budget productively.
+
+Done:
+
+- Committed and pushed the previous post-apply validation checkpoint as
+  `e38efd7`.
+- Added validation preset data models for runtime and Swift.
+- Added `GET /validation-presets`.
+- Added `POST /tasks/:taskID/approve-validation-preset`.
+- Extended `POST /tasks/:taskID/run-validation` to accept a preset id.
+- Added the low-risk `forge-post-apply` preset for built-in audit checks.
+- Added the medium-risk `runtime-typescript` preset for `npm run check` and
+  `npm run build` in `runtime/`.
+- Required task-level approval before running medium-risk validation presets.
+- Added allowlisted project command execution with `spawn`, `shell: false`,
+  repo-local cwd validation, timeout, exit code capture, and output summary.
+- Added macOS Review panel UI for project validation presets, approval state,
+  command list, and run action.
+- Updated runtime, development, architecture, security, database, edit
+  proposal, and v0 scope docs.
+- Verified `npm run check`, `npm run build`, `swift build`, preset listing,
+  unapproved preset blocking, approved runtime checks, exit-code recording, and
+  SQLite recovery of preset approval plus validation runs after restart.
+
+Not done:
+
+- Did not expose arbitrary shell command execution.
+- Did not add per-workspace custom validation presets.
+- Did not add settings UI for validation presets.
+- Did not normalize validation preset approvals into dedicated SQLite tables.
+- Did not connect a real LLM provider.
+
+Next:
+
+- Add per-workspace validation preset settings.
+- Add a permission prompt surface for command execution.
+- Add richer patch proposal format beyond append-text.
+- Add proposal revision history for multiple attempts.
+
 ## Decision Log
 
 ### 2026-07-04
@@ -1306,6 +1350,14 @@ Next:
 - Post-apply validation is now part of the task lifecycle. Applied proposals
   enter `Testing`, run controlled built-in `forge:` validation commands, and
   only become `Completed` after validation passes.
+
+### 2026-07-05
+
+- Validation now uses a preset registry. Low-risk built-in presets can run
+  automatically; medium-risk project command presets require task-level
+  approval before execution.
+- Project validation commands are allowlisted by the runtime, run without a
+  shell, use repo-local cwd values, and record exit code plus output summary.
 
 ## Open Questions
 

@@ -52,6 +52,7 @@ The product should show:
 - edit proposal validation
 - explicit apply/reject actions for edit proposals
 - post-apply validation runs
+- approved runtime validation preset
 - no automatic file changes
 
 ## V0 Not Included
@@ -85,6 +86,8 @@ V0 is complete when:
   workspace no longer matches the safe append boundary.
 - Applying an edit proposal runs controlled built-in validation before the task
   is marked completed.
+- A task can approve and run the `runtime-typescript` validation preset for
+  `npm run check` and `npm run build`.
 
 ## V0 Next After Completion
 
@@ -104,4 +107,5 @@ Safe edit proposals have started: Forge can create a proposed diff preview and
 return the task to human review without mutating files. A proposal can now be
 validated, rejected without touching files, or applied through a narrow
 append-text operation against existing Markdown files. Applied proposals now
-run built-in validation before completion.
+run built-in validation before completion. Approved runtime validation presets
+can also run allowlisted project checks after completion.

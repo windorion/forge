@@ -18,6 +18,14 @@ struct RuntimeClient {
         return envelope.tasks
     }
 
+    func listValidationPresets() async throws -> [ValidationPreset] {
+        let url = baseURL.appending(path: "validation-presets")
+        let (data, response) = try await URLSession.shared.data(from: url)
+        try validate(response)
+        let envelope = try JSONDecoder().decode(ValidationPresetListEnvelope.self, from: data)
+        return envelope.presets
+    }
+
     func createTask(title: String, objective: String) async throws -> ForgeTask {
         let url = baseURL.appending(path: "tasks")
         var request = URLRequest(url: url)
@@ -105,7 +113,26 @@ struct RuntimeClient {
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
 
-    func runValidation(taskID: ForgeTask.ID) async throws -> ForgeTask {
+    func approveValidationPreset(
+        taskID: ForgeTask.ID,
+        presetID: ValidationPreset.ID,
+        note: String? = nil
+    ) async throws -> ForgeTask {
+        let url = baseURL
+            .appending(path: "tasks")
+            .appending(path: taskID)
+            .appending(path: "approve-validation-preset")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(ApproveValidationPresetRequest(presetID: presetID, note: note))
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response)
+        return try JSONDecoder().decode(ForgeTask.self, from: data)
+    }
+
+    func runValidation(taskID: ForgeTask.ID, presetID: ValidationPreset.ID? = nil) async throws -> ForgeTask {
         let url = baseURL
             .appending(path: "tasks")
             .appending(path: taskID)
@@ -113,7 +140,7 @@ struct RuntimeClient {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = Data("{}".utf8)
+        request.httpBody = try JSONEncoder().encode(RunValidationRequest(presetID: presetID))
 
         let (data, response) = try await URLSession.shared.data(for: request)
         try validate(response)
@@ -168,6 +195,10 @@ struct RuntimeClient {
 
 private struct TaskListEnvelope: Decodable {
     var tasks: [ForgeTask]
+}
+
+private struct ValidationPresetListEnvelope: Decodable {
+    var presets: [ValidationPreset]
 }
 
 enum RuntimeClientError: LocalizedError {

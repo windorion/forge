@@ -70,6 +70,9 @@ Validation stores:
 Post-apply validation stores:
 
 - trigger
+- preset id
+- preset name
+- risk level
 - overall status
 - summary
 - started timestamp
@@ -93,6 +96,8 @@ Post-apply validation stores:
   file end.
 - Applying a proposal moves the task into `Testing` and runs built-in
   validation commands before completion.
+- Medium-risk project validation presets require explicit approval before they
+  can run.
 - Commit or push actions remain separate from edit application.
 
 ## Future Work

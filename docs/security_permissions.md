@@ -45,10 +45,11 @@ Examples:
 
 May run automatically based on settings, but should be logged and visible.
 
-Current v0 post-apply validation uses built-in `forge:` checks rather than
-arbitrary shell commands. These checks are logged and visible, but they do not
-execute user-provided commands. Future project test commands should move
-through the command risk model before automatic execution is allowed.
+Current v0 post-apply validation defaults to built-in `forge:` checks. It can
+also run allowlisted project validation presets, such as runtime `npm run
+check` and `npm run build`, after task-level approval. These commands are
+logged and visible, run without a shell, use repo-local cwd values, and are not
+accepted from arbitrary user input.
 
 ### High Risk
 

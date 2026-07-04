@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { appendFile, readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
@@ -10,6 +11,7 @@ import type {
   AgentState,
   ApprovalRecord,
   ApprovePlanRequest,
+  ApproveValidationPresetRequest,
   ContextFile,
   CreateTaskRequest,
   EditProposalDecisionRequest,
@@ -19,8 +21,11 @@ import type {
   PlanStep,
   ProposedFileChange,
   RuntimeEvent,
+  RunValidationRequest,
   ToolCall,
+  ValidationCommandDefinition,
   ValidationCommandResult,
+  ValidationPreset,
   ValidationRun
 } from "./types.js";
 
@@ -32,6 +37,82 @@ const repoRoot = path.resolve(runtimeDir, "..");
 const taskStore = new SqliteTaskStore(resolveDatabasePath());
 const tasks = new Map<string, ForgeTask>(taskStore.loadTasks().map((task) => [task.id, task]));
 const modelProvider = createModelProviderFromEnv();
+const validationCommandTimeoutMs = 60_000;
+
+type InternalValidationCommand = ValidationCommandDefinition & {
+  executable?: string;
+  args?: string[];
+  executeBuiltIn?: (task: ForgeTask) => Promise<string>;
+};
+
+type InternalValidationPreset = Omit<ValidationPreset, "commands"> & {
+  commands: InternalValidationCommand[];
+};
+
+const validationPresets: InternalValidationPreset[] = [
+  {
+    id: "forge-post-apply",
+    name: "Forge Post-Apply Checks",
+    description: "Built-in checks that confirm the applied proposal and changed files are still auditable.",
+    riskLevel: "Low",
+    requiresApproval: false,
+    commands: [
+      {
+        id: "changed-files-exist",
+        name: "Changed files exist",
+        command: "forge:changed-files-exist",
+        kind: "BuiltIn",
+        riskLevel: "Low",
+        executeBuiltIn: validateChangedFiles
+      },
+      {
+        id: "applied-proposal-recorded",
+        name: "Applied proposal recorded",
+        command: "forge:applied-proposal-recorded",
+        kind: "BuiltIn",
+        riskLevel: "Low",
+        executeBuiltIn: validateAppliedProposalRecorded
+      },
+      {
+        id: "ready-validation-retained",
+        name: "Ready validation retained",
+        command: "forge:ready-validation-retained",
+        kind: "BuiltIn",
+        riskLevel: "Low",
+        executeBuiltIn: validateReadyProposalValidation
+      }
+    ]
+  },
+  {
+    id: "runtime-typescript",
+    name: "Runtime TypeScript Checks",
+    description: "Approved project checks for the local TypeScript runtime: type-check and build.",
+    riskLevel: "Medium",
+    requiresApproval: true,
+    commands: [
+      {
+        id: "runtime-npm-check",
+        name: "Runtime type-check",
+        command: "npm run check",
+        kind: "ProjectCommand",
+        riskLevel: "Medium",
+        cwd: "runtime",
+        executable: "npm",
+        args: ["run", "check"]
+      },
+      {
+        id: "runtime-npm-build",
+        name: "Runtime build",
+        command: "npm run build",
+        kind: "ProjectCommand",
+        riskLevel: "Medium",
+        cwd: "runtime",
+        executable: "npm",
+        args: ["run", "build"]
+      }
+    ]
+  }
+];
 
 const defaultAgents: AgentState[] = [
   { role: "Manager", status: "Active", summary: "Owns task lifecycle and constraints" },
@@ -105,6 +186,11 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/validation-presets") {
+      writeJson(response, 200, { presets: listValidationPresets() });
+      return;
+    }
+
     if (request.method === "POST" && url.pathname === "/tasks") {
       const input = await readJson<CreateTaskRequest>(request);
       const task = createTask(input);
@@ -154,9 +240,18 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    const approveValidationPresetTaskID = taskIDFromActionPath(url.pathname, "approve-validation-preset");
+    if (request.method === "POST" && approveValidationPresetTaskID) {
+      const input = await readJson<ApproveValidationPresetRequest>(request);
+      const task = approveValidationPreset(approveValidationPresetTaskID, input);
+      writeJson(response, 200, task);
+      return;
+    }
+
     const runValidationTaskID = taskIDFromActionPath(url.pathname, "run-validation");
     if (request.method === "POST" && runValidationTaskID) {
-      const task = await runValidation(runValidationTaskID, "Manual");
+      const input = await readJson<RunValidationRequest>(request);
+      const task = await runValidation(runValidationTaskID, "Manual", input.presetID);
       writeJson(response, 200, task);
       return;
     }
@@ -196,6 +291,28 @@ function resolveDatabasePath(): string {
 
 function listTasks(): ForgeTask[] {
   return [...tasks.values()].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+}
+
+function listValidationPresets(): ValidationPreset[] {
+  return validationPresets.map((preset) => ({
+    id: preset.id,
+    name: preset.name,
+    description: preset.description,
+    riskLevel: preset.riskLevel,
+    requiresApproval: preset.requiresApproval,
+    commands: preset.commands.map(stripInternalCommandFields)
+  }));
+}
+
+function stripInternalCommandFields(command: InternalValidationCommand): ValidationCommandDefinition {
+  return {
+    id: command.id,
+    name: command.name,
+    command: command.command,
+    kind: command.kind,
+    riskLevel: command.riskLevel,
+    cwd: command.cwd
+  };
 }
 
 function saveTask(task: ForgeTask): void {
@@ -606,9 +723,50 @@ function rejectEditProposal(taskID: string, input: EditProposalDecisionRequest):
   return task;
 }
 
+function approveValidationPreset(taskID: string, input: ApproveValidationPresetRequest): ForgeTask {
+  const task = tasks.get(taskID);
+  if (!task) {
+    throw new HttpError(404, `Task not found: ${taskID}`);
+  }
+
+  const preset = findValidationPreset(input.presetID);
+  if (!preset.requiresApproval) {
+    throw new HttpError(409, `Validation preset does not require approval: ${preset.id}`);
+  }
+
+  if (hasValidationPresetApproval(task, preset.id)) {
+    throw new HttpError(409, `Validation preset already approved: ${preset.id}`);
+  }
+
+  const now = new Date().toISOString();
+  task.approvals.push({
+    id: randomUUID(),
+    action: "Approve Validation Preset",
+    decision: "Approved",
+    summary: `Approved validation preset "${preset.name}".`,
+    targetID: preset.id,
+    decidedAt: now,
+    userNote: input.note?.trim() || undefined
+  });
+  task.reviewSummary = `Validation preset approved: ${preset.name}.`;
+  setAgent(task, "Tester", "Ready", `Validation preset approved: ${preset.name}.`);
+  upsertPlanStep(task, {
+    id: `approve-validation-preset-${preset.id}`,
+    title: "Approve validation preset",
+    status: "Done",
+    summary: `${preset.name} can now run for this task.`
+  });
+
+  const approved = event("validation.preset.approved", `Validation preset approved: ${preset.name}.`);
+  approved.createdAt = now;
+  saveAndBroadcast(task, approved);
+  return task;
+}
+
 async function runValidation(
   taskID: string,
-  trigger: ValidationRun["trigger"]
+  trigger: ValidationRun["trigger"],
+  presetID = "forge-post-apply"
 ): Promise<ForgeTask> {
   const task = tasks.get(taskID);
   if (!task) {
@@ -619,12 +777,20 @@ async function runValidation(
     throw new HttpError(409, "Validation requires an applied edit proposal.");
   }
 
+  const preset = findValidationPreset(presetID);
+  if (preset.requiresApproval && !hasValidationPresetApproval(task, preset.id)) {
+    throw new HttpError(409, `Validation preset requires approval before it can run: ${preset.name}`);
+  }
+
   const startedAt = new Date().toISOString();
   const validationRun: ValidationRun = {
     id: randomUUID(),
     trigger,
+    presetID: preset.id,
+    presetName: preset.name,
+    riskLevel: preset.riskLevel,
     status: "Running",
-    summary: "Controlled validation is running.",
+    summary: `${preset.name} is running.`,
     startedAt,
     commands: []
   };
@@ -639,37 +805,15 @@ async function runValidation(
     id: "run-validation",
     title: "Run validation",
     status: "Active",
-    summary: "Running built-in post-apply validation commands."
+    summary: `Running validation preset: ${preset.name}.`
   });
 
-  const started = event("validation.started", "Controlled post-apply validation started.");
+  const started = event("validation.started", `Validation started: ${preset.name}.`);
   started.createdAt = startedAt;
   saveAndBroadcast(task, started);
 
-  const commands: Array<{
-    name: string;
-    command: string;
-    execute: () => Promise<string>;
-  }> = [
-    {
-      name: "Changed files exist",
-      command: "forge:changed-files-exist",
-      execute: () => validateChangedFiles(task)
-    },
-    {
-      name: "Applied proposal recorded",
-      command: "forge:applied-proposal-recorded",
-      execute: () => validateAppliedProposalRecorded(task)
-    },
-    {
-      name: "Ready validation retained",
-      command: "forge:ready-validation-retained",
-      execute: () => validateReadyProposalValidation(task)
-    }
-  ];
-
-  for (const command of commands) {
-    const result = await runValidationCommand(command.name, command.command, command.execute);
+  for (const command of preset.commands) {
+    const result = await runValidationCommand(command, task);
     validationRun.commands.push(result);
     task.updatedAt = result.endedAt ?? new Date().toISOString();
     saveTask(task);
@@ -724,23 +868,29 @@ async function runValidation(
 }
 
 async function runValidationCommand(
-  name: string,
-  command: string,
-  execute: () => Promise<string>
+  command: InternalValidationCommand,
+  task: ForgeTask
 ): Promise<ValidationCommandResult> {
   const startedAt = new Date().toISOString();
   const result: ValidationCommandResult = {
     id: randomUUID(),
-    name,
-    command,
+    name: command.name,
+    command: command.command,
+    kind: command.kind,
+    riskLevel: command.riskLevel,
+    cwd: command.cwd,
     status: "Running",
     outputSummary: "Running",
     startedAt
   };
 
   try {
-    result.outputSummary = await execute();
-    result.status = "Passed";
+    const output = command.kind === "BuiltIn"
+      ? await runBuiltInValidationCommand(command, task)
+      : await runProjectValidationCommand(command);
+    result.outputSummary = output.outputSummary;
+    result.exitCode = output.exitCode;
+    result.status = output.exitCode === 0 ? "Passed" : "Failed";
   } catch (error) {
     result.status = "Failed";
     result.outputSummary = error instanceof Error ? error.message : String(error);
@@ -748,6 +898,78 @@ async function runValidationCommand(
 
   result.endedAt = new Date().toISOString();
   return result;
+}
+
+async function runBuiltInValidationCommand(
+  command: InternalValidationCommand,
+  task: ForgeTask
+): Promise<{ outputSummary: string; exitCode?: number }> {
+  if (!command.executeBuiltIn) {
+    throw new Error(`Built-in validation command is missing an implementation: ${command.command}`);
+  }
+
+  return {
+    outputSummary: await command.executeBuiltIn(task),
+    exitCode: 0
+  };
+}
+
+async function runProjectValidationCommand(
+  command: InternalValidationCommand
+): Promise<{ outputSummary: string; exitCode?: number }> {
+  if (!command.executable || !command.args) {
+    throw new Error(`Project validation command is missing executable metadata: ${command.command}`);
+  }
+
+  const cwd = resolvePresetCommandCwd(command.cwd);
+  const { exitCode, output } = await runSpawnedCommand(command.executable, command.args, cwd);
+  const summary = summarizeCommandOutput(command.command, exitCode, output);
+
+  return { outputSummary: summary, exitCode };
+}
+
+function runSpawnedCommand(
+  executable: string,
+  args: string[],
+  cwd: string
+): Promise<{ exitCode: number; output: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(executable, args, {
+      cwd,
+      shell: false,
+      env: { ...process.env, CI: "1" }
+    });
+
+    let output = "";
+    const appendOutput = (chunk: Buffer) => {
+      output += chunk.toString("utf8");
+      if (output.length > 12_000) {
+        output = output.slice(output.length - 12_000);
+      }
+    };
+
+    const timeout = setTimeout(() => {
+      child.kill("SIGTERM");
+      reject(new Error(`Command timed out after ${validationCommandTimeoutMs / 1000}s.`));
+    }, validationCommandTimeoutMs);
+
+    child.stdout.on("data", appendOutput);
+    child.stderr.on("data", appendOutput);
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.on("close", (code) => {
+      clearTimeout(timeout);
+      resolve({ exitCode: code ?? 1, output });
+    });
+  });
+}
+
+function summarizeCommandOutput(command: string, exitCode: number, output: string): string {
+  const trimmed = output.replace(/\s+$/g, "").trim();
+  const tail = trimmed.length > 1_800 ? trimmed.slice(trimmed.length - 1_800) : trimmed;
+  return [`${command} exited with code ${exitCode}.`, tail].filter(Boolean).join("\n");
 }
 
 async function validateChangedFiles(task: ForgeTask): Promise<string> {
@@ -872,6 +1094,24 @@ function blockedValidation(
   };
 }
 
+function findValidationPreset(presetID: string): InternalValidationPreset {
+  const preset = validationPresets.find((candidate) => candidate.id === presetID);
+  if (!preset) {
+    throw new HttpError(404, `Validation preset not found: ${presetID}`);
+  }
+
+  return preset;
+}
+
+function hasValidationPresetApproval(task: ForgeTask, presetID: string): boolean {
+  return task.approvals.some(
+    (approval) =>
+      approval.action === "Approve Validation Preset" &&
+      approval.decision === "Approved" &&
+      approval.targetID === presetID
+  );
+}
+
 async function applyProposedFileChange(change: ProposedFileChange): Promise<string> {
   if (change.changeType !== "Modify") {
     throw new HttpError(409, `Only modify changes can be applied in v0: ${change.path}`);
@@ -931,6 +1171,31 @@ function resolveMarkdownWorkspacePath(inputPath: string): { absolutePath: string
   }
 
   return { absolutePath, relativePath: normalized };
+}
+
+function resolvePresetCommandCwd(inputPath: string | undefined): string {
+  if (!inputPath || inputPath.includes("\0") || path.isAbsolute(inputPath)) {
+    throw new Error(`Unsafe validation command cwd: ${inputPath ?? ""}`);
+  }
+
+  const normalized = path.posix.normalize(inputPath.replaceAll("\\", "/"));
+  if (
+    normalized === "." ||
+    normalized === ".." ||
+    normalized.startsWith("../") ||
+    normalized.startsWith("/") ||
+    normalized.startsWith(".git/") ||
+    normalized.startsWith(".forge/")
+  ) {
+    throw new Error(`Unsafe validation command cwd: ${inputPath}`);
+  }
+
+  const absolutePath = path.resolve(repoRoot, normalized);
+  if (!absolutePath.startsWith(`${repoRoot}${path.sep}`)) {
+    throw new Error(`Unsafe validation command cwd: ${inputPath}`);
+  }
+
+  return absolutePath;
 }
 
 function runAgentLoopV0(taskID: string): void {
@@ -1269,12 +1534,14 @@ function renderRuntimeHome(): string {
     <ul>
       <li><a href="/health">GET /health</a></li>
       <li><a href="/tasks">GET /tasks</a></li>
+      <li><a href="/validation-presets">GET /validation-presets</a></li>
       <li><code>POST /tasks</code></li>
       <li><code>POST /tasks/:taskID/approve-plan</code></li>
       <li><code>POST /tasks/:taskID/generate-edit-proposal</code></li>
       <li><code>POST /tasks/:taskID/validate-edit-proposal</code></li>
       <li><code>POST /tasks/:taskID/apply-edit-proposal</code></li>
       <li><code>POST /tasks/:taskID/reject-edit-proposal</code></li>
+      <li><code>POST /tasks/:taskID/approve-validation-preset</code></li>
       <li><code>POST /tasks/:taskID/run-validation</code></li>
       <li><code>GET /events</code></li>
     </ul>

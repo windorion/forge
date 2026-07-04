@@ -5,6 +5,7 @@ final class WorkspaceModel: ObservableObject {
     @Published var tasks: [ForgeTask] = [.sample]
     @Published var selectedTaskID: ForgeTask.ID? = ForgeTask.sample.id
     @Published var runtimeHealth: RuntimeHealth?
+    @Published var validationPresets: [ValidationPreset] = []
     @Published var statusMessage = "Runtime not checked"
     @Published var eventStreamStatus = "Event stream disconnected"
     @Published private var approvingTaskIDs = Set<ForgeTask.ID>()
@@ -13,6 +14,7 @@ final class WorkspaceModel: ObservableObject {
     @Published private var applyingEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var rejectingEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var runningValidationTaskIDs = Set<ForgeTask.ID>()
+    @Published private var approvingValidationPresetTaskIDs = Set<String>()
 
     private let runtime = RuntimeClient()
     private var eventStreamTask: Task<Void, Never>?
@@ -31,6 +33,7 @@ final class WorkspaceModel: ObservableObject {
                 runtimeHealth = try await runtime.health()
                 statusMessage = "Runtime connected"
                 try await refreshTasks()
+                try await refreshValidationPresets()
                 startEventStream()
             } catch {
                 runtimeHealth = nil
@@ -171,12 +174,36 @@ final class WorkspaceModel: ObservableObject {
         rejectingEditProposalTaskIDs.contains(taskID)
     }
 
-    func runValidation(for task: ForgeTask) {
-        runningValidationTaskIDs.insert(task.id)
+    func approveValidationPreset(for task: ForgeTask, presetID: ValidationPreset.ID) {
+        let key = validationPresetActionKey(taskID: task.id, presetID: presetID)
+        approvingValidationPresetTaskIDs.insert(key)
 
         Task {
             do {
-                let updatedTask = try await runtime.runValidation(taskID: task.id)
+                let updatedTask = try await runtime.approveValidationPreset(taskID: task.id, presetID: presetID)
+                upsert(updatedTask)
+                selectedTaskID = updatedTask.id
+                statusMessage = "Validation preset approved."
+                startEventStream()
+            } catch {
+                statusMessage = "Approve validation preset failed: \(error.localizedDescription)"
+            }
+
+            approvingValidationPresetTaskIDs.remove(key)
+        }
+    }
+
+    func isApprovingValidationPreset(taskID: ForgeTask.ID, presetID: ValidationPreset.ID) -> Bool {
+        approvingValidationPresetTaskIDs.contains(validationPresetActionKey(taskID: taskID, presetID: presetID))
+    }
+
+    func runValidation(for task: ForgeTask, presetID: ValidationPreset.ID? = nil) {
+        let key = validationPresetActionKey(taskID: task.id, presetID: presetID ?? "forge-post-apply")
+        runningValidationTaskIDs.insert(key)
+
+        Task {
+            do {
+                let updatedTask = try await runtime.runValidation(taskID: task.id, presetID: presetID)
                 upsert(updatedTask)
                 selectedTaskID = updatedTask.id
                 statusMessage = "Validation run completed."
@@ -185,12 +212,12 @@ final class WorkspaceModel: ObservableObject {
                 statusMessage = "Run validation failed: \(error.localizedDescription)"
             }
 
-            runningValidationTaskIDs.remove(task.id)
+            runningValidationTaskIDs.remove(key)
         }
     }
 
-    func isRunningValidation(taskID: ForgeTask.ID) -> Bool {
-        runningValidationTaskIDs.contains(taskID)
+    func isRunningValidation(taskID: ForgeTask.ID, presetID: ValidationPreset.ID? = nil) -> Bool {
+        runningValidationTaskIDs.contains(validationPresetActionKey(taskID: taskID, presetID: presetID ?? "forge-post-apply"))
     }
 
     private func startEventStream() {
@@ -230,11 +257,19 @@ final class WorkspaceModel: ObservableObject {
         selectedTaskID = selectedTaskID ?? remoteTasks.first?.id
     }
 
+    private func refreshValidationPresets() async throws {
+        validationPresets = try await runtime.listValidationPresets()
+    }
+
     private func upsert(_ task: ForgeTask) {
         if let index = tasks.firstIndex(where: { $0.id == task.id }) {
             tasks[index] = task
         } else {
             tasks.insert(task, at: 0)
         }
+    }
+
+    private func validationPresetActionKey(taskID: ForgeTask.ID, presetID: ValidationPreset.ID) -> String {
+        "\(taskID)-\(presetID)"
     }
 }

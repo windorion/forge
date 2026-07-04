@@ -133,11 +133,15 @@ rejected proposals without touching files.
 ### Validation Runner
 
 Runs controlled post-apply validation and records command-level results. The
-v0 runner uses built-in `forge:` commands rather than arbitrary shell commands:
+v0 runner has a preset registry:
 
-- `forge:changed-files-exist`
-- `forge:applied-proposal-recorded`
-- `forge:ready-validation-retained`
+- `forge-post-apply`: low-risk built-in `forge:` audit checks.
+- `runtime-typescript`: medium-risk project commands for `runtime`
+  (`npm run check` and `npm run build`).
+
+Medium-risk presets require task-level approval before execution. Project
+commands are allowlisted by the runtime, run without a shell, use repo-local
+cwd values, and preserve exit code plus output summary.
 
 Tasks enter `Testing` after apply and only move to `Completed` after
 validation passes. Failed validation moves the task to `Failed` with command

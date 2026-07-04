@@ -108,11 +108,16 @@ including each command name, status, command id, and output summary. The user
 can manually rerun validation with `POST /tasks/:taskID/run-validation` through
 the `Run Validation Again` button after an applied proposal exists.
 
-Current built-in validation commands:
+Current validation presets:
 
-- `forge:changed-files-exist`
-- `forge:applied-proposal-recorded`
-- `forge:ready-validation-retained`
+- `forge-post-apply`: low-risk built-in audit checks.
+- `runtime-typescript`: medium-risk project checks for the runtime
+  (`npm run check` and `npm run build` from `runtime/`).
+
+Medium-risk validation presets require task-level approval through
+`POST /tasks/:taskID/approve-validation-preset` before they can run. The Review
+panel shows project validation presets with their commands, cwd, risk level,
+approval button, and run button.
 
 ## Build Checks
 
@@ -129,8 +134,9 @@ cd runtime && npm run check
   append-text operations on existing Markdown files in `README.md` or `docs/`.
   Validation blocks unsupported paths, unsupported operations, oversized edits,
   missing files, and duplicate append text at the file end.
-- Post-apply validation currently uses built-in `forge:` checks rather than
-  arbitrary shell commands.
+- Post-apply validation defaults to built-in `forge:` checks. Medium-risk
+  project validation commands are allowlisted runtime presets, run without a
+  shell, and require explicit task-level approval before execution.
 - SQLite currently stores full task snapshots plus basic task index fields; the
   full normalized runs/messages/tool-calls schema is still ahead.
 - No repository scanner yet.

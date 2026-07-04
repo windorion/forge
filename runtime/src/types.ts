@@ -22,10 +22,15 @@ export interface RuntimeEvent {
 
 export interface ApprovalRecord {
   id: string;
-  action: "Approve Plan" | "Apply Edit Proposal" | "Reject Edit Proposal";
+  action:
+    | "Approve Plan"
+    | "Apply Edit Proposal"
+    | "Reject Edit Proposal"
+    | "Approve Validation Preset";
   decision: "Approved" | "Rejected";
   summary: string;
   decidedAt: string;
+  targetID?: string;
   userNote?: string;
 }
 
@@ -116,8 +121,12 @@ export interface ValidationCommandResult {
   id: string;
   name: string;
   command: string;
+  kind: "BuiltIn" | "ProjectCommand";
+  riskLevel: "Low" | "Medium" | "High";
+  cwd?: string;
   status: "Running" | "Passed" | "Failed";
   outputSummary: string;
+  exitCode?: number;
   startedAt: string;
   endedAt?: string;
 }
@@ -125,11 +134,32 @@ export interface ValidationCommandResult {
 export interface ValidationRun {
   id: string;
   trigger: "PostApply" | "Manual";
+  presetID: string;
+  presetName: string;
+  riskLevel: "Low" | "Medium" | "High";
   status: "Running" | "Passed" | "Failed";
   summary: string;
   startedAt: string;
   endedAt?: string;
   commands: ValidationCommandResult[];
+}
+
+export interface ValidationCommandDefinition {
+  id: string;
+  name: string;
+  command: string;
+  kind: "BuiltIn" | "ProjectCommand";
+  riskLevel: "Low" | "Medium" | "High";
+  cwd?: string;
+}
+
+export interface ValidationPreset {
+  id: string;
+  name: string;
+  description: string;
+  riskLevel: "Low" | "Medium" | "High";
+  requiresApproval: boolean;
+  commands: ValidationCommandDefinition[];
 }
 
 export interface ContextFile {
@@ -165,4 +195,13 @@ export interface CreateTaskRequest {
 
 export interface ApprovePlanRequest {
   note?: string;
+}
+
+export interface ApproveValidationPresetRequest {
+  presetID: string;
+  note?: string;
+}
+
+export interface RunValidationRequest {
+  presetID?: string;
 }

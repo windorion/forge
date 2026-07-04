@@ -7,12 +7,14 @@ This first slice is intentionally small:
 - `GET /`
 - `GET /health`
 - `GET /tasks`
+- `GET /validation-presets`
 - `POST /tasks`
 - `POST /tasks/:taskID/approve-plan`
 - `POST /tasks/:taskID/generate-edit-proposal`
 - `POST /tasks/:taskID/validate-edit-proposal`
 - `POST /tasks/:taskID/apply-edit-proposal`
 - `POST /tasks/:taskID/reject-edit-proposal`
+- `POST /tasks/:taskID/approve-validation-preset`
 - `POST /tasks/:taskID/run-validation`
 - `GET /events` as a Server-Sent Events stream
 
@@ -29,11 +31,15 @@ only supports append-text operations on existing Markdown files in `README.md`
 or `docs/`. After apply, the runtime runs controlled built-in validation
 commands and only marks the task completed if validation passes.
 
-Current built-in validation commands:
+Validation presets:
 
-- `forge:changed-files-exist`
-- `forge:applied-proposal-recorded`
-- `forge:ready-validation-retained`
+- `forge-post-apply`: low-risk built-in audit checks.
+- `runtime-typescript`: medium-risk project commands for `runtime`
+  (`npm run check` and `npm run build`). This preset requires task-level
+  approval before it can run.
+
+Project validation commands are allowlisted by the runtime, run without a
+shell, use repo-local cwd values, and record exit code plus output summary.
 
 Task state is persisted locally in SQLite. By default the runtime stores task
 snapshots in:
@@ -87,7 +93,11 @@ curl -X POST http://127.0.0.1:17373/tasks/<task-id>/apply-edit-proposal \
 curl -X POST http://127.0.0.1:17373/tasks/<task-id>/reject-edit-proposal \
   -H 'Content-Type: application/json' \
   -d '{"note":"Needs a narrower change."}'
+curl http://127.0.0.1:17373/validation-presets
+curl -X POST http://127.0.0.1:17373/tasks/<task-id>/approve-validation-preset \
+  -H 'Content-Type: application/json' \
+  -d '{"presetID":"runtime-typescript"}'
 curl -X POST http://127.0.0.1:17373/tasks/<task-id>/run-validation \
   -H 'Content-Type: application/json' \
-  -d '{}'
+  -d '{"presetID":"runtime-typescript"}'
 ```

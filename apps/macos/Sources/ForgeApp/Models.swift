@@ -81,6 +81,7 @@ struct ApprovalRecord: Identifiable, Codable, Hashable {
     var decision: String
     var summary: String
     var decidedAt: String
+    var targetID: String?
     var userNote: String?
 }
 
@@ -98,8 +99,12 @@ struct ValidationCommandResult: Identifiable, Codable, Hashable {
     var id: String
     var name: String
     var command: String
+    var kind: String
+    var riskLevel: String
+    var cwd: String?
     var status: String
     var outputSummary: String
+    var exitCode: Int?
     var startedAt: String
     var endedAt: String?
 }
@@ -107,11 +112,32 @@ struct ValidationCommandResult: Identifiable, Codable, Hashable {
 struct ValidationRun: Identifiable, Codable, Hashable {
     var id: String
     var trigger: String
+    var presetID: String
+    var presetName: String
+    var riskLevel: String
     var status: String
     var summary: String
     var startedAt: String
     var endedAt: String?
     var commands: [ValidationCommandResult]
+}
+
+struct ValidationCommandDefinition: Identifiable, Codable, Hashable {
+    var id: String
+    var name: String
+    var command: String
+    var kind: String
+    var riskLevel: String
+    var cwd: String?
+}
+
+struct ValidationPreset: Identifiable, Codable, Hashable {
+    var id: String
+    var name: String
+    var description: String
+    var riskLevel: String
+    var requiresApproval: Bool
+    var commands: [ValidationCommandDefinition]
 }
 
 struct ContextFile: Identifiable, Codable, Hashable {
@@ -197,6 +223,15 @@ struct ApprovePlanRequest: Encodable {
 
 struct EditProposalDecisionRequest: Encodable {
     var note: String?
+}
+
+struct ApproveValidationPresetRequest: Encodable {
+    var presetID: String
+    var note: String?
+}
+
+struct RunValidationRequest: Encodable {
+    var presetID: String?
 }
 
 struct RuntimeStreamEvent: Hashable {

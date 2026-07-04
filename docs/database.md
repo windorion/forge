@@ -121,6 +121,9 @@ Fields:
 - id
 - task id
 - trigger
+- preset id
+- preset name
+- risk level
 - status
 - summary
 - started at
@@ -136,7 +139,11 @@ Fields:
 - validation run id
 - name
 - command
+- kind
+- cwd
+- risk level
 - status
+- exit code
 - output summary
 - started at
 - ended at
@@ -164,6 +171,7 @@ Fields:
 - id
 - task id
 - action type
+- target id
 - requested summary
 - decision
 - decided at
