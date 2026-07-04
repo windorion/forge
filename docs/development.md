@@ -10,6 +10,8 @@ Forge currently has two implementation pieces:
 - `runtime`: TypeScript local runtime skeleton.
 
 The first vertical slice is app-runtime connectivity, not LLM execution.
+The current slice adds Agent Loop v0: a deterministic local planner loop that
+updates task state, agent status, plan steps, review summary, and SSE events.
 
 ## Run Runtime
 
@@ -47,7 +49,10 @@ swift run ForgeApp
 Use the toolbar buttons:
 
 - `Check Runtime`: calls `GET /health` and refreshes tasks.
-- `Create Demo Task`: calls `POST /tasks` and inserts the returned task.
+- `Start Demo Agent`: calls `POST /tasks` and starts Agent Loop v0.
+
+Use the sidebar composer to create a custom task. The app connects to
+`GET /events` and refreshes tasks as runtime events arrive.
 
 ## Build Checks
 
@@ -62,4 +67,5 @@ cd runtime && npm run check
 - No SQLite persistence yet.
 - No repository scanner yet.
 - The runtime stores tasks in memory.
-- The app does not consume the SSE event stream yet; it refreshes via HTTP.
+- Agent Loop v0 is deterministic and local; it simulates the planning and
+  review gate before real model/tool execution exists.

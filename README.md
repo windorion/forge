@@ -882,6 +882,43 @@ Next:
 - Make the UI show observable agent behavior rather than only static task
   panels.
 
+### 2026-07-04 16:11:40 CST +0800
+
+Conversation summary:
+
+- User asked what to do next and asked Codex to proceed.
+
+Done:
+
+- Implemented Agent Loop v0 in the TypeScript runtime.
+- Added dynamic task plan steps, agent states, changed files, and review
+  summary fields.
+- Changed task creation so the runtime now advances tasks through planning,
+  context building, plan drafting, and human review gate.
+- Added SSE `task.updated` broadcasting and app-side event stream consumption.
+- Added a sidebar task composer in the SwiftUI app.
+- Updated planner and review panels to show runtime-driven task state instead
+  of fixed static content.
+- Updated development docs and runtime docs for Agent Loop v0.
+- Verified `npm run check`, `npm run build`, `swift build`, runtime task
+  creation, loop progression to `Human Review`, and native app launch via
+  `./script/build_and_run.sh --verify`.
+
+Not done:
+
+- Did not connect a real LLM provider yet.
+- Did not add actual repository scanning, file reading, file editing, test
+  running, or git diff generation.
+- Did not add SQLite persistence.
+- Did not keep runtime or app running after validation.
+
+Next:
+
+- Add a real tool layer starting with read/search project files.
+- Add a model-provider abstraction so Agent Loop v0 can be replaced by a real
+  planner.
+- Add SQLite persistence so tasks survive runtime restarts.
+
 ## Decision Log
 
 ### 2026-07-04
@@ -909,6 +946,8 @@ Next:
 - Native macOS app launch should go through `./script/build_and_run.sh`, which
   builds and opens `dist/Forge.app`; `127.0.0.1:17373` is only the runtime
   service.
+- Agent Loop v0 is deterministic and local: it simulates Manager/Planner
+  progress and stops at a human review gate before real model/tool execution.
 
 ## Open Questions
 

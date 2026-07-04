@@ -25,7 +25,7 @@ struct WorkspaceView: View {
                 Button {
                     workspace.createDemoTask()
                 } label: {
-                    Label("Create Demo Task", systemImage: "plus.circle")
+                    Label("Start Demo Agent", systemImage: "play.circle")
                 }
             }
         }
@@ -49,6 +49,9 @@ private struct SidebarView: View {
             RuntimeBadge()
                 .padding(.horizontal, 14)
 
+            TaskComposer()
+                .padding(.horizontal, 14)
+
             List(selection: $workspace.selectedTaskID) {
                 Section("Tasks") {
                     ForEach(workspace.tasks) { task in
@@ -66,16 +69,55 @@ private struct RuntimeBadge: View {
     @EnvironmentObject private var workspace: WorkspaceModel
 
     var body: some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(workspace.runtimeHealth?.ok == true ? Color.green : Color.orange)
-                .frame(width: 8, height: 8)
-            Text(workspace.statusMessage)
-                .font(.caption)
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(workspace.runtimeHealth?.ok == true ? Color.green : Color.orange)
+                    .frame(width: 8, height: 8)
+                Text(workspace.statusMessage)
+                    .font(.caption.weight(.medium))
+                    .lineLimit(1)
+            }
+
+            Text(workspace.eventStreamStatus)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
                 .lineLimit(2)
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.thinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct TaskComposer: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
+    @State private var title = "Plan Agent Loop v0"
+    @State private var objective = "Create a reviewable plan, show agent progress, and stop before code changes."
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("New Task")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            TextField("Title", text: $title)
+                .textFieldStyle(.roundedBorder)
+
+            TextField("Objective", text: $objective, axis: .vertical)
+                .lineLimit(2...4)
+                .textFieldStyle(.roundedBorder)
+
+            Button {
+                workspace.createTask(title: title, objective: objective)
+            } label: {
+                Label("Start Agent Loop", systemImage: "sparkles")
+                    .frame(maxWidth: .infinity)
+            }
+            .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+        .padding(10)
         .background(.thinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
@@ -157,25 +199,48 @@ private struct TaskHeader: View {
 private struct PlannerPanel: View {
     var task: ForgeTask
 
-    private let steps = [
-        "Understand task objective",
-        "Inspect repository context",
-        "Prepare implementation plan",
-        "Run validation",
-        "Request human review"
-    ]
-
     var body: some View {
         Panel(title: "Planner", systemImage: "checklist") {
             VStack(alignment: .leading, spacing: 10) {
-                ForEach(steps, id: \.self) { step in
+                ForEach(task.planSteps) { step in
                     HStack(spacing: 10) {
-                        Image(systemName: step == "Understand task objective" ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(step == "Understand task objective" ? .green : .secondary)
-                        Text(step)
+                        Image(systemName: iconName(for: step.status))
+                            .foregroundStyle(iconColor(for: step.status))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(step.title)
+                            Text(step.summary)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
+        }
+    }
+
+    private func iconName(for status: String) -> String {
+        switch status {
+        case "Done":
+            return "checkmark.circle.fill"
+        case "Active":
+            return "arrow.triangle.2.circlepath.circle.fill"
+        case "Blocked":
+            return "exclamationmark.triangle.fill"
+        default:
+            return "circle"
+        }
+    }
+
+    private func iconColor(for status: String) -> Color {
+        switch status {
+        case "Done":
+            return .green
+        case "Active":
+            return .blue
+        case "Blocked":
+            return .orange
+        default:
+            return .secondary
         }
     }
 }
@@ -245,7 +310,20 @@ private struct ReviewPanel: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Changed files")
                     .font(.headline)
-                Text("No file changes yet. The first runtime slice only creates tasks and streams events.")
+                if task.changedFiles.isEmpty {
+                    Text("No file changes yet. Agent Loop v0 stops at the human review gate.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(task.changedFiles, id: \.self) { file in
+                        Label(file, systemImage: "doc.text")
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Review Summary")
+                    .font(.headline)
+                Text(task.reviewSummary ?? "No review summary yet.")
                     .foregroundStyle(.secondary)
             }
 

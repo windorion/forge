@@ -20,6 +20,13 @@ export interface RuntimeEvent {
   createdAt: string;
 }
 
+export interface PlanStep {
+  id: string;
+  title: string;
+  status: "Pending" | "Active" | "Done" | "Blocked";
+  summary: string;
+}
+
 export interface ForgeTask {
   id: string;
   title: string;
@@ -29,7 +36,10 @@ export interface ForgeTask {
   createdAt: string;
   updatedAt: string;
   agentStates: AgentState[];
+  planSteps: PlanStep[];
   events: RuntimeEvent[];
+  changedFiles: string[];
+  reviewSummary?: string;
 }
 
 export interface CreateTaskRequest {

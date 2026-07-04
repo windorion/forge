@@ -10,6 +10,10 @@ This first slice is intentionally small:
 - `POST /tasks`
 - `GET /events` as a Server-Sent Events stream
 
+Creating a task starts Agent Loop v0. It is deterministic for now: the Manager
+and Planner update task state, plan steps, events, and the review gate without
+calling a model.
+
 ## Development
 
 ```bash

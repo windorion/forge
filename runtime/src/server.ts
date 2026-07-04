@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import { URL } from "node:url";
-import type { AgentState, CreateTaskRequest, ForgeTask, RuntimeEvent } from "./types.js";
+import type { AgentState, CreateTaskRequest, ForgeTask, PlanStep, RuntimeEvent } from "./types.js";
 
 const startedAt = Date.now();
 const port = Number(process.env.FORGE_RUNTIME_PORT ?? 17373);
@@ -14,6 +14,33 @@ const defaultAgents: AgentState[] = [
   { role: "Coder", status: "Idle", summary: "Waiting for approved plan" },
   { role: "Tester", status: "Idle", summary: "Waiting for validation command" },
   { role: "Reviewer", status: "Idle", summary: "Waiting for diff" }
+];
+
+const defaultPlanSteps: PlanStep[] = [
+  {
+    id: "understand-objective",
+    title: "Understand task objective",
+    status: "Active",
+    summary: "Parse the user request and preserve constraints."
+  },
+  {
+    id: "build-context",
+    title: "Build repository context",
+    status: "Pending",
+    summary: "Inspect project memory and local repository signals."
+  },
+  {
+    id: "draft-plan",
+    title: "Draft implementation plan",
+    status: "Pending",
+    summary: "Turn context into a reviewable plan."
+  },
+  {
+    id: "request-review",
+    title: "Request human review",
+    status: "Pending",
+    summary: "Pause before code changes."
+  }
 ];
 
 const server = createServer(async (request, response) => {
@@ -52,8 +79,8 @@ const server = createServer(async (request, response) => {
       const input = await readJson<CreateTaskRequest>(request);
       const task = createTask(input);
       tasks.set(task.id, task);
-      emit("task.created", { taskID: task.id, title: task.title });
-      scheduleDemoProgress(task.id);
+      emit("task.created", { taskID: task.id, title: task.title, task });
+      runAgentLoopV0(task.id);
       writeJson(response, 201, task);
       return;
     }
@@ -94,33 +121,114 @@ function createTask(input: CreateTaskRequest): ForgeTask {
     currentPhase: "Planning",
     createdAt: now,
     updatedAt: now,
-    agentStates: defaultAgents,
-    events: [event]
+    agentStates: cloneAgents(defaultAgents),
+    planSteps: clonePlanSteps(defaultPlanSteps),
+    events: [event],
+    changedFiles: [],
+    reviewSummary: "No review yet. The planner is preparing a first plan."
   };
 }
 
-function scheduleDemoProgress(taskID: string): void {
-  const updates: Array<[number, RuntimeEvent]> = [
-    [600, { type: "plan.started", message: "Planner is building the first task plan.", createdAt: "" }],
-    [1400, { type: "context.pending", message: "Repository context integration is not wired yet.", createdAt: "" }],
-    [2200, { type: "review.pending", message: "Human review remains the next required gate.", createdAt: "" }]
+function runAgentLoopV0(taskID: string): void {
+  const updates: Array<[number, (task: ForgeTask) => RuntimeEvent]> = [
+    [
+      500,
+      (task) => {
+        setAgent(task, "Manager", "Active", "Accepted task and started the planner handoff.");
+        setAgent(task, "Planner", "Active", "Reading objective and preparing context requests.");
+        setPlanStep(task, "understand-objective", "Done", "Objective captured and converted into a task frame.");
+        setPlanStep(task, "build-context", "Active", "Looking for useful project memory and repo context.");
+        task.status = "Planning";
+        task.currentPhase = "Context Building";
+        return event("agent.manager.started", "Manager accepted the task and activated Planner.");
+      }
+    ],
+    [
+      1300,
+      (task) => {
+        setAgent(task, "Planner", "Active", "Found initial docs and runtime boundaries to inspect.");
+        setPlanStep(task, "build-context", "Done", "Found README, docs/runtime_architecture.md, and docs/multi_agent.md as relevant context.");
+        setPlanStep(task, "draft-plan", "Active", "Drafting the safest next implementation slice.");
+        return event("tool.search.completed", "Planner found project memory and runtime architecture docs.");
+      }
+    ],
+    [
+      2300,
+      (task) => {
+        setAgent(task, "Planner", "Done", "Prepared a reviewable implementation plan.");
+        setAgent(task, "Coder", "Ready", "Waiting for human approval before file changes.");
+        setAgent(task, "Reviewer", "Ready", "Ready to review plan risk before execution.");
+        setPlanStep(task, "draft-plan", "Done", "Plan prepared: add context, propose changes, wait for review, then execute.");
+        setPlanStep(task, "request-review", "Active", "Human approval required before code changes.");
+        task.status = "Human Review";
+        task.currentPhase = "Plan Review";
+        task.reviewSummary = "Agent Loop v0 prepared a plan and stopped before modifying files. This is the first trust gate.";
+        return event("plan.ready", "Planner prepared a plan and is waiting for human review.");
+      }
+    ],
+    [
+      3200,
+      (task) => {
+        setAgent(task, "Manager", "Active", "Holding at review gate.");
+        setAgent(task, "Reviewer", "Active", "Summarizing plan risk and next approval.");
+        setPlanStep(task, "request-review", "Done", "Plan is ready for review. No files changed.");
+        task.changedFiles = [];
+        task.reviewSummary = "Ready for approval: no files changed yet; next step would allow Coder to execute the plan.";
+        return event("review.required", "Human review gate reached. No code changes have been applied.");
+      }
+    ]
   ];
 
-  for (const [delay, event] of updates) {
+  for (const [delay, update] of updates) {
     setTimeout(() => {
       const task = tasks.get(taskID);
       if (!task) {
         return;
       }
 
-      const stamped = { ...event, createdAt: new Date().toISOString() };
+      const stamped = update(task);
+      stamped.createdAt = new Date().toISOString();
       task.events.push(stamped);
       task.updatedAt = stamped.createdAt;
-      task.currentPhase = stamped.type === "review.pending" ? "Plan Review" : task.currentPhase;
       tasks.set(taskID, task);
-      emit(stamped.type, { taskID, message: stamped.message });
+      emit(stamped.type, { taskID, message: stamped.message, task });
+      emit("task.updated", { taskID, task });
     }, delay);
   }
+}
+
+function event(type: string, message: string): RuntimeEvent {
+  return { type, message, createdAt: "" };
+}
+
+function cloneAgents(agents: AgentState[]): AgentState[] {
+  return agents.map((agent) => ({ ...agent }));
+}
+
+function clonePlanSteps(steps: PlanStep[]): PlanStep[] {
+  return steps.map((step) => ({ ...step }));
+}
+
+function setAgent(
+  task: ForgeTask,
+  role: AgentState["role"],
+  status: AgentState["status"],
+  summary: string
+): void {
+  task.agentStates = task.agentStates.map((agent) =>
+    agent.role === role ? { ...agent, status, summary } : agent
+  );
+}
+
+function setPlanStep(
+  task: ForgeTask,
+  id: string,
+  status: PlanStep["status"],
+  summary: string
+): void {
+  task.planSteps = task.planSteps.map((step) =>
+    step.id === id ? { ...step, status, summary } : step
+  );
 }
 
 function openEventStream(response: ServerResponse): void {

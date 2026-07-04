@@ -30,6 +30,41 @@ struct RuntimeClient {
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
 
+    func events() -> AsyncThrowingStream<RuntimeStreamEvent, Error> {
+        AsyncThrowingStream { continuation in
+            let streamTask = Task {
+                do {
+                    let url = baseURL.appending(path: "events")
+                    let (bytes, response) = try await URLSession.shared.bytes(from: url)
+                    try validate(response)
+
+                    var eventType = "message"
+                    var eventData = ""
+
+                    for try await line in bytes.lines {
+                        if line.hasPrefix("event: ") {
+                            eventType = String(line.dropFirst("event: ".count))
+                        } else if line.hasPrefix("data: ") {
+                            eventData += String(line.dropFirst("data: ".count))
+                        } else if line.isEmpty, !eventData.isEmpty {
+                            continuation.yield(RuntimeStreamEvent(type: eventType, data: eventData))
+                            eventType = "message"
+                            eventData = ""
+                        }
+                    }
+
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+
+            continuation.onTermination = { _ in
+                streamTask.cancel()
+            }
+        }
+    }
+
     private func validate(_ response: URLResponse) throws {
         guard let http = response as? HTTPURLResponse else {
             throw RuntimeClientError.invalidResponse
