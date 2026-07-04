@@ -470,6 +470,42 @@ private struct ReviewPanel: View {
                                 .foregroundStyle(.secondary)
                         }
 
+                        if let validation = editProposal.validation {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Label("Validation: \(validation.status)", systemImage: validationSystemImage(validation.status))
+                                    .font(.subheadline.weight(.semibold))
+                                Text(validation.summary)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text(validation.checkedAt)
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+
+                                ForEach(validation.fileResults) { result in
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Label("\(result.path) · \(result.status)", systemImage: validationSystemImage(result.status))
+                                            .font(.caption.weight(.semibold))
+                                        Text(result.summary)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                        ForEach(result.checks, id: \.self) { check in
+                                            Text("- \(check)")
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                    .padding(8)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(.quaternary)
+                                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                                }
+                            }
+                        } else {
+                            Label("Validation: Not Run", systemImage: "exclamationmark.triangle")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
+                        }
+
                         ForEach(editProposal.fileChanges) { change in
                             VStack(alignment: .leading, spacing: 6) {
                                 HStack {
@@ -547,6 +583,14 @@ private struct ReviewPanel: View {
                     .disabled(!canGenerateEditProposal)
 
                     Button {
+                        workspace.validateEditProposal(for: task)
+                    } label: {
+                        Label(validateEditProposalButtonTitle, systemImage: "checkmark.shield")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .disabled(!canValidateEditProposal)
+
+                    Button {
                         workspace.applyEditProposal(for: task)
                     } label: {
                         Label(applyEditProposalButtonTitle, systemImage: "checkmark.circle")
@@ -595,6 +639,10 @@ private struct ReviewPanel: View {
         workspace.isGeneratingEditProposal(taskID: task.id)
     }
 
+    private var isValidatingEditProposal: Bool {
+        workspace.isValidatingEditProposal(taskID: task.id)
+    }
+
     private var canGenerateEditProposal: Bool {
         task.executionProposal != nil &&
             (task.editProposal == nil || task.editProposal?.status == "Rejected") &&
@@ -613,6 +661,25 @@ private struct ReviewPanel: View {
         return "Generate Edit Proposal"
     }
 
+    private var canValidateEditProposal: Bool {
+        task.editProposal?.status == "Proposed" &&
+            !isValidatingEditProposal &&
+            !isApplyingEditProposal &&
+            !isRejectingEditProposal
+    }
+
+    private var validateEditProposalButtonTitle: String {
+        if isValidatingEditProposal {
+            return "Validating Proposal"
+        }
+
+        if task.editProposal?.validation?.status == "Ready" {
+            return "Validation Ready"
+        }
+
+        return "Validate Proposal"
+    }
+
     private var isApplyingEditProposal: Bool {
         workspace.isApplyingEditProposal(taskID: task.id)
     }
@@ -622,7 +689,11 @@ private struct ReviewPanel: View {
     }
 
     private var canApplyEditProposal: Bool {
-        task.editProposal?.status == "Proposed" && !isApplyingEditProposal && !isRejectingEditProposal
+        task.editProposal?.status == "Proposed" &&
+            validationAllowsApply &&
+            !isValidatingEditProposal &&
+            !isApplyingEditProposal &&
+            !isRejectingEditProposal
     }
 
     private var applyEditProposalButtonTitle: String {
@@ -635,6 +706,10 @@ private struct ReviewPanel: View {
         }
 
         return "Apply Edit Proposal"
+    }
+
+    private var validationAllowsApply: Bool {
+        task.editProposal?.validation?.status != "Blocked"
     }
 
     private var canRejectEditProposal: Bool {
@@ -651,6 +726,10 @@ private struct ReviewPanel: View {
         }
 
         return "Request Changes"
+    }
+
+    private func validationSystemImage(_ status: String) -> String {
+        status == "Ready" ? "checkmark.shield" : "exclamationmark.triangle"
     }
 
     private var emptyChangedFilesMessage: String {

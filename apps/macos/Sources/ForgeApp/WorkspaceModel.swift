@@ -9,6 +9,7 @@ final class WorkspaceModel: ObservableObject {
     @Published var eventStreamStatus = "Event stream disconnected"
     @Published private var approvingTaskIDs = Set<ForgeTask.ID>()
     @Published private var generatingEditProposalTaskIDs = Set<ForgeTask.ID>()
+    @Published private var validatingEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var applyingEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var rejectingEditProposalTaskIDs = Set<ForgeTask.ID>()
 
@@ -101,6 +102,28 @@ final class WorkspaceModel: ObservableObject {
 
     func isGeneratingEditProposal(taskID: ForgeTask.ID) -> Bool {
         generatingEditProposalTaskIDs.contains(taskID)
+    }
+
+    func validateEditProposal(for task: ForgeTask) {
+        validatingEditProposalTaskIDs.insert(task.id)
+
+        Task {
+            do {
+                let updatedTask = try await runtime.validateEditProposal(taskID: task.id)
+                upsert(updatedTask)
+                selectedTaskID = updatedTask.id
+                statusMessage = "Edit proposal validation refreshed."
+                startEventStream()
+            } catch {
+                statusMessage = "Validate edit proposal failed: \(error.localizedDescription)"
+            }
+
+            validatingEditProposalTaskIDs.remove(task.id)
+        }
+    }
+
+    func isValidatingEditProposal(taskID: ForgeTask.ID) -> Bool {
+        validatingEditProposalTaskIDs.contains(taskID)
     }
 
     func applyEditProposal(for task: ForgeTask) {

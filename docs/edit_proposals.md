@@ -23,15 +23,17 @@ Current runtime flow:
 6. User can request a safe edit proposal.
 7. Runtime creates `editProposal` with proposed file changes and a diff
    preview.
-8. Task returns to `Human Review` with current phase `Edit Proposal Review`.
-9. User can apply the proposal or request changes.
+8. Runtime validates the proposal against the current workspace.
+9. Task returns to `Human Review` with current phase `Edit Proposal Review`.
+10. User can refresh validation, apply the proposal, or request changes.
 
 No file is changed while the proposal is generated. `changedFiles` remains
 empty until the user explicitly applies the proposal.
 
 When a proposal is rejected, Forge records the rejection, leaves files
 unchanged, and allows another proposal to be generated. When a proposal is
-applied, Forge records an approval decision and updates `changedFiles`.
+applied, Forge validates the proposal again, records an approval decision, and
+updates `changedFiles`.
 
 ## Runtime Data
 
@@ -49,11 +51,20 @@ An edit proposal stores:
 - optional decision timestamp
 - optional decision note
 - optional restricted apply operation
+- optional validation result
 
 The current local deterministic provider emits a small reviewable proposal
 against a context file. It includes a restricted append-text operation so the
 UI, state machine, event stream, persistence path, and controlled apply path can
 be tested without introducing a general-purpose patch interpreter.
+
+Validation stores:
+
+- overall status
+- summary
+- checked timestamp
+- per-file status
+- per-file check messages
 
 ## Safety Rules
 
@@ -62,17 +73,19 @@ be tested without introducing a general-purpose patch interpreter.
 - The UI must make the proposal status visible.
 - The runtime must log proposal events.
 - Applying a proposal requires a separate explicit action.
+- A proposal is validated when generated and again immediately before apply.
 - Current v0 apply behavior only supports `AppendText`.
 - Current v0 apply behavior only writes existing Markdown files in `README.md`
   or `docs/*.md`.
 - Absolute paths, parent-directory traversal, `.git`, and `.forge` paths are
   rejected.
+- Apply is blocked if the proposed append text is already present at the target
+  file end.
 - Commit or push actions remain separate from edit application.
 
 ## Future Work
 
 - Generate real patch content from a model provider.
-- Validate patch applicability without applying it.
 - Add a richer patch apply engine after preview validation is mature.
 - Store proposal revisions.
 - Link edit proposals to normalized file-change records.

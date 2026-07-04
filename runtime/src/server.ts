@@ -13,6 +13,8 @@ import type {
   ContextFile,
   CreateTaskRequest,
   EditProposalDecisionRequest,
+  EditProposalValidation,
+  FileChangeValidation,
   ForgeTask,
   PlanStep,
   ProposedFileChange,
@@ -123,6 +125,13 @@ const server = createServer(async (request, response) => {
     const generateEditProposalTaskID = taskIDFromActionPath(url.pathname, "generate-edit-proposal");
     if (request.method === "POST" && generateEditProposalTaskID) {
       const task = await generateEditProposal(generateEditProposalTaskID);
+      writeJson(response, 200, task);
+      return;
+    }
+
+    const validateEditProposalTaskID = taskIDFromActionPath(url.pathname, "validate-edit-proposal");
+    if (request.method === "POST" && validateEditProposalTaskID) {
+      const task = await validateEditProposal(validateEditProposalTaskID);
       writeJson(response, 200, task);
       return;
     }
@@ -339,13 +348,17 @@ async function generateEditProposal(taskID: string): Promise<ForgeTask> {
   saveAndBroadcast(task, started);
 
   const proposal = await modelProvider.createEditProposal({ task });
+  proposal.validation = await buildEditProposalValidation(proposal.fileChanges);
   task.editProposal = proposal;
   task.status = "Human Review";
   task.currentPhase = "Edit Proposal Review";
   task.changedFiles = [];
-  task.reviewSummary = "Edit proposal ready for review. No file changes have been applied.";
+  task.reviewSummary =
+    proposal.validation.status === "Ready"
+      ? "Edit proposal ready and validated for review. No file changes have been applied."
+      : proposal.validation.summary;
   setAgent(task, "Coder", "Done", "Prepared a proposed diff without modifying files.");
-  setAgent(task, "Reviewer", "Active", "Review the proposed file changes before any apply step exists.");
+  setAgent(task, "Reviewer", "Active", "Review the proposed file changes and validation result before applying.");
   upsertPlanStep(task, {
     id: "generate-safe-edit-proposal",
     title: "Generate safe edit proposal",
@@ -353,15 +366,66 @@ async function generateEditProposal(taskID: string): Promise<ForgeTask> {
     summary: `Proposed ${proposal.fileChanges.length} file change(s). No files changed.`
   });
   upsertPlanStep(task, {
+    id: "validate-edit-proposal",
+    title: "Validate edit proposal",
+    status: proposal.validation.status === "Ready" ? "Done" : "Blocked",
+    summary: proposal.validation.summary
+  });
+  upsertPlanStep(task, {
     id: "review-edit-proposal",
     title: "Review edit proposal",
     status: "Active",
-    summary: "Human review required before a future apply step can mutate files."
+    summary: "Human review required before applying proposed file changes."
   });
 
-  const ready = event("edit.proposal.ready", "Safe edit proposal is ready for human review. No files changed.");
+  const ready = event(
+    proposal.validation.status === "Ready" ? "edit.proposal.ready" : "edit.proposal.validation.blocked",
+    proposal.validation.status === "Ready"
+      ? "Safe edit proposal is validated and ready for human review. No files changed."
+      : proposal.validation.summary
+  );
   ready.createdAt = proposal.generatedAt;
   saveAndBroadcast(task, ready);
+  return task;
+}
+
+async function validateEditProposal(taskID: string): Promise<ForgeTask> {
+  const task = tasks.get(taskID);
+  if (!task) {
+    throw new HttpError(404, `Task not found: ${taskID}`);
+  }
+
+  if (task.editProposal?.status !== "Proposed") {
+    throw new HttpError(409, "A proposed edit is required before validation.");
+  }
+
+  const validation = await buildEditProposalValidation(task.editProposal.fileChanges);
+  task.editProposal.validation = validation;
+  task.status = "Human Review";
+  task.currentPhase =
+    validation.status === "Ready" ? "Edit Proposal Review" : "Edit Proposal Validation Blocked";
+  task.reviewSummary = validation.summary;
+  setAgent(
+    task,
+    "Reviewer",
+    validation.status === "Ready" ? "Active" : "Blocked",
+    validation.status === "Ready"
+      ? "Proposal validation passed; ready for human review."
+      : "Proposal validation is blocked; review the failed checks."
+  );
+  upsertPlanStep(task, {
+    id: "validate-edit-proposal",
+    title: "Validate edit proposal",
+    status: validation.status === "Ready" ? "Done" : "Blocked",
+    summary: validation.summary
+  });
+
+  const validated = event(
+    validation.status === "Ready" ? "edit.proposal.validated" : "edit.proposal.validation.blocked",
+    validation.summary
+  );
+  validated.createdAt = validation.checkedAt;
+  saveAndBroadcast(task, validated);
   return task;
 }
 
@@ -378,6 +442,27 @@ async function applyEditProposal(
     throw new HttpError(409, "A proposed edit is required before applying changes.");
   }
 
+  const validation = await buildEditProposalValidation(task.editProposal.fileChanges);
+  task.editProposal.validation = validation;
+  if (validation.status !== "Ready") {
+    task.status = "Human Review";
+    task.currentPhase = "Edit Proposal Validation Blocked";
+    task.reviewSummary = validation.summary;
+    setAgent(task, "Coder", "Blocked", "Cannot apply until proposal validation passes.");
+    setAgent(task, "Reviewer", "Blocked", "Review failed proposal validation checks.");
+    upsertPlanStep(task, {
+      id: "validate-edit-proposal",
+      title: "Validate edit proposal",
+      status: "Blocked",
+      summary: validation.summary
+    });
+
+    const blocked = event("edit.proposal.validation.blocked", validation.summary);
+    blocked.createdAt = validation.checkedAt;
+    saveAndBroadcast(task, blocked);
+    return task;
+  }
+
   task.status = "Running";
   task.currentPhase = "Applying Edit Proposal";
   task.reviewSummary = "Applying the approved edit proposal with restricted file operations.";
@@ -388,6 +473,12 @@ async function applyEditProposal(
     title: "Apply edit proposal",
     status: "Active",
     summary: "Applying reviewed file changes with repo-local path checks."
+  });
+  upsertPlanStep(task, {
+    id: "validate-edit-proposal",
+    title: "Validate edit proposal",
+    status: "Done",
+    summary: validation.summary
   });
 
   const started = event("edit.proposal.apply.started", "Applying approved edit proposal.");
@@ -505,6 +596,89 @@ function rejectEditProposal(taskID: string, input: EditProposalDecisionRequest):
   return task;
 }
 
+async function buildEditProposalValidation(fileChanges: ProposedFileChange[]): Promise<EditProposalValidation> {
+  const fileResults = await Promise.all(fileChanges.map(validateProposedFileChange));
+  const blockedCount = fileResults.filter((result) => result.status === "Blocked").length;
+  const status: EditProposalValidation["status"] = blockedCount > 0 ? "Blocked" : "Ready";
+  const summary =
+    fileChanges.length === 0
+      ? "Validation blocked: proposal contains no file changes."
+      : blockedCount === 0
+        ? `Validation passed for ${fileResults.length} proposed file change(s).`
+        : `Validation blocked ${blockedCount} of ${fileResults.length} proposed file change(s).`;
+
+  return {
+    status: fileChanges.length === 0 ? "Blocked" : status,
+    summary,
+    checkedAt: new Date().toISOString(),
+    fileResults
+  };
+}
+
+async function validateProposedFileChange(change: ProposedFileChange): Promise<FileChangeValidation> {
+  const checks: string[] = [];
+
+  try {
+    if (change.changeType !== "Modify") {
+      return blockedValidation(change, `Only modify changes can be applied in v0: ${change.path}`, checks);
+    }
+    checks.push("Change type is supported.");
+
+    if (change.applyOperation?.kind !== "AppendText") {
+      return blockedValidation(change, `Only append-text edit operations can be applied in v0: ${change.path}`, checks);
+    }
+    checks.push("Apply operation is append-text.");
+
+    if (change.applyOperation.text.length === 0) {
+      return blockedValidation(change, `Append text is empty: ${change.path}`, checks);
+    }
+
+    if (change.applyOperation.text.length > 10_000) {
+      return blockedValidation(change, `Edit operation is too large for v0 apply: ${change.path}`, checks);
+    }
+    checks.push("Append text size is within the v0 limit.");
+
+    const { absolutePath, relativePath } = resolveMarkdownWorkspacePath(change.path);
+    checks.push("Path is inside the editable Markdown workspace boundary.");
+
+    const fileStat = await stat(absolutePath);
+    if (!fileStat.isFile()) {
+      return blockedValidation(change, `Can only append to existing files in v0: ${relativePath}`, checks);
+    }
+    checks.push("Target file exists.");
+
+    const currentContent = await readFile(absolutePath, "utf8");
+    if (currentContent.endsWith(change.applyOperation.text)) {
+      return blockedValidation(change, `Proposed append text is already present at the end of ${relativePath}.`, checks);
+    }
+    checks.push("Proposed append text is not already present at the file end.");
+
+    return {
+      id: change.id,
+      path: relativePath,
+      status: "Ready",
+      summary: `${relativePath} is ready for the restricted append operation.`,
+      checks
+    };
+  } catch (error) {
+    return blockedValidation(change, error instanceof Error ? error.message : String(error), checks);
+  }
+}
+
+function blockedValidation(
+  change: ProposedFileChange,
+  summary: string,
+  checks: string[]
+): FileChangeValidation {
+  return {
+    id: change.id,
+    path: change.path,
+    status: "Blocked",
+    summary,
+    checks
+  };
+}
+
 async function applyProposedFileChange(change: ProposedFileChange): Promise<string> {
   if (change.changeType !== "Modify") {
     throw new HttpError(409, `Only modify changes can be applied in v0: ${change.path}`);
@@ -522,6 +696,11 @@ async function applyProposedFileChange(change: ProposedFileChange): Promise<stri
   const fileStat = await stat(absolutePath);
   if (!fileStat.isFile()) {
     throw new HttpError(409, `Can only append to existing files in v0: ${relativePath}`);
+  }
+
+  const currentContent = await readFile(absolutePath, "utf8");
+  if (currentContent.endsWith(change.applyOperation.text)) {
+    throw new HttpError(409, `Proposed append text is already present at the end of ${relativePath}.`);
   }
 
   await appendFile(absolutePath, change.applyOperation.text, "utf8");
@@ -898,6 +1077,11 @@ function renderRuntimeHome(): string {
       <li><a href="/health">GET /health</a></li>
       <li><a href="/tasks">GET /tasks</a></li>
       <li><code>POST /tasks</code></li>
+      <li><code>POST /tasks/:taskID/approve-plan</code></li>
+      <li><code>POST /tasks/:taskID/generate-edit-proposal</code></li>
+      <li><code>POST /tasks/:taskID/validate-edit-proposal</code></li>
+      <li><code>POST /tasks/:taskID/apply-edit-proposal</code></li>
+      <li><code>POST /tasks/:taskID/reject-edit-proposal</code></li>
       <li><code>GET /events</code></li>
     </ul>
   </main>

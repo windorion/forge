@@ -88,15 +88,18 @@ asks the model provider for an execution proposal, and moves the task into
 After an execution proposal exists, the Review panel enables
 `Generate Edit Proposal`. That action calls
 `POST /tasks/:taskID/generate-edit-proposal`, creates a proposed diff preview,
-and returns the task to `Human Review` with current phase
-`Edit Proposal Review`. It still does not change files.
+validates it against the current workspace, and returns the task to
+`Human Review` with current phase `Edit Proposal Review`. It still does not
+change files.
 
 When an edit proposal is ready, the Review panel enables `Apply Edit Proposal`
-and `Request Changes`. Applying calls
-`POST /tasks/:taskID/apply-edit-proposal`, runs the restricted v0 append-text
+and `Request Changes`. It also exposes `Validate Proposal`, which calls
+`POST /tasks/:taskID/validate-edit-proposal` to refresh applicability checks
+without writing files. Applying calls `POST /tasks/:taskID/apply-edit-proposal`,
+revalidates the current workspace, runs the restricted v0 append-text
 operation, records the changed Markdown file, and marks the task completed.
-Requesting changes calls `POST /tasks/:taskID/reject-edit-proposal`, records the
-rejection, leaves files unchanged, and allows another edit proposal to be
+Requesting changes calls `POST /tasks/:taskID/reject-edit-proposal`, records
+the rejection, leaves files unchanged, and allows another edit proposal to be
 generated.
 
 ## Build Checks
@@ -112,6 +115,8 @@ cd runtime && npm run check
   deterministic.
 - Edit proposal application is intentionally narrow: v0 only supports
   append-text operations on existing Markdown files in `README.md` or `docs/`.
+  Validation blocks unsupported paths, unsupported operations, oversized edits,
+  missing files, and duplicate append text at the file end.
 - SQLite currently stores full task snapshots plus basic task index fields; the
   full normalized runs/messages/tool-calls schema is still ahead.
 - No repository scanner yet.

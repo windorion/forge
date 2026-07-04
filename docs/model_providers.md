@@ -26,7 +26,8 @@ streaming, and SQLite persistence without requiring API keys.
 
 It can also produce a deterministic edit proposal with a diff preview and a
 restricted append-text operation. The provider still does not apply changes
-itself; applying or rejecting proposals remains a runtime-owned approval step.
+itself; validating, applying, or rejecting proposals remains a runtime-owned
+approval step.
 
 ## Configuration
 

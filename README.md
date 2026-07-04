@@ -1171,6 +1171,47 @@ Next:
 - Add post-apply validation commands and visible test results.
 - Add stronger revision history for multiple proposal attempts.
 
+### 2026-07-04 17:56:17 CST +0800
+
+Conversation summary:
+
+- User asked Codex to continue the next implementation step.
+
+Done:
+
+- Added edit proposal validation data to runtime and Swift task models.
+- Added `POST /tasks/:taskID/validate-edit-proposal`.
+- Made edit proposal generation automatically validate proposed file changes
+  against the current workspace.
+- Made apply revalidate immediately before writing files.
+- Added validation checks for supported change type, supported apply
+  operation, edit size, safe Markdown path, existing target file, and duplicate
+  append text at the target file end.
+- Added blocked validation state so apply attempts can return to human review
+  without writing files.
+- Added macOS Review panel UI for validation status, per-file validation
+  results, and manual validation refresh.
+- Updated edit proposal, development, runtime, database, architecture,
+  model-provider, and v0 scope docs.
+- Verified `npm run check`, `npm run build`, `swift build`, a full runtime
+  smoke test for validation/apply, duplicate-append blocking, and SQLite
+  recovery of validation results after runtime restart.
+
+Not done:
+
+- Did not add a general patch interpreter.
+- Did not add real model-generated code edits.
+- Did not add post-apply test command execution.
+- Did not add normalized validation tables.
+- Did not keep the local runtime running after verification.
+
+Next:
+
+- Add a richer patch proposal format beyond append-text.
+- Add post-apply validation commands and visible test results.
+- Add proposal revision history for multiple attempts.
+- Add a concrete remote or local LLM provider implementation.
+
 ## Decision Log
 
 ### 2026-07-04
@@ -1217,6 +1258,9 @@ Next:
   can generate proposed file changes, reject them without touching files, or
   apply them through a narrow append-text operation for existing Markdown files
   after human approval.
+- Edit proposal validation is a runtime-owned safety gate. Proposals are
+  validated when generated and revalidated immediately before apply; blocked
+  validation returns the task to human review without writing files.
 
 ## Open Questions
 

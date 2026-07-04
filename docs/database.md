@@ -14,7 +14,8 @@ The first runtime persistence slice stores task snapshots in local SQLite at
 `.forge/forge.sqlite` by default. The current `tasks` table records basic task
 index fields and a full JSON payload so the app can recover task state,
 events, tool calls, context files, approval history, execution proposals, edit
-proposals, edit proposal decisions, and review state after a runtime restart.
+proposals, edit proposal validations, edit proposal decisions, and review
+state after a runtime restart.
 
 This is intentionally smaller than the full conceptual schema below. Future
 migrations should split runs, messages, tool calls, commands, file changes,

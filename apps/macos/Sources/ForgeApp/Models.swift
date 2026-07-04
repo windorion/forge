@@ -138,6 +138,22 @@ struct EditProposal: Identifiable, Codable, Hashable {
     var generatedAt: String
     var decidedAt: String?
     var decisionNote: String?
+    var validation: EditProposalValidation?
+}
+
+struct EditProposalValidation: Codable, Hashable {
+    var status: String
+    var summary: String
+    var checkedAt: String
+    var fileResults: [FileChangeValidation]
+}
+
+struct FileChangeValidation: Identifiable, Codable, Hashable {
+    var id: String
+    var path: String
+    var status: String
+    var summary: String
+    var checks: [String]
 }
 
 struct RuntimeHealth: Codable, Hashable {

@@ -10,6 +10,7 @@ This first slice is intentionally small:
 - `POST /tasks`
 - `POST /tasks/:taskID/approve-plan`
 - `POST /tasks/:taskID/generate-edit-proposal`
+- `POST /tasks/:taskID/validate-edit-proposal`
 - `POST /tasks/:taskID/apply-edit-proposal`
 - `POST /tasks/:taskID/reject-edit-proposal`
 - `GET /events` as a Server-Sent Events stream
@@ -20,9 +21,11 @@ calling a model. Approving a plan records an approval and opens the controlled
 execution preparation phase. The runtime then asks the configured model
 provider for a safe execution proposal without applying file changes.
 After that, a safe edit proposal can be generated as a proposed diff preview.
-It is not applied to the workspace until the user explicitly applies it.
-The current apply path is intentionally narrow: it only supports append-text
-operations on existing Markdown files in `README.md` or `docs/`.
+It is validated when generated and is not applied to the workspace until the
+user explicitly applies it. The apply path revalidates against the current
+workspace before writing. The current apply path is intentionally narrow: it
+only supports append-text operations on existing Markdown files in `README.md`
+or `docs/`.
 
 Task state is persisted locally in SQLite. By default the runtime stores task
 snapshots in:
@@ -65,6 +68,9 @@ curl -X POST http://127.0.0.1:17373/tasks/<task-id>/approve-plan \
   -H 'Content-Type: application/json' \
   -d '{}'
 curl -X POST http://127.0.0.1:17373/tasks/<task-id>/generate-edit-proposal \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+curl -X POST http://127.0.0.1:17373/tasks/<task-id>/validate-edit-proposal \
   -H 'Content-Type: application/json' \
   -d '{}'
 curl -X POST http://127.0.0.1:17373/tasks/<task-id>/apply-edit-proposal \

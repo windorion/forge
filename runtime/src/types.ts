@@ -72,6 +72,23 @@ export interface EditProposalDecisionRequest {
   note?: string;
 }
 
+export type EditProposalValidationStatus = "Ready" | "Blocked";
+
+export interface FileChangeValidation {
+  id: string;
+  path: string;
+  status: EditProposalValidationStatus;
+  summary: string;
+  checks: string[];
+}
+
+export interface EditProposalValidation {
+  status: EditProposalValidationStatus;
+  summary: string;
+  checkedAt: string;
+  fileResults: FileChangeValidation[];
+}
+
 export interface EditProposal {
   id: string;
   provider: ModelProviderInfo;
@@ -82,6 +99,7 @@ export interface EditProposal {
   generatedAt: string;
   decidedAt?: string;
   decisionNote?: string;
+  validation?: EditProposalValidation;
 }
 
 export interface ToolCall {
