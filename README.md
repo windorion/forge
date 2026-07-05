@@ -1575,6 +1575,41 @@ Next:
 - Add macOS app build/test entries to validation presets.
 - Consider normalized tables for messages and file references before v0.1.
 
+### 2026-07-05 22:03:33 CST +0800
+
+Conversation summary:
+
+- User asked Codex to continue the next step, so Codex added native macOS app
+  build coverage to the controlled validation preset system.
+
+Done:
+
+- Added runtime-known project command `macos-swift-build` for `swift build`
+  from the repository root.
+- Added built-in medium-risk preset `macos-swiftpm`, requiring task-level
+  approval before it can run.
+- Fixed project command cwd handling so runtime-owned commands can safely run
+  from the repository root when no subdirectory cwd is set.
+- Updated runtime, validation preset, development, runtime architecture, v0
+  scope, and root README docs.
+- Verified `git diff --check`, `npm run check`, `npm run build`,
+  `swift build`, API smoke for preset listing, approval, `swift build`
+  validation execution, and SQLite recovery after runtime restart.
+- Stopped the temporary runtime service and removed temporary smoke-test files.
+
+Not done:
+
+- Did not add an Xcode test or UI test preset yet.
+- Did not add per-workspace approval memory or revocation.
+- Did not add a settings editor for workspace validation presets.
+
+Next:
+
+- Add richer diff proposal formats beyond append-only Markdown edits.
+- Add selected-code or file-picker context to task messages.
+- Consider Xcode or Swift test presets once tests exist.
+- Consider normalized tables for validation runs before v0.1.
+
 ## Decision Log
 
 ### 2026-07-04
@@ -1666,6 +1701,9 @@ Next:
   paths such as `README.md` or `@runtime/src/server.ts:120`, stores resolved,
   missing, or blocked references on the message, and treats them as read-only
   context rather than implicit permission to edit files.
+- Validation presets now include native macOS app build coverage. The
+  `macos-swiftpm` preset runs allowlisted `swift build` from the repository
+  root after explicit task-level approval.
 
 ## Open Questions
 

@@ -41,6 +41,10 @@ FORGE_VALIDATION_PRESET_CONFIG_PATH=/path/to/validation-presets.json
 - `npm run check` in `runtime/`
 - `npm run build` in `runtime/`
 
+`macos-swiftpm` is medium risk and requires approval:
+
+- `swift build` from the repository root
+
 ## Workspace Config Format
 
 Workspace presets can only reference command IDs that the runtime already
@@ -55,7 +59,7 @@ Example:
       "id": "workspace-runtime-checks",
       "name": "Workspace Runtime Checks",
       "description": "Run runtime checks chosen by this workspace.",
-      "commandIDs": ["runtime-npm-check", "runtime-npm-build"]
+      "commandIDs": ["runtime-npm-check", "runtime-npm-build", "macos-swift-build"]
     }
   ]
 }

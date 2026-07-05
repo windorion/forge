@@ -115,6 +115,15 @@ const projectValidationCommands: InternalValidationCommand[] = [
     cwd: "runtime",
     executable: "npm",
     args: ["run", "build"]
+  },
+  {
+    id: "macos-swift-build",
+    name: "macOS SwiftPM build",
+    command: "swift build",
+    kind: "ProjectCommand",
+    riskLevel: "Medium",
+    executable: "swift",
+    args: ["build"]
   }
 ];
 
@@ -139,7 +148,16 @@ const builtInValidationPresets: InternalValidationPreset[] = [
     source: "BuiltIn",
     riskLevel: "Medium",
     requiresApproval: true,
-    commands: projectValidationCommands
+    commands: projectValidationCommands.filter((command) => command.id.startsWith("runtime-"))
+  },
+  {
+    id: "macos-swiftpm",
+    name: "macOS SwiftPM Build",
+    description: "Approved project check for the native macOS SwiftPM app: swift build from the repository root.",
+    source: "BuiltIn",
+    riskLevel: "Medium",
+    requiresApproval: true,
+    commands: projectValidationCommands.filter((command) => command.id === "macos-swift-build")
   }
 ];
 
@@ -1973,7 +1991,11 @@ function resolveMarkdownWorkspacePath(inputPath: string): { absolutePath: string
 }
 
 function resolvePresetCommandCwd(inputPath: string | undefined): string {
-  if (!inputPath || inputPath.includes("\0") || path.isAbsolute(inputPath)) {
+  if (!inputPath) {
+    return repoRoot;
+  }
+
+  if (inputPath.includes("\0") || path.isAbsolute(inputPath)) {
     throw new Error(`Unsafe validation command cwd: ${inputPath ?? ""}`);
   }
 

@@ -107,6 +107,8 @@ V0 is complete when:
   is marked completed.
 - A task can approve and run the `runtime-typescript` validation preset for
   `npm run check` and `npm run build`.
+- A task can approve and run the `macos-swiftpm` validation preset for
+  `swift build`.
 - Runtime can load workspace validation presets from
   `.forge/validation-presets.json`.
 - The app can show runtime-derived command permission state before approving or

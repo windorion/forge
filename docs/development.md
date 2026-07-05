@@ -138,11 +138,13 @@ Current validation presets:
 - `forge-post-apply`: low-risk built-in audit checks.
 - `runtime-typescript`: medium-risk project checks for the runtime
   (`npm run check` and `npm run build` from `runtime/`).
+- `macos-swiftpm`: medium-risk project check for the native macOS app
+  (`swift build` from the repository root).
 
 Workspace validation presets can be declared in `.forge/validation-presets.json`.
 They can only reference runtime-known command IDs such as `runtime-npm-check`
-and `runtime-npm-build`; raw shell command strings are not accepted from the
-workspace config.
+`runtime-npm-build`, and `macos-swift-build`; raw shell command strings are
+not accepted from the workspace config.
 
 Medium-risk validation presets require task-level approval through
 `POST /tasks/:taskID/approve-validation-preset` before they can run. The Review

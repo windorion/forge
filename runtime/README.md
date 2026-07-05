@@ -64,6 +64,9 @@ Validation presets:
 - `runtime-typescript`: medium-risk project commands for `runtime`
   (`npm run check` and `npm run build`). This preset requires task-level
   approval before it can run.
+- `macos-swiftpm`: medium-risk project command for the native macOS app
+  (`swift build` from the repository root). This preset requires task-level
+  approval before it can run.
 
 Workspace presets can be loaded from:
 
@@ -72,8 +75,8 @@ Workspace presets can be loaded from:
 ```
 
 Workspace presets can only reference runtime-known command IDs such as
-`runtime-npm-check` and `runtime-npm-build`; they cannot define raw shell
-commands.
+`runtime-npm-check`, `runtime-npm-build`, and `macos-swift-build`; they cannot
+define raw shell commands.
 
 Project validation commands are allowlisted by the runtime, run without a
 shell, use repo-local cwd values, and record exit code plus output summary.
@@ -153,4 +156,10 @@ curl -X POST http://127.0.0.1:17373/tasks/<task-id>/approve-validation-preset \
 curl -X POST http://127.0.0.1:17373/tasks/<task-id>/run-validation \
   -H 'Content-Type: application/json' \
   -d '{"presetID":"runtime-typescript"}'
+curl -X POST http://127.0.0.1:17373/tasks/<task-id>/approve-validation-preset \
+  -H 'Content-Type: application/json' \
+  -d '{"presetID":"macos-swiftpm"}'
+curl -X POST http://127.0.0.1:17373/tasks/<task-id>/run-validation \
+  -H 'Content-Type: application/json' \
+  -d '{"presetID":"macos-swiftpm"}'
 ```

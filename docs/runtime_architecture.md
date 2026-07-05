@@ -173,6 +173,8 @@ v0 runner has a preset registry:
 - `forge-post-apply`: low-risk built-in `forge:` audit checks.
 - `runtime-typescript`: medium-risk project commands for `runtime`
   (`npm run check` and `npm run build`).
+- `macos-swiftpm`: medium-risk project command for the native app
+  (`swift build` from the repository root).
 
 Workspace presets can be loaded from `.forge/validation-presets.json`. They
 compose runtime-known command IDs and cannot introduce raw shell commands.
