@@ -75,7 +75,19 @@ operations.
 The runtime health endpoint exposes provider configuration status through
 `modelProviderConfiguration`. The macOS Settings window shows the active
 provider, model, mode, non-secret provider settings, missing key issues, and
-remote-context boundary.
+remote-context boundary. It can also edit provider settings through
+`GET /settings/model-provider` and `POST /settings/model-provider`.
+
+Non-secret provider settings are persisted in:
+
+```text
+.forge/model-provider-settings.json
+```
+
+Use `FORGE_MODEL_PROVIDER_SETTINGS_PATH` to point the runtime at another
+non-secret settings file. The runtime never writes API keys to this file. The
+macOS app stores the OpenAI API key in Keychain and syncs it into runtime
+memory through the settings endpoint.
 
 ## Run macOS App
 
@@ -184,8 +196,8 @@ panel shows command permission requests with source, approval state, execution
 state, blocked reasons, command manifest, cwd, risk level, approval button, and
 run button. The runtime provides the task-specific permission state through
 `GET /tasks/:taskID/validation-permissions`. The Settings window shows the
-active provider status, loaded workspace validation config path, and any config
-issues.
+active provider status, editable provider settings, loaded workspace
+validation config path, and any config issues.
 
 ## Build Checks
 
@@ -196,8 +208,9 @@ cd runtime && npm run check
 
 ## Current Limitations
 
-- The OpenAI provider path is visible in the macOS Settings UI but not yet
-  editable there. It is enabled through environment variables.
+- The OpenAI provider path is now editable in the macOS Settings UI, including
+  provider id, model name, base URL, timeout, max output tokens, and Keychain
+  API key sync.
 - The OpenAI provider uses compact task/context summaries and Structured
   Outputs, but it is not yet part of a full tool-using agent loop.
 - Edit proposal application is intentionally narrow: v0 only supports

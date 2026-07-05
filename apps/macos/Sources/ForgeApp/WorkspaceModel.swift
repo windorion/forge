@@ -5,6 +5,7 @@ final class WorkspaceModel: ObservableObject {
     @Published var tasks: [ForgeTask] = [.sample]
     @Published var selectedTaskID: ForgeTask.ID? = ForgeTask.sample.id
     @Published var runtimeHealth: RuntimeHealth?
+    @Published var modelProviderSettingsEnvelope: ModelProviderSettingsEnvelope?
     @Published var validationPresets: [ValidationPreset] = []
     @Published var workspaceValidationPresetConfig: WorkspaceValidationPresetConfig?
     @Published var statusMessage = "Runtime not checked"
@@ -19,6 +20,7 @@ final class WorkspaceModel: ObservableObject {
     @Published private var rejectingEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var runningValidationTaskIDs = Set<ForgeTask.ID>()
     @Published private var approvingValidationPresetTaskIDs = Set<String>()
+    @Published private var updatingModelProviderSettings = false
 
     private let runtime = RuntimeClient()
     private var eventStreamTask: Task<Void, Never>?
@@ -35,6 +37,7 @@ final class WorkspaceModel: ObservableObject {
         Task {
             do {
                 runtimeHealth = try await runtime.health()
+                try await refreshModelProviderSettingsSnapshot()
                 statusMessage = "Runtime connected"
                 try await refreshTasks()
                 try await refreshValidationPresets()
@@ -42,10 +45,60 @@ final class WorkspaceModel: ObservableObject {
                 startEventStream()
             } catch {
                 runtimeHealth = nil
+                modelProviderSettingsEnvelope = nil
                 statusMessage = error.localizedDescription
                 eventStreamStatus = "Event stream disconnected"
             }
         }
+    }
+
+    func refreshModelProviderSettings() {
+        Task {
+            do {
+                try await refreshModelProviderSettingsSnapshot()
+                runtimeHealth = try? await runtime.health()
+                statusMessage = "Model provider settings refreshed."
+            } catch {
+                statusMessage = "Refresh model provider settings failed: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func updateModelProviderSettings(
+        providerID: String,
+        modelName: String?,
+        openAIBaseURL: String?,
+        openAITimeoutMs: Int?,
+        openAIMaxOutputTokens: Int?,
+        openAIAPIKey: String? = nil,
+        clearOpenAIAPIKey: Bool? = nil
+    ) {
+        updatingModelProviderSettings = true
+
+        Task {
+            do {
+                let update = UpdateModelProviderSettingsRequest(
+                    providerID: providerID,
+                    modelName: modelName,
+                    openAIBaseURL: openAIBaseURL,
+                    openAITimeoutMs: openAITimeoutMs,
+                    openAIMaxOutputTokens: openAIMaxOutputTokens,
+                    openAIAPIKey: openAIAPIKey,
+                    clearOpenAIAPIKey: clearOpenAIAPIKey
+                )
+                modelProviderSettingsEnvelope = try await runtime.updateModelProviderSettings(update)
+                runtimeHealth = try? await runtime.health()
+                statusMessage = "Model provider settings saved."
+            } catch {
+                statusMessage = "Save model provider settings failed: \(error.localizedDescription)"
+            }
+
+            updatingModelProviderSettings = false
+        }
+    }
+
+    func isUpdatingModelProviderSettings() -> Bool {
+        updatingModelProviderSettings
     }
 
     func createDemoTask() {
@@ -344,6 +397,10 @@ final class WorkspaceModel: ObservableObject {
         let envelope = try await runtime.listValidationPresets()
         validationPresets = envelope.presets
         workspaceValidationPresetConfig = envelope.workspaceConfig
+    }
+
+    private func refreshModelProviderSettingsSnapshot() async throws {
+        modelProviderSettingsEnvelope = try await runtime.modelProviderSettings()
     }
 
     private func refreshValidationPermissionSnapshotIfPossible(for taskID: ForgeTask.ID?) async {

@@ -8,6 +8,8 @@ This first slice is intentionally small:
 - `GET /health`
 - `GET /tasks`
 - `GET /validation-presets`
+- `GET /settings/model-provider`
+- `POST /settings/model-provider`
 - `GET /tasks/:taskID/validation-permissions`
 - `POST /tasks`
 - `POST /tasks/:taskID/messages`
@@ -122,6 +124,26 @@ FORGE_OPENAI_TIMEOUT_MS=30000
 FORGE_OPENAI_MAX_OUTPUT_TOKENS=1800
 ```
 
+The settings endpoint can update provider configuration while the runtime is
+running:
+
+```text
+GET /settings/model-provider
+POST /settings/model-provider
+```
+
+Non-secret settings are persisted in:
+
+```text
+.forge/model-provider-settings.json
+```
+
+Set `FORGE_MODEL_PROVIDER_SETTINGS_PATH` to use a different non-secret
+settings file. The runtime never persists API keys to that file. API keys can
+come from `OPENAI_API_KEY` at startup or be sent to the settings endpoint for
+the current runtime process. The macOS app stores the OpenAI key in Keychain
+and syncs it into runtime memory.
+
 The OpenAI provider uses Responses API Structured Outputs for model-provider
 artifacts. It receives compact task and context summaries, not whole
 repositories. The runtime still owns approval gates, validation, IDs,
@@ -150,6 +172,10 @@ http://127.0.0.1:17373
 
 ```bash
 curl http://127.0.0.1:17373/health
+curl http://127.0.0.1:17373/settings/model-provider
+curl -X POST http://127.0.0.1:17373/settings/model-provider \
+  -H 'Content-Type: application/json' \
+  -d '{"providerID":"openai","modelName":"gpt-5.5","openAIBaseURL":"https://api.openai.com/v1","openAITimeoutMs":30000,"openAIMaxOutputTokens":1800}'
 curl -X POST http://127.0.0.1:17373/tasks \
   -H 'Content-Type: application/json' \
   -d '{"title":"Demo task","objective":"Prove task creation."}'

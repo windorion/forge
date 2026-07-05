@@ -25,6 +25,29 @@ struct RuntimeClient {
         return try JSONDecoder().decode(ValidationPresetListEnvelope.self, from: data)
     }
 
+    func modelProviderSettings() async throws -> ModelProviderSettingsEnvelope {
+        let url = baseURL
+            .appending(path: "settings")
+            .appending(path: "model-provider")
+        let (data, response) = try await URLSession.shared.data(from: url)
+        try validate(response)
+        return try JSONDecoder().decode(ModelProviderSettingsEnvelope.self, from: data)
+    }
+
+    func updateModelProviderSettings(_ update: UpdateModelProviderSettingsRequest) async throws -> ModelProviderSettingsEnvelope {
+        let url = baseURL
+            .appending(path: "settings")
+            .appending(path: "model-provider")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(update)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response)
+        return try JSONDecoder().decode(ModelProviderSettingsEnvelope.self, from: data)
+    }
+
     func validationPermissions(taskID: ForgeTask.ID) async throws -> ValidationPermissionEnvelope {
         let url = baseURL
             .appending(path: "tasks")

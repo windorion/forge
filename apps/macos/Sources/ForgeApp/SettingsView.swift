@@ -14,7 +14,23 @@ struct SettingsView: View {
                 Label("Runtime", systemImage: "server.rack")
             }
 
-            ModelProviderSettingsTab(configuration: workspace.runtimeHealth?.modelProviderConfiguration)
+            ModelProviderSettingsTab(
+                envelope: workspace.modelProviderSettingsEnvelope,
+                fallbackConfiguration: workspace.runtimeHealth?.modelProviderConfiguration,
+                refresh: workspace.refreshModelProviderSettings,
+                save: { providerID, modelName, openAIBaseURL, timeout, maxOutputTokens, apiKey, clearKey in
+                    workspace.updateModelProviderSettings(
+                        providerID: providerID,
+                        modelName: modelName,
+                        openAIBaseURL: openAIBaseURL,
+                        openAITimeoutMs: timeout,
+                        openAIMaxOutputTokens: maxOutputTokens,
+                        openAIAPIKey: apiKey,
+                        clearOpenAIAPIKey: clearKey
+                    )
+                },
+                isSaving: workspace.isUpdatingModelProviderSettings()
+            )
                 .tabItem {
                     Label("Model", systemImage: "cpu")
                 }
@@ -76,10 +92,82 @@ private struct RuntimeSettingsTab: View {
 }
 
 private struct ModelProviderSettingsTab: View {
-    var configuration: ModelProviderConfiguration?
+    var envelope: ModelProviderSettingsEnvelope?
+    var fallbackConfiguration: ModelProviderConfiguration?
+    var refresh: () -> Void
+    var save: (String, String?, String?, Int?, Int?, String?, Bool?) -> Void
+    var isSaving: Bool
+
+    @State private var providerID = "local"
+    @State private var modelName = ""
+    @State private var openAIBaseURL = ""
+    @State private var timeoutText = ""
+    @State private var maxOutputText = ""
+    @State private var apiKeyInput = ""
+    @State private var localMessage = ""
+
+    private var configuration: ModelProviderConfiguration? {
+        envelope?.configuration ?? fallbackConfiguration
+    }
 
     var body: some View {
         Form {
+            Section("Edit Provider") {
+                Picker("Provider", selection: $providerID) {
+                    Text("Local").tag("local")
+                    Text("OpenAI").tag("openai")
+                }
+                .pickerStyle(.segmented)
+
+                TextField("Model", text: $modelName)
+
+                HStack {
+                    Button(action: refresh) {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
+
+                    Button(action: { saveCurrentSettings() }) {
+                        Label("Save", systemImage: "square.and.arrow.down")
+                    }
+                    .keyboardShortcut("s", modifiers: [.command])
+                    .disabled(isSaving)
+
+                    if isSaving {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                }
+
+                if let settingsPath = envelope?.editableSettings.settingsPath {
+                    LabeledContent("Settings File", value: settingsPath)
+                }
+            }
+
+            Section("OpenAI") {
+                TextField("Base URL", text: $openAIBaseURL)
+                TextField("Timeout ms", text: $timeoutText)
+                    .monospacedDigit()
+                TextField("Max Output Tokens", text: $maxOutputText)
+                    .monospacedDigit()
+                SecureField("API Key", text: $apiKeyInput)
+
+                if let editableSettings = envelope?.editableSettings {
+                    LabeledContent("Runtime Key", value: editableSettings.hasOpenAIAPIKey ? "Configured" : "Missing")
+                }
+
+                HStack {
+                    Button(action: syncStoredKey) {
+                        Label("Use Stored Key", systemImage: "key")
+                    }
+                    .disabled(isSaving)
+
+                    Button(role: .destructive, action: clearStoredKey) {
+                        Label("Clear Key", systemImage: "trash")
+                    }
+                    .disabled(isSaving)
+                }
+            }
+
             Section("Provider") {
                 if let configuration {
                     LabeledContent("Status") {
@@ -125,12 +213,128 @@ private struct ModelProviderSettingsTab: View {
                     }
                 }
             }
+
+            if !localMessage.isEmpty {
+                Section("Last Action") {
+                    Text(localMessage)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
         .formStyle(.grouped)
+        .onAppear(perform: loadCurrentSettings)
+        .onChange(of: envelope) { _, _ in
+            loadCurrentSettings()
+        }
     }
 
     private func displayValue(for item: ModelProviderConfigItem) -> String {
         item.isSecret && item.value == "Configured" ? "Configured" : item.value
+    }
+
+    private func loadCurrentSettings() {
+        let editableSettings = envelope?.editableSettings
+        let configuration = configuration
+        providerID = editableSettings?.providerID ?? configuration?.provider.id ?? "local"
+        modelName = editableSettings?.modelName ?? configuration?.provider.model ?? ""
+        openAIBaseURL = editableSettings?.openAIBaseURL ?? ""
+        timeoutText = editableSettings?.openAITimeoutMs.map(String.init) ?? ""
+        maxOutputText = editableSettings?.openAIMaxOutputTokens.map(String.init) ?? ""
+        apiKeyInput = ""
+    }
+
+    private func saveCurrentSettings() {
+        saveCurrentSettings(apiKeyOverride: nil, clearKey: false, storeEnteredAPIKey: true)
+    }
+
+    private func syncStoredKey() {
+        do {
+            guard let storedKey = try KeychainStore.readOpenAIAPIKey(), !storedKey.isEmpty else {
+                localMessage = "No OpenAI API key found in Keychain."
+                return
+            }
+
+            saveCurrentSettings(apiKeyOverride: storedKey, clearKey: false, storeEnteredAPIKey: false)
+            localMessage = "Stored OpenAI API key synced to runtime memory."
+        } catch {
+            localMessage = "Read Keychain failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func clearStoredKey() {
+        do {
+            try KeychainStore.deleteOpenAIAPIKey()
+            apiKeyInput = ""
+            saveCurrentSettings(apiKeyOverride: nil, clearKey: true, storeEnteredAPIKey: false)
+            localMessage = "OpenAI API key cleared from Keychain and runtime memory."
+        } catch {
+            localMessage = "Clear Keychain failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func saveCurrentSettings(
+        apiKeyOverride: String?,
+        clearKey: Bool,
+        storeEnteredAPIKey: Bool
+    ) {
+        do {
+            localMessage = ""
+            let timeout = try optionalPositiveInteger(timeoutText, fieldName: "Timeout")
+            let maxOutputTokens = try optionalPositiveInteger(maxOutputText, fieldName: "Max Output Tokens")
+            let trimmedAPIKey = apiKeyOverride ?? optionalTrimmed(apiKeyInput)
+
+            if storeEnteredAPIKey, let trimmedAPIKey {
+                try KeychainStore.saveOpenAIAPIKey(trimmedAPIKey)
+            }
+
+            save(
+                providerID,
+                optionalTrimmed(modelName),
+                optionalTrimmed(openAIBaseURL),
+                timeout,
+                maxOutputTokens,
+                trimmedAPIKey,
+                clearKey ? true : nil
+            )
+
+            if trimmedAPIKey != nil && storeEnteredAPIKey {
+                apiKeyInput = ""
+                localMessage = "Settings saved. API key stored in Keychain and synced to runtime memory."
+            } else {
+                localMessage = "Settings saved."
+            }
+        } catch {
+            localMessage = error.localizedDescription
+        }
+    }
+
+    private func optionalTrimmed(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func optionalPositiveInteger(_ value: String, fieldName: String) throws -> Int? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return nil
+        }
+
+        guard let integer = Int(trimmed), integer > 0 else {
+            throw SettingsInputError.invalidPositiveInteger(fieldName)
+        }
+
+        return integer
+    }
+}
+
+private enum SettingsInputError: LocalizedError {
+    case invalidPositiveInteger(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidPositiveInteger(let fieldName):
+            return "\(fieldName) must be a positive whole number."
+        }
     }
 }
 

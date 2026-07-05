@@ -55,6 +55,7 @@ The product should show:
 - SQLite task persistence
 - model-provider abstraction
 - provider configuration visibility
+- editable model-provider settings
 - execution proposals
 - safe edit proposals
 - revised edit proposals after requested changes
@@ -68,14 +69,14 @@ The product should show:
 
 ## V0 Not Included
 
-- real LLM provider
+- full autonomous tool-using real LLM loop
 - autonomous file edits
 - arbitrary command execution
 - general test runner orchestration
 - git diff generation
 - full repository index
 - Tree-sitter parsing
-- model settings UI
+- provider ecosystem beyond local deterministic and optional OpenAI
 - release packaging
 
 ## V0 Completion Criteria
@@ -117,8 +118,9 @@ V0 is complete when:
   `.forge/validation-presets.json`.
 - The app can show runtime-derived command permission state before approving or
   running project validation presets.
-- The Settings window can show runtime-derived model-provider status, missing
-  provider configuration, and remote-context boundary.
+- The Settings window can show and edit runtime-derived model-provider status,
+  missing provider configuration, non-secret provider options, Keychain-backed
+  OpenAI API key sync, and remote-context boundary.
 
 ## V0 Next After Completion
 
@@ -133,8 +135,9 @@ controlled execution preparation, but it does not yet run model-driven edits.
 
 The model-provider abstraction has also started: the default local
 deterministic provider creates task intent briefs, plan revisions, and an
-execution proposal after plan approval. Real remote or local LLM providers are
-still future work.
+execution proposal after plan approval. An optional OpenAI Responses provider
+exists behind the same boundary, but full autonomous tool use through a real
+LLM loop is still future work.
 
 Safe edit proposals have started: Forge can create a proposed diff preview and
 return the task to human review without mutating files. A proposal can now be

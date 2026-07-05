@@ -6,6 +6,7 @@ import type {
   IntentBrief,
   ModelProviderConfiguration,
   ModelProviderInfo,
+  ModelProviderRuntimeSettings,
   PlanRevision,
   PlanStep,
   TaskFileReference,
@@ -51,13 +52,17 @@ interface OpenAIProviderConfig {
 }
 
 export function createModelProviderFromEnv(): ModelProvider {
-  const providerID = (process.env.FORGE_MODEL_PROVIDER?.trim() || "local").toLowerCase();
+  return createModelProvider(defaultModelProviderRuntimeSettings());
+}
+
+export function createModelProvider(settings: ModelProviderRuntimeSettings): ModelProvider {
+  const providerID = normalizeProviderID(settings.providerID);
 
   if (providerID === "local") {
     return new LocalDeterministicModelProvider({
       id: "local",
       name: "Local Deterministic",
-      model: process.env.FORGE_MODEL_NAME?.trim() || "local-deterministic-v0",
+      model: settings.modelName?.trim() || "local-deterministic-v0",
       mode: "local"
     });
   }
@@ -67,14 +72,14 @@ export function createModelProviderFromEnv(): ModelProvider {
       {
         id: "openai",
         name: "OpenAI Responses",
-        model: process.env.FORGE_MODEL_NAME?.trim() || "gpt-5.5",
+        model: settings.modelName?.trim() || "gpt-5.5",
         mode: "remote"
       },
       {
-        apiKey: process.env.OPENAI_API_KEY?.trim() || undefined,
-        baseURL: (process.env.FORGE_OPENAI_BASE_URL?.trim() || "https://api.openai.com/v1").replace(/\/+$/, ""),
-        timeoutMs: numberFromEnv("FORGE_OPENAI_TIMEOUT_MS", 30_000),
-        maxOutputTokens: numberFromEnv("FORGE_OPENAI_MAX_OUTPUT_TOKENS", 1800)
+        apiKey: settings.openAIAPIKey?.trim() || undefined,
+        baseURL: (settings.openAIBaseURL?.trim() || "https://api.openai.com/v1").replace(/\/+$/, ""),
+        timeoutMs: positiveNumber(settings.openAITimeoutMs, 30_000),
+        maxOutputTokens: positiveNumber(settings.openAIMaxOutputTokens, 1800)
       }
     );
   }
@@ -83,7 +88,7 @@ export function createModelProviderFromEnv(): ModelProvider {
     {
       id: providerID,
       name: "Unavailable Model Provider",
-      model: process.env.FORGE_MODEL_NAME?.trim() || "unknown",
+      model: settings.modelName?.trim() || "unknown",
       mode: "remote"
     },
     `Unsupported model provider "${providerID}". Use FORGE_MODEL_PROVIDER=local or FORGE_MODEL_PROVIDER=openai.`
@@ -91,13 +96,17 @@ export function createModelProviderFromEnv(): ModelProvider {
 }
 
 export function getModelProviderConfigurationFromEnv(): ModelProviderConfiguration {
-  const providerID = (process.env.FORGE_MODEL_PROVIDER?.trim() || "local").toLowerCase();
+  return getModelProviderConfiguration(defaultModelProviderRuntimeSettings());
+}
+
+export function getModelProviderConfiguration(settings: ModelProviderRuntimeSettings): ModelProviderConfiguration {
+  const providerID = normalizeProviderID(settings.providerID);
 
   if (providerID === "local") {
     const provider = {
       id: "local",
       name: "Local Deterministic",
-      model: process.env.FORGE_MODEL_NAME?.trim() || "local-deterministic-v0",
+      model: settings.modelName?.trim() || "local-deterministic-v0",
       mode: "local" as const
     };
 
@@ -120,11 +129,11 @@ export function getModelProviderConfigurationFromEnv(): ModelProviderConfigurati
     const provider = {
       id: "openai",
       name: "OpenAI Responses",
-      model: process.env.FORGE_MODEL_NAME?.trim() || "gpt-5.5",
+      model: settings.modelName?.trim() || "gpt-5.5",
       mode: "remote" as const
     };
-    const baseURL = (process.env.FORGE_OPENAI_BASE_URL?.trim() || "https://api.openai.com/v1").replace(/\/+$/, "");
-    const hasAPIKey = Boolean(process.env.OPENAI_API_KEY?.trim());
+    const baseURL = (settings.openAIBaseURL?.trim() || "https://api.openai.com/v1").replace(/\/+$/, "");
+    const hasAPIKey = Boolean(settings.openAIAPIKey?.trim());
     const issues = hasAPIKey
       ? []
       : ["OPENAI_API_KEY is missing. OpenAI provider calls will fail until it is configured."];
@@ -146,8 +155,8 @@ export function getModelProviderConfigurationFromEnv(): ModelProviderConfigurati
         modelProviderConfigItem("mode", "Mode", provider.mode),
         modelProviderConfigItem("base-url", "Base URL", baseURL),
         modelProviderConfigItem("api-key", "API Key", hasAPIKey ? "Configured" : "Missing", true),
-        modelProviderConfigItem("timeout", "Timeout", `${numberFromEnv("FORGE_OPENAI_TIMEOUT_MS", 30_000)} ms`),
-        modelProviderConfigItem("max-output", "Max Output", `${numberFromEnv("FORGE_OPENAI_MAX_OUTPUT_TOKENS", 1800)} tokens`)
+        modelProviderConfigItem("timeout", "Timeout", `${positiveNumber(settings.openAITimeoutMs, 30_000)} ms`),
+        modelProviderConfigItem("max-output", "Max Output", `${positiveNumber(settings.openAIMaxOutputTokens, 1800)} tokens`)
       ]
     };
   }
@@ -156,7 +165,7 @@ export function getModelProviderConfigurationFromEnv(): ModelProviderConfigurati
     provider: {
       id: providerID,
       name: "Unavailable Model Provider",
-      model: process.env.FORGE_MODEL_NAME?.trim() || "unknown",
+      model: settings.modelName?.trim() || "unknown",
       mode: "remote"
     },
     configuredProviderID: providerID,
@@ -166,9 +175,24 @@ export function getModelProviderConfigurationFromEnv(): ModelProviderConfigurati
     sendsRemoteContext: false,
     settings: [
       modelProviderConfigItem("provider", "Provider", providerID),
-      modelProviderConfigItem("model", "Model", process.env.FORGE_MODEL_NAME?.trim() || "unknown")
+      modelProviderConfigItem("model", "Model", settings.modelName?.trim() || "unknown")
     ]
   };
+}
+
+export function defaultModelProviderRuntimeSettings(): ModelProviderRuntimeSettings {
+  return {
+    providerID: normalizeProviderID(process.env.FORGE_MODEL_PROVIDER?.trim() || "local"),
+    modelName: process.env.FORGE_MODEL_NAME?.trim() || undefined,
+    openAIBaseURL: process.env.FORGE_OPENAI_BASE_URL?.trim() || undefined,
+    openAITimeoutMs: numberFromEnv("FORGE_OPENAI_TIMEOUT_MS", undefined),
+    openAIMaxOutputTokens: numberFromEnv("FORGE_OPENAI_MAX_OUTPUT_TOKENS", undefined),
+    openAIAPIKey: process.env.OPENAI_API_KEY?.trim() || undefined
+  };
+}
+
+function normalizeProviderID(providerID: string | undefined): string {
+  return (providerID?.trim() || "local").toLowerCase();
 }
 
 function modelProviderConfigItem(
@@ -864,9 +888,15 @@ function compactTaskMessage(message: TaskMessage): Record<string, unknown> {
   };
 }
 
-function numberFromEnv(name: string, fallback: number): number {
+function numberFromEnv(name: string, fallback: number): number;
+function numberFromEnv(name: string, fallback: undefined): number | undefined;
+function numberFromEnv(name: string, fallback: number | undefined): number | undefined {
   const value = Number(process.env[name]);
   return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function positiveNumber(value: number | undefined, fallback: number): number {
+  return Number.isFinite(value) && value !== undefined && value > 0 ? value : fallback;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

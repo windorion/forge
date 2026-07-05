@@ -1885,8 +1885,51 @@ Next:
   runtime.
 - Model-provider configuration status is runtime-derived and visible in the
   macOS Settings window. The app shows provider readiness, missing secret
-  status, non-secret settings, and the remote-context boundary without
-  exposing secret values.
+  status, editable non-secret settings, Keychain-backed OpenAI API key sync,
+  and the remote-context boundary without exposing secret values.
+
+### 2026-07-06 03:54:54 CST +0800
+
+Conversation summary:
+
+- User asked Codex to continue the next step as a substantial long task.
+
+Done:
+
+- Added runtime-owned editable model-provider settings through
+  `GET /settings/model-provider` and `POST /settings/model-provider`.
+- Added `.forge/model-provider-settings.json` persistence for non-secret
+  provider settings and `FORGE_MODEL_PROVIDER_SETTINGS_PATH` override support.
+- Kept OpenAI API keys out of persisted runtime settings; the runtime only
+  reports key presence as configured or missing.
+- Changed runtime provider initialization so settings updates rebuild the
+  active provider without restarting the process.
+- Added Swift models and RuntimeClient methods for provider settings.
+- Added macOS Keychain storage for the OpenAI API key.
+- Rebuilt the macOS Model Settings tab so it can switch providers, edit model
+  and OpenAI non-secret options, save/sync Keychain keys, and clear keys.
+- Updated model-provider, security, development, runtime, and v0 scope docs.
+- Verified `npm run check`, `npm run build`, `swift build`, and
+  `git diff --check`.
+- Started and stopped a temporary runtime for smoke testing.
+
+Not done:
+
+- Did not call the live OpenAI API.
+- Did not add Anthropic, Ollama, Apple/MLX, or other provider settings.
+- Did not add a full autonomous tool-using real LLM loop.
+- Did not complete the localhost settings API smoke test because sandboxed
+  localhost access required escalation and the escalation was blocked by the
+  current usage/approval limit.
+
+Next:
+
+- Run the provider settings API smoke test once localhost escalation is
+  available again.
+- Add a first real provider-backed task smoke with an intentionally supplied
+  API key.
+- Continue from provider configuration into richer real-model planning and
+  safer edit proposal formats.
 
 ## Open Questions
 

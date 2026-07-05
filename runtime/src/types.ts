@@ -78,6 +78,25 @@ export interface ModelProviderConfiguration {
   remoteContextSummary?: string;
 }
 
+export interface ModelProviderRuntimeSettings {
+  providerID: string;
+  modelName?: string;
+  openAIBaseURL?: string;
+  openAITimeoutMs?: number;
+  openAIMaxOutputTokens?: number;
+  openAIAPIKey?: string;
+}
+
+export interface ModelProviderSettingsUpdateRequest {
+  providerID?: string;
+  modelName?: string;
+  openAIBaseURL?: string;
+  openAITimeoutMs?: number;
+  openAIMaxOutputTokens?: number;
+  openAIAPIKey?: string;
+  clearOpenAIAPIKey?: boolean;
+}
+
 export interface IntentBrief {
   summary: string;
   constraints: string[];

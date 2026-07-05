@@ -49,7 +49,7 @@ files, runs commands, commits, pushes, or calls tools.
 
 ## Configuration
 
-Environment variables:
+Environment variables provide startup defaults:
 
 - `FORGE_MODEL_PROVIDER`: provider id. Defaults to `local`.
 - `FORGE_MODEL_NAME`: model name. Defaults to `local-deterministic-v0` for
@@ -63,6 +63,23 @@ Environment variables:
 
 Unsupported provider ids now fail clearly through an unavailable provider.
 The OpenAI provider also fails clearly when `OPENAI_API_KEY` is missing.
+
+Runtime-editable settings:
+
+- `GET /settings/model-provider`: returns the active provider configuration
+  plus editable non-secret runtime settings.
+- `POST /settings/model-provider`: updates provider id, model name, OpenAI
+  base URL, OpenAI timeout, OpenAI max output tokens, and in-memory OpenAI API
+  key state.
+- `.forge/model-provider-settings.json`: stores non-secret provider settings.
+- `FORGE_MODEL_PROVIDER_SETTINGS_PATH`: optional override for the non-secret
+  settings file path.
+
+The runtime never writes API keys into `.forge/model-provider-settings.json`.
+When the macOS app saves an OpenAI API key, it stores the key in macOS
+Keychain and sends it to the runtime settings endpoint so the current runtime
+process can use it in memory. After a runtime restart, the key must come from
+`OPENAI_API_KEY` or be synced from Keychain again.
 
 Remote-provider privacy boundary:
 
@@ -88,8 +105,10 @@ window. The snapshot includes:
 - whether selected task context can be sent to a remote provider
 - a short remote-context boundary summary
 
-This is a visibility surface only. Provider selection and secrets are still
-environment-driven in the current slice.
+The macOS Settings window reads this status and the dedicated settings
+endpoint. It can switch between `local` and `openai`, adjust non-secret OpenAI
+options, store the OpenAI API key in Keychain, sync that key into runtime
+memory, and clear the key from both Keychain and runtime memory.
 
 ## Runtime Contract
 

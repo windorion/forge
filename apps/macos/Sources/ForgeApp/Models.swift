@@ -243,6 +243,21 @@ struct ModelProviderConfiguration: Codable, Hashable {
     var remoteContextSummary: String?
 }
 
+struct ModelProviderEditableSettings: Codable, Hashable {
+    var providerID: String
+    var modelName: String?
+    var openAIBaseURL: String?
+    var openAITimeoutMs: Int?
+    var openAIMaxOutputTokens: Int?
+    var hasOpenAIAPIKey: Bool
+    var settingsPath: String
+}
+
+struct ModelProviderSettingsEnvelope: Codable, Hashable {
+    var configuration: ModelProviderConfiguration
+    var editableSettings: ModelProviderEditableSettings
+}
+
 struct IntentBrief: Codable, Hashable {
     var summary: String
     var constraints: [String]
@@ -362,6 +377,50 @@ struct RunValidationRequest: Encodable {
 
 struct CreateTaskMessageRequest: Encodable {
     var content: String
+}
+
+struct UpdateModelProviderSettingsRequest: Encodable {
+    var providerID: String?
+    var modelName: String?
+    var openAIBaseURL: String?
+    var openAITimeoutMs: Int?
+    var openAIMaxOutputTokens: Int?
+    var openAIAPIKey: String?
+    var clearOpenAIAPIKey: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case providerID
+        case modelName
+        case openAIBaseURL
+        case openAITimeoutMs
+        case openAIMaxOutputTokens
+        case openAIAPIKey
+        case clearOpenAIAPIKey
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+
+        try container.encodeIfPresent(providerID, forKey: .providerID)
+        try encodeClearingField(modelName, forKey: .modelName, in: &container)
+        try encodeClearingField(openAIBaseURL, forKey: .openAIBaseURL, in: &container)
+        try encodeClearingField(openAITimeoutMs, forKey: .openAITimeoutMs, in: &container)
+        try encodeClearingField(openAIMaxOutputTokens, forKey: .openAIMaxOutputTokens, in: &container)
+        try container.encodeIfPresent(openAIAPIKey, forKey: .openAIAPIKey)
+        try container.encodeIfPresent(clearOpenAIAPIKey, forKey: .clearOpenAIAPIKey)
+    }
+
+    private func encodeClearingField<T: Encodable>(
+        _ value: T?,
+        forKey key: CodingKeys,
+        in container: inout KeyedEncodingContainer<CodingKeys>
+    ) throws {
+        if let value {
+            try container.encode(value, forKey: key)
+        } else {
+            try container.encodeNil(forKey: key)
+        }
+    }
 }
 
 struct RuntimeStreamEvent: Hashable {

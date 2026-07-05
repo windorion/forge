@@ -120,6 +120,13 @@ Remote model provider rule:
   and proposal metadata. It should not upload whole repositories.
 - Runtime health may report whether a secret is configured, but it must not
   return secret values.
+- Runtime model-provider settings persist only non-secret values in
+  `.forge/model-provider-settings.json`.
+- The macOS app stores OpenAI API keys in macOS Keychain and syncs them into
+  runtime memory through `POST /settings/model-provider`; the runtime does not
+  persist API keys to disk.
+- Clearing the OpenAI key from Settings deletes the Keychain item and asks the
+  runtime to clear its in-memory copy.
 - Remote model output is guidance only. The runtime must continue to validate
   proposals and require approval before file, command, git, or external side
   effects.

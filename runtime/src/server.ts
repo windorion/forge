@@ -1,11 +1,16 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { appendFile, readdir, readFile, stat } from "node:fs/promises";
+import { readFileSync } from "node:fs";
+import { appendFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { URL } from "node:url";
 import { fileURLToPath } from "node:url";
-import { createModelProviderFromEnv, getModelProviderConfigurationFromEnv } from "./modelProvider.js";
+import {
+  createModelProvider,
+  defaultModelProviderRuntimeSettings,
+  getModelProviderConfiguration
+} from "./modelProvider.js";
 import { SqliteTaskStore } from "./taskStore.js";
 import type {
   AgentState,
@@ -20,6 +25,8 @@ import type {
   EditProposalValidation,
   FileChangeValidation,
   ForgeTask,
+  ModelProviderRuntimeSettings,
+  ModelProviderSettingsUpdateRequest,
   PlanRevision,
   PlanStep,
   ProposedFileChange,
@@ -44,7 +51,8 @@ const runtimeDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".
 const repoRoot = path.resolve(runtimeDir, "..");
 const taskStore = new SqliteTaskStore(resolveDatabasePath());
 const tasks = new Map<string, ForgeTask>(taskStore.loadTasks().map((task) => [task.id, task]));
-const modelProvider = createModelProviderFromEnv();
+let modelProviderSettings = loadModelProviderRuntimeSettings();
+let modelProvider = createModelProvider(modelProviderSettings);
 const validationCommandTimeoutMs = 60_000;
 const repositoryScanMaxFiles = 400;
 const repositorySearchMaxFiles = 240;
@@ -162,6 +170,16 @@ interface WorkspacePresetConfigStatus {
 interface ValidationPresetRegistry {
   presets: InternalValidationPreset[];
   workspaceConfig: WorkspacePresetConfigStatus;
+}
+
+interface PublicModelProviderRuntimeSettings {
+  providerID: string;
+  modelName?: string;
+  openAIBaseURL?: string;
+  openAITimeoutMs?: number;
+  openAIMaxOutputTokens?: number;
+  hasOpenAIAPIKey: boolean;
+  settingsPath: string;
 }
 
 interface RepositorySearchMatch {
@@ -323,7 +341,7 @@ const server = createServer(async (request, response) => {
         version: "0.1.0",
         uptimeSeconds: (Date.now() - startedAt) / 1000,
         modelProvider: modelProvider.info,
-        modelProviderConfiguration: getModelProviderConfigurationFromEnv(),
+        modelProviderConfiguration: getModelProviderConfiguration(modelProviderSettings),
         persistence: {
           databasePath: taskStore.dbPath,
           taskCount: tasks.size
@@ -342,6 +360,24 @@ const server = createServer(async (request, response) => {
       writeJson(response, 200, {
         presets: listValidationPresets(registry),
         workspaceConfig: registry.workspaceConfig
+      });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/settings/model-provider") {
+      writeJson(response, 200, {
+        configuration: getModelProviderConfiguration(modelProviderSettings),
+        editableSettings: publicModelProviderRuntimeSettings(modelProviderSettings)
+      });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/settings/model-provider") {
+      const input = await readJson<ModelProviderSettingsUpdateRequest>(request);
+      const configuration = await updateModelProviderSettings(input);
+      writeJson(response, 200, {
+        configuration,
+        editableSettings: publicModelProviderRuntimeSettings(modelProviderSettings)
       });
       return;
     }
@@ -470,6 +506,231 @@ function resolveDatabasePath(): string {
   }
 
   return path.join(repoRoot, ".forge", "forge.sqlite");
+}
+
+function resolveModelProviderSettingsPath(): string {
+  const configured = process.env.FORGE_MODEL_PROVIDER_SETTINGS_PATH;
+  if (configured) {
+    return path.resolve(repoRoot, configured);
+  }
+
+  return path.join(repoRoot, ".forge", "model-provider-settings.json");
+}
+
+function loadModelProviderRuntimeSettings(): ModelProviderRuntimeSettings {
+  const defaults = defaultModelProviderRuntimeSettings();
+  const settingsPath = resolveModelProviderSettingsPath();
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(settingsPath, "utf8"));
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return defaults;
+    }
+
+    console.warn(`Forge model provider settings ignored: ${error instanceof Error ? error.message : String(error)}`);
+    return defaults;
+  }
+
+  if (!isRecord(parsed)) {
+    console.warn("Forge model provider settings ignored: root value must be an object.");
+    return defaults;
+  }
+
+  return {
+    ...defaults,
+    providerID: providerIDFromPersistedSetting(parsed.providerID, defaults.providerID),
+    modelName: stringSettingFromUnknown(parsed.modelName) ?? defaults.modelName,
+    openAIBaseURL: stringSettingFromUnknown(parsed.openAIBaseURL) ?? defaults.openAIBaseURL,
+    openAITimeoutMs: positiveIntegerFromUnknown(parsed.openAITimeoutMs) ?? defaults.openAITimeoutMs,
+    openAIMaxOutputTokens: positiveIntegerFromUnknown(parsed.openAIMaxOutputTokens)
+      ?? defaults.openAIMaxOutputTokens,
+    openAIAPIKey: defaults.openAIAPIKey
+  };
+}
+
+async function updateModelProviderSettings(
+  input: ModelProviderSettingsUpdateRequest
+): Promise<ReturnType<typeof getModelProviderConfiguration>> {
+  if (!isRecord(input)) {
+    throw new HttpError(400, "Model provider settings update must be an object.");
+  }
+
+  const previousProviderID = modelProviderSettings.providerID;
+  const nextProviderID = "providerID" in input
+    ? providerIDFromUnknown(input.providerID, modelProviderSettings.providerID)
+    : modelProviderSettings.providerID;
+  const providerChanged = nextProviderID !== previousProviderID;
+  const nextSettings: ModelProviderRuntimeSettings = {
+    ...modelProviderSettings,
+    providerID: nextProviderID
+  };
+
+  if (providerChanged && !("modelName" in input)) {
+    nextSettings.modelName = undefined;
+  }
+
+  if ("modelName" in input) {
+    nextSettings.modelName = optionalTrimmedString(input.modelName, "modelName", 120);
+  }
+
+  if ("openAIBaseURL" in input) {
+    nextSettings.openAIBaseURL = optionalURLString(input.openAIBaseURL, "openAIBaseURL");
+  }
+
+  if ("openAITimeoutMs" in input) {
+    nextSettings.openAITimeoutMs = optionalPositiveInteger(input.openAITimeoutMs, "openAITimeoutMs", 1, 300_000);
+  }
+
+  if ("openAIMaxOutputTokens" in input) {
+    nextSettings.openAIMaxOutputTokens = optionalPositiveInteger(
+      input.openAIMaxOutputTokens,
+      "openAIMaxOutputTokens",
+      1,
+      200_000
+    );
+  }
+
+  if (input.clearOpenAIAPIKey === true) {
+    nextSettings.openAIAPIKey = undefined;
+  }
+
+  if ("openAIAPIKey" in input) {
+    const apiKey = optionalTrimmedString(input.openAIAPIKey, "openAIAPIKey", 20_000);
+    if (apiKey) {
+      nextSettings.openAIAPIKey = apiKey;
+    }
+  }
+
+  await persistModelProviderSettings(nextSettings);
+  modelProviderSettings = nextSettings;
+  modelProvider = createModelProvider(modelProviderSettings);
+  return getModelProviderConfiguration(modelProviderSettings);
+}
+
+async function persistModelProviderSettings(settings: ModelProviderRuntimeSettings): Promise<void> {
+  const settingsPath = resolveModelProviderSettingsPath();
+  const persisted = stripUndefinedValues({
+    providerID: providerIDFromUnknown(settings.providerID, "local"),
+    modelName: optionalPersistedString(settings.modelName),
+    openAIBaseURL: optionalPersistedString(settings.openAIBaseURL),
+    openAITimeoutMs: positiveIntegerFromUnknown(settings.openAITimeoutMs),
+    openAIMaxOutputTokens: positiveIntegerFromUnknown(settings.openAIMaxOutputTokens)
+  });
+
+  await mkdir(path.dirname(settingsPath), { recursive: true });
+  await writeFile(settingsPath, `${JSON.stringify(persisted, null, 2)}\n`, "utf8");
+}
+
+function publicModelProviderRuntimeSettings(
+  settings: ModelProviderRuntimeSettings
+): PublicModelProviderRuntimeSettings {
+  return {
+    providerID: providerIDForPublicSettings(settings.providerID),
+    modelName: settings.modelName,
+    openAIBaseURL: settings.openAIBaseURL,
+    openAITimeoutMs: settings.openAITimeoutMs,
+    openAIMaxOutputTokens: settings.openAIMaxOutputTokens,
+    hasOpenAIAPIKey: Boolean(settings.openAIAPIKey?.trim()),
+    settingsPath: resolveModelProviderSettingsPath()
+  };
+}
+
+function providerIDFromUnknown(value: unknown, fallback: string): string {
+  const providerID = typeof value === "string" ? value.trim().toLowerCase() : fallback;
+  if (providerID === "local" || providerID === "openai") {
+    return providerID;
+  }
+
+  throw new HttpError(400, `Unsupported model provider "${providerID}". Use local or openai.`);
+}
+
+function providerIDFromPersistedSetting(value: unknown, fallback: string): string {
+  const providerID = typeof value === "string" ? value.trim().toLowerCase() : fallback;
+  if (providerID === "local" || providerID === "openai") {
+    return providerID;
+  }
+
+  console.warn(`Forge model provider settings ignored unsupported provider: ${providerID}`);
+  return fallback;
+}
+
+function providerIDForPublicSettings(value: unknown): string {
+  const providerID = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return providerID || "local";
+}
+
+function stringSettingFromUnknown(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function optionalPersistedString(value: string | undefined): string | undefined {
+  return value?.trim() || undefined;
+}
+
+function optionalTrimmedString(value: unknown, fieldName: string, maxLength: number): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (typeof value !== "string") {
+    throw new HttpError(400, `${fieldName} must be a string.`);
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length > maxLength) {
+    throw new HttpError(413, `${fieldName} is too large.`);
+  }
+
+  return trimmed || undefined;
+}
+
+function optionalURLString(value: unknown, fieldName: string): string | undefined {
+  const trimmed = optionalTrimmedString(value, fieldName, 2_000);
+  if (!trimmed) {
+    return undefined;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new HttpError(400, `${fieldName} must be a valid URL.`);
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new HttpError(400, `${fieldName} must use http or https.`);
+  }
+
+  return trimmed.replace(/\/+$/, "");
+}
+
+function optionalPositiveInteger(
+  value: unknown,
+  fieldName: string,
+  min: number,
+  max: number
+): number | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  const numberValue = typeof value === "number" ? value : Number(value);
+  if (!Number.isInteger(numberValue) || numberValue < min || numberValue > max) {
+    throw new HttpError(400, `${fieldName} must be an integer from ${min} to ${max}.`);
+  }
+
+  return numberValue;
+}
+
+function positiveIntegerFromUnknown(value: unknown): number | undefined {
+  const numberValue = typeof value === "number" ? value : Number(value);
+  return Number.isInteger(numberValue) && numberValue > 0 ? numberValue : undefined;
+}
+
+function stripUndefinedValues<T extends Record<string, unknown>>(value: T): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(value).filter(([, fieldValue]) => fieldValue !== undefined));
 }
 
 function listTasks(): ForgeTask[] {
@@ -2806,6 +3067,8 @@ function renderRuntimeHome(): string {
       <li><a href="/health">GET /health</a></li>
       <li><a href="/tasks">GET /tasks</a></li>
       <li><a href="/validation-presets">GET /validation-presets</a></li>
+      <li><a href="/settings/model-provider">GET /settings/model-provider</a></li>
+      <li><code>POST /settings/model-provider</code></li>
       <li><code>POST /tasks</code></li>
       <li><code>POST /tasks/:taskID/messages</code></li>
       <li><code>POST /tasks/:taskID/generate-plan-revision</code></li>
