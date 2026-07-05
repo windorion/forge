@@ -54,6 +54,7 @@ The product should show:
 - human review gate
 - SQLite task persistence
 - model-provider abstraction
+- provider configuration visibility
 - execution proposals
 - safe edit proposals
 - revised edit proposals after requested changes
@@ -116,6 +117,8 @@ V0 is complete when:
   `.forge/validation-presets.json`.
 - The app can show runtime-derived command permission state before approving or
   running project validation presets.
+- The Settings window can show runtime-derived model-provider status, missing
+  provider configuration, and remote-context boundary.
 
 ## V0 Next After Completion
 

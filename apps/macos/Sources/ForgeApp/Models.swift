@@ -225,6 +225,24 @@ struct ModelProviderInfo: Codable, Hashable {
     var mode: String
 }
 
+struct ModelProviderConfigItem: Identifiable, Codable, Hashable {
+    var id: String
+    var label: String
+    var value: String
+    var isSecret: Bool
+}
+
+struct ModelProviderConfiguration: Codable, Hashable {
+    var provider: ModelProviderInfo
+    var configuredProviderID: String
+    var status: String
+    var summary: String
+    var issues: [String]
+    var settings: [ModelProviderConfigItem]
+    var sendsRemoteContext: Bool
+    var remoteContextSummary: String?
+}
+
 struct IntentBrief: Codable, Hashable {
     var summary: String
     var constraints: [String]
@@ -317,6 +335,7 @@ struct RuntimeHealth: Codable, Hashable {
     var version: String
     var uptimeSeconds: Double
     var modelProvider: ModelProviderInfo?
+    var modelProviderConfiguration: ModelProviderConfiguration?
 }
 
 struct CreateTaskRequest: Encodable {

@@ -118,6 +118,8 @@ Remote model provider rule:
 - The OpenAI provider slice sends task state, recent task messages, file
   reference summaries, context file summaries, plan steps, changed-file names,
   and proposal metadata. It should not upload whole repositories.
+- Runtime health may report whether a secret is configured, but it must not
+  return secret values.
 - Remote model output is guidance only. The runtime must continue to validate
   proposals and require approval before file, command, git, or external side
   effects.

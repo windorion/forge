@@ -1728,6 +1728,51 @@ Next:
 - Add richer edit proposal operations so model-backed guidance can become real
   reviewable code diffs.
 
+### 2026-07-06 03:30:56 CST +0800
+
+Summary:
+
+- User asked for a longer next task, so Codex added runtime-derived model
+  provider configuration visibility and surfaced it in the native macOS
+  Settings window.
+
+Done:
+
+- Re-read required project rules, model-provider docs, development notes, and
+  macOS SwiftUI Settings guidance.
+- Added `ModelProviderConfiguration` and config item types to runtime task
+  types and Swift app models.
+- Added `getModelProviderConfigurationFromEnv()` so provider readiness,
+  missing configuration, non-secret settings, and remote-context boundaries are
+  derived from the same environment as the active provider.
+- Extended `GET /health` with `modelProviderConfiguration`.
+- Rebuilt macOS Settings as native tabs for Runtime, Model, and Validation.
+- Added a Model Settings tab showing provider status, configured provider id,
+  model, mode, non-secret settings, missing key issues, and remote-context
+  boundary.
+- Updated model provider, development, runtime, v0 scope, security, and root
+  README docs.
+- Verified `git diff --check`, `npm run check`, `npm run build`,
+  `swift build`, and an HTTP `/health` smoke test for
+  `FORGE_MODEL_PROVIDER=openai` without an API key.
+- Stopped the temporary runtime and removed temporary smoke-test files.
+
+Not done:
+
+- Did not add editable provider settings in the macOS UI.
+- Did not store API keys in Keychain.
+- Did not call the live OpenAI API.
+- Did not add Anthropic, Ollama, or Apple/MLX provider status surfaces.
+
+Next:
+
+- Add secure provider configuration, likely using macOS Keychain and a runtime
+  settings endpoint.
+- Add a live provider smoke test path once the user intentionally supplies an
+  API key.
+- Expand edit proposals beyond Markdown append so model-backed guidance can
+  produce real reviewable code diffs.
+
 ## Decision Log
 
 ### 2026-07-04
@@ -1838,6 +1883,10 @@ Next:
 - Remote model output is still guidance only. Forge keeps IDs, timestamps,
   validation, approvals, and restricted file apply operations inside the local
   runtime.
+- Model-provider configuration status is runtime-derived and visible in the
+  macOS Settings window. The app shows provider readiness, missing secret
+  status, non-secret settings, and the remote-context boundary without
+  exposing secret values.
 
 ## Open Questions
 

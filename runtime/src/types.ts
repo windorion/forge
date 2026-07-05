@@ -60,6 +60,24 @@ export interface ModelProviderInfo {
   mode: "local" | "remote";
 }
 
+export interface ModelProviderConfigItem {
+  id: string;
+  label: string;
+  value: string;
+  isSecret: boolean;
+}
+
+export interface ModelProviderConfiguration {
+  provider: ModelProviderInfo;
+  configuredProviderID: string;
+  status: "Ready" | "NeedsConfiguration" | "Unsupported";
+  summary: string;
+  issues: string[];
+  settings: ModelProviderConfigItem[];
+  sendsRemoteContext: boolean;
+  remoteContextSummary?: string;
+}
+
 export interface IntentBrief {
   summary: string;
   constraints: string[];

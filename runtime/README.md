@@ -127,6 +127,11 @@ artifacts. It receives compact task and context summaries, not whole
 repositories. The runtime still owns approval gates, validation, IDs,
 timestamps, and restricted file apply operations.
 
+`GET /health` returns `modelProviderConfiguration` so the macOS Settings
+window can show provider readiness, missing configuration, non-secret settings,
+and the remote-context boundary. Secret values are never returned; key status
+is reported as `Configured` or `Missing`.
+
 ## Development
 
 ```bash

@@ -72,6 +72,11 @@ briefs, plan revisions, execution proposals, and edit proposal guidance. The
 runtime still owns validation, approvals, IDs, timestamps, and restricted file
 operations.
 
+The runtime health endpoint exposes provider configuration status through
+`modelProviderConfiguration`. The macOS Settings window shows the active
+provider, model, mode, non-secret provider settings, missing key issues, and
+remote-context boundary.
+
 ## Run macOS App
 
 From the repository root, prefer the app bundle runner:
@@ -179,7 +184,8 @@ panel shows command permission requests with source, approval state, execution
 state, blocked reasons, command manifest, cwd, risk level, approval button, and
 run button. The runtime provides the task-specific permission state through
 `GET /tasks/:taskID/validation-permissions`. The Settings window shows the
-loaded workspace validation config path and any config issues.
+active provider status, loaded workspace validation config path, and any config
+issues.
 
 ## Build Checks
 
@@ -190,8 +196,8 @@ cd runtime && npm run check
 
 ## Current Limitations
 
-- The OpenAI provider path is available but not yet configurable from the
-  macOS Settings UI. It is enabled through environment variables.
+- The OpenAI provider path is visible in the macOS Settings UI but not yet
+  editable there. It is enabled through environment variables.
 - The OpenAI provider uses compact task/context summaries and Structured
   Outputs, but it is not yet part of a full tool-using agent loop.
 - Edit proposal application is intentionally narrow: v0 only supports

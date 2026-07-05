@@ -5,7 +5,7 @@ import { appendFile, readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { URL } from "node:url";
 import { fileURLToPath } from "node:url";
-import { createModelProviderFromEnv } from "./modelProvider.js";
+import { createModelProviderFromEnv, getModelProviderConfigurationFromEnv } from "./modelProvider.js";
 import { SqliteTaskStore } from "./taskStore.js";
 import type {
   AgentState,
@@ -323,6 +323,7 @@ const server = createServer(async (request, response) => {
         version: "0.1.0",
         uptimeSeconds: (Date.now() - startedAt) / 1000,
         modelProvider: modelProvider.info,
+        modelProviderConfiguration: getModelProviderConfigurationFromEnv(),
         persistence: {
           databasePath: taskStore.dbPath,
           taskCount: tasks.size

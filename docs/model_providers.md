@@ -74,6 +74,23 @@ Remote-provider privacy boundary:
   to send selected task context to OpenAI or the configured compatible base
   URL.
 
+## Runtime Status Surface
+
+`GET /health` exposes `modelProviderConfiguration` for the macOS Settings
+window. The snapshot includes:
+
+- active provider metadata
+- configured provider id
+- status: `Ready`, `NeedsConfiguration`, or `Unsupported`
+- summary and issues
+- non-secret configuration values
+- secret presence as `Configured` or `Missing`, never the secret value
+- whether selected task context can be sent to a remote provider
+- a short remote-context boundary summary
+
+This is a visibility surface only. Provider selection and secrets are still
+environment-driven in the current slice.
+
 ## Runtime Contract
 
 A provider receives task state and returns structured output. Current output:

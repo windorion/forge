@@ -4,6 +4,7 @@ import type {
   ExecutionProposal,
   ForgeTask,
   IntentBrief,
+  ModelProviderConfiguration,
   ModelProviderInfo,
   PlanRevision,
   PlanStep,
@@ -87,6 +88,96 @@ export function createModelProviderFromEnv(): ModelProvider {
     },
     `Unsupported model provider "${providerID}". Use FORGE_MODEL_PROVIDER=local or FORGE_MODEL_PROVIDER=openai.`
   );
+}
+
+export function getModelProviderConfigurationFromEnv(): ModelProviderConfiguration {
+  const providerID = (process.env.FORGE_MODEL_PROVIDER?.trim() || "local").toLowerCase();
+
+  if (providerID === "local") {
+    const provider = {
+      id: "local",
+      name: "Local Deterministic",
+      model: process.env.FORGE_MODEL_NAME?.trim() || "local-deterministic-v0",
+      mode: "local" as const
+    };
+
+    return {
+      provider,
+      configuredProviderID: providerID,
+      status: "Ready",
+      summary: "Local deterministic provider is ready. No remote model calls will be made.",
+      issues: [],
+      sendsRemoteContext: false,
+      settings: [
+        modelProviderConfigItem("provider", "Provider", provider.id),
+        modelProviderConfigItem("model", "Model", provider.model),
+        modelProviderConfigItem("mode", "Mode", provider.mode)
+      ]
+    };
+  }
+
+  if (providerID === "openai") {
+    const provider = {
+      id: "openai",
+      name: "OpenAI Responses",
+      model: process.env.FORGE_MODEL_NAME?.trim() || "gpt-5.5",
+      mode: "remote" as const
+    };
+    const baseURL = (process.env.FORGE_OPENAI_BASE_URL?.trim() || "https://api.openai.com/v1").replace(/\/+$/, "");
+    const hasAPIKey = Boolean(process.env.OPENAI_API_KEY?.trim());
+    const issues = hasAPIKey
+      ? []
+      : ["OPENAI_API_KEY is missing. OpenAI provider calls will fail until it is configured."];
+
+    return {
+      provider,
+      configuredProviderID: providerID,
+      status: hasAPIKey ? "Ready" : "NeedsConfiguration",
+      summary: hasAPIKey
+        ? "OpenAI Responses provider is configured for structured model outputs."
+        : "OpenAI Responses provider is selected but missing its API key.",
+      issues,
+      sendsRemoteContext: true,
+      remoteContextSummary:
+        "Sends compact task state, recent messages, file reference summaries, and selected context summaries. It does not upload whole repositories.",
+      settings: [
+        modelProviderConfigItem("provider", "Provider", provider.id),
+        modelProviderConfigItem("model", "Model", provider.model),
+        modelProviderConfigItem("mode", "Mode", provider.mode),
+        modelProviderConfigItem("base-url", "Base URL", baseURL),
+        modelProviderConfigItem("api-key", "API Key", hasAPIKey ? "Configured" : "Missing", true),
+        modelProviderConfigItem("timeout", "Timeout", `${numberFromEnv("FORGE_OPENAI_TIMEOUT_MS", 30_000)} ms`),
+        modelProviderConfigItem("max-output", "Max Output", `${numberFromEnv("FORGE_OPENAI_MAX_OUTPUT_TOKENS", 1800)} tokens`)
+      ]
+    };
+  }
+
+  return {
+    provider: {
+      id: providerID,
+      name: "Unavailable Model Provider",
+      model: process.env.FORGE_MODEL_NAME?.trim() || "unknown",
+      mode: "remote"
+    },
+    configuredProviderID: providerID,
+    status: "Unsupported",
+    summary: `Unsupported model provider "${providerID}".`,
+    issues: [`Unsupported model provider "${providerID}". Use local or openai.`],
+    sendsRemoteContext: false,
+    settings: [
+      modelProviderConfigItem("provider", "Provider", providerID),
+      modelProviderConfigItem("model", "Model", process.env.FORGE_MODEL_NAME?.trim() || "unknown")
+    ]
+  };
+}
+
+function modelProviderConfigItem(
+  id: string,
+  label: string,
+  value: string,
+  isSecret = false
+): ModelProviderConfiguration["settings"][number] {
+  return { id, label, value, isSecret };
 }
 
 class UnavailableModelProvider implements ModelProvider {
