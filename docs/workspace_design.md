@@ -90,6 +90,7 @@ Responsibilities:
 - changed files
 - inline diff
 - change summary
+- proposal revision history
 - accept/reject controls
 - file-level notes
 
@@ -162,6 +163,8 @@ Each state should have a clear primary action.
 - Always show changed files before approval.
 - Always require a fresh approval when task conversation changes the active
   plan.
+- Always preserve rejected edit proposals when a revised proposal replaces
+  them.
 - Always show command logs for commands run by agents.
 - Never hide failures behind generic status.
 - Use native macOS controls where appropriate.

@@ -15,8 +15,8 @@ The first runtime persistence slice stores task snapshots in local SQLite at
 index fields and a full JSON payload so the app can recover task state,
 events, tool calls, validation runs, context files, approval history,
 task conversation messages, plan revisions, execution proposals, edit
-proposals, edit proposal validations, edit proposal decisions, and review
-state after a runtime restart.
+proposals, edit proposal revisions, edit proposal validations, edit proposal
+decisions, and review state after a runtime restart.
 
 This is intentionally smaller than the full conceptual schema below. Future
 migrations should split runs, messages, tool calls, commands, file changes,
@@ -99,6 +99,27 @@ Fields:
 - rationale
 - risk level
 - revised plan steps
+- generated at
+
+### Edit Proposal Revisions
+
+Stores current and previous edit proposals generated before file mutation.
+
+Fields:
+
+- id
+- task id
+- provider
+- source message id
+- revision number
+- previous proposal id
+- summary
+- proposed file changes
+- diff previews
+- validation result
+- status
+- decided at
+- decision note
 - generated at
 
 ### Tool Calls

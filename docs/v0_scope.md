@@ -54,6 +54,7 @@ The product should show:
 - model-provider abstraction
 - execution proposals
 - safe edit proposals
+- revised edit proposals after requested changes
 - edit proposal validation
 - explicit apply/reject actions for edit proposals
 - post-apply validation runs
@@ -93,6 +94,8 @@ V0 is complete when:
 - The UI shows tool calls and context files.
 - No code changes are made without approval.
 - A generated edit proposal can be rejected without changing files.
+- A rejected edit proposal can be revised from the latest task conversation
+  without changing files, while preserving the rejected proposal in history.
 - A generated edit proposal can be explicitly applied through a restricted
   Markdown append operation.
 - A generated edit proposal can be validated before apply, and blocked if the

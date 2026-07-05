@@ -112,7 +112,16 @@ function parseTaskPayload(payload: unknown): ForgeTask {
     })),
     messages: parsed.messages ?? [],
     planRevisions: parsed.planRevisions ?? [],
+    editProposalRevisions: (parsed.editProposalRevisions ?? []).map((proposal, index) => ({
+      ...proposal,
+      revisionNumber: proposal.revisionNumber ?? index + 1
+    })),
     executionProposal: parsed.executionProposal,
     editProposal: parsed.editProposal
+      ? {
+          ...parsed.editProposal,
+          revisionNumber: parsed.editProposal.revisionNumber ?? 1
+        }
+      : undefined
   };
 }

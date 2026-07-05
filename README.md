@@ -1492,6 +1492,48 @@ Next:
 - Add macOS app build/test entries to validation presets.
 - Decide whether plan revisions need dedicated persistence tables before v0.1.
 
+### 2026-07-05 21:15:08 CST +0800
+
+Conversation summary:
+
+- User asked Codex to continue the next step, so Codex implemented the
+  request-changes edit proposal revision loop.
+
+Done:
+
+- Added edit proposal revision metadata: source message id, revision number,
+  previous proposal id, and proposal revision history.
+- Added `POST /tasks/:taskID/revise-edit-proposal`.
+- Rejected edit proposals are now archived before a revised proposal replaces
+  the current review artifact.
+- Revised proposals are generated from the latest task conversation and intent
+  brief, validated immediately, and returned to `Human Review` without
+  changing files.
+- Updated the macOS app so the existing proposal action becomes
+  `Revise Edit Proposal` after rejection, and the Review panel shows current
+  revision metadata plus previous proposal history.
+- Updated runtime, edit proposal, model provider, runtime architecture,
+  database, development, workspace design, user flow, and v0 scope docs.
+- Verified `git diff --check`, `npm run check`, `npm run build`,
+  `swift build`, API smoke for reject -> message -> revise, and SQLite
+  recovery of current and historical proposal revisions after runtime restart.
+- Stopped the temporary runtime service and removed temporary smoke-test files.
+
+Not done:
+
+- Did not connect a real model provider yet.
+- Did not add manual editing of proposed diffs.
+- Did not normalize edit proposal revisions into dedicated SQLite tables.
+- Did not apply revised proposals in the smoke test, to keep the test from
+  mutating project files.
+
+Next:
+
+- Add file mentions or selected-code context to task messages.
+- Add richer diff proposal formats beyond append-only Markdown edits.
+- Add macOS app build/test entries to validation presets.
+- Consider a dedicated normalized table for proposal revisions before v0.1.
+
 ## Decision Log
 
 ### 2026-07-04
@@ -1575,6 +1617,10 @@ Next:
   any prepared execution proposal, returns the task to human review, and
   requires a fresh approval targeted at the current revision before execution
   can continue.
+- Edit proposal review now supports a request-changes revision loop. Rejected
+  proposals are preserved in history, the latest task conversation can produce
+  a revised proposal, and the new artifact is validated and returned to human
+  review without mutating files.
 
 ## Open Questions
 

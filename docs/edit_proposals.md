@@ -26,21 +26,31 @@ Current runtime flow:
 8. Runtime validates the proposal against the current workspace.
 9. Task returns to `Human Review` with current phase `Edit Proposal Review`.
 10. User can refresh validation, apply the proposal, or request changes.
+11. If changes are requested, user can add task conversation context and ask
+    Forge to revise the rejected proposal.
+12. Runtime archives the rejected proposal in revision history, creates a new
+    proposal from the latest conversation, validates it, and returns to
+    `Human Review`.
 
 No file is changed while the proposal is generated. `changedFiles` remains
 empty until the user explicitly applies the proposal.
 
 When a proposal is rejected, Forge records the rejection, leaves files
-unchanged, and allows another proposal to be generated. When a proposal is
-applied, Forge validates the proposal again, records an approval decision, and
-updates `changedFiles`. The runtime then runs controlled post-apply validation
-before marking the task completed.
+unchanged, and allows another proposal to be generated. Revised proposals are
+new review artifacts: the rejected proposal is retained in proposal revision
+history, the current proposal is replaced, and `changedFiles` remains empty.
+When a proposal is applied, Forge validates the proposal again, records an
+approval decision, and updates `changedFiles`. The runtime then runs controlled
+post-apply validation before marking the task completed.
 
 ## Runtime Data
 
 An edit proposal stores:
 
 - provider metadata
+- source message id
+- revision number
+- previous proposal id
 - summary
 - proposed file changes
 - change type
@@ -53,6 +63,10 @@ An edit proposal stores:
 - optional decision note
 - optional restricted apply operation
 - optional validation result
+
+Task state also stores previous edit proposals in `editProposalRevisions`.
+The current proposal remains in `editProposal`; historical revisions are
+read-only audit records.
 
 The current local deterministic provider emits a small reviewable proposal
 against a context file. It includes a restricted append-text operation so the
@@ -99,10 +113,11 @@ Post-apply validation stores:
 - Medium-risk project validation presets require explicit approval before they
   can run.
 - Commit or push actions remain separate from edit application.
+- Revising a proposal must not mutate files; it only replaces the current
+  review artifact after archiving the rejected one.
 
 ## Future Work
 
 - Generate real patch content from a model provider.
 - Add a richer patch apply engine after preview validation is mature.
-- Store proposal revisions.
 - Link edit proposals to normalized file-change records.

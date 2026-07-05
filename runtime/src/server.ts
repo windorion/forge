@@ -15,6 +15,7 @@ import type {
   ContextFile,
   CreateTaskMessageRequest,
   CreateTaskRequest,
+  EditProposal,
   EditProposalDecisionRequest,
   EditProposalValidation,
   FileChangeValidation,
@@ -265,6 +266,13 @@ const server = createServer(async (request, response) => {
     const generateEditProposalTaskID = taskIDFromActionPath(url.pathname, "generate-edit-proposal");
     if (request.method === "POST" && generateEditProposalTaskID) {
       const task = await generateEditProposal(generateEditProposalTaskID);
+      writeJson(response, 200, task);
+      return;
+    }
+
+    const reviseEditProposalTaskID = taskIDFromActionPath(url.pathname, "revise-edit-proposal");
+    if (request.method === "POST" && reviseEditProposalTaskID) {
+      const task = await reviseEditProposal(reviseEditProposalTaskID);
       writeJson(response, 200, task);
       return;
     }
@@ -657,6 +665,7 @@ async function createTask(input: CreateTaskRequest): Promise<ForgeTask> {
     validationRuns: [],
     messages: [userMessage],
     planRevisions: [],
+    editProposalRevisions: [],
     contextFiles: [],
     changedFiles: [],
     executionProposal: undefined,
@@ -914,24 +923,85 @@ async function generateEditProposal(taskID: string): Promise<ForgeTask> {
     throw new HttpError(409, "This task already has a proposed edit awaiting review.");
   }
 
+  if (task.editProposal?.status === "Applied") {
+    throw new HttpError(409, "Applied edit proposals cannot be regenerated.");
+  }
+
+  if (task.editProposal?.status === "Rejected") {
+    return createEditProposalForTask(task, "Revision", task.editProposal);
+  }
+
+  return createEditProposalForTask(task, "Initial");
+}
+
+async function reviseEditProposal(taskID: string): Promise<ForgeTask> {
+  const task = tasks.get(taskID);
+  if (!task) {
+    throw new HttpError(404, `Task not found: ${taskID}`);
+  }
+
+  if (!task.executionProposal) {
+    throw new HttpError(409, "An execution proposal is required before revising edit proposals.");
+  }
+
+  if (task.editProposal?.status !== "Rejected") {
+    throw new HttpError(409, "A rejected edit proposal is required before revision.");
+  }
+
+  return createEditProposalForTask(task, "Revision", task.editProposal);
+}
+
+async function createEditProposalForTask(
+  task: ForgeTask,
+  mode: "Initial" | "Revision",
+  previousProposal?: EditProposal
+): Promise<ForgeTask> {
+  const isRevision = mode === "Revision";
+  const sourceMessage = latestTaskMessage(task, "User");
+  const revisionNumber = previousProposal ? (previousProposal.revisionNumber ?? 1) + 1 : 1;
+
   task.status = "Running";
-  task.currentPhase = "Edit Proposal Generation";
-  task.reviewSummary = "Generating a safe edit proposal. No files will be changed.";
-  setAgent(task, "Coder", "Active", `Generating a safe edit proposal with ${modelProvider.info.name}.`);
+  task.currentPhase = isRevision ? "Edit Proposal Revision" : "Edit Proposal Generation";
+  task.reviewSummary = isRevision
+    ? "Revising the rejected edit proposal from the latest task conversation. No files will be changed."
+    : "Generating a safe edit proposal. No files will be changed.";
+  setAgent(
+    task,
+    "Coder",
+    "Active",
+    isRevision
+      ? `Revising a safe edit proposal with ${modelProvider.info.name}.`
+      : `Generating a safe edit proposal with ${modelProvider.info.name}.`
+  );
   setAgent(task, "Reviewer", "Idle", "Waiting for a proposed diff to review.");
   upsertPlanStep(task, {
-    id: "generate-safe-edit-proposal",
-    title: "Generate safe edit proposal",
+    id: isRevision ? "revise-edit-proposal" : "generate-safe-edit-proposal",
+    title: isRevision ? "Revise edit proposal" : "Generate safe edit proposal",
     status: "Active",
-    summary: "Drafting a proposed diff without touching the working tree."
+    summary: isRevision
+      ? "Using the latest task conversation to revise the rejected proposal without touching files."
+      : "Drafting a proposed diff without touching the working tree."
   });
 
-  const started = event("edit.proposal.started", "Generating a safe edit proposal without applying file changes.");
+  const started = event(
+    isRevision ? "edit.proposal.revision.started" : "edit.proposal.started",
+    isRevision
+      ? "Revising a rejected edit proposal without applying file changes."
+      : "Generating a safe edit proposal without applying file changes."
+  );
   started.createdAt = new Date().toISOString();
   saveAndBroadcast(task, started);
 
-  const proposal = await modelProvider.createEditProposal({ task });
+  const proposal = await modelProvider.createEditProposal({
+    task,
+    previousProposal,
+    sourceMessage,
+    revisionNumber
+  });
   proposal.validation = await buildEditProposalValidation(proposal.fileChanges);
+  if (previousProposal) {
+    archiveEditProposalRevision(task, previousProposal);
+  }
   task.editProposal = proposal;
   task.status = "Human Review";
   task.currentPhase = "Edit Proposal Review";
@@ -943,10 +1013,12 @@ async function generateEditProposal(taskID: string): Promise<ForgeTask> {
   setAgent(task, "Coder", "Done", "Prepared a proposed diff without modifying files.");
   setAgent(task, "Reviewer", "Active", "Review the proposed file changes and validation result before applying.");
   upsertPlanStep(task, {
-    id: "generate-safe-edit-proposal",
-    title: "Generate safe edit proposal",
+    id: isRevision ? "revise-edit-proposal" : "generate-safe-edit-proposal",
+    title: isRevision ? "Revise edit proposal" : "Generate safe edit proposal",
     status: "Done",
-    summary: `Proposed ${proposal.fileChanges.length} file change(s). No files changed.`
+    summary: isRevision
+      ? `Proposed revision ${proposal.revisionNumber} with ${proposal.fileChanges.length} file change(s). No files changed.`
+      : `Proposed ${proposal.fileChanges.length} file change(s). No files changed.`
   });
   upsertPlanStep(task, {
     id: "validate-edit-proposal",
@@ -962,14 +1034,24 @@ async function generateEditProposal(taskID: string): Promise<ForgeTask> {
   });
 
   const ready = event(
-    proposal.validation.status === "Ready" ? "edit.proposal.ready" : "edit.proposal.validation.blocked",
     proposal.validation.status === "Ready"
-      ? "Safe edit proposal is validated and ready for human review. No files changed."
+      ? isRevision ? "edit.proposal.revision.ready" : "edit.proposal.ready"
+      : "edit.proposal.validation.blocked",
+    proposal.validation.status === "Ready"
+      ? isRevision
+        ? "Revised edit proposal is validated and ready for human review. No files changed."
+        : "Safe edit proposal is validated and ready for human review. No files changed."
       : proposal.validation.summary
   );
   ready.createdAt = proposal.generatedAt;
   saveAndBroadcast(task, ready);
   return task;
+}
+
+function archiveEditProposalRevision(task: ForgeTask, proposal: EditProposal): void {
+  if (!task.editProposalRevisions.some((candidate) => candidate.id === proposal.id)) {
+    task.editProposalRevisions.push(structuredClone(proposal));
+  }
 }
 
 async function validateEditProposal(taskID: string): Promise<ForgeTask> {
@@ -2056,6 +2138,7 @@ function renderRuntimeHome(): string {
       <li><code>POST /tasks/:taskID/generate-plan-revision</code></li>
       <li><code>POST /tasks/:taskID/approve-plan</code></li>
       <li><code>POST /tasks/:taskID/generate-edit-proposal</code></li>
+      <li><code>POST /tasks/:taskID/revise-edit-proposal</code></li>
       <li><code>POST /tasks/:taskID/validate-edit-proposal</code></li>
       <li><code>POST /tasks/:taskID/apply-edit-proposal</code></li>
       <li><code>POST /tasks/:taskID/reject-edit-proposal</code></li>

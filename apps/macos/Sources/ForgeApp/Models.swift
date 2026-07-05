@@ -16,6 +16,7 @@ struct ForgeTask: Identifiable, Codable, Hashable {
     var validationRuns: [ValidationRun]
     var messages: [TaskMessage]
     var planRevisions: [PlanRevision]
+    var editProposalRevisions: [EditProposal]
     var contextFiles: [ContextFile]
     var executionProposal: ExecutionProposal?
     var editProposal: EditProposal?
@@ -61,6 +62,7 @@ struct ForgeTask: Identifiable, Codable, Hashable {
             )
         ],
         planRevisions: [],
+        editProposalRevisions: [],
         contextFiles: [],
         executionProposal: nil,
         editProposal: nil,
@@ -266,6 +268,9 @@ struct ProposedFileOperation: Codable, Hashable {
 struct EditProposal: Identifiable, Codable, Hashable {
     var id: String
     var provider: ModelProviderInfo
+    var sourceMessageID: String?
+    var revisionOfID: String?
+    var revisionNumber: Int
     var summary: String
     var fileChanges: [ProposedFileChange]
     var riskLevel: String

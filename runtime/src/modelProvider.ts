@@ -20,6 +20,9 @@ export interface PlanRevisionRequest {
 
 export interface EditProposalRequest {
   task: ForgeTask;
+  previousProposal?: EditProposal;
+  sourceMessage?: TaskMessage;
+  revisionNumber: number;
 }
 
 export interface IntentBriefRequest {
@@ -162,7 +165,7 @@ class LocalDeterministicModelProvider implements ModelProvider {
 
   async createEditProposal(request: EditProposalRequest): Promise<EditProposal> {
     const targetPath = chooseTargetPath(request.task);
-    const appendText = buildAppendText(request.task);
+    const appendText = buildAppendText(request);
     const diffPreview = [
       `--- a/${targetPath}`,
       `+++ b/${targetPath}`,
@@ -176,13 +179,20 @@ class LocalDeterministicModelProvider implements ModelProvider {
     return {
       id: randomUUID(),
       provider: this.info,
-      summary: `Propose a small reviewable update touching ${targetPath}.`,
+      sourceMessageID: request.sourceMessage?.id,
+      revisionOfID: request.previousProposal?.id,
+      revisionNumber: request.revisionNumber,
+      summary: request.previousProposal
+        ? `Revise proposal ${request.previousProposal.revisionNumber} with the latest task conversation, touching ${targetPath}.`
+        : `Propose a small reviewable update touching ${targetPath}.`,
       fileChanges: [
         {
           id: randomUUID(),
           path: targetPath,
           changeType: "Modify",
-          rationale: "Keep the first edit proposal narrow, visible, and reversible before any workspace mutation.",
+          rationale: request.previousProposal
+            ? "Revise the rejected proposal using the latest task conversation while preserving the review boundary."
+            : "Keep the first edit proposal narrow, visible, and reversible before any workspace mutation.",
           diffPreview,
           applyOperation: {
             kind: "AppendText",
@@ -203,19 +213,32 @@ function chooseTargetPath(task: ForgeTask): string {
   return preferred.find((candidate) => contextPaths.has(candidate)) ?? task.contextFiles[0]?.path ?? "README.md";
 }
 
-function buildAppendText(task: ForgeTask): string {
-  const title = singleLine(task.title);
-  const objective = singleLine(task.objective);
+function buildAppendText(request: EditProposalRequest): string {
+  const title = singleLine(request.task.title);
+  const objective = singleLine(request.task.objective);
+  const latestIntentBrief = latestIntentBriefForTask(request.task);
+  const latestInstruction = singleLine(request.sourceMessage?.content ?? latestIntentBrief?.summary ?? "");
+  const revisionLabel = request.revisionNumber > 1
+    ? `- Proposal revision: ${request.revisionNumber} (revises ${request.previousProposal?.id ?? "previous proposal"})`
+    : "- Proposal revision: 1";
 
-  return [
+  const lines = [
     "",
     "## Forge Implementation Note",
     "",
     `- Task: ${title}`,
     `- Objective: ${objective}`,
-    "- Safety: generated as an edit proposal first, then applied only after explicit human approval.",
-    ""
-  ].join("\n");
+    revisionLabel
+  ];
+
+  if (latestInstruction) {
+    lines.push(`- Latest instruction: ${latestInstruction}`);
+  }
+
+  lines.push("- Safety: generated as an edit proposal first, then applied only after explicit human approval.");
+  lines.push("");
+
+  return lines.join("\n");
 }
 
 function singleLine(value: string): string {

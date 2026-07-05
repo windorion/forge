@@ -115,7 +115,11 @@ revalidates the current workspace, runs the restricted v0 append-text
 operation, records the changed Markdown file, and marks the task completed.
 Requesting changes calls `POST /tasks/:taskID/reject-edit-proposal`, records
 the rejection, leaves files unchanged, and allows another edit proposal to be
-generated.
+generated. After a rejection, the same Review action area exposes
+`Revise Edit Proposal`; it calls `POST /tasks/:taskID/revise-edit-proposal`,
+uses the latest task conversation and intent brief, archives the rejected
+proposal in revision history, validates the new proposal, and returns to
+`Human Review`.
 
 After a proposal is applied, the runtime enters `Testing` and runs controlled
 built-in validation commands. The Review panel shows `Validation Runs`,
@@ -152,7 +156,8 @@ cd runtime && npm run check
 ## Current Limitations
 
 - No remote LLM provider is wired yet. The current provider is local and
-  deterministic, including task intent briefs and plan revisions.
+  deterministic, including task intent briefs, plan revisions, and edit
+  proposal revisions.
 - Edit proposal application is intentionally narrow: v0 only supports
   append-text operations on existing Markdown files in `README.md` or `docs/`.
   Validation blocks unsupported paths, unsupported operations, oversized edits,

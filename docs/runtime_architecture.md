@@ -139,6 +139,11 @@ Creates proposed file changes and diff previews without mutating the working
 tree. This sits before real edit/apply tools and gives the user a reviewable
 artifact while preserving the human approval boundary.
 
+When an edit proposal is rejected, the generator can revise it from the latest
+task conversation. The runtime archives the rejected proposal, records the new
+proposal revision metadata, validates the new artifact, and returns the task to
+human review. The revision path must not write files.
+
 ### Edit Proposal Validator
 
 Checks proposed file changes against the current workspace before apply. The
@@ -198,6 +203,8 @@ Sends structured events to the app:
 - plan updated
 - plan revision started
 - plan revision ready
+- edit proposal revision started
+- edit proposal revision ready
 - tool started
 - tool finished
 - command output

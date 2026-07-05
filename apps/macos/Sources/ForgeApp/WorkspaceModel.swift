@@ -149,10 +149,18 @@ final class WorkspaceModel: ObservableObject {
 
         Task {
             do {
-                let updatedTask = try await runtime.generateEditProposal(taskID: task.id)
+                let isRevision = task.editProposal?.status == "Rejected"
+                let updatedTask: ForgeTask
+                if isRevision {
+                    updatedTask = try await runtime.reviseEditProposal(taskID: task.id)
+                } else {
+                    updatedTask = try await runtime.generateEditProposal(taskID: task.id)
+                }
                 upsert(updatedTask)
                 selectedTaskID = updatedTask.id
-                statusMessage = "Edit proposal ready for review."
+                statusMessage = isRevision
+                    ? "Revised edit proposal ready for review."
+                    : "Edit proposal ready for review."
                 await refreshValidationPermissionSnapshotIfPossible(for: updatedTask.id)
                 startEventStream()
             } catch {

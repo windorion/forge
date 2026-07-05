@@ -668,12 +668,20 @@ private struct ReviewPanel: View {
                             Text(editProposal.summary)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                            Label("Revision: \(editProposal.revisionNumber)", systemImage: "arrow.triangle.branch")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
                             Label("Status: \(editProposal.status)", systemImage: "list.bullet.clipboard")
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(.secondary)
                             Label("Risk: \(editProposal.riskLevel)", systemImage: "shield")
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(.secondary)
+                            if let revisionOfID = editProposal.revisionOfID {
+                                Label("Revises \(revisionOfID)", systemImage: "arrow.uturn.backward")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            }
                         }
 
                         if let validation = editProposal.validation {
@@ -735,6 +743,35 @@ private struct ReviewPanel: View {
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .background(.quaternary)
                                     .clipShape(RoundedRectangle(cornerRadius: 6))
+                            }
+                            .padding(10)
+                            .background(.background)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                    }
+                }
+
+                if !task.editProposalRevisions.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Previous Edit Proposals")
+                            .font(.headline)
+
+                        ForEach(task.editProposalRevisions.reversed()) { proposal in
+                            VStack(alignment: .leading, spacing: 5) {
+                                HStack {
+                                    Label("Revision \(proposal.revisionNumber)", systemImage: "clock.arrow.circlepath")
+                                        .font(.subheadline.weight(.semibold))
+                                    Spacer()
+                                    Text(proposal.status)
+                                        .font(.caption2.weight(.medium))
+                                        .foregroundStyle(.secondary)
+                                }
+                                Text(proposal.summary)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text(proposal.decisionNote ?? "No reviewer note.")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
                             }
                             .padding(10)
                             .background(.background)
@@ -1026,12 +1063,18 @@ private struct ReviewPanel: View {
     private var canGenerateEditProposal: Bool {
         task.executionProposal != nil &&
             (task.editProposal == nil || task.editProposal?.status == "Rejected") &&
-            !isGeneratingEditProposal
+            !isGeneratingEditProposal &&
+            !isApplyingEditProposal &&
+            !isRejectingEditProposal
     }
 
     private var generateEditProposalButtonTitle: String {
         if isGeneratingEditProposal {
             return "Generating Edit Proposal"
+        }
+
+        if task.editProposal?.status == "Rejected" {
+            return "Revise Edit Proposal"
         }
 
         if task.editProposal != nil {

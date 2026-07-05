@@ -14,6 +14,7 @@ This first slice is intentionally small:
 - `POST /tasks/:taskID/generate-plan-revision`
 - `POST /tasks/:taskID/approve-plan`
 - `POST /tasks/:taskID/generate-edit-proposal`
+- `POST /tasks/:taskID/revise-edit-proposal`
 - `POST /tasks/:taskID/validate-edit-proposal`
 - `POST /tasks/:taskID/apply-edit-proposal`
 - `POST /tasks/:taskID/reject-edit-proposal`
@@ -43,11 +44,15 @@ preparation phase. The runtime then asks the configured model provider for a
 safe execution proposal without applying file changes.
 After that, a safe edit proposal can be generated as a proposed diff preview.
 It is validated when generated and is not applied to the workspace until the
-user explicitly applies it. The apply path revalidates against the current
-workspace before writing. The current apply path is intentionally narrow: it
-only supports append-text operations on existing Markdown files in `README.md`
-or `docs/`. After apply, the runtime runs controlled built-in validation
-commands and only marks the task completed if validation passes.
+user explicitly applies it. If the user requests changes, the rejected proposal
+can be revised through `POST /tasks/:taskID/revise-edit-proposal`; the runtime
+archives the rejected proposal, asks the model provider for a new proposal from
+the latest task conversation, validates it, and returns to human review without
+writing files. The apply path revalidates against the current workspace before
+writing. The current apply path is intentionally narrow: it only supports
+append-text operations on existing Markdown files in `README.md` or `docs/`.
+After apply, the runtime runs controlled built-in validation commands and only
+marks the task completed if validation passes.
 
 Validation presets:
 
@@ -121,15 +126,21 @@ curl -X POST http://127.0.0.1:17373/tasks/<task-id>/approve-plan \
 curl -X POST http://127.0.0.1:17373/tasks/<task-id>/generate-edit-proposal \
   -H 'Content-Type: application/json' \
   -d '{}'
+curl -X POST http://127.0.0.1:17373/tasks/<task-id>/reject-edit-proposal \
+  -H 'Content-Type: application/json' \
+  -d '{"note":"Needs a narrower change."}'
+curl -X POST http://127.0.0.1:17373/tasks/<task-id>/messages \
+  -H 'Content-Type: application/json' \
+  -d '{"content":"Revise the proposal around a narrower documentation change."}'
+curl -X POST http://127.0.0.1:17373/tasks/<task-id>/revise-edit-proposal \
+  -H 'Content-Type: application/json' \
+  -d '{}'
 curl -X POST http://127.0.0.1:17373/tasks/<task-id>/validate-edit-proposal \
   -H 'Content-Type: application/json' \
   -d '{}'
 curl -X POST http://127.0.0.1:17373/tasks/<task-id>/apply-edit-proposal \
   -H 'Content-Type: application/json' \
   -d '{}'
-curl -X POST http://127.0.0.1:17373/tasks/<task-id>/reject-edit-proposal \
-  -H 'Content-Type: application/json' \
-  -d '{"note":"Needs a narrower change."}'
 curl http://127.0.0.1:17373/validation-presets
 curl http://127.0.0.1:17373/tasks/<task-id>/validation-permissions
 curl -X POST http://127.0.0.1:17373/tasks/<task-id>/approve-validation-preset \

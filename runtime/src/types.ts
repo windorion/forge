@@ -127,6 +127,9 @@ export interface EditProposalValidation {
 export interface EditProposal {
   id: string;
   provider: ModelProviderInfo;
+  sourceMessageID?: string;
+  revisionOfID?: string;
+  revisionNumber: number;
   summary: string;
   fileChanges: ProposedFileChange[];
   riskLevel: "Low" | "Medium" | "High";
@@ -252,6 +255,7 @@ export interface ForgeTask {
   validationRuns: ValidationRun[];
   messages: TaskMessage[];
   planRevisions: PlanRevision[];
+  editProposalRevisions: EditProposal[];
   contextFiles: ContextFile[];
   executionProposal?: ExecutionProposal;
   editProposal?: EditProposal;

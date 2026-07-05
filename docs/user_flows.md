@@ -89,12 +89,15 @@ Steps:
 2. User opens diff review.
 3. Forge explains why each change was made.
 4. User accepts, rejects, or asks for revisions.
-5. Accepted changes are applied to the working tree.
+5. If revisions are requested, user can clarify in the task conversation and
+   Forge generates a revised edit proposal without changing files.
+6. Accepted changes are applied to the working tree.
 
 Review must show:
 
 - file list
 - before/after diff
+- proposal revision history
 - tests run
 - command logs
 - risk notes

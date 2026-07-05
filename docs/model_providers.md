@@ -27,9 +27,11 @@ the provider boundary, task state updates, event streaming, and SQLite
 persistence without requiring API keys.
 
 It can also produce a deterministic edit proposal with a diff preview and a
-restricted append-text operation. The provider still does not apply changes
-itself; validating, applying, or rejecting proposals remains a runtime-owned
-approval step.
+restricted append-text operation. When a proposal is rejected, the provider can
+produce a revised proposal from the latest task conversation while preserving
+the same review and validation boundary. The provider still does not apply
+changes itself; validating, applying, rejecting, or archiving proposals remains
+a runtime-owned approval step.
 
 ## Configuration
 
@@ -58,6 +60,8 @@ A provider receives task state and returns structured output. Current output:
 - execution summary
 - proposed actions
 - proposed file changes
+- proposal revision number
+- previous proposal link
 - diff previews
 - restricted apply operations
 - risk level
