@@ -12,7 +12,8 @@ separable from task state.
 
 ## Current Implementation
 
-The runtime now has a `ModelProvider` interface and a default local provider:
+The runtime now has a `ModelProvider` interface, a default local provider, and
+an optional OpenAI Responses provider.
 
 - provider id: `local`
 - provider name: `Local Deterministic`
@@ -33,16 +34,45 @@ the same review and validation boundary. The provider still does not apply
 changes itself; validating, applying, rejecting, or archiving proposals remains
 a runtime-owned approval step.
 
+The optional OpenAI provider:
+
+- provider id: `openai`
+- provider name: `OpenAI Responses`
+- default model: `gpt-5.5`
+- mode: `remote`
+
+It uses the Responses API with Structured Outputs (`text.format` JSON schema)
+for intent briefs, plan revisions, execution proposals, and edit proposal
+guidance. The runtime still generates IDs, timestamps, validation state, and
+restricted apply operations locally. The remote provider never directly edits
+files, runs commands, commits, pushes, or calls tools.
+
 ## Configuration
 
 Environment variables:
 
 - `FORGE_MODEL_PROVIDER`: provider id. Defaults to `local`.
-- `FORGE_MODEL_NAME`: model name. Defaults to `local-deterministic-v0`.
+- `FORGE_MODEL_NAME`: model name. Defaults to `local-deterministic-v0` for
+  local and `gpt-5.5` for OpenAI.
+- `OPENAI_API_KEY`: required when `FORGE_MODEL_PROVIDER=openai`.
+- `FORGE_OPENAI_BASE_URL`: optional OpenAI-compatible base URL override.
+  Defaults to `https://api.openai.com/v1`.
+- `FORGE_OPENAI_TIMEOUT_MS`: optional request timeout. Defaults to `30000`.
+- `FORGE_OPENAI_MAX_OUTPUT_TOKENS`: optional structured-output budget.
+  Defaults to `1800`.
 
-Unsupported provider ids currently fall back to the local deterministic
-provider. Real provider implementations should fail clearly when required
-credentials or settings are missing.
+Unsupported provider ids now fail clearly through an unavailable provider.
+The OpenAI provider also fails clearly when `OPENAI_API_KEY` is missing.
+
+Remote-provider privacy boundary:
+
+- Forge sends compact task state, recent task messages, file reference
+  summaries, context file summaries, current plan steps, changed-file names,
+  and proposal metadata.
+- Forge does not upload whole repositories in this provider slice.
+- Users should still treat `FORGE_MODEL_PROVIDER=openai` as explicit consent
+  to send selected task context to OpenAI or the configured compatible base
+  URL.
 
 ## Runtime Contract
 

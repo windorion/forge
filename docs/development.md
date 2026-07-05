@@ -51,6 +51,27 @@ FORGE_MODEL_PROVIDER=local
 FORGE_MODEL_NAME=local-deterministic-v0
 ```
 
+To exercise the optional OpenAI Responses provider:
+
+```text
+FORGE_MODEL_PROVIDER=openai
+FORGE_MODEL_NAME=gpt-5.5
+OPENAI_API_KEY=...
+```
+
+Optional OpenAI provider settings:
+
+```text
+FORGE_OPENAI_BASE_URL=https://api.openai.com/v1
+FORGE_OPENAI_TIMEOUT_MS=30000
+FORGE_OPENAI_MAX_OUTPUT_TOKENS=1800
+```
+
+When enabled, the provider uses Responses API Structured Outputs for intent
+briefs, plan revisions, execution proposals, and edit proposal guidance. The
+runtime still owns validation, approvals, IDs, timestamps, and restricted file
+operations.
+
 ## Run macOS App
 
 From the repository root, prefer the app bundle runner:
@@ -169,9 +190,10 @@ cd runtime && npm run check
 
 ## Current Limitations
 
-- No remote LLM provider is wired yet. The current provider is local and
-  deterministic, including task intent briefs with file references, plan
-  revisions, and edit proposal revisions.
+- The OpenAI provider path is available but not yet configurable from the
+  macOS Settings UI. It is enabled through environment variables.
+- The OpenAI provider uses compact task/context summaries and Structured
+  Outputs, but it is not yet part of a full tool-using agent loop.
 - Edit proposal application is intentionally narrow: v0 only supports
   append-text operations on existing Markdown files in `README.md` or `docs/`.
   Validation blocks unsupported paths, unsupported operations, oversized edits,

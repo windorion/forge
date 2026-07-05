@@ -106,6 +106,27 @@ FORGE_MODEL_PROVIDER=local
 FORGE_MODEL_NAME=local-deterministic-v0
 ```
 
+The runtime also has an optional OpenAI Responses provider:
+
+```text
+FORGE_MODEL_PROVIDER=openai
+FORGE_MODEL_NAME=gpt-5.5
+OPENAI_API_KEY=...
+```
+
+Optional OpenAI settings:
+
+```text
+FORGE_OPENAI_BASE_URL=https://api.openai.com/v1
+FORGE_OPENAI_TIMEOUT_MS=30000
+FORGE_OPENAI_MAX_OUTPUT_TOKENS=1800
+```
+
+The OpenAI provider uses Responses API Structured Outputs for model-provider
+artifacts. It receives compact task and context summaries, not whole
+repositories. The runtime still owns approval gates, validation, IDs,
+timestamps, and restricted file apply operations.
+
 ## Development
 
 ```bash

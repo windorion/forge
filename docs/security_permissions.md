@@ -110,6 +110,18 @@ Forge must avoid exposing:
 
 The context builder should respect ignore rules and future secret detection.
 
+Remote model provider rule:
+
+- `FORGE_MODEL_PROVIDER=local` remains the default.
+- `FORGE_MODEL_PROVIDER=openai` is explicit consent to send compact task
+  context to OpenAI or the configured compatible base URL.
+- The OpenAI provider slice sends task state, recent task messages, file
+  reference summaries, context file summaries, plan steps, changed-file names,
+  and proposal metadata. It should not upload whole repositories.
+- Remote model output is guidance only. The runtime must continue to validate
+  proposals and require approval before file, command, git, or external side
+  effects.
+
 ## Emergency Controls
 
 The user should be able to:

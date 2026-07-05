@@ -1686,6 +1686,48 @@ Next:
 - Consider a persistent repository index after the first model-backed
   task-to-diff loop works.
 
+### 2026-07-06 03:23:17 CST +0800
+
+Summary:
+
+- User asked to continue the next step, so Codex added the first real remote
+  model-provider path while keeping local deterministic mode as the default.
+
+Done:
+
+- Used official OpenAI documentation to verify Responses API and Structured
+  Outputs shape before implementation.
+- Added optional `FORGE_MODEL_PROVIDER=openai` support backed by the OpenAI
+  Responses API.
+- Kept `FORGE_MODEL_PROVIDER=local` as the default.
+- Added OpenAI provider configuration through `OPENAI_API_KEY`,
+  `FORGE_MODEL_NAME`, `FORGE_OPENAI_BASE_URL`,
+  `FORGE_OPENAI_TIMEOUT_MS`, and `FORGE_OPENAI_MAX_OUTPUT_TOKENS`.
+- Added structured JSON schemas and local normalization for intent briefs,
+  plan revisions, execution proposals, and edit proposal guidance.
+- Preserved the safety boundary: remote model output remains guidance only,
+  while IDs, timestamps, validation, approvals, and restricted apply operations
+  stay inside the runtime.
+- Updated model provider, development, runtime, security, and root README
+  docs.
+- Verified `git diff --check`, `npm run check`, `npm run build`,
+  `swift build`, and a no-network provider smoke test for missing
+  `OPENAI_API_KEY`.
+
+Not done:
+
+- Did not call the live OpenAI API because no API key was provided.
+- Did not add a macOS Settings UI for provider configuration.
+- Did not add Anthropic, Ollama, or Apple/MLX providers.
+- Did not expand edit application beyond restricted Markdown append.
+
+Next:
+
+- Add provider status and configuration visibility in the macOS Settings UI.
+- Add a live OpenAI smoke test path once an API key is intentionally provided.
+- Add richer edit proposal operations so model-backed guidance can become real
+  reviewable code diffs.
+
 ## Decision Log
 
 ### 2026-07-04
@@ -1790,6 +1832,12 @@ Next:
 - This repo context pass is intentionally not a full index yet. Tree-sitter,
   symbol search, dependency graphs, semantic search, embeddings, and
   incremental indexing remain future work.
+- The runtime now has an optional `openai` model provider backed by the
+  Responses API and Structured Outputs. `local` remains the default; OpenAI is
+  enabled only with `FORGE_MODEL_PROVIDER=openai` and `OPENAI_API_KEY`.
+- Remote model output is still guidance only. Forge keeps IDs, timestamps,
+  validation, approvals, and restricted file apply operations inside the local
+  runtime.
 
 ## Open Questions
 
