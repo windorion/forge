@@ -307,6 +307,31 @@ private struct TaskMessageRow: View {
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
+
+            if !message.fileReferences.isEmpty {
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach(message.fileReferences) { reference in
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack {
+                                Label(reference.path ?? reference.requestedPath, systemImage: fileReferenceSystemImage(reference.status))
+                                    .font(.caption.weight(.semibold))
+                                Spacer()
+                                Text(reference.status)
+                                    .font(.caption2.weight(.medium))
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Text(fileReferenceDetail(reference))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(7)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.quaternary)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                    }
+                }
+            }
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -322,6 +347,37 @@ private struct TaskMessageRow: View {
         message.role == "User"
             ? Color(nsColor: .textBackgroundColor)
             : Color.secondary.opacity(0.12)
+    }
+
+    private func fileReferenceSystemImage(_ status: String) -> String {
+        switch status {
+        case "Resolved":
+            return "doc.text.magnifyingglass"
+        case "Missing":
+            return "questionmark.folder"
+        case "Blocked":
+            return "exclamationmark.triangle"
+        default:
+            return "doc"
+        }
+    }
+
+    private func fileReferenceDetail(_ reference: TaskFileReference) -> String {
+        var parts = [reference.summary]
+
+        if let lineStart = reference.lineStart {
+            if let lineEnd = reference.lineEnd, lineEnd != lineStart {
+                parts.append("Lines \(lineStart)-\(lineEnd)")
+            } else {
+                parts.append("Line \(lineStart)")
+            }
+        }
+
+        if let lineCount = reference.lineCount {
+            parts.append("\(lineCount) lines")
+        }
+
+        return parts.joined(separator: " · ")
     }
 }
 

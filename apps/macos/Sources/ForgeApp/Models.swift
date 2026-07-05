@@ -57,6 +57,7 @@ struct ForgeTask: Identifiable, Codable, Hashable {
                 kind: "IntentBrief",
                 content: "Connect the runtime to start a real task conversation.",
                 createdAt: "local",
+                fileReferences: [],
                 provider: nil,
                 intentBrief: nil
             )
@@ -238,8 +239,22 @@ struct TaskMessage: Identifiable, Codable, Hashable {
     var kind: String
     var content: String
     var createdAt: String
+    var fileReferences: [TaskFileReference]
     var provider: ModelProviderInfo?
     var intentBrief: IntentBrief?
+}
+
+struct TaskFileReference: Identifiable, Codable, Hashable {
+    var id: String
+    var requestedPath: String
+    var path: String?
+    var status: String
+    var summary: String
+    var byteSize: Int?
+    var lineCount: Int?
+    var lineStart: Int?
+    var lineEnd: Int?
+    var detectedAt: String
 }
 
 struct ExecutionProposal: Identifiable, Codable, Hashable {

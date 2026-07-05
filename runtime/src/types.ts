@@ -68,12 +68,26 @@ export interface IntentBrief {
   nextAction: string;
 }
 
+export interface TaskFileReference {
+  id: string;
+  requestedPath: string;
+  path?: string;
+  status: "Resolved" | "Missing" | "Blocked";
+  summary: string;
+  byteSize?: number;
+  lineCount?: number;
+  lineStart?: number;
+  lineEnd?: number;
+  detectedAt: string;
+}
+
 export interface TaskMessage {
   id: string;
   role: "User" | "Assistant";
   kind: "UserMessage" | "IntentBrief";
   content: string;
   createdAt: string;
+  fileReferences: TaskFileReference[];
   provider?: ModelProviderInfo;
   intentBrief?: IntentBrief;
 }

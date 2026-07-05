@@ -25,6 +25,7 @@ import type {
   ProposedFileChange,
   RuntimeEvent,
   RunValidationRequest,
+  TaskFileReference,
   TaskMessage,
   ToolCall,
   ValidationCommandDefinition,
@@ -647,7 +648,7 @@ async function createTask(input: CreateTaskRequest): Promise<ForgeTask> {
     message: "Task created and queued for planning.",
     createdAt: now
   };
-  const userMessage = createUserTaskMessage(objective, now);
+  const userMessage = await createUserTaskMessage(objective, now);
 
   const task: ForgeTask = {
     id: randomUUID(),
@@ -672,6 +673,15 @@ async function createTask(input: CreateTaskRequest): Promise<ForgeTask> {
     editProposal: undefined,
     reviewSummary: "No review yet. The planner is preparing a first plan."
   };
+
+  if (userMessage.fileReferences.length > 0) {
+    const resolvedCount = userMessage.fileReferences.filter((reference) => reference.status === "Resolved").length;
+    task.events.push({
+      type: "conversation.file_references.detected",
+      message: `Detected ${userMessage.fileReferences.length} file reference(s), ${resolvedCount} resolved.`,
+      createdAt: now
+    });
+  }
 
   const assistantMessage = await createAssistantIntentBriefMessage(task, userMessage);
   task.messages.push(assistantMessage);
@@ -710,7 +720,7 @@ async function createTaskMessage(taskID: string, input: CreateTaskMessageRequest
   }
 
   const now = new Date().toISOString();
-  const userMessage = createUserTaskMessage(content, now);
+  const userMessage = await createUserTaskMessage(content, now);
   task.messages.push(userMessage);
 
   setAgent(task, "Manager", "Active", "Received a task conversation update from the user.");
@@ -725,6 +735,16 @@ async function createTaskMessage(taskID: string, input: CreateTaskMessageRequest
   const received = event("conversation.user_message.created", "User added a task conversation message.");
   received.createdAt = now;
   saveAndBroadcast(task, received);
+
+  if (userMessage.fileReferences.length > 0) {
+    const resolvedCount = userMessage.fileReferences.filter((reference) => reference.status === "Resolved").length;
+    const referenced = event(
+      "conversation.file_references.detected",
+      `Detected ${userMessage.fileReferences.length} file reference(s), ${resolvedCount} resolved.`
+    );
+    referenced.createdAt = new Date().toISOString();
+    saveAndBroadcast(task, referenced);
+  }
 
   const assistantMessage = await createAssistantIntentBriefMessage(task, userMessage);
   task.messages.push(assistantMessage);
@@ -789,12 +809,13 @@ async function generatePlanRevision(taskID: string): Promise<ForgeTask> {
   return task;
 }
 
-function createUserTaskMessage(content: string, createdAt: string): TaskMessage {
+async function createUserTaskMessage(content: string, createdAt: string): Promise<TaskMessage> {
   return {
     id: randomUUID(),
     role: "User",
     kind: "UserMessage",
     content,
+    fileReferences: await resolveTaskFileReferences(content, createdAt),
     createdAt
   };
 }
@@ -810,6 +831,7 @@ async function createAssistantIntentBriefMessage(
     kind: "IntentBrief",
     content: formatIntentBrief(intentBrief),
     createdAt: new Date().toISOString(),
+    fileReferences: [],
     provider: modelProvider.info,
     intentBrief
   };
@@ -831,6 +853,199 @@ function formatBriefList(title: string, values: string[]): string {
   }
 
   return `${title}:\n${values.map((value) => `- ${value}`).join("\n")}`;
+}
+
+async function resolveTaskFileReferences(content: string, detectedAt: string): Promise<TaskFileReference[]> {
+  const mentions = extractFileMentionCandidates(content).slice(0, 6);
+  const references: TaskFileReference[] = [];
+
+  for (const mention of mentions) {
+    references.push(await resolveTaskFileReference(mention, detectedAt));
+  }
+
+  return references;
+}
+
+function extractFileMentionCandidates(content: string): string[] {
+  const candidates = new Set<string>();
+  const add = (raw: string | undefined) => {
+    const candidate = cleanFileMention(raw ?? "");
+    if (candidate && looksLikeFileMention(candidate)) {
+      candidates.add(candidate);
+    }
+  };
+
+  for (const match of content.matchAll(/`([^`\n]+)`/g)) {
+    add(match[1]);
+  }
+
+  for (const match of content.matchAll(/(?:^|[\s(])@([A-Za-z0-9._/-]+(?::\d+(?:-\d+)?)?)/g)) {
+    add(match[1]);
+  }
+
+  for (const match of content.matchAll(
+    /(?:^|[\s(])((?:\.\/)?(?:README\.md|AGENTS\.md|docs\/[A-Za-z0-9._/-]+|runtime\/[A-Za-z0-9._/-]+|apps\/[A-Za-z0-9._/-]+|script\/[A-Za-z0-9._/-]+|\.forge\/[A-Za-z0-9._/-]+)(?::\d+(?:-\d+)?)?)/g
+  )) {
+    add(match[1]);
+  }
+
+  return [...candidates];
+}
+
+function cleanFileMention(raw: string): string {
+  return raw
+    .trim()
+    .replace(/^@/, "")
+    .replace(/^\.\/+/, "")
+    .replace(/[),.;\]]+$/g, "");
+}
+
+function looksLikeFileMention(candidate: string): boolean {
+  const pathOnly = candidate.replace(/:\d+(?:-\d+)?$/, "");
+  return (
+    pathOnly === "README.md" ||
+    pathOnly === "AGENTS.md" ||
+    pathOnly.includes("/") ||
+    /\.[A-Za-z0-9]{1,8}$/.test(pathOnly)
+  );
+}
+
+async function resolveTaskFileReference(mention: string, detectedAt: string): Promise<TaskFileReference> {
+  const parsed = parseMentionPathAndLine(mention);
+  const baseReference = {
+    id: randomUUID(),
+    requestedPath: mention,
+    lineStart: parsed.lineStart,
+    lineEnd: parsed.lineEnd,
+    detectedAt
+  };
+
+  try {
+    const { absolutePath, relativePath } = resolveReadOnlyWorkspacePath(parsed.path);
+    const fileStat = await stat(absolutePath);
+    if (!fileStat.isFile()) {
+      return {
+        ...baseReference,
+        path: relativePath,
+        status: "Missing",
+        summary: `Referenced path is not a file: ${relativePath}.`
+      };
+    }
+
+    if (fileStat.size > 200_000) {
+      return {
+        ...baseReference,
+        path: relativePath,
+        status: "Blocked",
+        byteSize: fileStat.size,
+        summary: `File is too large for conversation context: ${relativePath}.`
+      };
+    }
+
+    const content = await readFile(absolutePath, "utf8");
+    if (content.includes("\0")) {
+      return {
+        ...baseReference,
+        path: relativePath,
+        status: "Blocked",
+        byteSize: fileStat.size,
+        summary: `File appears to be binary and was not added as conversation context: ${relativePath}.`
+      };
+    }
+
+    const lineCount = content.split("\n").length;
+    return {
+      ...baseReference,
+      path: relativePath,
+      status: "Resolved",
+      byteSize: fileStat.size,
+      lineCount,
+      summary: summarizeReferencedFile(relativePath, content, parsed.lineStart, parsed.lineEnd)
+    };
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return {
+        ...baseReference,
+        path: parsed.path,
+        status: "Missing",
+        summary: `Referenced file does not exist: ${parsed.path}.`
+      };
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      ...baseReference,
+      status: "Blocked",
+      summary: message
+    };
+  }
+}
+
+function parseMentionPathAndLine(mention: string): { path: string; lineStart?: number; lineEnd?: number } {
+  const match = mention.match(/^(.*?):(\d+)(?:-(\d+))?$/);
+  if (!match) {
+    return { path: mention };
+  }
+
+  const lineStart = Number(match[2]);
+  const lineEnd = match[3] ? Number(match[3]) : lineStart;
+  return {
+    path: match[1],
+    lineStart,
+    lineEnd: Math.max(lineStart, lineEnd)
+  };
+}
+
+function resolveReadOnlyWorkspacePath(inputPath: string): { absolutePath: string; relativePath: string } {
+  if (inputPath.includes("\0") || path.isAbsolute(inputPath)) {
+    throw new HttpError(409, `Unsafe file reference path: ${inputPath}`);
+  }
+
+  const normalized = path.posix.normalize(inputPath.replaceAll("\\", "/").replace(/^\.\/+/, ""));
+  if (
+    normalized === "." ||
+    normalized === ".." ||
+    normalized.startsWith("../") ||
+    normalized.startsWith("/") ||
+    normalized.startsWith(".git/") ||
+    normalized.startsWith(".forge/") ||
+    normalized.includes("/.git/") ||
+    normalized.includes("/.forge/")
+  ) {
+    throw new HttpError(409, `Unsafe file reference path: ${inputPath}`);
+  }
+
+  const absolutePath = path.resolve(repoRoot, normalized);
+  if (!absolutePath.startsWith(`${repoRoot}${path.sep}`)) {
+    throw new HttpError(409, `Unsafe file reference path: ${inputPath}`);
+  }
+
+  return { absolutePath, relativePath: normalized };
+}
+
+function summarizeReferencedFile(
+  relativePath: string,
+  content: string,
+  lineStart?: number,
+  lineEnd?: number
+): string {
+  if (relativePath.endsWith(".md")) {
+    return summarizeMarkdown(content) || `${relativePath} resolved as Markdown context.`;
+  }
+
+  const lines = content.split("\n");
+  const selectedLine = lineStart
+    ? lines.slice(Math.max(0, lineStart - 1), Math.min(lines.length, lineEnd ?? lineStart))
+    : lines;
+  const firstMeaningfulLine = selectedLine
+    .map((line) => line.trim())
+    .find((line) => line.length > 0 && !line.startsWith("//") && !line.startsWith("#!"));
+  const location = lineStart ? ` lines ${lineStart}${lineEnd && lineEnd !== lineStart ? `-${lineEnd}` : ""}` : "";
+  return [
+    `${relativePath}${location}`,
+    `${lines.length} line(s)`,
+    firstMeaningfulLine
+  ].filter(Boolean).join(" - ").slice(0, 220);
 }
 
 async function approvePlan(taskID: string, input: ApprovePlanRequest): Promise<ForgeTask> {

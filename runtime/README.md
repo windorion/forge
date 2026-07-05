@@ -29,7 +29,11 @@ user objective as a task message and asks the configured provider for a
 structured intent brief. The task conversation can continue through
 `POST /tasks/:taskID/messages`; each user message gets a new provider-generated
 intent brief with summary, constraints, acceptance criteria, open questions,
-and next action.
+and next action. User messages can mention repo files with paths such as
+`README.md`, `docs/v0_scope.md`, or `@runtime/src/server.ts:120`. The runtime
+resolves up to six safe repo-local file references, stores their summaries on
+the message, and exposes missing or blocked references without reading outside
+the workspace.
 
 The task conversation can also drive planning through
 `POST /tasks/:taskID/generate-plan-revision`. It asks the configured model
@@ -116,7 +120,7 @@ curl -X POST http://127.0.0.1:17373/tasks \
   -d '{"title":"Demo task","objective":"Prove task creation."}'
 curl -X POST http://127.0.0.1:17373/tasks/<task-id>/messages \
   -H 'Content-Type: application/json' \
-  -d '{"content":"Make the acceptance criteria explicit before planning."}'
+  -d '{"content":"Make the acceptance criteria explicit before planning. Use `docs/v0_scope.md`."}'
 curl -X POST http://127.0.0.1:17373/tasks/<task-id>/generate-plan-revision \
   -H 'Content-Type: application/json' \
   -d '{}'
@@ -131,7 +135,7 @@ curl -X POST http://127.0.0.1:17373/tasks/<task-id>/reject-edit-proposal \
   -d '{"note":"Needs a narrower change."}'
 curl -X POST http://127.0.0.1:17373/tasks/<task-id>/messages \
   -H 'Content-Type: application/json' \
-  -d '{"content":"Revise the proposal around a narrower documentation change."}'
+  -d '{"content":"Revise the proposal around a narrower documentation change in @docs/development.md."}'
 curl -X POST http://127.0.0.1:17373/tasks/<task-id>/revise-edit-proposal \
   -H 'Content-Type: application/json' \
   -d '{}'

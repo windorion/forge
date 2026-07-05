@@ -37,7 +37,8 @@ Steps:
    user message.
 3. Forge produces a structured intent brief with summary, constraints,
    acceptance criteria, open questions, and next action.
-4. User can clarify or refine the task in the same task conversation.
+4. User can clarify or refine the task in the same task conversation, including
+   repo file mentions such as `@runtime/src/server.ts`.
 5. User can ask Forge to update the plan from the latest conversation.
 6. Forge records a plan revision and returns to human review.
 7. Planner agent inspects repo context.
@@ -49,6 +50,7 @@ Task record should include:
 - title
 - objective
 - messages
+- message file references
 - context
 - plan
 - plan revisions

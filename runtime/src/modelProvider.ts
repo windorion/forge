@@ -6,6 +6,7 @@ import type {
   IntentBrief,
   ModelProviderInfo,
   PlanRevision,
+  TaskFileReference,
   TaskMessage
 } from "./types.js";
 
@@ -67,6 +68,8 @@ class LocalDeterministicModelProvider implements ModelProvider {
     const latestMessage = singleLine(request.latestUserMessage.content);
     const contextCount = request.task.contextFiles.length;
     const changedFileCount = request.task.changedFiles.length;
+    const resolvedReferences = resolvedFileReferencesForMessage(request.latestUserMessage);
+    const referenceSummary = formatFileReferenceList(resolvedReferences);
 
     return {
       summary: latestMessage || objective || "Clarify the software task and keep it reviewable.",
@@ -74,6 +77,9 @@ class LocalDeterministicModelProvider implements ModelProvider {
         "Keep the work task-centered, not editor-centered.",
         "Do not apply file changes before human review.",
         "Preserve local-first behavior and visible audit trails.",
+        resolvedReferences.length > 0
+          ? `Use referenced file context: ${referenceSummary}.`
+          : "Preserve any explicit file references in future planning.",
         contextCount > 0
           ? `Reuse inspected context from ${contextCount} file(s) before proposing changes.`
           : "Inspect project context before proposing changes."
@@ -81,11 +87,14 @@ class LocalDeterministicModelProvider implements ModelProvider {
       acceptanceCriteria: [
         "Forge can restate the user intent in the task conversation.",
         "The next plan or proposal references the clarified intent.",
+        resolvedReferences.length > 0
+          ? `Referenced file context is preserved for ${resolvedReferences.length} file(s).`
+          : "The user can add file mentions for more specific task context.",
         changedFileCount > 0
           ? `Any follow-up work accounts for ${changedFileCount} changed file(s).`
           : "No workspace mutation happens until an explicit approval gate."
       ],
-      openQuestions: buildOpenQuestions(latestMessage),
+      openQuestions: buildOpenQuestions(latestMessage, resolvedReferences.length > 0),
       nextAction: "Review the intent brief, answer any open question, then continue to planning or proposal generation."
     };
   }
@@ -93,9 +102,12 @@ class LocalDeterministicModelProvider implements ModelProvider {
   async createPlanRevision(request: PlanRevisionRequest): Promise<PlanRevision> {
     const latestIntentBrief = latestIntentBriefForTask(request.task);
     const intentSummary = latestIntentBrief?.summary ?? singleLine(request.task.objective);
+    const resolvedReferences = latestResolvedFileReferencesForTask(request.task);
     const contextSummary = request.task.contextFiles.length > 0
       ? `Use ${request.task.contextFiles.length} inspected context file(s).`
-      : "Build repository context before proposing implementation.";
+      : resolvedReferences.length > 0
+        ? `Use referenced file context: ${formatFileReferenceList(resolvedReferences)}.`
+        : "Build repository context before proposing implementation.";
     const acceptanceSummary = latestIntentBrief?.acceptanceCriteria[0]
       ?? "Keep the work reviewable and stop at approval gates.";
 
@@ -145,8 +157,10 @@ class LocalDeterministicModelProvider implements ModelProvider {
 
   async createExecutionProposal(request: ExecutionProposalRequest): Promise<ExecutionProposal> {
     const contextPaths = request.task.contextFiles.map((file) => file.path);
+    const referencedPaths = latestResolvedFileReferencesForTask(request.task).map((reference) => reference.path);
+    const allContextPaths = [...new Set([...contextPaths, ...referencedPaths].filter(Boolean))];
     const contextSummary =
-      contextPaths.length > 0 ? `using ${contextPaths.join(", ")}` : "using the task objective only";
+      allContextPaths.length > 0 ? `using ${allContextPaths.join(", ")}` : "using the task objective only";
 
     return {
       id: randomUUID(),
@@ -208,6 +222,13 @@ class LocalDeterministicModelProvider implements ModelProvider {
 }
 
 function chooseTargetPath(task: ForgeTask): string {
+  const mentionedMarkdownPath = latestResolvedFileReferencesForTask(task)
+    .flatMap((reference) => reference.path ? [reference.path] : [])
+    .find(isEditableMarkdownPath);
+  if (mentionedMarkdownPath) {
+    return mentionedMarkdownPath;
+  }
+
   const preferred = ["docs/v0_scope.md", "docs/development.md", "README.md"];
   const contextPaths = new Set(task.contextFiles.map((file) => file.path));
   return preferred.find((candidate) => contextPaths.has(candidate)) ?? task.contextFiles[0]?.path ?? "README.md";
@@ -245,7 +266,7 @@ function singleLine(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
-function buildOpenQuestions(message: string): string[] {
+function buildOpenQuestions(message: string, hasFileReferences = false): string[] {
   const lower = message.toLowerCase();
   const questions: string[] = [];
 
@@ -253,7 +274,7 @@ function buildOpenQuestions(message: string): string[] {
     questions.push("What should count as done or validated for this task?");
   }
 
-  if (!lower.includes("file") && !lower.includes("docs/") && !lower.includes("文件")) {
+  if (!hasFileReferences && !lower.includes("file") && !lower.includes("docs/") && !lower.includes("文件")) {
     questions.push("Are there specific files, modules, or docs that should be treated as primary context?");
   }
 
@@ -262,4 +283,23 @@ function buildOpenQuestions(message: string): string[] {
 
 function latestIntentBriefForTask(task: ForgeTask): IntentBrief | undefined {
   return [...task.messages].reverse().find((message) => message.intentBrief)?.intentBrief;
+}
+
+function latestResolvedFileReferencesForTask(task: ForgeTask): TaskFileReference[] {
+  const latestMessageWithReferences = [...task.messages]
+    .reverse()
+    .find((message) => resolvedFileReferencesForMessage(message).length > 0);
+  return latestMessageWithReferences ? resolvedFileReferencesForMessage(latestMessageWithReferences) : [];
+}
+
+function resolvedFileReferencesForMessage(message: TaskMessage): TaskFileReference[] {
+  return message.fileReferences.filter((reference) => reference.status === "Resolved" && reference.path);
+}
+
+function formatFileReferenceList(references: TaskFileReference[]): string {
+  return references.map((reference) => reference.path).filter(Boolean).slice(0, 4).join(", ");
+}
+
+function isEditableMarkdownPath(candidate: string): boolean {
+  return candidate === "README.md" || (candidate.startsWith("docs/") && candidate.endsWith(".md"));
 }

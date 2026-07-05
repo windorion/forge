@@ -21,10 +21,10 @@ The runtime now has a `ModelProvider` interface and a default local provider:
 
 The current provider does not call an external model. It produces a
 deterministic task intent brief from the task conversation, a deterministic
-plan revision from the latest intent brief, and a deterministic execution
-proposal after a user approves a plan. This lets the app and runtime exercise
-the provider boundary, task state updates, event streaming, and SQLite
-persistence without requiring API keys.
+plan revision from the latest intent brief and file references, and a
+deterministic execution proposal after a user approves a plan. This lets the
+app and runtime exercise the provider boundary, task state updates, event
+streaming, and SQLite persistence without requiring API keys.
 
 It can also produce a deterministic edit proposal with a diff preview and a
 restricted append-text operation. When a proposal is rejected, the provider can
@@ -54,6 +54,7 @@ A provider receives task state and returns structured output. Current output:
 - acceptance criteria
 - open questions
 - next action
+- resolved file references
 - plan revision summary
 - plan revision rationale
 - revised plan steps

@@ -110,7 +110,10 @@ function parseTaskPayload(payload: unknown): ForgeTask {
       riskLevel: run.riskLevel ?? "Low",
       commands: run.commands ?? []
     })),
-    messages: parsed.messages ?? [],
+    messages: (parsed.messages ?? []).map((message) => ({
+      ...message,
+      fileReferences: message.fileReferences ?? []
+    })),
     planRevisions: parsed.planRevisions ?? [],
     editProposalRevisions: (parsed.editProposalRevisions ?? []).map((proposal, index) => ({
       ...proposal,

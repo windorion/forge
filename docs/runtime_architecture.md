@@ -117,8 +117,15 @@ Stores task-scoped user and assistant messages. Creating a task records the
 initial objective as a user message, then asks the model provider for a
 structured intent brief. Follow-up task messages use the same provider boundary
 to update the brief with summary, constraints, acceptance criteria, open
-questions, and next action. The conversation supports task understanding; it
-should not replace the task, review, diff, or validation surfaces.
+questions, and next action.
+
+Task messages can also carry repo-local file references parsed from paths in
+the message body, including `README.md`, `docs/example.md`, or
+`@runtime/src/server.ts:120`. The runtime owns parsing and safety checks. It
+resolves existing safe files, stores compact summaries on the message, and
+records missing or blocked references without reading outside the repository.
+The conversation supports task understanding; it should not replace the task,
+review, diff, or validation surfaces.
 
 ### Plan Revision Generator
 
@@ -203,6 +210,7 @@ Sends structured events to the app:
 - plan updated
 - plan revision started
 - plan revision ready
+- conversation file references detected
 - edit proposal revision started
 - edit proposal revision ready
 - tool started

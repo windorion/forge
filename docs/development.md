@@ -79,6 +79,12 @@ brief. Sending another message calls `POST /tasks/:taskID/messages`, appends
 the user message, and creates a new structured intent brief with summary,
 constraints, acceptance criteria, open questions, and next action.
 
+Task messages can mention files with repo-relative paths such as `README.md`,
+`docs/v0_scope.md`, or `@runtime/src/server.ts:120`. The runtime resolves up
+to six safe file references, stores summaries on the message, and shows
+resolved, missing, or blocked references in the conversation panel. These
+references are read-only context; sending a message never mutates files.
+
 The conversation panel also includes `Update Plan From Conversation`. That
 action calls `POST /tasks/:taskID/generate-plan-revision`, asks the model
 provider for a new plan revision from the latest message and intent brief,
@@ -156,8 +162,8 @@ cd runtime && npm run check
 ## Current Limitations
 
 - No remote LLM provider is wired yet. The current provider is local and
-  deterministic, including task intent briefs, plan revisions, and edit
-  proposal revisions.
+  deterministic, including task intent briefs with file references, plan
+  revisions, and edit proposal revisions.
 - Edit proposal application is intentionally narrow: v0 only supports
   append-text operations on existing Markdown files in `README.md` or `docs/`.
   Validation blocks unsupported paths, unsupported operations, oversized edits,

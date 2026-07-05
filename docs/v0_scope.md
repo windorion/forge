@@ -47,6 +47,7 @@ The product should show:
 - visible context files
 - visible plan steps
 - task conversation
+- task message file references
 - structured intent briefs
 - conversation-driven plan revisions
 - human review gate
@@ -85,6 +86,8 @@ V0 is complete when:
 - Creating a task records the initial objective as a task message and produces
   a structured intent brief.
 - A user can add a task message and receive an updated intent brief.
+- A user can mention repo-local files in task messages and see resolved,
+  missing, or blocked references preserved on the message.
 - A user can generate a plan revision from the latest task conversation.
 - Approving a plan targets the current plan revision when one exists, so an old
   approval does not automatically approve a revised plan.

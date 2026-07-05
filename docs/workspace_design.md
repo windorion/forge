@@ -107,6 +107,7 @@ Responsibilities:
 - follow-up requests
 - structured intent brief
 - plan revision request
+- file references
 
 Chat is a supporting surface. It should not dominate the product.
 
@@ -165,6 +166,8 @@ Each state should have a clear primary action.
   plan.
 - Always preserve rejected edit proposals when a revised proposal replaces
   them.
+- Always show resolved, missing, or blocked file references attached to task
+  messages.
 - Always show command logs for commands run by agents.
 - Never hide failures behind generic status.
 - Use native macOS controls where appropriate.

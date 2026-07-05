@@ -1534,6 +1534,47 @@ Next:
 - Add macOS app build/test entries to validation presets.
 - Consider a dedicated normalized table for proposal revisions before v0.1.
 
+### 2026-07-05 21:31:18 CST +0800
+
+Conversation summary:
+
+- User asked Codex to continue the next step, so Codex implemented repo-local
+  file mentions for task conversation messages.
+
+Done:
+
+- Added `TaskFileReference` metadata to task messages.
+- Runtime now parses file mentions from task objectives and follow-up
+  messages, including backtick paths, `@path` mentions, and optional line
+  ranges such as `@runtime/src/server.ts:120`.
+- File references are resolved read-only inside the repository, capped to six
+  references per message, and stored as `Resolved`, `Missing`, or `Blocked`.
+- Model-provider intent briefs, plan revisions, execution proposals, and safe
+  edit proposals can now use resolved file-reference context.
+- Mentioned editable Markdown files are preferred as safe edit proposal targets
+  while preserving the existing append-only approval boundary.
+- macOS Task Conversation now shows file-reference cards on each message.
+- Updated runtime, model provider, runtime architecture, database,
+  development, workspace design, user flow, v0 scope, and root README docs.
+- Verified `git diff --check`, `npm run check`, `npm run build`,
+  `swift build`, API smoke for resolved/missing/blocked file references, and
+  SQLite recovery after runtime restart.
+- Stopped the temporary runtime service and removed temporary smoke-test files.
+
+Not done:
+
+- Did not add selected-code attachments from the active editor yet.
+- Did not build autocomplete or picker UI for file mentions.
+- Did not normalize message file references into dedicated SQLite tables.
+- Did not connect a real model provider yet.
+
+Next:
+
+- Add selected-code or file-picker context to task messages.
+- Add richer diff proposal formats beyond append-only Markdown edits.
+- Add macOS app build/test entries to validation presets.
+- Consider normalized tables for messages and file references before v0.1.
+
 ## Decision Log
 
 ### 2026-07-04
@@ -1621,6 +1662,10 @@ Next:
   proposals are preserved in history, the latest task conversation can produce
   a revised proposal, and the new artifact is validated and returned to human
   review without mutating files.
+- Task conversation now supports repo-local file mentions. The runtime parses
+  paths such as `README.md` or `@runtime/src/server.ts:120`, stores resolved,
+  missing, or blocked references on the message, and treats them as read-only
+  context rather than implicit permission to edit files.
 
 ## Open Questions
 

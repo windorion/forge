@@ -82,7 +82,26 @@ Fields:
 - content
 - provider
 - intent brief
+- file references
 - created at
+
+### Message File References
+
+Stores repo-local files mentioned in task messages.
+
+Fields:
+
+- id
+- message id
+- requested path
+- resolved path
+- status
+- summary
+- byte size
+- line count
+- line start
+- line end
+- detected at
 
 ### Plan Revisions
 
