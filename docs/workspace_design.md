@@ -97,10 +97,12 @@ The diff panel is one of the highest-trust surfaces in the product.
 
 Responsibilities:
 
+- task-scoped conversation
 - clarifying questions
 - user instructions
 - explanations
 - follow-up requests
+- structured intent brief
 
 Chat is a supporting surface. It should not dominate the product.
 

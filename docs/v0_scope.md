@@ -15,8 +15,9 @@ The user should be able to:
 3. Create a task.
 4. Watch the agent inspect real local project context.
 5. See tool calls, context files, plan steps, agent states, and runtime events.
-6. Reach a human review gate before any code changes are applied.
-7. Approve a generated edit proposal before a narrow, controlled file change is
+6. Continue a task conversation and see a structured intent brief.
+7. Reach a human review gate before any code changes are applied.
+8. Approve a generated edit proposal before a narrow, controlled file change is
    applied.
 
 ## V0 Product Feeling
@@ -44,6 +45,8 @@ The product should show:
 - visible tool calls
 - visible context files
 - visible plan steps
+- task conversation
+- structured intent briefs
 - human review gate
 - SQLite task persistence
 - model-provider abstraction
@@ -76,6 +79,9 @@ V0 is complete when:
 - A user can run `cd runtime && npm run dev`.
 - A user can run `./script/build_and_run.sh`.
 - The app can create a task.
+- Creating a task records the initial objective as a task message and produces
+  a structured intent brief.
+- A user can add a task message and receive an updated intent brief.
 - The runtime can inspect real local project files.
 - The app updates from runtime events.
 - The task reaches `Human Review`.
@@ -106,8 +112,8 @@ The explicit plan approval action has started: approval is recorded and opens
 controlled execution preparation, but it does not yet run model-driven edits.
 
 The model-provider abstraction has also started: the default local
-deterministic provider creates an execution proposal after plan approval. Real
-remote or local LLM providers are still future work.
+deterministic provider creates task intent briefs and an execution proposal
+after plan approval. Real remote or local LLM providers are still future work.
 
 Safe edit proposals have started: Forge can create a proposed diff preview and
 return the task to human review without mutating files. A proposal can now be

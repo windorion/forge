@@ -110,6 +110,7 @@ function parseTaskPayload(payload: unknown): ForgeTask {
       riskLevel: run.riskLevel ?? "Low",
       commands: run.commands ?? []
     })),
+    messages: parsed.messages ?? [],
     executionProposal: parsed.executionProposal,
     editProposal: parsed.editProposal
   };

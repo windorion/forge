@@ -11,9 +11,10 @@ Forge currently has two implementation pieces:
 
 The first vertical slice is app-runtime connectivity, not LLM execution.
 The current slice adds Agent Loop v0: a deterministic local planner loop that
-updates task state, agent status, plan steps, review summary, tool calls,
-context files, approval history, model-provider execution proposals, SSE
-events, safe edit proposals, and SQLite task persistence.
+updates task state, agent status, plan steps, review summary, task
+conversation, tool calls, context files, approval history, model-provider
+intent briefs and execution proposals, SSE events, safe edit proposals, and
+SQLite task persistence.
 
 ## Run Runtime
 
@@ -71,6 +72,12 @@ Use the toolbar buttons:
 
 Use the sidebar composer to create a custom task. The app connects to
 `GET /events` and refreshes tasks as runtime events arrive.
+
+The main workspace includes `Task Conversation`. Creating a task records the
+initial objective as a user message and stores a provider-generated intent
+brief. Sending another message calls `POST /tasks/:taskID/messages`, appends
+the user message, and creates a new structured intent brief with summary,
+constraints, acceptance criteria, open questions, and next action.
 
 Agent Loop v0 currently runs local read-only tools:
 
@@ -137,7 +144,7 @@ cd runtime && npm run check
 ## Current Limitations
 
 - No remote LLM provider is wired yet. The current provider is local and
-  deterministic.
+  deterministic, including task intent briefs.
 - Edit proposal application is intentionally narrow: v0 only supports
   append-text operations on existing Markdown files in `README.md` or `docs/`.
   Validation blocks unsupported paths, unsupported operations, oversized edits,

@@ -74,6 +74,7 @@ Coordinates planning, execution, testing, review, and user approval states.
 Builds compact task context from:
 
 - user prompt
+- task conversation
 - repository metadata
 - file search
 - symbol search
@@ -109,6 +110,15 @@ The provider layer should:
 - return structured proposals or model outputs
 - avoid direct file, command, git, or network side effects
 - make missing credentials or unsupported providers explicit
+
+### Task Conversation And Intent Intake
+
+Stores task-scoped user and assistant messages. Creating a task records the
+initial objective as a user message, then asks the model provider for a
+structured intent brief. Follow-up task messages use the same provider boundary
+to update the brief with summary, constraints, acceptance criteria, open
+questions, and next action. The conversation supports task understanding; it
+should not replace the task, review, diff, or validation surfaces.
 
 ### Edit Proposal Generator
 

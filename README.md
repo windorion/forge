@@ -1400,6 +1400,50 @@ Next:
 - Add macOS app build/test entries to the validation command catalog.
 - Add richer patch proposal formats beyond append-only Markdown edits.
 
+### 2026-07-05 14:37:27 CST +0800
+
+Conversation summary:
+
+- User pointed out that the current agent still felt like a mimic rather than
+  a chat-driven agent that understands task intent, then asked Codex to plan
+  and continue a long next task.
+
+Done:
+
+- Added task-scoped conversation messages to the runtime task model.
+- Added structured intent briefs with summary, constraints, acceptance
+  criteria, open questions, and next action.
+- Extended the model-provider contract with deterministic local
+  `createIntentBrief` output.
+- Creating a task now records the initial objective as a user message and
+  creates an assistant intent brief.
+- Added `POST /tasks/:taskID/messages` so users can clarify a task and receive
+  an updated intent brief.
+- Persisted task messages in the existing SQLite task snapshot payload with
+  migration fallback for older tasks.
+- Added Swift models, runtime client method, workspace state, sending state,
+  and a main workspace `Task Conversation` panel.
+- Updated runtime, model provider, runtime architecture, database,
+  development, workspace design, user flow, and v0 scope docs.
+- Verified `npm run check`, `npm run build`, `swift build`, task conversation
+  API smoke test, and SQLite recovery of messages after runtime restart.
+
+Not done:
+
+- Did not connect a real LLM provider yet.
+- Did not add streaming token-by-token chat output.
+- Did not normalize messages into dedicated SQLite tables.
+- Did not make follow-up messages alter existing plans or proposals yet.
+- Did not add attachment, file mention, or code selection context to messages.
+
+Next:
+
+- Connect task conversation to real provider-backed planning when OpenAI or a
+  local model provider is configured.
+- Let follow-up messages request proposal revisions.
+- Add file mentions or selected-code context to task messages.
+- Normalize task messages into dedicated SQLite tables.
+
 ## Decision Log
 
 ### 2026-07-04
@@ -1472,6 +1516,12 @@ Next:
 - Project command permission cards should show command boundary, execution
   mode, approval state, blocked reasons, and last-run metadata before allowing
   approval or execution.
+- Task conversation is the task-scoped collaboration surface. It should help
+  Forge understand and refine user intent, but it should not replace task
+  state, planner, review, diff, validation, or approval surfaces.
+- The model-provider boundary now includes structured intent briefs before
+  planning or execution proposals. The local deterministic provider remains a
+  placeholder until real LLM or local model providers are wired.
 
 ## Open Questions
 

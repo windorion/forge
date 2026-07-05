@@ -154,6 +154,7 @@ private struct TaskWorkspaceView: View {
             HStack(spacing: 0) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
+                        TaskConversationPanel(task: task)
                         PlannerPanel(task: task)
                         ContextPanel(task: task)
                         ToolCallPanel(task: task)
@@ -198,6 +199,152 @@ private struct TaskHeader: View {
             }
         }
         .padding(20)
+    }
+}
+
+private struct TaskConversationPanel: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
+
+    var task: ForgeTask
+
+    @State private var draft = ""
+
+    var body: some View {
+        Panel(title: "Task Conversation", systemImage: "bubble.left.and.text.bubble.right") {
+            VStack(alignment: .leading, spacing: 12) {
+                if task.messages.isEmpty {
+                    Text("No task messages yet.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(task.messages) { message in
+                            TaskMessageRow(message: message)
+                        }
+                    }
+                }
+
+                HStack(alignment: .bottom, spacing: 8) {
+                    TextField("Add instruction or clarification", text: $draft, axis: .vertical)
+                        .lineLimit(2...5)
+                        .textFieldStyle(.roundedBorder)
+
+                    Button {
+                        send()
+                    } label: {
+                        Label(sendButtonTitle, systemImage: "paperplane")
+                    }
+                    .disabled(!canSend)
+                }
+            }
+        }
+    }
+
+    private var trimmedDraft: String {
+        draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canSend: Bool {
+        !trimmedDraft.isEmpty && !workspace.isSendingTaskMessage(taskID: task.id)
+    }
+
+    private var sendButtonTitle: String {
+        workspace.isSendingTaskMessage(taskID: task.id) ? "Sending" : "Send"
+    }
+
+    private func send() {
+        let content = trimmedDraft
+        guard !content.isEmpty else {
+            return
+        }
+
+        draft = ""
+        workspace.sendTaskMessage(for: task, content: content)
+    }
+}
+
+private struct TaskMessageRow: View {
+    var message: TaskMessage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Label(message.role, systemImage: systemImage)
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(message.createdAt)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+
+            if let intentBrief = message.intentBrief {
+                IntentBriefView(brief: intentBrief)
+            } else {
+                Text(message.content)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            if let provider = message.provider {
+                Label("\(provider.name) / \(provider.model)", systemImage: "cpu")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(messageBackgroundColor)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var systemImage: String {
+        message.role == "User" ? "person.crop.circle" : "sparkles"
+    }
+
+    private var messageBackgroundColor: Color {
+        message.role == "User"
+            ? Color(nsColor: .textBackgroundColor)
+            : Color.secondary.opacity(0.12)
+    }
+}
+
+private struct IntentBriefView: View {
+    var brief: IntentBrief
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(brief.summary)
+                .font(.subheadline)
+                .textSelection(.enabled)
+
+            BriefList(title: "Constraints", values: brief.constraints)
+            BriefList(title: "Acceptance", values: brief.acceptanceCriteria)
+            BriefList(title: "Open Questions", values: brief.openQuestions)
+
+            Label(brief.nextAction, systemImage: "arrow.forward.circle")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct BriefList: View {
+    var title: String
+    var values: [String]
+
+    var body: some View {
+        if !values.isEmpty {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                ForEach(values, id: \.self) { value in
+                    Text("- \(value)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+            }
+        }
     }
 }
 

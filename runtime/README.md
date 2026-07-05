@@ -10,6 +10,7 @@ This first slice is intentionally small:
 - `GET /validation-presets`
 - `GET /tasks/:taskID/validation-permissions`
 - `POST /tasks`
+- `POST /tasks/:taskID/messages`
 - `POST /tasks/:taskID/approve-plan`
 - `POST /tasks/:taskID/generate-edit-proposal`
 - `POST /tasks/:taskID/validate-edit-proposal`
@@ -20,10 +21,17 @@ This first slice is intentionally small:
 - `GET /events` as a Server-Sent Events stream
 
 Creating a task starts Agent Loop v0. It is deterministic for now: the Manager
-and Planner update task state, plan steps, events, and the review gate without
-calling a model. Approving a plan records an approval and opens the controlled
-execution preparation phase. The runtime then asks the configured model
-provider for a safe execution proposal without applying file changes.
+and Planner update task state, plan steps, events, task conversation, and the
+review gate without calling a remote model. Creating a task records the initial
+user objective as a task message and asks the configured provider for a
+structured intent brief. The task conversation can continue through
+`POST /tasks/:taskID/messages`; each user message gets a new provider-generated
+intent brief with summary, constraints, acceptance criteria, open questions,
+and next action.
+
+Approving a plan records an approval and opens the controlled execution
+preparation phase. The runtime then asks the configured model provider for a
+safe execution proposal without applying file changes.
 After that, a safe edit proposal can be generated as a proposed diff preview.
 It is validated when generated and is not applied to the workspace until the
 user explicitly applies it. The apply path revalidates against the current
@@ -92,6 +100,9 @@ curl http://127.0.0.1:17373/health
 curl -X POST http://127.0.0.1:17373/tasks \
   -H 'Content-Type: application/json' \
   -d '{"title":"Demo task","objective":"Prove task creation."}'
+curl -X POST http://127.0.0.1:17373/tasks/<task-id>/messages \
+  -H 'Content-Type: application/json' \
+  -d '{"content":"Make the acceptance criteria explicit before planning."}'
 curl -X POST http://127.0.0.1:17373/tasks/<task-id>/approve-plan \
   -H 'Content-Type: application/json' \
   -d '{}'

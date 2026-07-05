@@ -33,15 +33,20 @@ Goal: turn user intent into a structured task.
 Steps:
 
 1. User describes work: "Fix the login timeout bug."
-2. Forge creates a task with objective, constraints, and acceptance criteria.
-3. Planner agent inspects repo context.
-4. Forge presents a plan.
-5. User approves, edits, or rejects the plan.
+2. Forge creates a task conversation and records the initial objective as a
+   user message.
+3. Forge produces a structured intent brief with summary, constraints,
+   acceptance criteria, open questions, and next action.
+4. User can clarify or refine the task in the same task conversation.
+5. Planner agent inspects repo context.
+6. Forge presents a plan.
+7. User approves, edits, or rejects the plan.
 
 Task record should include:
 
 - title
 - objective
+- messages
 - context
 - plan
 - constraints

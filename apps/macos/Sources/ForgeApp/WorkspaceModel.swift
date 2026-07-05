@@ -10,6 +10,7 @@ final class WorkspaceModel: ObservableObject {
     @Published var statusMessage = "Runtime not checked"
     @Published var eventStreamStatus = "Event stream disconnected"
     @Published private var validationPermissionSnapshots: [ForgeTask.ID: [ValidationPresetPermission]] = [:]
+    @Published private var sendingMessageTaskIDs = Set<ForgeTask.ID>()
     @Published private var approvingTaskIDs = Set<ForgeTask.ID>()
     @Published private var generatingEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var validatingEditProposalTaskIDs = Set<ForgeTask.ID>()
@@ -89,6 +90,34 @@ final class WorkspaceModel: ObservableObject {
 
     func isApprovingPlan(taskID: ForgeTask.ID) -> Bool {
         approvingTaskIDs.contains(taskID)
+    }
+
+    func sendTaskMessage(for task: ForgeTask, content: String) {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return
+        }
+
+        sendingMessageTaskIDs.insert(task.id)
+
+        Task {
+            do {
+                let updatedTask = try await runtime.sendTaskMessage(taskID: task.id, content: trimmed)
+                upsert(updatedTask)
+                selectedTaskID = updatedTask.id
+                statusMessage = "Intent brief updated."
+                await refreshValidationPermissionSnapshotIfPossible(for: updatedTask.id)
+                startEventStream()
+            } catch {
+                statusMessage = "Send message failed: \(error.localizedDescription)"
+            }
+
+            sendingMessageTaskIDs.remove(task.id)
+        }
+    }
+
+    func isSendingTaskMessage(taskID: ForgeTask.ID) -> Bool {
+        sendingMessageTaskIDs.contains(taskID)
     }
 
     func generateEditProposal(for task: ForgeTask) {

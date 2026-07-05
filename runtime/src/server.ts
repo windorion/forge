@@ -13,6 +13,7 @@ import type {
   ApprovePlanRequest,
   ApproveValidationPresetRequest,
   ContextFile,
+  CreateTaskMessageRequest,
   CreateTaskRequest,
   EditProposalDecisionRequest,
   EditProposalValidation,
@@ -22,6 +23,7 @@ import type {
   ProposedFileChange,
   RuntimeEvent,
   RunValidationRequest,
+  TaskMessage,
   ToolCall,
   ValidationCommandDefinition,
   ValidationCommandResult,
@@ -225,9 +227,17 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    const createMessageTaskID = taskIDFromActionPath(url.pathname, "messages");
+    if (request.method === "POST" && createMessageTaskID) {
+      const input = await readJson<CreateTaskMessageRequest>(request);
+      const task = await createTaskMessage(createMessageTaskID, input);
+      writeJson(response, 201, task);
+      return;
+    }
+
     if (request.method === "POST" && url.pathname === "/tasks") {
       const input = await readJson<CreateTaskRequest>(request);
-      const task = createTask(input);
+      const task = await createTask(input);
       tasks.set(task.id, task);
       taskStore.saveTask(task);
       emit("task.created", { taskID: task.id, title: task.title, task });
@@ -612,17 +622,18 @@ class HttpError extends Error {
   }
 }
 
-function createTask(input: CreateTaskRequest): ForgeTask {
+async function createTask(input: CreateTaskRequest): Promise<ForgeTask> {
   const now = new Date().toISOString();
   const title = input.title?.trim() || "Untitled Forge task";
   const objective = input.objective?.trim() || "No objective provided.";
-  const event: RuntimeEvent = {
+  const createdEvent: RuntimeEvent = {
     type: "task.created",
     message: "Task created and queued for planning.",
     createdAt: now
   };
+  const userMessage = createUserTaskMessage(objective, now);
 
-  return {
+  const task: ForgeTask = {
     id: randomUUID(),
     title,
     objective,
@@ -632,16 +643,130 @@ function createTask(input: CreateTaskRequest): ForgeTask {
     updatedAt: now,
     agentStates: cloneAgents(defaultAgents),
     planSteps: clonePlanSteps(defaultPlanSteps),
-    events: [event],
+    events: [createdEvent],
     approvals: [],
     toolCalls: [],
     validationRuns: [],
+    messages: [userMessage],
     contextFiles: [],
     changedFiles: [],
     executionProposal: undefined,
     editProposal: undefined,
     reviewSummary: "No review yet. The planner is preparing a first plan."
   };
+
+  const assistantMessage = await createAssistantIntentBriefMessage(task, userMessage);
+  task.messages.push(assistantMessage);
+  task.updatedAt = assistantMessage.createdAt;
+  task.events.push({
+    type: "conversation.intent_brief.created",
+    message: "Initial task intent brief created from the user objective.",
+    createdAt: assistantMessage.createdAt
+  });
+  task.reviewSummary = "Intent brief created. The planner is preparing the first implementation plan.";
+  setAgent(task, "Manager", "Active", "Captured the task objective and opened a task conversation.");
+  setAgent(task, "Planner", "Active", "Created an initial intent brief before planning.");
+  upsertPlanStep(task, {
+    id: "clarify-intent",
+    title: "Clarify task intent",
+    status: "Done",
+    summary: assistantMessage.intentBrief?.summary ?? "Task intent captured from the initial objective."
+  });
+
+  return task;
+}
+
+async function createTaskMessage(taskID: string, input: CreateTaskMessageRequest): Promise<ForgeTask> {
+  const task = tasks.get(taskID);
+  if (!task) {
+    throw new HttpError(404, `Task not found: ${taskID}`);
+  }
+
+  const content = input.content?.trim() ?? "";
+  if (!content) {
+    throw new HttpError(400, "Task message content is required.");
+  }
+
+  if (content.length > 8_000) {
+    throw new HttpError(413, "Task message content is too large.");
+  }
+
+  const now = new Date().toISOString();
+  const userMessage = createUserTaskMessage(content, now);
+  task.messages.push(userMessage);
+
+  setAgent(task, "Manager", "Active", "Received a task conversation update from the user.");
+  setAgent(task, "Planner", "Active", `Updating intent brief with ${modelProvider.info.name}.`);
+  upsertPlanStep(task, {
+    id: "clarify-intent",
+    title: "Clarify task intent",
+    status: "Active",
+    summary: "Reading the latest task message and updating the structured brief."
+  });
+
+  const received = event("conversation.user_message.created", "User added a task conversation message.");
+  received.createdAt = now;
+  saveAndBroadcast(task, received);
+
+  const assistantMessage = await createAssistantIntentBriefMessage(task, userMessage);
+  task.messages.push(assistantMessage);
+  task.reviewSummary = "Intent brief updated from the latest task conversation message.";
+  setAgent(task, "Planner", "Ready", "Updated the task intent brief; waiting for the next planning or review action.");
+  upsertPlanStep(task, {
+    id: "clarify-intent",
+    title: "Clarify task intent",
+    status: "Done",
+    summary: assistantMessage.intentBrief?.summary ?? "Task intent updated."
+  });
+
+  const briefCreated = event("conversation.intent_brief.created", "Assistant created an updated task intent brief.");
+  briefCreated.createdAt = assistantMessage.createdAt;
+  saveAndBroadcast(task, briefCreated);
+  return task;
+}
+
+function createUserTaskMessage(content: string, createdAt: string): TaskMessage {
+  return {
+    id: randomUUID(),
+    role: "User",
+    kind: "UserMessage",
+    content,
+    createdAt
+  };
+}
+
+async function createAssistantIntentBriefMessage(
+  task: ForgeTask,
+  latestUserMessage: TaskMessage
+): Promise<TaskMessage> {
+  const intentBrief = await modelProvider.createIntentBrief({ task, latestUserMessage });
+  return {
+    id: randomUUID(),
+    role: "Assistant",
+    kind: "IntentBrief",
+    content: formatIntentBrief(intentBrief),
+    createdAt: new Date().toISOString(),
+    provider: modelProvider.info,
+    intentBrief
+  };
+}
+
+function formatIntentBrief(intentBrief: NonNullable<TaskMessage["intentBrief"]>): string {
+  return [
+    `Intent: ${intentBrief.summary}`,
+    formatBriefList("Constraints", intentBrief.constraints),
+    formatBriefList("Acceptance", intentBrief.acceptanceCriteria),
+    formatBriefList("Open questions", intentBrief.openQuestions),
+    `Next: ${intentBrief.nextAction}`
+  ].filter(Boolean).join("\n");
+}
+
+function formatBriefList(title: string, values: string[]): string {
+  if (values.length === 0) {
+    return "";
+  }
+
+  return `${title}:\n${values.map((value) => `- ${value}`).join("\n")}`;
 }
 
 async function approvePlan(taskID: string, input: ApprovePlanRequest): Promise<ForgeTask> {
@@ -1835,6 +1960,7 @@ function renderRuntimeHome(): string {
       <li><a href="/tasks">GET /tasks</a></li>
       <li><a href="/validation-presets">GET /validation-presets</a></li>
       <li><code>POST /tasks</code></li>
+      <li><code>POST /tasks/:taskID/messages</code></li>
       <li><code>POST /tasks/:taskID/approve-plan</code></li>
       <li><code>POST /tasks/:taskID/generate-edit-proposal</code></li>
       <li><code>POST /tasks/:taskID/validate-edit-proposal</code></li>

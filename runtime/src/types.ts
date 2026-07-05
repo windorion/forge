@@ -48,6 +48,24 @@ export interface ModelProviderInfo {
   mode: "local" | "remote";
 }
 
+export interface IntentBrief {
+  summary: string;
+  constraints: string[];
+  acceptanceCriteria: string[];
+  openQuestions: string[];
+  nextAction: string;
+}
+
+export interface TaskMessage {
+  id: string;
+  role: "User" | "Assistant";
+  kind: "UserMessage" | "IntentBrief";
+  content: string;
+  createdAt: string;
+  provider?: ModelProviderInfo;
+  intentBrief?: IntentBrief;
+}
+
 export interface ExecutionProposal {
   id: string;
   provider: ModelProviderInfo;
@@ -220,6 +238,7 @@ export interface ForgeTask {
   approvals: ApprovalRecord[];
   toolCalls: ToolCall[];
   validationRuns: ValidationRun[];
+  messages: TaskMessage[];
   contextFiles: ContextFile[];
   executionProposal?: ExecutionProposal;
   editProposal?: EditProposal;
@@ -243,4 +262,8 @@ export interface ApproveValidationPresetRequest {
 
 export interface RunValidationRequest {
   presetID?: string;
+}
+
+export interface CreateTaskMessageRequest {
+  content?: string;
 }

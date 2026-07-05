@@ -14,6 +14,7 @@ struct ForgeTask: Identifiable, Codable, Hashable {
     var approvals: [ApprovalRecord]
     var toolCalls: [ToolCall]
     var validationRuns: [ValidationRun]
+    var messages: [TaskMessage]
     var contextFiles: [ContextFile]
     var executionProposal: ExecutionProposal?
     var editProposal: EditProposal?
@@ -47,6 +48,17 @@ struct ForgeTask: Identifiable, Codable, Hashable {
         approvals: [],
         toolCalls: [],
         validationRuns: [],
+        messages: [
+            TaskMessage(
+                id: "local-message",
+                role: "Assistant",
+                kind: "IntentBrief",
+                content: "Connect the runtime to start a real task conversation.",
+                createdAt: "local",
+                provider: nil,
+                intentBrief: nil
+            )
+        ],
         contextFiles: [],
         executionProposal: nil,
         editProposal: nil,
@@ -196,6 +208,24 @@ struct ModelProviderInfo: Codable, Hashable {
     var mode: String
 }
 
+struct IntentBrief: Codable, Hashable {
+    var summary: String
+    var constraints: [String]
+    var acceptanceCriteria: [String]
+    var openQuestions: [String]
+    var nextAction: String
+}
+
+struct TaskMessage: Identifiable, Codable, Hashable {
+    var id: String
+    var role: String
+    var kind: String
+    var content: String
+    var createdAt: String
+    var provider: ModelProviderInfo?
+    var intentBrief: IntentBrief?
+}
+
 struct ExecutionProposal: Identifiable, Codable, Hashable {
     var id: String
     var provider: ModelProviderInfo
@@ -275,6 +305,10 @@ struct ApproveValidationPresetRequest: Encodable {
 
 struct RunValidationRequest: Encodable {
     var presetID: String?
+}
+
+struct CreateTaskMessageRequest: Encodable {
+    var content: String
 }
 
 struct RuntimeStreamEvent: Hashable {
