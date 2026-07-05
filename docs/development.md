@@ -14,7 +14,9 @@ The current slice adds Agent Loop v0: a deterministic local planner loop that
 updates task state, agent status, plan steps, review summary, task
 conversation, tool calls, context files, approval history, model-provider
 intent briefs and execution proposals, SSE events, safe edit proposals, and
-SQLite task persistence.
+SQLite task persistence. The loop now includes a bounded repo-context pass
+that scans safe local files, derives search terms from the task intent, records
+matching files, and reads selected context before planning.
 
 ## Run Runtime
 
@@ -94,8 +96,12 @@ current plan revision before Forge prepares execution again.
 
 Agent Loop v0 currently runs local read-only tools:
 
-- `list_project_files`: lists root and docs markdown files.
-- `read_context_file`: reads selected project memory files.
+- `list_repo_files`: lists safe repo-local source, config, script, and
+  documentation files while skipping private/generated directories.
+- `search_repo_context`: scores repo files from task-derived search terms and
+  explicit file references.
+- `read_context_file`: reads selected context files after repo-local safety
+  checks.
 
 The app shows those tool calls and the resulting context file summaries before
 the task stops at the human review gate.
@@ -177,6 +183,9 @@ cd runtime && npm run check
   allowlisted validation presets; they are not arbitrary shell execution.
 - SQLite currently stores full task snapshots plus basic task index fields; the
   full normalized runs/messages/tool-calls schema is still ahead.
-- No repository scanner yet.
-- Agent Loop v0 is deterministic and local; it simulates the planning and
-  review gate before real model execution exists.
+- Repository context is still a bounded v1 scanner, not a full repository
+  index. It does not use Tree-sitter, symbols, embeddings, dependency graphs,
+  or semantic search yet.
+- Agent Loop v0 is deterministic and local; it can inspect task-selected repo
+  context, but it still simulates planning and review before real model
+  execution exists.

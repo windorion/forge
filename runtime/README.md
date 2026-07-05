@@ -24,9 +24,15 @@ This first slice is intentionally small:
 
 Creating a task starts Agent Loop v0. It is deterministic for now: the Manager
 and Planner update task state, plan steps, events, task conversation, and the
-review gate without calling a remote model. Creating a task records the initial
-user objective as a task message and asks the configured provider for a
-structured intent brief. The task conversation can continue through
+review gate without calling a remote model. The loop runs bounded read-only
+repo-context tools: `list_repo_files`, `search_repo_context`, and
+`read_context_file`. Search terms come from the task objective, recent task
+conversation, and explicit file references; private/generated directories and
+oversized files are skipped.
+
+Creating a task records the initial user objective as a task message and asks
+the configured provider for a structured intent brief. The task conversation
+can continue through
 `POST /tasks/:taskID/messages`; each user message gets a new provider-generated
 intent brief with summary, constraints, acceptance criteria, open questions,
 and next action. User messages can mention repo files with paths such as

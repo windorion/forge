@@ -40,6 +40,24 @@ Indexer should collect:
 - references
 - dependency hints
 
+Current implementation:
+
+- Agent Loop v0 has a bounded read-only repo-context scanner.
+- It skips private/generated directories such as `.git`, `.forge`,
+  `node_modules`, `.build`, `.swiftpm`, and `dist`.
+- It scans a limited set of source, config, script, and documentation file
+  types, then scores matches from task-derived search terms.
+- It stores compact context summaries on the task rather than building a
+  durable full-text or symbol index.
+
+Still future work:
+
+- persistent file-tree index
+- Tree-sitter symbol extraction
+- dependency graph hints
+- semantic search and embeddings
+- incremental re-indexing
+
 Potential tools:
 
 - ripgrep

@@ -46,6 +46,102 @@ const taskStore = new SqliteTaskStore(resolveDatabasePath());
 const tasks = new Map<string, ForgeTask>(taskStore.loadTasks().map((task) => [task.id, task]));
 const modelProvider = createModelProviderFromEnv();
 const validationCommandTimeoutMs = 60_000;
+const repositoryScanMaxFiles = 400;
+const repositorySearchMaxFiles = 240;
+const repositoryContextMaxFiles = 6;
+const repositoryContextMaxFileBytes = 220_000;
+const repositoryIgnoredDirectories = new Set([
+  ".build",
+  ".forge",
+  ".git",
+  ".swiftpm",
+  "DerivedData",
+  "dist",
+  "node_modules"
+]);
+const repositoryIgnoredFileNames = new Set([
+  ".DS_Store",
+  "package-lock.json"
+]);
+const repositoryContextExtensions = new Set([
+  ".md",
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".json",
+  ".swift",
+  ".sh",
+  ".yml",
+  ".yaml",
+  ".toml"
+]);
+const repositoryImportantFiles = [
+  "README.md",
+  "AGENTS.md",
+  "docs/v0_scope.md",
+  "docs/development.md",
+  "docs/runtime_architecture.md",
+  "docs/model_providers.md",
+  "docs/local_first.md",
+  "runtime/src/server.ts",
+  "runtime/src/modelProvider.ts",
+  "runtime/src/types.ts",
+  "Package.swift"
+];
+const repositorySearchStopWords = new Set([
+  "about",
+  "after",
+  "again",
+  "agent",
+  "because",
+  "before",
+  "build",
+  "code",
+  "continue",
+  "current",
+  "doing",
+  "done",
+  "files",
+  "forge",
+  "from",
+  "have",
+  "into",
+  "like",
+  "local",
+  "make",
+  "next",
+  "only",
+  "plan",
+  "project",
+  "repo",
+  "task",
+  "that",
+  "this",
+  "what",
+  "with",
+  "work"
+]);
+const chineseIntentSearchTerms: Array<[string, string[]]> = [
+  ["模型", ["model", "provider", "intent"]],
+  ["意图", ["intent", "brief", "objective"]],
+  ["上下文", ["context", "repository", "file"]],
+  ["搜索", ["search", "context", "file"]],
+  ["仓库", ["repository", "repo", "context"]],
+  ["代码", ["code", "edit", "diff"]],
+  ["聊天", ["conversation", "message", "intent"]],
+  ["对话", ["conversation", "message", "intent"]],
+  ["验证", ["validation", "preset", "command"]],
+  ["测试", ["test", "validation", "command"]],
+  ["权限", ["permission", "approval", "risk"]],
+  ["审批", ["approval", "review", "permission"]],
+  ["本地", ["local", "runtime", "context"]],
+  ["执行", ["execution", "proposal", "agent"]],
+  ["修改", ["edit", "proposal", "diff"]],
+  ["文件", ["file", "context", "read"]],
+  ["不是", ["mimic", "deterministic", "provider"]],
+  ["模拟", ["mimic", "deterministic", "provider"]]
+];
 
 type InternalValidationCommand = Omit<ValidationCommandDefinition, "executionMode" | "boundary"> & {
   executable?: string;
@@ -66,6 +162,13 @@ interface WorkspacePresetConfigStatus {
 interface ValidationPresetRegistry {
   presets: InternalValidationPreset[];
   workspaceConfig: WorkspacePresetConfigStatus;
+}
+
+interface RepositorySearchMatch {
+  path: string;
+  score: number;
+  reasons: string[];
+  matchedLines: string[];
 }
 
 const builtInValidationCommands: InternalValidationCommand[] = [
@@ -2036,14 +2139,39 @@ function runAgentLoopV0(taskID: string): void {
     [
       1300,
       async (task) => {
-        setAgent(task, "Planner", "Active", "Running local read-only tools against project memory.");
-        const projectFiles = await runTool(task, "list_project_files", "README.md and docs/*.md", listProjectFiles);
-        const contextFiles = await buildContextFiles(task, projectFiles);
+        setAgent(task, "Planner", "Active", "Scanning local repository context from the task intent.");
+        const projectFiles = await runTool(
+          task,
+          "list_repo_files",
+          "Bounded repo scan excluding private and generated directories",
+          listRepositoryFiles
+        );
+        const searchTerms = deriveRepositorySearchTerms(task);
+        const contextMatches = await runTool(
+          task,
+          "search_repo_context",
+          searchTerms.join(", "),
+          () => searchRepositoryContext(projectFiles, searchTerms, explicitContextPathsForTask(task))
+        );
+        const contextFiles = await buildContextFiles(task, projectFiles, contextMatches);
         task.contextFiles = contextFiles;
-        setAgent(task, "Planner", "Active", `Read ${contextFiles.length} context files from the local repo.`);
-        setPlanStep(task, "build-context", "Done", `Inspected ${contextFiles.map((file) => file.path).join(", ")}.`);
+        setAgent(
+          task,
+          "Planner",
+          "Active",
+          `Read ${contextFiles.length} context file(s) selected from ${projectFiles.length} repo file(s).`
+        );
+        setPlanStep(
+          task,
+          "build-context",
+          "Done",
+          `Searched for ${searchTerms.join(", ")} and inspected ${formatPathList(contextFiles.map((file) => file.path))}.`
+        );
         setPlanStep(task, "draft-plan", "Active", "Drafting the safest next implementation slice.");
-        return event("tool.context.completed", `Planner inspected ${contextFiles.length} local context files.`);
+        return event(
+          "tool.context.completed",
+          `Planner searched repo context and inspected ${contextFiles.length} local context file(s).`
+        );
       }
     ],
     [
@@ -2120,42 +2248,296 @@ function shouldContinueAgentLoopV0(task: ForgeTask): boolean {
   );
 }
 
-async function listProjectFiles(): Promise<string[]> {
-  const docsDir = path.join(repoRoot, "docs");
-  const docEntries = await readdir(docsDir);
-  const docFiles = docEntries
-    .filter((entry) => entry.endsWith(".md"))
-    .sort()
-    .map((entry) => `docs/${entry}`);
-  return ["README.md", ...docFiles];
+async function listRepositoryFiles(): Promise<string[]> {
+  const files: string[] = [];
+
+  async function walk(relativeDirectory: string): Promise<void> {
+    if (files.length >= repositoryScanMaxFiles) {
+      return;
+    }
+
+    const absoluteDirectory = path.join(repoRoot, relativeDirectory);
+    const entries = await readdir(absoluteDirectory, { withFileTypes: true });
+
+    for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+      if (files.length >= repositoryScanMaxFiles) {
+        return;
+      }
+
+      if (entry.isSymbolicLink()) {
+        continue;
+      }
+
+      const relativePath = relativeDirectory
+        ? path.posix.join(relativeDirectory, entry.name)
+        : entry.name;
+
+      if (entry.isDirectory()) {
+        if (!shouldSkipRepositoryDirectory(entry.name, relativePath)) {
+          await walk(relativePath);
+        }
+        continue;
+      }
+
+      if (!entry.isFile() || shouldSkipRepositoryFile(entry.name, relativePath)) {
+        continue;
+      }
+
+      const absolutePath = path.join(repoRoot, relativePath);
+      const fileStat = await stat(absolutePath);
+      if (fileStat.size > repositoryContextMaxFileBytes) {
+        continue;
+      }
+
+      files.push(relativePath);
+    }
+  }
+
+  await walk("");
+  return files.sort();
 }
 
-async function buildContextFiles(task: ForgeTask, files: string[]): Promise<ContextFile[]> {
-  const preferred = [
-    "README.md",
-    "docs/runtime_architecture.md",
-    "docs/multi_agent.md",
-    "docs/v0_scope.md"
-  ];
-  const selected = preferred.filter((file) => files.includes(file));
+function shouldSkipRepositoryDirectory(name: string, relativePath: string): boolean {
+  if (repositoryIgnoredDirectories.has(name) || name.endsWith(".xcodeproj")) {
+    return true;
+  }
+
+  return relativePath.split("/").some((part) => repositoryIgnoredDirectories.has(part));
+}
+
+function shouldSkipRepositoryFile(name: string, relativePath: string): boolean {
+  if (repositoryIgnoredFileNames.has(name) || name.endsWith(".sqlite") || name.endsWith(".sqlite-shm") || name.endsWith(".sqlite-wal")) {
+    return true;
+  }
+
+  if (relativePath.includes("/.git/") || relativePath.includes("/.forge/")) {
+    return true;
+  }
+
+  if (repositoryImportantFiles.includes(relativePath)) {
+    return false;
+  }
+
+  return !repositoryContextExtensions.has(path.extname(name));
+}
+
+async function searchRepositoryContext(
+  files: string[],
+  searchTerms: string[],
+  explicitPaths: string[]
+): Promise<RepositorySearchMatch[]> {
+  const explicitPathSet = new Set(explicitPaths);
+  const matches: RepositorySearchMatch[] = [];
+
+  for (const file of files.slice(0, repositorySearchMaxFiles)) {
+    const match = await scoreRepositoryFile(file, searchTerms, explicitPathSet);
+    if (match && match.score > 0) {
+      matches.push(match);
+    }
+  }
+
+  return matches
+    .sort((left, right) => right.score - left.score || left.path.localeCompare(right.path))
+    .slice(0, 12);
+}
+
+async function scoreRepositoryFile(
+  relativePath: string,
+  searchTerms: string[],
+  explicitPaths: Set<string>
+): Promise<RepositorySearchMatch | undefined> {
+  const reasons: string[] = [];
+  let score = 0;
+
+  if (explicitPaths.has(relativePath)) {
+    score += 100;
+    reasons.push("explicitly referenced by task conversation");
+  }
+
+  if (repositoryImportantFiles.includes(relativePath)) {
+    score += 5;
+    reasons.push("important project file");
+  }
+
+  const { absolutePath } = resolveReadOnlyWorkspacePath(relativePath);
+  const content = await readFile(absolutePath, "utf8");
+  if (content.includes("\0")) {
+    return undefined;
+  }
+
+  const lowerPath = relativePath.toLowerCase();
+  const lowerContent = content.toLowerCase();
+  for (const term of searchTerms) {
+    const lowerTerm = term.toLowerCase();
+    if (lowerPath.includes(lowerTerm)) {
+      score += 12;
+      reasons.push(`path matches "${term}"`);
+    }
+
+    const hitCount = countOccurrences(lowerContent, lowerTerm, 6);
+    if (hitCount > 0) {
+      score += Math.min(24, hitCount * 4);
+      reasons.push(`content matches "${term}" ${hitCount} time(s)`);
+    }
+  }
+
+  if (score === 0) {
+    return undefined;
+  }
+
+  return {
+    path: relativePath,
+    score,
+    reasons: reasons.slice(0, 4),
+    matchedLines: matchedLinesForTerms(content, searchTerms).slice(0, 3)
+  };
+}
+
+function countOccurrences(content: string, term: string, maxCount: number): number {
+  if (!term) {
+    return 0;
+  }
+
+  let count = 0;
+  let index = content.indexOf(term);
+  while (index >= 0 && count < maxCount) {
+    count += 1;
+    index = content.indexOf(term, index + term.length);
+  }
+
+  return count;
+}
+
+function matchedLinesForTerms(content: string, searchTerms: string[]): string[] {
+  const lines = content.split("\n");
+  const matches: string[] = [];
+
+  for (const [index, line] of lines.entries()) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    const lowerLine = trimmed.toLowerCase();
+    if (searchTerms.some((term) => lowerLine.includes(term.toLowerCase()))) {
+      matches.push(`${index + 1}: ${trimmed.replace(/\s+/g, " ").slice(0, 160)}`);
+    }
+
+    if (matches.length >= 4) {
+      break;
+    }
+  }
+
+  return matches;
+}
+
+async function buildContextFiles(
+  task: ForgeTask,
+  files: string[],
+  matches: RepositorySearchMatch[]
+): Promise<ContextFile[]> {
+  const selected = selectRepositoryContextPaths(task, files, matches);
   const contextFiles: ContextFile[] = [];
 
   for (const file of selected) {
     const content = await runTool(task, "read_context_file", file, () => runReadOnlyFileTool(file));
+    const match = matches.find((candidate) => candidate.path === file);
     contextFiles.push({
       path: file,
-      summary: summarizeMarkdown(content)
+      summary: summarizeContextFile(file, content, match)
     });
   }
 
   return contextFiles;
 }
 
-async function runReadOnlyFileTool(relativePath: string): Promise<string> {
-  const absolutePath = path.resolve(repoRoot, relativePath);
-  if (!absolutePath.startsWith(`${repoRoot}${path.sep}`)) {
-    throw new Error(`Refusing to read outside repo: ${relativePath}`);
+function selectRepositoryContextPaths(
+  task: ForgeTask,
+  files: string[],
+  matches: RepositorySearchMatch[]
+): string[] {
+  const selected: string[] = [];
+  const fileSet = new Set(files);
+  const add = (candidate: string | undefined) => {
+    if (!candidate || selected.includes(candidate)) {
+      return;
+    }
+
+    if (fileSet.has(candidate) || explicitContextPathsForTask(task).includes(candidate)) {
+      selected.push(candidate);
+    }
+  };
+
+  for (const explicitPath of explicitContextPathsForTask(task)) {
+    add(explicitPath);
   }
+
+  for (const match of matches) {
+    add(match.path);
+  }
+
+  for (const importantPath of repositoryImportantFiles) {
+    add(importantPath);
+  }
+
+  return selected.slice(0, repositoryContextMaxFiles);
+}
+
+function explicitContextPathsForTask(task: ForgeTask): string[] {
+  return [
+    ...new Set(
+      task.messages
+        .flatMap((message) => message.fileReferences)
+        .filter((reference) => reference.status === "Resolved" && reference.path)
+        .map((reference) => reference.path as string)
+    )
+  ];
+}
+
+function deriveRepositorySearchTerms(task: ForgeTask): string[] {
+  const source = [
+    task.title,
+    task.objective,
+    ...task.messages.slice(-6).map((message) => message.content),
+    ...task.contextFiles.map((file) => `${file.path} ${file.summary}`)
+  ].join(" ");
+  const lowerSource = source.toLowerCase();
+  const terms = new Set<string>();
+
+  for (const match of lowerSource.matchAll(/[a-z][a-z0-9_-]{2,}/g)) {
+    const term = match[0].replaceAll("_", "-");
+    if (!repositorySearchStopWords.has(term)) {
+      terms.add(term);
+    }
+  }
+
+  for (const [needle, mappedTerms] of chineseIntentSearchTerms) {
+    if (source.includes(needle)) {
+      for (const mappedTerm of mappedTerms) {
+        terms.add(mappedTerm);
+      }
+    }
+  }
+
+  for (const explicitPath of explicitContextPathsForTask(task)) {
+    for (const part of explicitPath.toLowerCase().split(/[^a-z0-9]+/)) {
+      if (part.length >= 3 && !repositorySearchStopWords.has(part)) {
+        terms.add(part);
+      }
+    }
+  }
+
+  if (terms.size === 0) {
+    for (const fallbackTerm of ["agent", "runtime", "context", "review"]) {
+      terms.add(fallbackTerm);
+    }
+  }
+
+  return [...terms].slice(0, 10);
+}
+
+async function runReadOnlyFileTool(relativePath: string): Promise<string> {
+  const { absolutePath } = resolveReadOnlyWorkspacePath(relativePath);
 
   const fileStat = await stat(absolutePath);
   if (!fileStat.isFile()) {
@@ -2163,6 +2545,37 @@ async function runReadOnlyFileTool(relativePath: string): Promise<string> {
   }
 
   return readFile(absolutePath, "utf8");
+}
+
+function summarizeContextFile(
+  relativePath: string,
+  content: string,
+  match?: RepositorySearchMatch
+): string {
+  const baseSummary = relativePath.endsWith(".md")
+    ? summarizeMarkdown(content)
+    : summarizeSourceFile(relativePath, content);
+  const matchSummary = match
+    ? [
+        `Score ${match.score}`,
+        match.reasons.length > 0 ? match.reasons.join("; ") : undefined,
+        match.matchedLines.length > 0 ? `Snippets: ${match.matchedLines.join(" | ")}` : undefined
+      ].filter(Boolean).join(". ")
+    : "";
+
+  return [baseSummary, matchSummary].filter(Boolean).join(" ").slice(0, 360);
+}
+
+function summarizeSourceFile(relativePath: string, content: string): string {
+  const lines = content.split("\n");
+  const firstMeaningfulLine = lines
+    .map((line) => line.trim())
+    .find((line) => line.length > 0 && !line.startsWith("//") && !line.startsWith("#!"));
+  return [
+    relativePath,
+    `${lines.length} line(s)`,
+    firstMeaningfulLine
+  ].filter(Boolean).join(" - ").slice(0, 220);
 }
 
 function summarizeMarkdown(content: string): string {
@@ -2176,6 +2589,14 @@ function summarizeMarkdown(content: string): string {
     .map((part) => part.replace(/\s+/g, " ").trim())
     .find((part) => part.length > 30 && !part.startsWith("#"));
   return [heading, firstParagraph].filter(Boolean).join(" - ").slice(0, 220);
+}
+
+function formatPathList(paths: string[]): string {
+  if (paths.length === 0) {
+    return "no files";
+  }
+
+  return paths.slice(0, 6).join(", ");
 }
 
 async function runTool<T>(
@@ -2220,7 +2641,21 @@ async function runTool<T>(
 
 function summarizeToolOutput(output: unknown): string {
   if (Array.isArray(output)) {
-    return `${output.length} result(s): ${output.slice(0, 4).join(", ")}`;
+    const preview = output
+      .slice(0, 4)
+      .map((item) => {
+        if (typeof item === "string") {
+          return item;
+        }
+
+        if (isRecord(item) && typeof item.path === "string") {
+          return typeof item.score === "number" ? `${item.path} (${item.score})` : item.path;
+        }
+
+        return JSON.stringify(item);
+      })
+      .join(", ");
+    return `${output.length} result(s): ${preview}`;
   }
 
   if (typeof output === "string") {

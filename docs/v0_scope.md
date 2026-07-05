@@ -43,6 +43,7 @@ The product should show:
 - Server-Sent Events stream
 - deterministic Agent Loop v0
 - local file listing and file reads
+- task-intent repo context search
 - visible tool calls
 - visible context files
 - visible plan steps
@@ -92,6 +93,8 @@ V0 is complete when:
 - Approving a plan targets the current plan revision when one exists, so an old
   approval does not automatically approve a revised plan.
 - The runtime can inspect real local project files.
+- The runtime can derive search terms from the task intent and inspect
+  matching repo-local context files.
 - The app updates from runtime events.
 - The task reaches `Human Review`.
 - The UI shows tool calls and context files.
@@ -118,8 +121,9 @@ V0 is complete when:
 
 After v0, Forge should move toward v0.1:
 
-- read/search tools powered by real task intent
 - richer file-edit proposal flow
+- deeper repository understanding with symbols, dependency hints, and
+  persistent indexing
 
 The explicit plan approval action has started: approval is recorded and opens
 controlled execution preparation, but it does not yet run model-driven edits.

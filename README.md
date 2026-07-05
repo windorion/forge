@@ -1610,6 +1610,82 @@ Next:
 - Consider Xcode or Swift test presets once tests exist.
 - Consider normalized tables for validation runs before v0.1.
 
+### 2026-07-06 01:28:50 CST +0800
+
+Summary:
+
+- User asked for an objective status assessment: where Forge is now, how far it
+  is from a finished product, and what capabilities the finished product should
+  ultimately have.
+
+Done:
+
+- Re-read the project constitution, document map, v0 scope, roadmap, runtime
+  architecture, development notes, macOS-native plan, model provider notes,
+  validation preset notes, workspace design, and user flows.
+- Inspected the current runtime and macOS app implementation surfaces.
+- Confirmed the working tree was clean before this session log.
+- Verified the current runtime still passes `npm run check` and
+  `npm run build`.
+- Verified the current SwiftPM macOS app still passes `swift build`.
+
+Not done:
+
+- Did not change runtime or app behavior.
+- Did not add new product scope or roadmap decisions.
+- Did not start local runtime or launch the macOS app UI.
+
+Next:
+
+- Decide whether the next implementation focus should be real model provider
+  wiring, repository context/search, richer edit proposals, or native macOS
+  product polish.
+- For product progress, prioritize the first workflow where Forge understands a
+  task well enough to inspect relevant files and propose a real reviewable code
+  change.
+
+### 2026-07-06 03:15:55 CST +0800
+
+Summary:
+
+- User asked to continue the next step, so Codex advanced Forge from static
+  project-memory inspection toward task-intent repository context search.
+
+Done:
+
+- Re-read the required project rules and task-specific docs.
+- Added Agent Loop v0 repo context tools: `list_repo_files`,
+  `search_repo_context`, and bounded `read_context_file` selection.
+- Added safe repo scanning boundaries that skip private/generated directories
+  and oversized files.
+- Added task-derived search terms from objective, recent conversation,
+  explicit file references, and common Chinese intent words.
+- Added path/content scoring, matched-line snippets, and improved tool output
+  summaries for object search results.
+- Kept the existing macOS Context Files and Tool Calls panels as the display
+  surface, since their current data model already renders the new results.
+- Updated runtime, local-first, runtime architecture, v0 scope, development,
+  runtime README, and root README decision notes.
+- Verified `git diff --check`, `npm run check`, `npm run build`,
+  `swift build`, and an HTTP API smoke test with a temporary runtime and
+  SQLite database.
+- Stopped the temporary runtime and removed temporary smoke-test files.
+
+Not done:
+
+- Did not add Tree-sitter, symbol search, embeddings, or a persistent
+  repository index.
+- Did not wire a real remote or local LLM provider.
+- Did not expand edit proposals beyond the current Markdown append operation.
+
+Next:
+
+- Add a real model provider path or a provider configuration surface.
+- Add richer edit proposal operations so context search can lead to real
+  reviewable code diffs.
+- Consider a persistent repository index after the first model-backed
+  task-to-diff loop works.
+
 ## Decision Log
 
 ### 2026-07-04
@@ -1704,6 +1780,16 @@ Next:
 - Validation presets now include native macOS app build coverage. The
   `macos-swiftpm` preset runs allowlisted `swift build` from the repository
   root after explicit task-level approval.
+
+### 2026-07-06
+
+- Agent Loop v0 now includes a bounded read-only repository context pass. It
+  lists safe repo-local files, derives search terms from task intent and task
+  conversation, searches path/content matches, and reads selected context files
+  before plan review.
+- This repo context pass is intentionally not a full index yet. Tree-sitter,
+  symbol search, dependency graphs, semantic search, embeddings, and
+  incremental indexing remain future work.
 
 ## Open Questions
 

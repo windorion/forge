@@ -82,6 +82,13 @@ Builds compact task context from:
 - project docs
 - git diff
 
+Current v0 implementation: the runtime performs a bounded read-only repository
+context pass during Agent Loop v0. It lists safe repo-local source, config,
+script, and documentation files; derives search terms from the task objective,
+recent messages, and explicit file references; scores path/content matches;
+then reads selected context files with repo-local safety checks. This is not a
+full index yet.
+
 ### Tool Registry
 
 Defines tools with schemas, permissions, risk levels, and execution handlers.
@@ -98,6 +105,12 @@ Required tools:
 - git diff
 - run tests
 - request approval
+
+Current read-only context tools:
+
+- `list_repo_files`
+- `search_repo_context`
+- `read_context_file`
 
 ### Model Providers
 
