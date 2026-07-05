@@ -1444,6 +1444,54 @@ Next:
 - Add file mentions or selected-code context to task messages.
 - Normalize task messages into dedicated SQLite tables.
 
+### 2026-07-05 15:39:36 CST +0800
+
+Conversation summary:
+
+- User asked Codex to continue the next step and plan a long task after noting
+  that the current agent still felt more like mimicry than a chat-driven agent.
+
+Done:
+
+- Added conversation-driven plan revisions to the runtime model.
+- Extended the model-provider contract with deterministic local
+  `createPlanRevision` output.
+- Added `POST /tasks/:taskID/generate-plan-revision`.
+- Generating a plan revision now uses the latest task conversation and intent
+  brief, records provider/source/rationale/risk/steps, replaces visible plan
+  steps, clears any prepared execution proposal, and returns the task to
+  `Human Review`.
+- Plan approvals now target the current plan revision when one exists, so old
+  approvals do not silently approve revised plans.
+- Added macOS runtime client, workspace state, conversation-panel button, and
+  Planner panel revision card for plan revisions.
+- Added a guard so the initial deterministic Agent Loop v0 stops applying
+  scheduled updates after a plan revision, plan approval, execution proposal,
+  or edit proposal advances the task.
+- Updated runtime, model provider, runtime architecture, database,
+  development, workspace design, user flow, and v0 scope docs.
+- Verified `git diff --check`, `npm run check`, `npm run build`,
+  `swift build`, API smoke for two plan revisions and targeted approvals, and
+  SQLite recovery after runtime restart.
+- Stopped the temporary runtime service and removed temporary smoke-test files.
+
+Not done:
+
+- Did not connect a real LLM or local model provider yet.
+- Did not add token streaming for planning or chat.
+- Did not allow editing plan steps manually in the UI.
+- Did not normalize plan revisions into a dedicated SQLite table.
+- Did not generate revised edit proposals from conversation after an edit
+  proposal already exists.
+
+Next:
+
+- Connect real provider-backed planning to the new plan revision boundary.
+- Add a request-changes flow that can revise an existing edit proposal safely.
+- Add file mentions or selected-code context to task messages.
+- Add macOS app build/test entries to validation presets.
+- Decide whether plan revisions need dedicated persistence tables before v0.1.
+
 ## Decision Log
 
 ### 2026-07-04
@@ -1522,6 +1570,11 @@ Next:
 - The model-provider boundary now includes structured intent briefs before
   planning or execution proposals. The local deterministic provider remains a
   placeholder until real LLM or local model providers are wired.
+- Task conversation can now drive plan revisions. A revised plan records the
+  source message, provider, rationale, risk level, and revised steps, clears
+  any prepared execution proposal, returns the task to human review, and
+  requires a fresh approval targeted at the current revision before execution
+  can continue.
 
 ## Open Questions
 

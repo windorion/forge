@@ -19,6 +19,7 @@ import type {
   EditProposalValidation,
   FileChangeValidation,
   ForgeTask,
+  PlanRevision,
   PlanStep,
   ProposedFileChange,
   RuntimeEvent,
@@ -232,6 +233,13 @@ const server = createServer(async (request, response) => {
       const input = await readJson<CreateTaskMessageRequest>(request);
       const task = await createTaskMessage(createMessageTaskID, input);
       writeJson(response, 201, task);
+      return;
+    }
+
+    const generatePlanRevisionTaskID = taskIDFromActionPath(url.pathname, "generate-plan-revision");
+    if (request.method === "POST" && generatePlanRevisionTaskID) {
+      const task = await generatePlanRevision(generatePlanRevisionTaskID);
+      writeJson(response, 200, task);
       return;
     }
 
@@ -648,6 +656,7 @@ async function createTask(input: CreateTaskRequest): Promise<ForgeTask> {
     toolCalls: [],
     validationRuns: [],
     messages: [userMessage],
+    planRevisions: [],
     contextFiles: [],
     changedFiles: [],
     executionProposal: undefined,
@@ -725,6 +734,52 @@ async function createTaskMessage(taskID: string, input: CreateTaskMessageRequest
   return task;
 }
 
+async function generatePlanRevision(taskID: string): Promise<ForgeTask> {
+  const task = tasks.get(taskID);
+  if (!task) {
+    throw new HttpError(404, `Task not found: ${taskID}`);
+  }
+
+  if (task.editProposal?.status === "Proposed" || task.editProposal?.status === "Applied") {
+    throw new HttpError(409, "Resolve the current edit proposal before generating a new plan revision.");
+  }
+
+  const sourceMessage = latestTaskMessage(task, "User");
+  task.status = "Planning";
+  task.currentPhase = "Plan Revision";
+  task.reviewSummary = "Generating a plan revision from the task conversation.";
+  task.executionProposal = undefined;
+  setAgent(task, "Manager", "Active", "Routing the latest task conversation into planning.");
+  setAgent(task, "Planner", "Active", `Generating a plan revision with ${modelProvider.info.name}.`);
+  setAgent(task, "Coder", "Idle", "Waiting for an approved revised plan.");
+  setAgent(task, "Reviewer", "Idle", "Waiting for the revised plan.");
+  upsertPlanStep(task, {
+    id: "generate-plan-revision",
+    title: "Generate plan revision",
+    status: "Active",
+    summary: "Using the latest task conversation and intent brief to revise the plan."
+  });
+
+  const started = event("plan.revision.started", "Generating a plan revision from the task conversation.");
+  started.createdAt = new Date().toISOString();
+  saveAndBroadcast(task, started);
+
+  const revision = await modelProvider.createPlanRevision({ task, sourceMessage });
+  task.planRevisions.push(revision);
+  task.planSteps = revision.steps.map((step) => ({ ...step }));
+  task.status = "Human Review";
+  task.currentPhase = "Plan Review";
+  task.reviewSummary = revision.summary;
+  setAgent(task, "Manager", "Active", "Holding revised plan at the review gate.");
+  setAgent(task, "Planner", "Done", "Generated a revised plan from the task conversation.");
+  setAgent(task, "Reviewer", "Active", "Review the plan revision before approving execution.");
+
+  const ready = event("plan.revision.ready", "Plan revision is ready for human review.");
+  ready.createdAt = revision.generatedAt;
+  saveAndBroadcast(task, ready);
+  return task;
+}
+
 function createUserTaskMessage(content: string, createdAt: string): TaskMessage {
   return {
     id: randomUUID(),
@@ -780,12 +835,18 @@ async function approvePlan(taskID: string, input: ApprovePlanRequest): Promise<F
   }
 
   const now = new Date().toISOString();
+  const planRevision = latestPlanRevision(task);
+  if (hasPlanApproval(task, planRevision?.id)) {
+    throw new HttpError(409, "The current plan is already approved.");
+  }
+
   const approval: ApprovalRecord = {
     id: randomUUID(),
     action: "Approve Plan",
     decision: "Approved",
     summary: "Approved the current plan and opened controlled execution preparation.",
     decidedAt: now,
+    targetID: planRevision?.id,
     userNote: input.note?.trim() || undefined
   };
 
@@ -1504,6 +1565,23 @@ async function findValidationPreset(presetID: string): Promise<InternalValidatio
   return preset;
 }
 
+function latestTaskMessage(task: ForgeTask, role?: TaskMessage["role"]): TaskMessage | undefined {
+  return [...task.messages].reverse().find((message) => !role || message.role === role);
+}
+
+function latestPlanRevision(task: ForgeTask): PlanRevision | undefined {
+  return task.planRevisions.at(-1);
+}
+
+function hasPlanApproval(task: ForgeTask, planRevisionID: string | undefined): boolean {
+  return task.approvals.some(
+    (approval) =>
+      approval.action === "Approve Plan" &&
+      approval.decision === "Approved" &&
+      approval.targetID === planRevisionID
+  );
+}
+
 function hasValidationPresetApproval(task: ForgeTask, presetID: string): boolean {
   return findValidationPresetApproval(task, presetID) !== undefined;
 }
@@ -1683,6 +1761,10 @@ function runAgentLoopV0(taskID: string): void {
         return;
       }
 
+      if (!shouldContinueAgentLoopV0(task)) {
+        return;
+      }
+
       void Promise.resolve(update(task))
         .then((stamped) => {
           stamped.createdAt = new Date().toISOString();
@@ -1707,6 +1789,16 @@ function runAgentLoopV0(taskID: string): void {
         });
     }, delay);
   }
+}
+
+function shouldContinueAgentLoopV0(task: ForgeTask): boolean {
+  const planApproved = task.approvals.some((approval) => approval.action === "Approve Plan");
+  return (
+    task.planRevisions.length === 0 &&
+    !planApproved &&
+    !task.executionProposal &&
+    !task.editProposal
+  );
 }
 
 async function listProjectFiles(): Promise<string[]> {
@@ -1961,6 +2053,7 @@ function renderRuntimeHome(): string {
       <li><a href="/validation-presets">GET /validation-presets</a></li>
       <li><code>POST /tasks</code></li>
       <li><code>POST /tasks/:taskID/messages</code></li>
+      <li><code>POST /tasks/:taskID/generate-plan-revision</code></li>
       <li><code>POST /tasks/:taskID/approve-plan</code></li>
       <li><code>POST /tasks/:taskID/generate-edit-proposal</code></li>
       <li><code>POST /tasks/:taskID/validate-edit-proposal</code></li>

@@ -111,6 +111,7 @@ function parseTaskPayload(payload: unknown): ForgeTask {
       commands: run.commands ?? []
     })),
     messages: parsed.messages ?? [],
+    planRevisions: parsed.planRevisions ?? [],
     executionProposal: parsed.executionProposal,
     editProposal: parsed.editProposal
   };

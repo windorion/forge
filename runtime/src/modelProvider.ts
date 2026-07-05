@@ -1,8 +1,21 @@
 import { randomUUID } from "node:crypto";
-import type { EditProposal, ExecutionProposal, ForgeTask, IntentBrief, ModelProviderInfo, TaskMessage } from "./types.js";
+import type {
+  EditProposal,
+  ExecutionProposal,
+  ForgeTask,
+  IntentBrief,
+  ModelProviderInfo,
+  PlanRevision,
+  TaskMessage
+} from "./types.js";
 
 export interface ExecutionProposalRequest {
   task: ForgeTask;
+}
+
+export interface PlanRevisionRequest {
+  task: ForgeTask;
+  sourceMessage?: TaskMessage;
 }
 
 export interface EditProposalRequest {
@@ -17,6 +30,7 @@ export interface IntentBriefRequest {
 export interface ModelProvider {
   readonly info: ModelProviderInfo;
   createIntentBrief(request: IntentBriefRequest): Promise<IntentBrief>;
+  createPlanRevision(request: PlanRevisionRequest): Promise<PlanRevision>;
   createExecutionProposal(request: ExecutionProposalRequest): Promise<ExecutionProposal>;
   createEditProposal(request: EditProposalRequest): Promise<EditProposal>;
 }
@@ -70,6 +84,59 @@ class LocalDeterministicModelProvider implements ModelProvider {
       ],
       openQuestions: buildOpenQuestions(latestMessage),
       nextAction: "Review the intent brief, answer any open question, then continue to planning or proposal generation."
+    };
+  }
+
+  async createPlanRevision(request: PlanRevisionRequest): Promise<PlanRevision> {
+    const latestIntentBrief = latestIntentBriefForTask(request.task);
+    const intentSummary = latestIntentBrief?.summary ?? singleLine(request.task.objective);
+    const contextSummary = request.task.contextFiles.length > 0
+      ? `Use ${request.task.contextFiles.length} inspected context file(s).`
+      : "Build repository context before proposing implementation.";
+    const acceptanceSummary = latestIntentBrief?.acceptanceCriteria[0]
+      ?? "Keep the work reviewable and stop at approval gates.";
+
+    return {
+      id: randomUUID(),
+      provider: this.info,
+      sourceMessageID: request.sourceMessage?.id,
+      intentSummary,
+      summary: `Plan revision for "${singleLine(request.task.title)}": ${intentSummary}`,
+      rationale: "Generated from the current task conversation and latest intent brief without changing files.",
+      riskLevel: "Low",
+      steps: [
+        {
+          id: "review-intent",
+          title: "Review clarified intent",
+          status: "Done",
+          summary: intentSummary
+        },
+        {
+          id: "build-context",
+          title: "Build repository context",
+          status: "Pending",
+          summary: contextSummary
+        },
+        {
+          id: "draft-implementation",
+          title: "Draft implementation proposal",
+          status: "Pending",
+          summary: acceptanceSummary
+        },
+        {
+          id: "validate-result",
+          title: "Validate result",
+          status: "Pending",
+          summary: "Run approved validation presets and preserve command output."
+        },
+        {
+          id: "request-human-review",
+          title: "Request human review",
+          status: "Active",
+          summary: "Plan revision is ready for approval before execution."
+        }
+      ],
+      generatedAt: new Date().toISOString()
     };
   }
 
@@ -168,4 +235,8 @@ function buildOpenQuestions(message: string): string[] {
   }
 
   return questions.slice(0, 2);
+}
+
+function latestIntentBriefForTask(task: ForgeTask): IntentBrief | undefined {
+  return [...task.messages].reverse().find((message) => message.intentBrief)?.intentBrief;
 }

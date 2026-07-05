@@ -41,6 +41,18 @@ export interface PlanStep {
   summary: string;
 }
 
+export interface PlanRevision {
+  id: string;
+  provider: ModelProviderInfo;
+  sourceMessageID?: string;
+  intentSummary: string;
+  summary: string;
+  rationale: string;
+  riskLevel: "Low" | "Medium" | "High";
+  steps: PlanStep[];
+  generatedAt: string;
+}
+
 export interface ModelProviderInfo {
   id: string;
   name: string;
@@ -239,6 +251,7 @@ export interface ForgeTask {
   toolCalls: ToolCall[];
   validationRuns: ValidationRun[];
   messages: TaskMessage[];
+  planRevisions: PlanRevision[];
   contextFiles: ContextFile[];
   executionProposal?: ExecutionProposal;
   editProposal?: EditProposal;

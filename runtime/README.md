@@ -11,6 +11,7 @@ This first slice is intentionally small:
 - `GET /tasks/:taskID/validation-permissions`
 - `POST /tasks`
 - `POST /tasks/:taskID/messages`
+- `POST /tasks/:taskID/generate-plan-revision`
 - `POST /tasks/:taskID/approve-plan`
 - `POST /tasks/:taskID/generate-edit-proposal`
 - `POST /tasks/:taskID/validate-edit-proposal`
@@ -28,6 +29,14 @@ structured intent brief. The task conversation can continue through
 `POST /tasks/:taskID/messages`; each user message gets a new provider-generated
 intent brief with summary, constraints, acceptance criteria, open questions,
 and next action.
+
+The task conversation can also drive planning through
+`POST /tasks/:taskID/generate-plan-revision`. It asks the configured model
+provider to turn the latest task message and intent brief into a new plan
+revision. The runtime replaces the visible plan steps with the revision, clears
+any prepared execution proposal, returns the task to `Human Review`, and
+requires a fresh plan approval before execution can continue. The endpoint is
+blocked while an edit proposal is still proposed or already applied.
 
 Approving a plan records an approval and opens the controlled execution
 preparation phase. The runtime then asks the configured model provider for a
@@ -103,6 +112,9 @@ curl -X POST http://127.0.0.1:17373/tasks \
 curl -X POST http://127.0.0.1:17373/tasks/<task-id>/messages \
   -H 'Content-Type: application/json' \
   -d '{"content":"Make the acceptance criteria explicit before planning."}'
+curl -X POST http://127.0.0.1:17373/tasks/<task-id>/generate-plan-revision \
+  -H 'Content-Type: application/json' \
+  -d '{}'
 curl -X POST http://127.0.0.1:17373/tasks/<task-id>/approve-plan \
   -H 'Content-Type: application/json' \
   -d '{}'

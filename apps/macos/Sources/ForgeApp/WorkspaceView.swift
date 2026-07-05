@@ -235,6 +235,14 @@ private struct TaskConversationPanel: View {
                     }
                     .disabled(!canSend)
                 }
+
+                Button {
+                    workspace.generatePlanRevision(for: task)
+                } label: {
+                    Label(planRevisionButtonTitle, systemImage: "list.bullet.clipboard")
+                        .frame(maxWidth: .infinity)
+                }
+                .disabled(!canGeneratePlanRevision)
             }
         }
     }
@@ -249,6 +257,16 @@ private struct TaskConversationPanel: View {
 
     private var sendButtonTitle: String {
         workspace.isSendingTaskMessage(taskID: task.id) ? "Sending" : "Send"
+    }
+
+    private var canGeneratePlanRevision: Bool {
+        !workspace.isGeneratingPlanRevision(taskID: task.id) &&
+            task.editProposal?.status != "Proposed" &&
+            task.editProposal?.status != "Applied"
+    }
+
+    private var planRevisionButtonTitle: String {
+        workspace.isGeneratingPlanRevision(taskID: task.id) ? "Updating Plan" : "Update Plan From Conversation"
     }
 
     private func send() {
@@ -354,6 +372,10 @@ private struct PlannerPanel: View {
     var body: some View {
         Panel(title: "Planner", systemImage: "checklist") {
             VStack(alignment: .leading, spacing: 10) {
+                if let revision = task.planRevisions.last {
+                    PlanRevisionCard(revision: revision)
+                }
+
                 ForEach(task.planSteps) { step in
                     HStack(spacing: 10) {
                         Image(systemName: iconName(for: step.status))
@@ -394,6 +416,40 @@ private struct PlannerPanel: View {
         default:
             return .secondary
         }
+    }
+}
+
+private struct PlanRevisionCard: View {
+    var revision: PlanRevision
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Label("Plan Revision", systemImage: "arrow.triangle.branch")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(revision.riskLevel)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(revision.summary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+
+            Text(revision.rationale)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Label("\(revision.provider.name) / \(revision.provider.model)", systemImage: "cpu")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -932,7 +988,7 @@ private struct ReviewPanel: View {
     }
 
     private var canApprovePlan: Bool {
-        task.status == "Human Review" && task.approvals.isEmpty && !isApproving
+        task.status == "Human Review" && !hasApprovedCurrentPlan && !isApproving
     }
 
     private var approveButtonTitle: String {
@@ -940,11 +996,23 @@ private struct ReviewPanel: View {
             return "Approving"
         }
 
-        if !task.approvals.isEmpty {
+        if hasApprovedCurrentPlan {
             return "Plan Approved"
         }
 
         return "Approve Plan"
+    }
+
+    private var latestPlanRevision: PlanRevision? {
+        task.planRevisions.last
+    }
+
+    private var hasApprovedCurrentPlan: Bool {
+        task.approvals.contains { approval in
+            approval.action == "Approve Plan" &&
+                approval.decision == "Approved" &&
+                approval.targetID == latestPlanRevision?.id
+        }
     }
 
     private var isGeneratingEditProposal: Bool {

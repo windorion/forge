@@ -45,6 +45,8 @@ Responsibilities:
 - completed steps
 - blocked steps
 - rationale
+- current plan revision
+- plan revision history
 - user approval points
 
 The planner is not a decorative checklist. It is the user's map of what the
@@ -103,6 +105,7 @@ Responsibilities:
 - explanations
 - follow-up requests
 - structured intent brief
+- plan revision request
 
 Chat is a supporting surface. It should not dominate the product.
 
@@ -157,6 +160,8 @@ Each state should have a clear primary action.
 
 - Always show current task state.
 - Always show changed files before approval.
+- Always require a fresh approval when task conversation changes the active
+  plan.
 - Always show command logs for commands run by agents.
 - Never hide failures behind generic status.
 - Use native macOS controls where appropriate.

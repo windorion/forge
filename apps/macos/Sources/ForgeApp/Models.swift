@@ -15,6 +15,7 @@ struct ForgeTask: Identifiable, Codable, Hashable {
     var toolCalls: [ToolCall]
     var validationRuns: [ValidationRun]
     var messages: [TaskMessage]
+    var planRevisions: [PlanRevision]
     var contextFiles: [ContextFile]
     var executionProposal: ExecutionProposal?
     var editProposal: EditProposal?
@@ -59,6 +60,7 @@ struct ForgeTask: Identifiable, Codable, Hashable {
                 intentBrief: nil
             )
         ],
+        planRevisions: [],
         contextFiles: [],
         executionProposal: nil,
         editProposal: nil,
@@ -78,6 +80,18 @@ struct PlanStep: Identifiable, Codable, Hashable {
     var title: String
     var status: String
     var summary: String
+}
+
+struct PlanRevision: Identifiable, Codable, Hashable {
+    var id: String
+    var provider: ModelProviderInfo
+    var sourceMessageID: String?
+    var intentSummary: String
+    var summary: String
+    var rationale: String
+    var riskLevel: String
+    var steps: [PlanStep]
+    var generatedAt: String
 }
 
 struct RuntimeEvent: Identifiable, Codable, Hashable {

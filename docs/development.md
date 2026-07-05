@@ -79,6 +79,13 @@ brief. Sending another message calls `POST /tasks/:taskID/messages`, appends
 the user message, and creates a new structured intent brief with summary,
 constraints, acceptance criteria, open questions, and next action.
 
+The conversation panel also includes `Update Plan From Conversation`. That
+action calls `POST /tasks/:taskID/generate-plan-revision`, asks the model
+provider for a new plan revision from the latest message and intent brief,
+shows the revision in the Planner panel, clears any prepared execution
+proposal, and moves the task back to `Human Review`. The user must approve the
+current plan revision before Forge prepares execution again.
+
 Agent Loop v0 currently runs local read-only tools:
 
 - `list_project_files`: lists root and docs markdown files.
@@ -89,8 +96,9 @@ the task stops at the human review gate.
 
 When a task reaches `Human Review`, the Review panel enables `Approve Plan`.
 That action calls `POST /tasks/:taskID/approve-plan`, records approval history,
-asks the model provider for an execution proposal, and moves the task into
-`Execution Preparation` without changing files.
+targets the current plan revision when one exists, asks the model provider for
+an execution proposal, and moves the task into `Execution Preparation` without
+changing files.
 
 After an execution proposal exists, the Review panel enables
 `Generate Edit Proposal`. That action calls
@@ -144,7 +152,7 @@ cd runtime && npm run check
 ## Current Limitations
 
 - No remote LLM provider is wired yet. The current provider is local and
-  deterministic, including task intent briefs.
+  deterministic, including task intent briefs and plan revisions.
 - Edit proposal application is intentionally narrow: v0 only supports
   append-text operations on existing Markdown files in `README.md` or `docs/`.
   Validation blocks unsupported paths, unsupported operations, oversized edits,

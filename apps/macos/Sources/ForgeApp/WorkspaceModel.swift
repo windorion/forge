@@ -11,6 +11,7 @@ final class WorkspaceModel: ObservableObject {
     @Published var eventStreamStatus = "Event stream disconnected"
     @Published private var validationPermissionSnapshots: [ForgeTask.ID: [ValidationPresetPermission]] = [:]
     @Published private var sendingMessageTaskIDs = Set<ForgeTask.ID>()
+    @Published private var generatingPlanRevisionTaskIDs = Set<ForgeTask.ID>()
     @Published private var approvingTaskIDs = Set<ForgeTask.ID>()
     @Published private var generatingEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var validatingEditProposalTaskIDs = Set<ForgeTask.ID>()
@@ -118,6 +119,29 @@ final class WorkspaceModel: ObservableObject {
 
     func isSendingTaskMessage(taskID: ForgeTask.ID) -> Bool {
         sendingMessageTaskIDs.contains(taskID)
+    }
+
+    func generatePlanRevision(for task: ForgeTask) {
+        generatingPlanRevisionTaskIDs.insert(task.id)
+
+        Task {
+            do {
+                let updatedTask = try await runtime.generatePlanRevision(taskID: task.id)
+                upsert(updatedTask)
+                selectedTaskID = updatedTask.id
+                statusMessage = "Plan revision ready for review."
+                await refreshValidationPermissionSnapshotIfPossible(for: updatedTask.id)
+                startEventStream()
+            } catch {
+                statusMessage = "Generate plan revision failed: \(error.localizedDescription)"
+            }
+
+            generatingPlanRevisionTaskIDs.remove(task.id)
+        }
+    }
+
+    func isGeneratingPlanRevision(taskID: ForgeTask.ID) -> Bool {
+        generatingPlanRevisionTaskIDs.contains(taskID)
     }
 
     func generateEditProposal(for task: ForgeTask) {

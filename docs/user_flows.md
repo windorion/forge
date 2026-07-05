@@ -38,9 +38,11 @@ Steps:
 3. Forge produces a structured intent brief with summary, constraints,
    acceptance criteria, open questions, and next action.
 4. User can clarify or refine the task in the same task conversation.
-5. Planner agent inspects repo context.
-6. Forge presents a plan.
-7. User approves, edits, or rejects the plan.
+5. User can ask Forge to update the plan from the latest conversation.
+6. Forge records a plan revision and returns to human review.
+7. Planner agent inspects repo context.
+8. Forge presents a plan.
+9. User approves, edits, or rejects the plan.
 
 Task record should include:
 
@@ -49,6 +51,7 @@ Task record should include:
 - messages
 - context
 - plan
+- plan revisions
 - constraints
 - status
 - approval history

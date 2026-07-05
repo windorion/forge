@@ -120,6 +120,19 @@ to update the brief with summary, constraints, acceptance criteria, open
 questions, and next action. The conversation supports task understanding; it
 should not replace the task, review, diff, or validation surfaces.
 
+### Plan Revision Generator
+
+Turns the latest task conversation and structured intent brief into a
+reviewable plan revision. A revision records provider metadata, source message,
+intent summary, rationale, risk level, generated timestamp, and revised plan
+steps. Generating a revision clears any prepared execution proposal, updates
+the visible planner, returns the task to `Human Review`, and requires a fresh
+plan approval targeted at that revision before execution can continue.
+
+Plan revision generation is blocked while an edit proposal is proposed or
+applied, because the user must resolve the current change review before
+changing the plan beneath it.
+
 ### Edit Proposal Generator
 
 Creates proposed file changes and diff previews without mutating the working
@@ -183,6 +196,8 @@ Sends structured events to the app:
 
 - task created
 - plan updated
+- plan revision started
+- plan revision ready
 - tool started
 - tool finished
 - command output
