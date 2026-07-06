@@ -1729,7 +1729,7 @@ async function applyEditProposal(
   task.status = "Running";
   task.currentPhase = "Applying Edit Proposal";
   task.reviewSummary = "Applying the approved edit proposal with restricted file operations.";
-  setAgent(task, "Coder", "Active", "Applying the approved append-only edit proposal.");
+  setAgent(task, "Coder", "Active", "Applying the approved restricted edit proposal.");
   setAgent(task, "Reviewer", "Active", "Watching the controlled apply step.");
   upsertPlanStep(task, {
     id: "apply-edit-proposal",
@@ -2180,19 +2180,10 @@ async function validateProposedFileChange(change: ProposedFileChange): Promise<F
     }
     checks.push("Change type is supported.");
 
-    if (change.applyOperation?.kind !== "AppendText") {
-      return blockedValidation(change, `Only append-text edit operations can be applied in v0: ${change.path}`, checks);
+    const operation = change.applyOperation;
+    if (!operation) {
+      return blockedValidation(change, `No apply operation was provided: ${change.path}`, checks);
     }
-    checks.push("Apply operation is append-text.");
-
-    if (change.applyOperation.text.length === 0) {
-      return blockedValidation(change, `Append text is empty: ${change.path}`, checks);
-    }
-
-    if (change.applyOperation.text.length > 10_000) {
-      return blockedValidation(change, `Edit operation is too large for v0 apply: ${change.path}`, checks);
-    }
-    checks.push("Append text size is within the v0 limit.");
 
     const { absolutePath, relativePath } = resolveMarkdownWorkspacePath(change.path);
     checks.push("Path is inside the editable Markdown workspace boundary.");
@@ -2204,16 +2195,81 @@ async function validateProposedFileChange(change: ProposedFileChange): Promise<F
     checks.push("Target file exists.");
 
     const currentContent = await readFile(absolutePath, "utf8");
-    if (currentContent.endsWith(change.applyOperation.text)) {
-      return blockedValidation(change, `Proposed append text is already present at the end of ${relativePath}.`, checks);
+
+    if (operation.kind === "AppendText") {
+      checks.push("Apply operation is append-text.");
+
+      if (operation.text.length === 0) {
+        return blockedValidation(change, `Append text is empty: ${change.path}`, checks);
+      }
+
+      if (operation.text.length > 10_000) {
+        return blockedValidation(change, `Edit operation is too large for v0 apply: ${change.path}`, checks);
+      }
+      checks.push("Append text size is within the v0 limit.");
+
+      if (currentContent.endsWith(operation.text)) {
+        return blockedValidation(change, `Proposed append text is already present at the end of ${relativePath}.`, checks);
+      }
+      checks.push("Proposed append text is not already present at the file end.");
+
+      return {
+        id: change.id,
+        path: relativePath,
+        status: "Ready",
+        summary: `${relativePath} is ready for the restricted append-text operation.`,
+        checks
+      };
     }
-    checks.push("Proposed append text is not already present at the file end.");
+
+    if (operation.kind === "ReplaceText") {
+      checks.push("Apply operation is replace-text.");
+
+      if (operation.findText.length === 0) {
+        return blockedValidation(change, `Find text is empty: ${change.path}`, checks);
+      }
+
+      if (operation.replaceWith.length === 0) {
+        return blockedValidation(change, `Replacement text is empty: ${change.path}`, checks);
+      }
+
+      if (operation.findText.length > 10_000 || operation.replaceWith.length > 10_000) {
+        return blockedValidation(change, `Replace operation is too large for v0 apply: ${change.path}`, checks);
+      }
+      checks.push("Replace text size is within the v0 limit.");
+
+      if (operation.findText === operation.replaceWith) {
+        return blockedValidation(change, `Find text and replacement text are identical: ${change.path}`, checks);
+      }
+
+      const occurrenceCount = countTextOccurrences(currentContent, operation.findText);
+      if (occurrenceCount === 0) {
+        return blockedValidation(change, `Find text was not found in ${relativePath}.`, checks);
+      }
+
+      if (occurrenceCount > 1) {
+        return blockedValidation(
+          change,
+          `Find text appears ${occurrenceCount} times in ${relativePath}; exact replace requires one match.`,
+          checks
+        );
+      }
+      checks.push("Find text appears exactly once in the target file.");
+
+      return {
+        id: change.id,
+        path: relativePath,
+        status: "Ready",
+        summary: `${relativePath} is ready for the restricted replace-text operation.`,
+        checks
+      };
+    }
 
     return {
       id: change.id,
       path: relativePath,
-      status: "Ready",
-      summary: `${relativePath} is ready for the restricted append operation.`,
+      status: "Blocked",
+      summary: `Unsupported apply operation for ${relativePath}.`,
       checks
     };
   } catch (error) {
@@ -2299,12 +2355,9 @@ async function applyProposedFileChange(change: ProposedFileChange): Promise<stri
     throw new HttpError(409, `Only modify changes can be applied in v0: ${change.path}`);
   }
 
-  if (change.applyOperation?.kind !== "AppendText") {
-    throw new HttpError(409, `Only append-text edit operations can be applied in v0: ${change.path}`);
-  }
-
-  if (change.applyOperation.text.length > 10_000) {
-    throw new HttpError(409, `Edit operation is too large for v0 apply: ${change.path}`);
+  const operation = change.applyOperation;
+  if (!operation) {
+    throw new HttpError(409, `No apply operation was provided: ${change.path}`);
   }
 
   const { absolutePath, relativePath } = resolveMarkdownWorkspacePath(change.path);
@@ -2314,12 +2367,68 @@ async function applyProposedFileChange(change: ProposedFileChange): Promise<stri
   }
 
   const currentContent = await readFile(absolutePath, "utf8");
-  if (currentContent.endsWith(change.applyOperation.text)) {
-    throw new HttpError(409, `Proposed append text is already present at the end of ${relativePath}.`);
+
+  if (operation.kind === "AppendText") {
+    if (operation.text.length === 0) {
+      throw new HttpError(409, `Append text is empty: ${relativePath}`);
+    }
+
+    if (operation.text.length > 10_000) {
+      throw new HttpError(409, `Edit operation is too large for v0 apply: ${relativePath}`);
+    }
+
+    if (currentContent.endsWith(operation.text)) {
+      throw new HttpError(409, `Proposed append text is already present at the end of ${relativePath}.`);
+    }
+
+    await appendFile(absolutePath, operation.text, "utf8");
+    return relativePath;
   }
 
-  await appendFile(absolutePath, change.applyOperation.text, "utf8");
-  return relativePath;
+  if (operation.kind === "ReplaceText") {
+    if (operation.findText.length === 0 || operation.replaceWith.length === 0) {
+      throw new HttpError(409, `Replace operation requires non-empty find and replacement text: ${relativePath}`);
+    }
+
+    if (operation.findText.length > 10_000 || operation.replaceWith.length > 10_000) {
+      throw new HttpError(409, `Replace operation is too large for v0 apply: ${relativePath}`);
+    }
+
+    if (operation.findText === operation.replaceWith) {
+      throw new HttpError(409, `Find text and replacement text are identical: ${relativePath}`);
+    }
+
+    const occurrenceCount = countTextOccurrences(currentContent, operation.findText);
+    if (occurrenceCount !== 1) {
+      throw new HttpError(
+        409,
+        `Replace operation requires exactly one match in ${relativePath}; found ${occurrenceCount}.`
+      );
+    }
+
+    await writeFile(absolutePath, currentContent.replace(operation.findText, operation.replaceWith), "utf8");
+    return relativePath;
+  }
+
+  throw new HttpError(409, `Unsupported apply operation for ${relativePath}.`);
+}
+
+function countTextOccurrences(content: string, needle: string): number {
+  if (!needle) {
+    return 0;
+  }
+
+  let count = 0;
+  let offset = 0;
+  while (true) {
+    const index = content.indexOf(needle, offset);
+    if (index === -1) {
+      return count;
+    }
+
+    count += 1;
+    offset = index + needle.length;
+  }
 }
 
 function resolveMarkdownWorkspacePath(inputPath: string): { absolutePath: string; relativePath: string } {

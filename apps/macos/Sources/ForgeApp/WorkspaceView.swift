@@ -792,6 +792,11 @@ private struct ReviewPanel: View {
                                 Text(change.rationale)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                if let operation = change.applyOperation {
+                                    Label(operationSummary(operation), systemImage: operationSystemImage(operation))
+                                        .font(.caption.weight(.medium))
+                                        .foregroundStyle(.secondary)
+                                }
                                 Text(change.diffPreview)
                                     .font(.caption.monospaced())
                                     .textSelection(.enabled)
@@ -1082,6 +1087,28 @@ private struct ReviewPanel: View {
 
     private var canApprovePlan: Bool {
         task.status == "Human Review" && !hasApprovedCurrentPlan && !isApproving
+    }
+
+    private func operationSummary(_ operation: ProposedFileOperation) -> String {
+        switch operation.kind {
+        case "AppendText":
+            return "AppendText / \(operation.text?.count ?? 0) chars"
+        case "ReplaceText":
+            return "ReplaceText / \(operation.findText?.count ?? 0) -> \(operation.replaceWith?.count ?? 0) chars"
+        default:
+            return "\(operation.kind) / unsupported"
+        }
+    }
+
+    private func operationSystemImage(_ operation: ProposedFileOperation) -> String {
+        switch operation.kind {
+        case "AppendText":
+            return "text.append"
+        case "ReplaceText":
+            return "arrow.left.arrow.right"
+        default:
+            return "questionmark.diamond"
+        }
     }
 
     private var approveButtonTitle: String {

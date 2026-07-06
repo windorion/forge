@@ -9,6 +9,7 @@ import type {
   ModelProviderRuntimeSettings,
   PlanRevision,
   PlanStep,
+  ProposedFileOperation,
   TaskFileReference,
   TaskMessage
 } from "./types.js";
@@ -49,6 +50,20 @@ interface OpenAIProviderConfig {
   baseURL: string;
   timeoutMs: number;
   maxOutputTokens: number;
+}
+
+interface EditProposalGuidance {
+  summary: string;
+  targetPath: string;
+  rationale: string;
+  appendNote: string;
+  riskLevel: EditProposal["riskLevel"];
+}
+
+interface RestrictedEditDraft {
+  targetPath: string;
+  diffPreview: string;
+  applyOperation: ProposedFileOperation;
 }
 
 export function createModelProviderFromEnv(): ModelProvider {
@@ -303,24 +318,14 @@ class OpenAIResponsesModelProvider implements ModelProvider {
       editProposalGuidanceSchema,
       [
         "Create guidance for a safe Forge edit proposal.",
-        "The runtime will validate and apply only a restricted append-text operation to README.md or docs/*.md.",
+        "The runtime will validate and apply only restricted append-text operations or explicit quoted replace-text operations to README.md or docs/*.md.",
         "Choose a targetPath only if it is README.md or a docs/*.md file from the provided context.",
         "Do not include raw code patches. Return concise proposal guidance.",
         taskProviderContext(request.task, request.sourceMessage)
       ].join("\n\n")
     );
     const guidance = normalizeEditProposalGuidanceOutput(output);
-    const targetPath = chooseTargetPath(request.task, guidance.targetPath);
-    const appendText = buildAppendText(request, guidance);
-    const diffPreview = [
-      `--- a/${targetPath}`,
-      `+++ b/${targetPath}`,
-      "@@ proposed safe edit @@",
-      ...appendText
-        .trimEnd()
-        .split("\n")
-        .map((line) => `+${line}`)
-    ].join("\n");
+    const draft = buildRestrictedEditDraft(request, guidance);
 
     return {
       id: randomUUID(),
@@ -332,14 +337,11 @@ class OpenAIResponsesModelProvider implements ModelProvider {
       fileChanges: [
         {
           id: randomUUID(),
-          path: targetPath,
+          path: draft.targetPath,
           changeType: "Modify",
           rationale: guidance.rationale,
-          diffPreview,
-          applyOperation: {
-            kind: "AppendText",
-            text: appendText
-          }
+          diffPreview: draft.diffPreview,
+          applyOperation: draft.applyOperation
         }
       ],
       riskLevel: guidance.riskLevel,
@@ -591,17 +593,10 @@ class LocalDeterministicModelProvider implements ModelProvider {
   }
 
   async createEditProposal(request: EditProposalRequest): Promise<EditProposal> {
-    const targetPath = chooseTargetPath(request.task);
-    const appendText = buildAppendText(request);
-    const diffPreview = [
-      `--- a/${targetPath}`,
-      `+++ b/${targetPath}`,
-      "@@ proposed safe edit @@",
-      ...appendText
-        .trimEnd()
-        .split("\n")
-        .map((line) => `+${line}`)
-    ].join("\n");
+    const draft = buildRestrictedEditDraft(request);
+    const operationLabel = draft.applyOperation.kind === "ReplaceText"
+      ? "an exact text replacement"
+      : "a small append-only note";
 
     return {
       id: randomUUID(),
@@ -610,21 +605,18 @@ class LocalDeterministicModelProvider implements ModelProvider {
       revisionOfID: request.previousProposal?.id,
       revisionNumber: request.revisionNumber,
       summary: request.previousProposal
-        ? `Revise proposal ${request.previousProposal.revisionNumber} with the latest task conversation, touching ${targetPath}.`
-        : `Propose a small reviewable update touching ${targetPath}.`,
+        ? `Revise proposal ${request.previousProposal.revisionNumber} with ${operationLabel} in ${draft.targetPath}.`
+        : `Propose ${operationLabel} touching ${draft.targetPath}.`,
       fileChanges: [
         {
           id: randomUUID(),
-          path: targetPath,
+          path: draft.targetPath,
           changeType: "Modify",
           rationale: request.previousProposal
             ? "Revise the rejected proposal using the latest task conversation while preserving the review boundary."
             : "Keep the first edit proposal narrow, visible, and reversible before any workspace mutation.",
-          diffPreview,
-          applyOperation: {
-            kind: "AppendText",
-            text: appendText
-          }
+          diffPreview: draft.diffPreview,
+          applyOperation: draft.applyOperation
         }
       ],
       riskLevel: "Low",
@@ -918,6 +910,86 @@ function chooseTargetPath(task: ForgeTask, preferredPath?: string): string {
   const preferred = ["docs/v0_scope.md", "docs/development.md", "README.md"];
   const contextPaths = new Set(task.contextFiles.map((file) => file.path));
   return preferred.find((candidate) => contextPaths.has(candidate)) ?? task.contextFiles[0]?.path ?? "README.md";
+}
+
+function buildRestrictedEditDraft(
+  request: EditProposalRequest,
+  guidance?: EditProposalGuidance
+): RestrictedEditDraft {
+  const targetPath = chooseTargetPath(request.task, guidance?.targetPath);
+  const replaceInstruction = parseExactReplaceInstruction(request.sourceMessage?.content ?? request.task.objective);
+  if (replaceInstruction) {
+    const applyOperation: ProposedFileOperation = {
+      kind: "ReplaceText",
+      findText: replaceInstruction.findText,
+      replaceWith: replaceInstruction.replaceWith
+    };
+
+    return {
+      targetPath,
+      applyOperation,
+      diffPreview: buildReplaceTextDiffPreview(targetPath, applyOperation)
+    };
+  }
+
+  const appendText = buildAppendText(request, guidance);
+  const applyOperation: ProposedFileOperation = {
+    kind: "AppendText",
+    text: appendText
+  };
+
+  return {
+    targetPath,
+    applyOperation,
+    diffPreview: buildAppendTextDiffPreview(targetPath, appendText)
+  };
+}
+
+function parseExactReplaceInstruction(content: string): { findText: string; replaceWith: string } | undefined {
+  const patterns = [
+    /\breplace\s+["“]([\s\S]+?)["”]\s+(?:with|to)\s+["“]([\s\S]+?)["”]/i,
+    /(?:把|将)\s*[“"]([\s\S]+?)[”"]\s*替换(?:成|为)\s*[“"]([\s\S]+?)[”"]/
+  ];
+
+  for (const pattern of patterns) {
+    const match = pattern.exec(content);
+    const findText = match?.[1]?.trim();
+    const replaceWith = match?.[2]?.trim();
+    if (findText && replaceWith && findText !== replaceWith) {
+      return {
+        findText: findText.slice(0, 10_000),
+        replaceWith: replaceWith.slice(0, 10_000)
+      };
+    }
+  }
+
+  return undefined;
+}
+
+function buildAppendTextDiffPreview(targetPath: string, appendText: string): string {
+  return [
+    `--- a/${targetPath}`,
+    `+++ b/${targetPath}`,
+    "@@ proposed safe append @@",
+    ...diffLines(appendText.trimEnd(), "+")
+  ].join("\n");
+}
+
+function buildReplaceTextDiffPreview(
+  targetPath: string,
+  operation: Extract<ProposedFileOperation, { kind: "ReplaceText" }>
+): string {
+  return [
+    `--- a/${targetPath}`,
+    `+++ b/${targetPath}`,
+    "@@ proposed exact replacement @@",
+    ...diffLines(operation.findText, "-"),
+    ...diffLines(operation.replaceWith, "+")
+  ].join("\n");
+}
+
+function diffLines(text: string, prefix: "-" | "+"): string[] {
+  return text.split("\n").map((line) => `${prefix}${line}`);
 }
 
 function buildAppendText(

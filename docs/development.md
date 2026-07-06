@@ -161,8 +161,8 @@ When an edit proposal is ready, the Review panel enables `Apply Edit Proposal`
 and `Request Changes`. It also exposes `Validate Proposal`, which calls
 `POST /tasks/:taskID/validate-edit-proposal` to refresh applicability checks
 without writing files. Applying calls `POST /tasks/:taskID/apply-edit-proposal`,
-revalidates the current workspace, runs the restricted v0 append-text
-operation, records the changed Markdown file, and marks the task completed.
+revalidates the current workspace, runs the restricted v0 edit operation,
+records the changed Markdown file, and marks the task completed.
 Requesting changes calls `POST /tasks/:taskID/reject-edit-proposal`, records
 the rejection, leaves files unchanged, and allows another edit proposal to be
 generated. After a rejection, the same Review action area exposes
@@ -214,9 +214,11 @@ cd runtime && npm run check
 - The OpenAI provider uses compact task/context summaries and Structured
   Outputs, but it is not yet part of a full tool-using agent loop.
 - Edit proposal application is intentionally narrow: v0 only supports
-  append-text operations on existing Markdown files in `README.md` or `docs/`.
-  Validation blocks unsupported paths, unsupported operations, oversized edits,
-  missing files, and duplicate append text at the file end.
+  append-text and exact replace-text operations on existing Markdown files in
+  `README.md` or `docs/`. Validation blocks unsupported paths, unsupported
+  operations, oversized edits, missing files, duplicate append text at the file
+  end, and replace operations whose find text is missing or appears more than
+  once.
 - Post-apply validation defaults to built-in `forge:` checks. Medium-risk
   project validation commands are allowlisted runtime presets, run without a
   shell, and require explicit task-level approval before execution.

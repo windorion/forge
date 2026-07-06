@@ -1817,8 +1817,8 @@ Next:
   without external API calls; real LLM providers come later.
 - Edit proposals are review artifacts until explicitly applied. The runtime
   can generate proposed file changes, reject them without touching files, or
-  apply them through a narrow append-text operation for existing Markdown files
-  after human approval.
+  apply them through narrow append-text or exact replace-text operations for
+  existing Markdown files after human approval.
 - Edit proposal validation is a runtime-owned safety gate. Proposals are
   validated when generated and revalidated immediately before apply; blocked
   validation returns the task to human review without writing files.
@@ -1930,6 +1930,49 @@ Next:
   API key.
 - Continue from provider configuration into richer real-model planning and
   safer edit proposal formats.
+
+### 2026-07-07 01:55:18 CST +0800
+
+Conversation summary:
+
+- User asked Codex to continue with another substantial long task.
+
+Done:
+
+- Extended the safe edit proposal operation model from append-only to a
+  restricted union of `AppendText` and `ReplaceText`.
+- Added runtime validation for exact replace operations: existing Markdown
+  target only, bounded text, non-empty find/replacement text, no identical
+  replacement, and exactly one find-text match before apply.
+- Added controlled apply support for `ReplaceText` using the same review,
+  validation, approval, changed-files, and post-apply validation lifecycle as
+  append operations.
+- Updated the local and OpenAI provider paths so explicit task messages such as
+  `replace "old" with "new"` or `把“旧文本”替换成“新文本”` generate a
+  replace-text proposal; otherwise they continue to generate append-text
+  proposals.
+- Updated the macOS task workspace to decode and display edit operation
+  summaries for both append and replace proposals.
+- Updated edit proposal, runtime architecture, model provider, development,
+  runtime README, v0 scope, and root README docs.
+- Verified `npm run check`, `npm run build`, `swift build`, `git diff --check`,
+  and an end-to-end temporary runtime smoke test that generated, validated, and
+  applied a `ReplaceText` proposal.
+
+Not done:
+
+- Did not add a general patch interpreter or multi-hunk diff apply engine.
+- Did not allow replace operations outside `README.md` or `docs/*.md`.
+- Did not call the live OpenAI API.
+- Did not normalize edit proposal operations into dedicated SQLite tables.
+
+Next:
+
+- Add richer proposal previews and possibly side-by-side diff rendering in the
+  macOS app.
+- Add normalized persistence for proposal revisions and file-change operations.
+- Add model-backed smoke tests once a live provider key is intentionally
+  supplied.
 
 ## Open Questions
 

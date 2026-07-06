@@ -105,9 +105,9 @@ V0 is complete when:
 - A rejected edit proposal can be revised from the latest task conversation
   without changing files, while preserving the rejected proposal in history.
 - A generated edit proposal can be explicitly applied through a restricted
-  Markdown append operation.
+  Markdown append or exact replace operation.
 - A generated edit proposal can be validated before apply, and blocked if the
-  workspace no longer matches the safe append boundary.
+  workspace no longer matches the safe append or exact replace boundary.
 - Applying an edit proposal runs controlled built-in validation before the task
   is marked completed.
 - A task can approve and run the `runtime-typescript` validation preset for
@@ -142,9 +142,9 @@ LLM loop is still future work.
 Safe edit proposals have started: Forge can create a proposed diff preview and
 return the task to human review without mutating files. A proposal can now be
 validated, rejected without touching files, or applied through a narrow
-append-text operation against existing Markdown files. Applied proposals now
-run built-in validation before completion. Approved runtime validation presets
-can also run allowlisted project checks after completion, including presets
-composed from workspace config. The Review panel now shows command permission
-requests from runtime-derived permission snapshots instead of only listing
-preset commands.
+append-text or exact replace-text operation against existing Markdown files.
+Applied proposals now run built-in validation before completion. Approved
+runtime validation presets can also run allowlisted project checks after
+completion, including presets composed from workspace config. The Review panel
+now shows command permission requests from runtime-derived permission snapshots
+instead of only listing preset commands.

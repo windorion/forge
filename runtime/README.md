@@ -62,7 +62,8 @@ archives the rejected proposal, asks the model provider for a new proposal from
 the latest task conversation, validates it, and returns to human review without
 writing files. The apply path revalidates against the current workspace before
 writing. The current apply path is intentionally narrow: it only supports
-append-text operations on existing Markdown files in `README.md` or `docs/`.
+append-text and exact replace-text operations on existing Markdown files in
+`README.md` or `docs/`. Exact replace requires the find text to appear once.
 After apply, the runtime runs controlled built-in validation commands and only
 marks the task completed if validation passes.
 

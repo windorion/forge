@@ -311,6 +311,8 @@ struct ProposedFileChange: Identifiable, Codable, Hashable {
 struct ProposedFileOperation: Codable, Hashable {
     var kind: String
     var text: String?
+    var findText: String?
+    var replaceWith: String?
 }
 
 struct EditProposal: Identifiable, Codable, Hashable {

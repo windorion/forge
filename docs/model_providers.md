@@ -28,11 +28,14 @@ app and runtime exercise the provider boundary, task state updates, event
 streaming, and SQLite persistence without requiring API keys.
 
 It can also produce a deterministic edit proposal with a diff preview and a
-restricted append-text operation. When a proposal is rejected, the provider can
-produce a revised proposal from the latest task conversation while preserving
-the same review and validation boundary. The provider still does not apply
-changes itself; validating, applying, rejecting, or archiving proposals remains
-a runtime-owned approval step.
+restricted apply operation. The default is append-text; if the latest task
+conversation includes an explicit quoted replacement instruction such as
+`replace "old" with "new"` or `把“旧文本”替换成“新文本”`, the provider can
+emit an exact replace-text operation. When a proposal is rejected, the provider
+can produce a revised proposal from the latest task conversation while
+preserving the same review and validation boundary. The provider still does
+not apply changes itself; validating, applying, rejecting, or archiving
+proposals remains a runtime-owned approval step.
 
 The optional OpenAI provider:
 

@@ -69,9 +69,17 @@ The current proposal remains in `editProposal`; historical revisions are
 read-only audit records.
 
 The current local deterministic provider emits a small reviewable proposal
-against a context file. It includes a restricted append-text operation so the
-UI, state machine, event stream, persistence path, and controlled apply path can
-be tested without introducing a general-purpose patch interpreter.
+against a context file. It includes a restricted apply operation so the UI,
+state machine, event stream, persistence path, and controlled apply path can be
+tested without introducing a general-purpose patch interpreter.
+
+Current restricted operation kinds:
+
+- `AppendText`: appends bounded text to an existing Markdown file.
+- `ReplaceText`: replaces exact bounded text only when the find text appears
+  exactly once in the target file. The provider can generate this operation
+  from explicit task messages such as `replace "old" with "new"` or
+  `把“旧文本”替换成“新文本”`.
 
 Validation stores:
 
@@ -101,13 +109,15 @@ Post-apply validation stores:
 - The runtime must log proposal events.
 - Applying a proposal requires a separate explicit action.
 - A proposal is validated when generated and again immediately before apply.
-- Current v0 apply behavior only supports `AppendText`.
+- Current v0 apply behavior only supports `AppendText` and `ReplaceText`.
 - Current v0 apply behavior only writes existing Markdown files in `README.md`
   or `docs/*.md`.
 - Absolute paths, parent-directory traversal, `.git`, and `.forge` paths are
   rejected.
 - Apply is blocked if the proposed append text is already present at the target
   file end.
+- Apply is blocked if replace find text is missing, appears more than once,
+  is identical to the replacement, or if either side is empty or oversized.
 - Applying a proposal moves the task into `Testing` and runs built-in
   validation commands before completion.
 - Medium-risk project validation presets require explicit approval before they
@@ -118,6 +128,7 @@ Post-apply validation stores:
 
 ## Future Work
 
-- Generate real patch content from a model provider.
-- Add a richer patch apply engine after preview validation is mature.
+- Generate richer model-backed patch content while keeping runtime-owned
+  validation and review gates.
+- Add a richer patch apply engine after exact replace validation is mature.
 - Link edit proposals to normalized file-change records.

@@ -168,15 +168,15 @@ human review. The revision path must not write files.
 
 Checks proposed file changes against the current workspace before apply. The
 v0 validator confirms supported operation type, safe Markdown path, existing
-target file, operation size, and whether the append text is already present at
-the file end.
+target file, operation size, whether append text is already present at the file
+end, and whether exact replace text appears exactly once.
 
 ### Edit Proposal Applier
 
 Applies an explicitly approved proposal through restricted file operations.
-The v0 implementation only supports append-text edits to existing Markdown
-files in `README.md` or `docs/`, revalidates before writing, and records
-rejected proposals without touching files.
+The v0 implementation only supports append-text edits and exact replace-text
+edits to existing Markdown files in `README.md` or `docs/`, revalidates before
+writing, and records rejected proposals without touching files.
 
 ### Validation Runner
 

@@ -152,7 +152,13 @@ export interface AppendTextOperation {
   text: string;
 }
 
-export type ProposedFileOperation = AppendTextOperation;
+export interface ReplaceTextOperation {
+  kind: "ReplaceText";
+  findText: string;
+  replaceWith: string;
+}
+
+export type ProposedFileOperation = AppendTextOperation | ReplaceTextOperation;
 
 export interface EditProposalDecisionRequest {
   note?: string;
