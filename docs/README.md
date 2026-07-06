@@ -5,13 +5,15 @@ responsible for recording.
 
 ## Source Of Truth
 
-The root `README.md` is the project constitution and memory index. It records
-the highest-level decisions, active rules, session logs, and links to deeper
-documents.
+The root `README.md` is the compact project constitution and memory index. It
+records the highest-level decisions, active rules, current status summary, and
+links to deeper documents.
 
 The `docs/` directory stores detailed planning and architecture documents.
 Each document owns one area of the product so that decisions do not get mixed
 together.
+
+Timestamped working history lives in `session_log.md`, not in the root README.
 
 ## Document Map
 
@@ -19,6 +21,8 @@ together.
 | --- | --- |
 | `product_vision.md` | Why Forge exists, what category it creates, and what principles must not change. |
 | `product_positioning.md` | Market position, competitors, differentiation, and messaging. |
+| `project_status.md` | Current implementation state, distance to finished product, and completion estimates. |
+| `todo.md` | Active TODO list, priority order, and next concrete tasks. |
 | `user_personas.md` | Target users, pains, motivations, objections, and success criteria. |
 | `user_flows.md` | End-to-end workflows from onboarding to review and shipping. |
 | `workspace_design.md` | Product surface model, screen structure, panels, states, and interaction rules. |
@@ -38,14 +42,19 @@ together.
 | `founder_notes.md` | Distilled founder/product decisions from conversations. |
 | `development.md` | How to run the current app/runtime skeleton and what is not wired yet. |
 | `v0_scope.md` | Defines the first end-to-end product target and completion criteria. |
+| `session_log.md` | Timestamped work-session history with summary, done, not done, and next steps. |
 
 ## Update Rules
 
-- If a new decision changes product direction, update the root `README.md`.
+- If a new decision changes product direction, update the root `README.md`
+  compactly and move detail into a focused document.
 - If a decision adds detail inside a domain, update the matching `docs/` file.
+- If overall progress or distance to finished changes, update
+  `project_status.md`.
+- If priorities change, update `todo.md`.
 - If a document becomes too broad, split it into a focused file and link it
   here.
-- Every meaningful work session should end with a root README session log.
+- Every meaningful work session should end with an entry in `session_log.md`.
 - Keep documents practical. Each file should help a future AI or engineer make
   better decisions.
 

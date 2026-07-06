@@ -59,8 +59,8 @@ The project began with important product decisions in conversation. Those
 decisions should be captured in durable files so future AI assistants and
 engineers do not drift.
 
-The root README is the living project memory. The `docs/` directory stores
-domain-specific detail.
+The root README is the compact project index. The `docs/` directory stores
+domain-specific detail, current status, TODOs, and session history.
 
 ## Collaboration Pattern
 
@@ -70,7 +70,8 @@ Preferred pattern:
 2. Product/architecture docs turn intent into constraints.
 3. Codex or another AI agent implements focused pieces.
 4. Human reviews output.
-5. README and docs are updated with decisions and session logs.
+5. README stays compact; focused docs and `docs/session_log.md` are updated
+   with decisions, TODO changes, status changes, and session history.
 
 ## Current Strategic Bet
 

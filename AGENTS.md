@@ -8,7 +8,8 @@ Before changing code, docs, prompts, architecture, or product direction, read:
 
 1. `README.md`
 2. `docs/README.md`
-3. The specific `docs/` file related to the task
+3. `docs/project_status.md` and `docs/todo.md` when planning next work
+4. The specific `docs/` file related to the task
 
 ## Project Direction
 
@@ -31,11 +32,15 @@ Do not turn it into:
 - Make human review and local-first behavior first-class.
 - Use native macOS patterns when building the app.
 - Keep runtime actions auditable.
+- Keep the root README compact. Move detailed records into focused docs.
+- Update `docs/project_status.md` when product state or completion estimates
+  change.
+- Update `docs/todo.md` when priorities change.
 
 ## Session Logging
 
-At the end of every working conversation, append a timestamped entry to the
-`Session Log` section of `README.md`.
+At the end of every working conversation, append a timestamped entry to
+`docs/session_log.md`.
 
 Each entry must include:
 
