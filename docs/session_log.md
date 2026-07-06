@@ -1428,3 +1428,29 @@ Next:
 - Keep README as the high-level entry point.
 - Use `docs/project_status.md` for progress and finished-product distance.
 - Use `docs/todo.md` as the source of truth for next implementation tasks.
+
+### 2026-07-07 02:10:52 CST +0800
+
+Conversation summary:
+
+- User asked to make `AGENTS.md` explain the main document design and how other
+  agents should read the docs when taking over.
+
+Done:
+
+- Expanded `AGENTS.md` with a handoff reading path for new agents.
+- Added grouped document responsibilities covering project state, product,
+  experience, runtime, model providers, edit proposals, validation, database,
+  git, MCP, and security.
+- Added a task-specific reading guide so agents can load the right focused docs
+  before editing code.
+
+Not done:
+
+- Did not change app or runtime behavior.
+- Did not alter the docs map beyond the agent-facing handoff instructions.
+
+Next:
+
+- Keep future handoffs anchored in `README.md`, `docs/project_status.md`,
+  `docs/todo.md`, and the relevant domain doc instead of rereading everything.
