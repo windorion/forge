@@ -72,25 +72,131 @@ private struct RuntimeBadge: View {
     @EnvironmentObject private var workspace: WorkspaceModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Circle()
-                    .fill(workspace.runtimeHealth?.ok == true ? Color.green : Color.orange)
-                    .frame(width: 8, height: 8)
-                Text(workspace.statusMessage)
+                Image(systemName: runtimeSystemImage)
+                    .foregroundStyle(runtimeColor)
+                Text(workspace.runtimeState.rawValue)
                     .font(.caption.weight(.medium))
                     .lineLimit(1)
+                Spacer()
+                if let version = workspace.runtimeHealth?.version {
+                    Text(version)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
             }
 
-            Text(workspace.eventStreamStatus)
+            Text(runtimeDetail)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
+
+            Label(workspace.runtimeEndpoint, systemImage: "network")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+
+            Label(streamDetail, systemImage: streamSystemImage)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            HStack(spacing: 8) {
+                Button {
+                    workspace.refreshRuntimeHealth()
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .help("Refresh runtime health")
+
+                Button {
+                    workspace.openRuntimeStatusPage()
+                } label: {
+                    Label("Open", systemImage: "safari")
+                }
+                .help("Open runtime status page")
+
+                Button {
+                    workspace.copyRuntimeDiagnostics()
+                } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
+                .help("Copy runtime diagnostics")
+            }
+            .labelStyle(.iconOnly)
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.thinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var runtimeDetail: String {
+        switch workspace.runtimeState {
+        case .unchecked:
+            return "Runtime has not been checked."
+        case .checking:
+            return "Checking the expected local runtime."
+        case .running:
+            return workspace.statusMessage
+        case .needsProviderConfiguration:
+            return providerIssue ?? "Runtime is reachable, but provider setup needs attention."
+        case .wrongVersion:
+            return "Expected \(WorkspaceModel.expectedRuntimeService) \(WorkspaceModel.expectedRuntimeVersion)."
+        case .disconnected:
+            return workspace.runtimeLastError ?? "Runtime did not respond on the expected endpoint."
+        }
+    }
+
+    private var providerIssue: String? {
+        workspace.modelProviderSettingsEnvelope?.configuration.issues.first ??
+            workspace.runtimeHealth?.modelProviderConfiguration?.issues.first
+    }
+
+    private var streamDetail: String {
+        "\(workspace.eventStreamState.rawValue) · \(workspace.eventStreamStatus)"
+    }
+
+    private var runtimeSystemImage: String {
+        switch workspace.runtimeState {
+        case .unchecked:
+            return "questionmark.circle"
+        case .checking:
+            return "arrow.triangle.2.circlepath.circle"
+        case .running:
+            return "checkmark.circle.fill"
+        case .needsProviderConfiguration:
+            return "exclamationmark.triangle.fill"
+        case .wrongVersion:
+            return "xmark.octagon.fill"
+        case .disconnected:
+            return "bolt.horizontal.circle"
+        }
+    }
+
+    private var runtimeColor: Color {
+        switch workspace.runtimeState {
+        case .running:
+            return .green
+        case .needsProviderConfiguration, .checking:
+            return .orange
+        case .wrongVersion, .disconnected:
+            return .red
+        case .unchecked:
+            return .secondary
+        }
+    }
+
+    private var streamSystemImage: String {
+        switch workspace.eventStreamState {
+        case .connected:
+            return "dot.radiowaves.left.and.right"
+        case .connecting:
+            return "antenna.radiowaves.left.and.right"
+        case .disconnected:
+            return "wifi.slash"
+        }
     }
 }
 

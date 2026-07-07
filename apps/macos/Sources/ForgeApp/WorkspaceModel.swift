@@ -1,15 +1,24 @@
+import AppKit
 import Foundation
 
 @MainActor
 final class WorkspaceModel: ObservableObject {
+    static let expectedRuntimeService = "forge-runtime"
+    static let expectedRuntimeVersion = "0.1.0"
+
     @Published var tasks: [ForgeTask] = [.sample]
     @Published var selectedTaskID: ForgeTask.ID? = ForgeTask.sample.id
     @Published var runtimeHealth: RuntimeHealth?
+    @Published var runtimeState: RuntimeConnectionState = .unchecked
+    @Published var runtimeLastCheckedAt: Date?
+    @Published var runtimeLastError: String?
+    @Published var runtimeDiagnosticsCopiedAt: Date?
     @Published var modelProviderSettingsEnvelope: ModelProviderSettingsEnvelope?
     @Published var validationPresets: [ValidationPreset] = []
     @Published var workspaceValidationPresetConfig: WorkspaceValidationPresetConfig?
     @Published var statusMessage = "Runtime not checked"
     @Published var eventStreamStatus = "Event stream disconnected"
+    @Published var eventStreamState: RuntimeEventStreamState = .disconnected
     @Published private var validationPermissionSnapshots: [ForgeTask.ID: [ValidationPresetPermission]] = [:]
     @Published private var sendingMessageTaskIDs = Set<ForgeTask.ID>()
     @Published private var generatingPlanRevisionTaskIDs = Set<ForgeTask.ID>()
@@ -29,16 +38,27 @@ final class WorkspaceModel: ObservableObject {
         tasks.first { $0.id == selectedTaskID }
     }
 
+    var runtimeEndpoint: String {
+        runtime.baseURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
+
     deinit {
         eventStreamTask?.cancel()
     }
 
     func refreshRuntimeHealth() {
+        runtimeState = .checking
+        runtimeLastError = nil
+        statusMessage = "Checking runtime..."
+
         Task {
             do {
-                runtimeHealth = try await runtime.health()
+                let health = try await runtime.health()
+                runtimeHealth = health
+                runtimeLastCheckedAt = Date()
+                runtimeState = classifyRuntimeState(health)
                 try await refreshModelProviderSettingsSnapshot()
-                statusMessage = "Runtime connected"
+                statusMessage = statusMessage(for: runtimeState)
                 try await refreshTasks()
                 try await refreshValidationPresets()
                 await refreshValidationPermissionSnapshotIfPossible(for: selectedTaskID)
@@ -46,8 +66,13 @@ final class WorkspaceModel: ObservableObject {
             } catch {
                 runtimeHealth = nil
                 modelProviderSettingsEnvelope = nil
-                statusMessage = error.localizedDescription
+                runtimeState = .disconnected
+                runtimeLastCheckedAt = Date()
+                runtimeLastError = error.localizedDescription
+                statusMessage = "Runtime disconnected"
+                eventStreamState = .disconnected
                 eventStreamStatus = "Event stream disconnected"
+                eventStreamTask?.cancel()
             }
         }
     }
@@ -56,7 +81,12 @@ final class WorkspaceModel: ObservableObject {
         Task {
             do {
                 try await refreshModelProviderSettingsSnapshot()
-                runtimeHealth = try? await runtime.health()
+                if let health = try? await runtime.health() {
+                    runtimeHealth = health
+                    runtimeState = classifyRuntimeState(health)
+                    runtimeLastCheckedAt = Date()
+                    runtimeLastError = nil
+                }
                 statusMessage = "Model provider settings refreshed."
             } catch {
                 statusMessage = "Refresh model provider settings failed: \(error.localizedDescription)"
@@ -87,7 +117,12 @@ final class WorkspaceModel: ObservableObject {
                     clearOpenAIAPIKey: clearOpenAIAPIKey
                 )
                 modelProviderSettingsEnvelope = try await runtime.updateModelProviderSettings(update)
-                runtimeHealth = try? await runtime.health()
+                if let health = try? await runtime.health() {
+                    runtimeHealth = health
+                    runtimeState = classifyRuntimeState(health)
+                    runtimeLastCheckedAt = Date()
+                    runtimeLastError = nil
+                }
                 statusMessage = "Model provider settings saved."
             } catch {
                 statusMessage = "Save model provider settings failed: \(error.localizedDescription)"
@@ -355,8 +390,94 @@ final class WorkspaceModel: ObservableObject {
         }
     }
 
+    func copyRuntimeDiagnostics() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(runtimeDiagnosticsText(), forType: .string)
+        runtimeDiagnosticsCopiedAt = Date()
+        statusMessage = "Runtime diagnostics copied."
+    }
+
+    func openRuntimeStatusPage() {
+        NSWorkspace.shared.open(runtime.baseURL)
+        statusMessage = "Runtime status page opened."
+    }
+
+    func runtimeDiagnosticsText() -> String {
+        let health = runtimeHealth
+        let providerConfiguration = modelProviderSettingsEnvelope?.configuration ?? health?.modelProviderConfiguration
+        let provider = providerConfiguration?.provider ?? health?.modelProvider
+        let lastChecked = runtimeLastCheckedAt.map(Self.diagnosticsDateFormatter.string(from:)) ?? "Never"
+        let copiedAt = runtimeDiagnosticsCopiedAt.map(Self.diagnosticsDateFormatter.string(from:)) ?? "Never"
+
+        var lines = [
+            "Forge Runtime Diagnostics",
+            "Generated: \(Self.diagnosticsDateFormatter.string(from: Date()))",
+            "Endpoint: \(runtimeEndpoint)",
+            "Expected service: \(Self.expectedRuntimeService)",
+            "Expected version: \(Self.expectedRuntimeVersion)",
+            "Runtime state: \(runtimeState.rawValue)",
+            "Status message: \(statusMessage)",
+            "Last checked: \(lastChecked)",
+            "Last error: \(runtimeLastError ?? "None")",
+            "Event stream: \(eventStreamState.rawValue)",
+            "Event stream detail: \(eventStreamStatus)",
+            "Diagnostics copied: \(copiedAt)"
+        ]
+
+        if let health {
+            lines.append(contentsOf: [
+                "Health ok: \(health.ok)",
+                "Service: \(health.service)",
+                "Version: \(health.version)",
+                "Uptime seconds: \(Int(health.uptimeSeconds.rounded()))"
+            ])
+
+            if let persistence = health.persistence {
+                lines.append("Database path: \(persistence.databasePath)")
+                lines.append("Task count: \(persistence.taskCount)")
+            }
+        }
+
+        if let provider {
+            lines.append(contentsOf: [
+                "Provider: \(provider.name)",
+                "Provider id: \(provider.id)",
+                "Provider model: \(provider.model)",
+                "Provider mode: \(provider.mode)"
+            ])
+        }
+
+        if let providerConfiguration {
+            lines.append("Provider status: \(providerConfiguration.status)")
+            lines.append("Provider summary: \(providerConfiguration.summary)")
+            if providerConfiguration.issues.isEmpty {
+                lines.append("Provider issues: None")
+            } else {
+                lines.append("Provider issues:")
+                lines.append(contentsOf: providerConfiguration.issues.map { "- \($0)" })
+            }
+            lines.append("Sends remote context: \(providerConfiguration.sendsRemoteContext)")
+            if let remoteContextSummary = providerConfiguration.remoteContextSummary {
+                lines.append("Remote context boundary: \(remoteContextSummary)")
+            }
+        }
+
+        if let workspaceValidationPresetConfig {
+            lines.append("Validation preset config: \(workspaceValidationPresetConfig.path)")
+            lines.append("Validation preset config exists: \(workspaceValidationPresetConfig.exists)")
+            if !workspaceValidationPresetConfig.issues.isEmpty {
+                lines.append("Validation preset config issues:")
+                lines.append(contentsOf: workspaceValidationPresetConfig.issues.map { "- \($0)" })
+            }
+        }
+
+        lines.append("Loaded tasks in app: \(tasks.count)")
+        return lines.joined(separator: "\n")
+    }
+
     private func startEventStream() {
         eventStreamTask?.cancel()
+        eventStreamState = .connecting
         eventStreamStatus = "Event stream connecting"
 
         eventStreamTask = Task { [runtime] in
@@ -364,8 +485,16 @@ final class WorkspaceModel: ObservableObject {
                 for try await event in runtime.events() {
                     await handleRuntimeEvent(event)
                 }
+
+                await MainActor.run {
+                    if !Task.isCancelled {
+                        eventStreamState = .disconnected
+                        eventStreamStatus = "Event stream disconnected"
+                    }
+                }
             } catch {
                 await MainActor.run {
+                    eventStreamState = .disconnected
                     eventStreamStatus = "Event stream stopped: \(error.localizedDescription)"
                 }
             }
@@ -373,6 +502,7 @@ final class WorkspaceModel: ObservableObject {
     }
 
     private func handleRuntimeEvent(_ event: RuntimeStreamEvent) async {
+        eventStreamState = .connected
         eventStreamStatus = "Last event: \(event.type)"
 
         do {
@@ -428,7 +558,49 @@ final class WorkspaceModel: ObservableObject {
         }
     }
 
+    private func classifyRuntimeState(_ health: RuntimeHealth) -> RuntimeConnectionState {
+        guard health.ok else {
+            return .disconnected
+        }
+
+        guard health.service == Self.expectedRuntimeService,
+              health.version == Self.expectedRuntimeVersion else {
+            return .wrongVersion
+        }
+
+        let providerStatus = health.modelProviderConfiguration?.status
+            ?? modelProviderSettingsEnvelope?.configuration.status
+        if providerStatus == "NeedsConfiguration" || providerStatus == "Unsupported" {
+            return .needsProviderConfiguration
+        }
+
+        return .running
+    }
+
+    private func statusMessage(for state: RuntimeConnectionState) -> String {
+        switch state {
+        case .unchecked:
+            return "Runtime not checked"
+        case .checking:
+            return "Checking runtime..."
+        case .running:
+            return "Runtime connected"
+        case .needsProviderConfiguration:
+            return "Runtime connected. Provider needs configuration."
+        case .wrongVersion:
+            return "Runtime connected, but version or service is unexpected."
+        case .disconnected:
+            return "Runtime disconnected"
+        }
+    }
+
     private func validationPresetActionKey(taskID: ForgeTask.ID, presetID: ValidationPreset.ID) -> String {
         "\(taskID)-\(presetID)"
     }
+
+    private static let diagnosticsDateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
 }

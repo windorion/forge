@@ -353,6 +353,27 @@ struct RuntimeHealth: Codable, Hashable {
     var uptimeSeconds: Double
     var modelProvider: ModelProviderInfo?
     var modelProviderConfiguration: ModelProviderConfiguration?
+    var persistence: RuntimePersistenceInfo?
+}
+
+struct RuntimePersistenceInfo: Codable, Hashable {
+    var databasePath: String
+    var taskCount: Int
+}
+
+enum RuntimeConnectionState: String, Hashable {
+    case unchecked = "Unchecked"
+    case checking = "Checking"
+    case running = "Running"
+    case needsProviderConfiguration = "Needs Provider Configuration"
+    case wrongVersion = "Wrong Version"
+    case disconnected = "Disconnected"
+}
+
+enum RuntimeEventStreamState: String, Hashable {
+    case disconnected = "Disconnected"
+    case connecting = "Connecting"
+    case connected = "Connected"
 }
 
 struct CreateTaskRequest: Encodable {

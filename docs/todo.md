@@ -16,9 +16,7 @@ what to do next without rereading the whole project history.
   runtime state, diagnostics, and provider settings paths.
 - Improve the macOS edit proposal panel with clearer diff preview and operation
   metadata.
-- Add app-level runtime state: running, disconnected, wrong port, wrong
-  version, and startup guidance.
-- Add a simple app action to open or copy runtime diagnostics.
+- Add app-managed runtime start/stop.
 - Run a provider settings smoke test with an intentionally supplied OpenAI API
   key, without committing secrets.
 - Add a short V0 demo script in `docs/development.md`.
@@ -86,6 +84,9 @@ what to do next without rereading the whole project history.
 
 ## Done Recently
 
+- App-level runtime state and diagnostics for unchecked/checking/running,
+  disconnected, wrong version, provider configuration issues, event stream
+  state, startup guidance, and copy/open diagnostics actions.
 - Core runtime smoke regression script covering task creation, file-reference
   messages, plan revision, plan approval, edit proposal generation, validation,
   apply, post-apply validation, append/replace operations, and SQLite restart

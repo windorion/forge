@@ -48,6 +48,9 @@ Implemented:
   messages, plan revision, plan approval, edit proposal generation,
   validation, apply, built-in post-apply validation, append/replace operations,
   and SQLite restart recovery.
+- App-visible runtime state and diagnostics for unchecked/checking/running,
+  disconnected, wrong version, provider configuration issues, SSE stream state,
+  expected endpoint, database/task count, and copy/open diagnostics actions.
 
 ## Completion Estimate
 
@@ -55,7 +58,7 @@ These percentages are product-readiness estimates, not calendar estimates.
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| V0 local demo | 85-88% | A local demo can show task creation, context inspection, planning, review, restricted edits, validation, and core runtime regression coverage. |
+| V0 local demo | 87-90% | A local demo can show task creation, context inspection, planning, review, restricted edits, validation, core runtime regression coverage, and runtime diagnostics. |
 | Useful developer alpha | 40-50% | A developer can use Forge on small real tasks with model-backed planning/editing, visible diffs, and reliable rollback. |
 | Commercial beta | 25-30% | A paid user can install it, connect providers, trust permissions, use git workflows, and recover from failures. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
@@ -85,7 +88,7 @@ restricted change, and see validation results.
 
 Remaining V0 gaps:
 
-- app-managed runtime start/stop or clearer run-state UX
+- app-managed runtime start/stop
 - more useful diff preview in the macOS app
 - provider settings smoke test with a live key supplied intentionally
 - broadened regression coverage for app-facing runtime state and provider

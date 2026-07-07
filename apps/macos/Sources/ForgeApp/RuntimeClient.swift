@@ -231,6 +231,7 @@ struct RuntimeClient {
                     let url = baseURL.appending(path: "events")
                     let (bytes, response) = try await URLSession.shared.bytes(from: url)
                     try validate(response)
+                    continuation.yield(RuntimeStreamEvent(type: "stream.connected", data: ""))
 
                     var eventType = "message"
                     var eventData = ""

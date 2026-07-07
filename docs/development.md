@@ -113,6 +113,13 @@ Use the toolbar buttons:
 - `Check Runtime`: calls `GET /health` and refreshes tasks.
 - `Start Demo Agent`: calls `POST /tasks` and starts Agent Loop v0.
 
+The sidebar runtime badge shows app-level runtime state: unchecked, checking,
+running, disconnected, wrong version, provider configuration issues, endpoint,
+and event-stream state. It also provides actions to refresh health, open the
+runtime status page, and copy a diagnostics bundle. The Settings runtime tab
+shows the same state plus service, version, uptime, database path, task count,
+last checked time, and last error.
+
 Use the sidebar composer to create a custom task. The app connects to
 `GET /events` and refreshes tasks as runtime events arrive.
 

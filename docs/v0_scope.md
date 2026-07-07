@@ -65,6 +65,8 @@ The product should show:
 - approved runtime validation preset
 - workspace validation preset config
 - command permission request surface
+- app-visible runtime state and diagnostics
+- copy/open runtime diagnostics actions
 - no automatic file changes
 
 ## V0 Not Included
@@ -121,6 +123,9 @@ V0 is complete when:
 - The Settings window can show and edit runtime-derived model-provider status,
   missing provider configuration, non-secret provider options, Keychain-backed
   OpenAI API key sync, and remote-context boundary.
+- The app shows whether the expected runtime endpoint is unchecked, checking,
+  running, disconnected, wrong version, or blocked by provider configuration,
+  and exposes copy/open diagnostics actions.
 
 ## V0 Next After Completion
 

@@ -53,6 +53,8 @@ Implemented today:
 - Editable model-provider settings in macOS Settings with Keychain-backed OpenAI API key sync.
 - Core runtime smoke regression for the main task lifecycle, restricted
   append/replace edits, post-apply validation, and restart recovery.
+- App-visible runtime state and diagnostics for endpoint, version, provider
+  configuration, SSE stream, and copy/open diagnostics actions.
 
 Not finished yet:
 
@@ -69,7 +71,7 @@ Product-readiness estimate:
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| V0 local demo | 85-88% | The local task-to-review demo is mostly implemented and now has core runtime regression coverage. |
+| V0 local demo | 87-90% | The local task-to-review demo is mostly implemented, has core runtime regression coverage, and surfaces runtime diagnostics. |
 | Useful developer alpha | 40-50% | Needs real model-backed work, richer diffs, git visibility, and recovery. |
 | Commercial beta | 25-30% | Needs packaging, onboarding, runtime management, trust polish, and integrations. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, git, memory, MCP/GitHub, and product polish. |
@@ -83,7 +85,7 @@ Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
 
 - broaden the V0 regression/demo path beyond the runtime core
 - improve edit proposal diff preview
-- manage runtime state from the app
+- add app-managed runtime start/stop
 - make real provider-backed planning and proposal generation usable
 - add git status and review surfaces
 - build a durable repository index

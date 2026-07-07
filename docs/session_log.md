@@ -1488,3 +1488,42 @@ Next:
   port, wrong version, startup guidance, and a copy/open diagnostics action.
 - Then improve the macOS edit proposal review panel with clearer operation
   metadata and diff preview.
+
+### 2026-07-08 02:13:54 CST +0800
+
+Conversation summary:
+
+- User asked to continue the next implementation step.
+
+Done:
+
+- Added structured app-level runtime state for unchecked, checking, running,
+  provider configuration issues, wrong version, and disconnected states.
+- Added structured SSE stream state and an immediate `stream.connected` event
+  when the app connects to runtime events.
+- Upgraded the sidebar runtime badge with endpoint, version, runtime state,
+  stream state, refresh, open runtime page, and copy diagnostics actions.
+- Expanded the Settings runtime tab with shared runtime state, last checked,
+  last error, service/version, uptime, database path, task count, event stream
+  status, and diagnostics actions.
+- Added a pasteboard diagnostics bundle covering endpoint, expected
+  service/version, runtime state, stream state, health, persistence, provider
+  status/issues, validation config, and loaded task count.
+- Updated `README.md`, `docs/development.md`, `docs/project_status.md`,
+  `docs/todo.md`, and `docs/v0_scope.md` to reflect the new runtime state and
+  diagnostics surface.
+- Verified `swift build`.
+
+Not done:
+
+- Did not implement app-managed runtime start/stop.
+- Did not improve the edit proposal diff preview.
+- Did not add app-facing automated regression coverage.
+- Did not run a live OpenAI provider settings smoke test.
+
+Next:
+
+- Improve the macOS edit proposal panel with clearer operation metadata and a
+  more readable diff preview.
+- Add a short V0 demo script in `docs/development.md`.
+- Add app-facing regression checks for runtime state and diagnostics paths.

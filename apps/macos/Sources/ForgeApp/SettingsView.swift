@@ -6,9 +6,17 @@ struct SettingsView: View {
     var body: some View {
         TabView {
             RuntimeSettingsTab(
+                endpoint: workspace.runtimeEndpoint,
+                runtimeState: workspace.runtimeState,
+                eventStreamState: workspace.eventStreamState,
                 statusMessage: workspace.statusMessage,
+                eventStreamStatus: workspace.eventStreamStatus,
                 runtimeHealth: workspace.runtimeHealth,
-                refresh: workspace.refreshRuntimeHealth
+                runtimeLastCheckedAt: workspace.runtimeLastCheckedAt,
+                runtimeLastError: workspace.runtimeLastError,
+                refresh: workspace.refreshRuntimeHealth,
+                copyDiagnostics: workspace.copyRuntimeDiagnostics,
+                openRuntimeStatusPage: workspace.openRuntimeStatusPage
             )
             .tabItem {
                 Label("Runtime", systemImage: "server.rack")
@@ -49,26 +57,66 @@ struct SettingsView: View {
 }
 
 private struct RuntimeSettingsTab: View {
+    var endpoint: String
+    var runtimeState: RuntimeConnectionState
+    var eventStreamState: RuntimeEventStreamState
     var statusMessage: String
+    var eventStreamStatus: String
     var runtimeHealth: RuntimeHealth?
+    var runtimeLastCheckedAt: Date?
+    var runtimeLastError: String?
     var refresh: () -> Void
+    var copyDiagnostics: () -> Void
+    var openRuntimeStatusPage: () -> Void
 
     var body: some View {
         Form {
             Section("Runtime") {
-                LabeledContent("Endpoint", value: "http://127.0.0.1:17373")
+                LabeledContent("Endpoint", value: endpoint)
+                LabeledContent("Runtime State") {
+                    RuntimeStateText(state: runtimeState)
+                }
+                LabeledContent("Event Stream") {
+                    EventStreamStateText(state: eventStreamState)
+                }
                 LabeledContent("Status", value: statusMessage)
+                LabeledContent("Stream Detail", value: eventStreamStatus)
+
+                if let runtimeLastCheckedAt {
+                    LabeledContent("Last Checked", value: runtimeLastCheckedAt.formatted(date: .abbreviated, time: .standard))
+                }
+
+                if let runtimeLastError {
+                    LabeledContent("Last Error", value: runtimeLastError)
+                }
 
                 if let runtimeHealth {
                     LabeledContent("Service", value: runtimeHealth.service)
                     LabeledContent("Version", value: runtimeHealth.version)
+                    LabeledContent("Expected Version", value: WorkspaceModel.expectedRuntimeVersion)
                     LabeledContent("Uptime", value: formattedUptime(runtimeHealth.uptimeSeconds))
+                    if let persistence = runtimeHealth.persistence {
+                        LabeledContent("Task Count", value: "\(persistence.taskCount)")
+                        LabeledContent("Database", value: persistence.databasePath)
+                    }
                 }
 
-                Button(action: refresh) {
-                    Label("Refresh Runtime", systemImage: "arrow.clockwise")
+                HStack {
+                    Button(action: refresh) {
+                        Label("Refresh Runtime", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button(action: openRuntimeStatusPage) {
+                        Label("Open Status Page", systemImage: "safari")
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button(action: copyDiagnostics) {
+                        Label("Copy Diagnostics", systemImage: "doc.on.doc")
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.bordered)
             }
 
             Section("Product Rules") {
@@ -88,6 +136,76 @@ private struct RuntimeSettingsTab: View {
         let minutes = value / 60
         let remainingSeconds = value % 60
         return "\(minutes)m \(remainingSeconds)s"
+    }
+}
+
+private struct RuntimeStateText: View {
+    var state: RuntimeConnectionState
+
+    var body: some View {
+        Label(state.rawValue, systemImage: systemImage)
+            .foregroundStyle(color)
+    }
+
+    private var systemImage: String {
+        switch state {
+        case .unchecked:
+            return "questionmark.circle"
+        case .checking:
+            return "arrow.triangle.2.circlepath.circle"
+        case .running:
+            return "checkmark.circle.fill"
+        case .needsProviderConfiguration:
+            return "exclamationmark.triangle.fill"
+        case .wrongVersion:
+            return "xmark.octagon.fill"
+        case .disconnected:
+            return "bolt.horizontal.circle"
+        }
+    }
+
+    private var color: Color {
+        switch state {
+        case .running:
+            return .green
+        case .needsProviderConfiguration, .checking:
+            return .orange
+        case .wrongVersion, .disconnected:
+            return .red
+        case .unchecked:
+            return .secondary
+        }
+    }
+}
+
+private struct EventStreamStateText: View {
+    var state: RuntimeEventStreamState
+
+    var body: some View {
+        Label(state.rawValue, systemImage: systemImage)
+            .foregroundStyle(color)
+    }
+
+    private var systemImage: String {
+        switch state {
+        case .connected:
+            return "dot.radiowaves.left.and.right"
+        case .connecting:
+            return "antenna.radiowaves.left.and.right"
+        case .disconnected:
+            return "wifi.slash"
+        }
+    }
+
+    private var color: Color {
+        switch state {
+        case .connected:
+            return .green
+        case .connecting:
+            return .orange
+        case .disconnected:
+            return .secondary
+        }
     }
 }
 
