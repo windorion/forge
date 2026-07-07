@@ -169,6 +169,20 @@ The server listens on:
 http://127.0.0.1:17373
 ```
 
+Run the core lifecycle smoke regression:
+
+```bash
+cd runtime
+npm run smoke:core
+```
+
+The smoke command builds the runtime, starts a temporary local runtime process,
+uses temporary SQLite and provider settings paths, creates and cleans unique
+Markdown fixtures under `docs/`, and verifies create task, file-reference
+messages, plan revision, plan approval, edit proposal generation, validation,
+apply, post-apply validation, restart recovery, and both append/replace
+restricted edit operations.
+
 ## Example
 
 ```bash

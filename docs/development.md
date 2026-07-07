@@ -18,6 +18,9 @@ SQLite task persistence. The loop now includes a bounded repo-context pass
 that scans safe local files, derives search terms from the task intent, records
 matching files, and reads selected context before planning.
 
+The runtime core has an automated smoke regression that exercises the main
+task lifecycle without using real project memory or provider settings.
+
 ## Run Runtime
 
 ```bash
@@ -199,11 +202,40 @@ run button. The runtime provides the task-specific permission state through
 active provider status, editable provider settings, loaded workspace
 validation config path, and any config issues.
 
+## Core Runtime Smoke
+
+```bash
+cd runtime
+npm run smoke:core
+```
+
+This command builds the runtime, starts a temporary runtime process on a random
+local port, uses a temporary SQLite database and provider settings file,
+creates unique temporary Markdown fixtures under `docs/`, and deletes them at
+the end.
+
+It covers:
+
+- create task
+- message with repo-local file reference
+- generate plan revision
+- approve plan
+- generate and validate edit proposal
+- apply restricted edit proposal
+- built-in post-apply validation
+- SQLite restart recovery
+- both `AppendText` and exact `ReplaceText`
+
+In sandboxed Codex sessions, the command may need approval because it listens
+on `127.0.0.1`.
+
 ## Build Checks
 
 ```bash
 swift build
 cd runtime && npm run check
+cd runtime && npm run build
+cd runtime && npm run smoke:core
 ```
 
 ## Current Limitations

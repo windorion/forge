@@ -1454,3 +1454,37 @@ Next:
 
 - Keep future handoffs anchored in `README.md`, `docs/project_status.md`,
   `docs/todo.md`, and the relevant domain doc instead of rereading everything.
+
+### 2026-07-08 01:45:53 CST +0800
+
+Conversation summary:
+
+- User asked to continue the next long development task for Forge.
+
+Done:
+
+- Added `runtime/scripts/smoke-core.mjs`, an automated core runtime smoke
+  regression.
+- Added `npm run smoke:core`.
+- Covered create task, repo-local file-reference message, plan revision, plan
+  approval, edit proposal generation, proposal validation, proposal apply,
+  built-in post-apply validation, SQLite restart recovery, and both
+  `AppendText` and exact `ReplaceText`.
+- Updated `README.md`, `docs/development.md`, `docs/project_status.md`,
+  `docs/todo.md`, and `runtime/README.md` to document the new smoke command
+  and current V0 distance.
+- Verified `npm run check`, `npm run build`, and `npm run smoke:core`.
+
+Not done:
+
+- Did not add app-level runtime diagnostics or app-managed runtime lifecycle.
+- Did not improve the macOS edit proposal diff preview.
+- Did not run a live OpenAI provider settings smoke test.
+- Did not add broader app/UI regression automation.
+
+Next:
+
+- Add app-facing runtime state and diagnostics: running, disconnected, wrong
+  port, wrong version, startup guidance, and a copy/open diagnostics action.
+- Then improve the macOS edit proposal review panel with clearer operation
+  metadata and diff preview.

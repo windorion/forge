@@ -3,14 +3,15 @@
 Document role: record the current product state, objective completion estimate,
 major gaps, and what "finished" means at each product horizon.
 
-Last updated: 2026-07-07
+Last updated: 2026-07-08
 
 ## One-Line Status
 
 Forge is a working local prototype of a macOS-native agent workspace. It can
 create tasks, inspect bounded repo context, hold review gates, generate safe
 edit proposals, apply restricted Markdown edits, validate work, and persist task
-state locally. It is not yet a real autonomous coding agent product.
+state locally. The runtime core now has automated smoke coverage. It is not yet
+a real autonomous coding agent product.
 
 ## Current Implementation
 
@@ -43,6 +44,10 @@ Implemented:
 - Optional OpenAI Responses provider with Structured Outputs.
 - Editable model-provider settings in macOS Settings.
 - OpenAI API key handling through macOS Keychain and runtime memory.
+- Core runtime smoke regression command covering create task, file-reference
+  messages, plan revision, plan approval, edit proposal generation,
+  validation, apply, built-in post-apply validation, append/replace operations,
+  and SQLite restart recovery.
 
 ## Completion Estimate
 
@@ -50,7 +55,7 @@ These percentages are product-readiness estimates, not calendar estimates.
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| V0 local demo | 80-85% | A local demo can show task creation, context inspection, planning, review, restricted edits, and validation. |
+| V0 local demo | 85-88% | A local demo can show task creation, context inspection, planning, review, restricted edits, validation, and core runtime regression coverage. |
 | Useful developer alpha | 40-50% | A developer can use Forge on small real tasks with model-backed planning/editing, visible diffs, and reliable rollback. |
 | Commercial beta | 25-30% | A paid user can install it, connect providers, trust permissions, use git workflows, and recover from failures. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
@@ -83,7 +88,8 @@ Remaining V0 gaps:
 - app-managed runtime start/stop or clearer run-state UX
 - more useful diff preview in the macOS app
 - provider settings smoke test with a live key supplied intentionally
-- tighter end-to-end regression script for the main task lifecycle
+- broadened regression coverage for app-facing runtime state and provider
+  settings paths
 - small UI polish pass around task states and review panels
 
 ## Alpha Finish Line

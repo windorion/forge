@@ -3,7 +3,7 @@
 Document role: maintain the active backlog, priority order, and next concrete
 engineering tasks for Forge.
 
-Last updated: 2026-07-07
+Last updated: 2026-07-08
 
 ## Rule
 
@@ -12,10 +12,8 @@ what to do next without rereading the whole project history.
 
 ## P0: Finish V0
 
-- Add an end-to-end regression script for the core task lifecycle:
-  create task, message with file reference, plan revision, approve plan,
-  generate edit proposal, validate, apply, post-apply validation, restart
-  recovery.
+- Broaden automated regression coverage from the runtime core to app-facing
+  runtime state, diagnostics, and provider settings paths.
 - Improve the macOS edit proposal panel with clearer diff preview and operation
   metadata.
 - Add app-level runtime state: running, disconnected, wrong port, wrong
@@ -88,6 +86,10 @@ what to do next without rereading the whole project history.
 
 ## Done Recently
 
+- Core runtime smoke regression script covering task creation, file-reference
+  messages, plan revision, plan approval, edit proposal generation, validation,
+  apply, post-apply validation, append/replace operations, and SQLite restart
+  recovery.
 - Model provider settings management in macOS Settings.
 - OpenAI provider configuration visibility and Keychain-backed API key sync.
 - Safe edit proposal exact replace operation.

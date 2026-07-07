@@ -34,7 +34,7 @@ auditable boundaries.
 
 ## Current Status
 
-Last updated: 2026-07-07
+Last updated: 2026-07-08
 
 Implemented today:
 
@@ -51,6 +51,8 @@ Implemented today:
 - Validation presets and runtime-derived command permission state.
 - Local deterministic model provider and optional OpenAI Responses provider.
 - Editable model-provider settings in macOS Settings with Keychain-backed OpenAI API key sync.
+- Core runtime smoke regression for the main task lifecycle, restricted
+  append/replace edits, post-apply validation, and restart recovery.
 
 Not finished yet:
 
@@ -67,7 +69,7 @@ Product-readiness estimate:
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| V0 local demo | 80-85% | The local task-to-review demo is mostly implemented. |
+| V0 local demo | 85-88% | The local task-to-review demo is mostly implemented and now has core runtime regression coverage. |
 | Useful developer alpha | 40-50% | Needs real model-backed work, richer diffs, git visibility, and recovery. |
 | Commercial beta | 25-30% | Needs packaging, onboarding, runtime management, trust polish, and integrations. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, git, memory, MCP/GitHub, and product polish. |
@@ -79,7 +81,7 @@ but it is not close to a commercial finished product yet.
 
 Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
 
-- finish the V0 regression/demo path
+- broaden the V0 regression/demo path beyond the runtime core
 - improve edit proposal diff preview
 - manage runtime state from the app
 - make real provider-backed planning and proposal generation usable
