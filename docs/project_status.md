@@ -49,6 +49,9 @@ Implemented:
   follow-up repair proposals.
 - Read-only git status and bounded per-file diff inspection from the runtime,
   surfaced in the macOS Review UI with changed-file open/reveal actions.
+- Read-only commit preparation preview from the runtime, surfaced in the macOS
+  Review UI with suggested commit message, included files, validation
+  suggestions, blockers, risk notes, and a non-mutating operation boundary.
 - Built-in and allowlisted project validation presets.
 - Runtime-derived command permission state in the app.
 - Runtime model-provider abstraction.
@@ -76,8 +79,8 @@ These percentages are product-readiness estimates, not calendar estimates.
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| V0 local demo | 90-93% | A local demo can show task creation, context inspection, planning, review, restricted edits, validation, repair proposal review, git status/diff visibility, core runtime regression coverage, runtime diagnostics, and first-pass runtime lifecycle controls. |
-| Useful developer alpha | 44-54% | A developer can use Forge on small real tasks with model-backed planning/editing, visible diffs, runtime lifecycle controls, and reliable rollback. |
+| V0 local demo | 91-94% | A local demo can show task creation, context inspection, planning, review, restricted edits, validation, repair proposal review, git status/diff visibility, commit preparation preview, core runtime regression coverage, runtime diagnostics, and first-pass runtime lifecycle controls. |
+| Useful developer alpha | 46-56% | A developer can use Forge on small real tasks with model-backed planning/editing, visible diffs, commit preparation preview, runtime lifecycle controls, and reliable rollback. |
 | Commercial beta | 25-30% | A paid user can install it, connect providers, trust permissions, use git workflows, and recover from failures. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
 
@@ -92,7 +95,7 @@ The hardest remaining work is not the app shell. The hardest remaining work is:
 - reliable repository understanding beyond bounded file scans
 - safe but useful patch generation and diff review
 - app-managed runtime lifecycle
-- git workflow from dirty tree to reviewed commit or PR
+- git workflow from dirty tree to approved commit or PR
 - robust command execution and failure recovery
 - native macOS distribution, signing, notarization, and updates
 - trust polish: permissions, audit trail, secret handling, and clear user
@@ -110,6 +113,8 @@ Remaining V0 gaps:
   diagnostics
 - harden the first-pass git/diff review UI for larger diffs and packaged app
   workflows
+- harden commit preparation review for mixed staged/unstaged states and larger
+  changes
 - provider settings smoke test with a live key supplied intentionally
 - broadened regression coverage for app-facing runtime state and provider
   settings paths
@@ -125,7 +130,7 @@ Alpha requires:
 - real provider-backed planning and proposal generation in normal flows
 - a richer patch format than append/exact replace
 - side-by-side diff review
-- git status and changed-file inspection in the app
+- git status, changed-file inspection, and commit preparation preview in the app
 - task recovery after runtime restart and common failures
 - a clean onboarding path for choosing a repo and provider
 
@@ -141,7 +146,7 @@ Commercial beta requires:
 - app-managed runtime process
 - robust provider configuration and diagnostics
 - workspace/repository selection
-- git commit and PR preparation workflow
+- approved git commit and PR workflow
 - privacy and permission messaging
 - crash/error reporting strategy
 - pricing and packaging decision

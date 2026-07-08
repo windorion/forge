@@ -355,6 +355,29 @@ export interface GitFileDiff {
   summary: string;
 }
 
+export interface GitCommitRelatedTask {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  currentPhase: string;
+  summary: string;
+}
+
+export interface GitCommitPreview {
+  generatedAt: string;
+  readiness: "Ready" | "NeedsReview" | "Blocked";
+  summary: string;
+  suggestedTitle: string;
+  suggestedBody: string[];
+  includedFiles: GitFileChange[];
+  relatedTask?: GitCommitRelatedTask;
+  validationSummary: string;
+  validationCommands: string[];
+  riskNotes: string[];
+  blockers: string[];
+  operationBoundary: string;
+}
+
 export interface ContextFile {
   path: string;
   summary: string;

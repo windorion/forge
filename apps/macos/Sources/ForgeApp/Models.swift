@@ -265,6 +265,29 @@ struct GitFileDiff: Codable, Hashable {
     var summary: String
 }
 
+struct GitCommitRelatedTask: Codable, Hashable {
+    var id: String
+    var title: String
+    var status: String
+    var currentPhase: String
+    var summary: String
+}
+
+struct GitCommitPreview: Codable, Hashable {
+    var generatedAt: String
+    var readiness: String
+    var summary: String
+    var suggestedTitle: String
+    var suggestedBody: [String]
+    var includedFiles: [GitFileChange]
+    var relatedTask: GitCommitRelatedTask?
+    var validationSummary: String
+    var validationCommands: [String]
+    var riskNotes: [String]
+    var blockers: [String]
+    var operationBoundary: String
+}
+
 struct ContextFile: Identifiable, Codable, Hashable {
     var id: String { path }
     var path: String

@@ -58,6 +58,9 @@ Implemented today:
   surfaced in the macOS Review UI and still behind human review.
 - Read-only git status and bounded file diff inspection surfaced in the macOS
   Review UI, including open/reveal actions for changed files.
+- Read-only commit preparation artifacts with suggested commit message,
+  included files, validation suggestions, blockers, and risk notes surfaced in
+  the macOS Review UI.
 - SQLite task persistence.
 - Validation presets and runtime-derived command permission state.
 - Local deterministic model provider and optional OpenAI Responses provider.
@@ -75,7 +78,7 @@ Not finished yet:
 
 - Real autonomous model-backed tool loop.
 - General patch engine and richer diff review.
-- Commit and PR workflow.
+- Actual staging, commit, push, and PR workflow.
 - Durable repository index with symbols and semantic search.
 - Hardened app-managed runtime lifecycle for packaged distribution.
 - Packaged, signed, notarized, auto-updating Mac distribution.
@@ -86,8 +89,8 @@ Product-readiness estimate:
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| V0 local demo | 90-93% | The local task-to-review demo is mostly implemented, has core runtime regression coverage, repair review UI, git status/diff visibility, and app-visible runtime lifecycle controls. |
-| Useful developer alpha | 44-54% | Needs real model-backed work, richer patching, commit/PR review artifacts, and recovery. |
+| V0 local demo | 91-94% | The local task-to-review demo is mostly implemented, has core runtime regression coverage, repair review UI, git status/diff visibility, commit preparation preview, and app-visible runtime lifecycle controls. |
+| Useful developer alpha | 46-56% | Needs real model-backed work, richer patching, actual commit/PR actions, and recovery. |
 | Commercial beta | 25-30% | Needs packaging, onboarding, runtime management, trust polish, and integrations. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, git, memory, MCP/GitHub, and product polish. |
 
@@ -102,7 +105,7 @@ Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
 - harden git/diff and edit proposal review for larger real changes
 - harden app-managed runtime start/stop
 - make real provider-backed planning and proposal generation usable
-- add commit/PR review surfaces
+- add approved staging/commit/PR action surfaces
 - build a durable repository index
 
 ## Core Principles

@@ -208,6 +208,13 @@ The macOS Review panel consumes these endpoints as the first native
 working-tree surface. It prioritizes files related to the selected task, shows
 open/reveal actions, and renders a compact side-by-side diff preview.
 
+The runtime also provides `GET /git/commit-preview` as a non-mutating review
+artifact. It summarizes the current working tree, optional selected task, and
+latest task validation state into a suggested commit message, included files,
+validation commands to consider, risk notes, and blockers. This endpoint must
+remain read-only; actual stage, commit, push, or PR publication are separate
+high-risk actions that require explicit approval.
+
 ### Validation Runner
 
 Runs controlled post-apply validation and records command-level results. The

@@ -9,6 +9,7 @@ This first slice is intentionally small:
 - `GET /tasks`
 - `GET /git/status`
 - `GET /git/diff?path=<repo-relative-path>`
+- `GET /git/commit-preview`
 - `GET /validation-presets`
 - `GET /settings/model-provider`
 - `POST /settings/model-provider`
@@ -98,6 +99,11 @@ staged/unstaged/untracked flags, and available line-count stats. `GET /git/diff`
 returns a bounded per-file diff for a repo-relative path from that status
 snapshot. Diff reads are low-risk and run through `git` without a shell; paths
 must stay repo-relative and `.git`/`.forge` internals are blocked.
+`GET /git/commit-preview` turns the current working tree, optional task
+context, and latest task validation state into a review artifact with a
+suggested commit message, included files, validation commands to consider,
+risk notes, blockers, and an explicit non-mutating operation boundary. It does
+not stage, commit, push, or mutate the repository.
 
 Validation presets:
 
@@ -214,9 +220,10 @@ uses temporary SQLite and provider settings paths, creates and cleans unique
 Markdown fixtures under `docs/`, and verifies create task, file-reference
 messages, plan revision, plan approval, edit proposal generation, validation,
 apply, post-apply validation, restart recovery, and both append/replace
-restricted edit operations. It also verifies read-only git status and bounded
-git diff endpoints against temporary fixtures. It also starts a mock OpenAI Responses server to
-verify the model-guided context loop path before an OpenAI-backed plan
+restricted edit operations. It also verifies read-only git status, bounded git
+diff, and commit-preview endpoints against temporary fixtures. It also starts
+a mock OpenAI Responses server to verify the model-guided context loop path
+before an OpenAI-backed plan
 revision, a richer edit proposal with append/create apply, and a blocked
 preview-only artifact. It also verifies a blocked-to-repaired proposal path and
 bounded stop behavior for proposals that remain preview-only. The smoke also
@@ -230,6 +237,7 @@ cleaning the temporary file.
 curl http://127.0.0.1:17373/health
 curl http://127.0.0.1:17373/git/status
 curl "http://127.0.0.1:17373/git/diff?path=README.md"
+curl "http://127.0.0.1:17373/git/commit-preview"
 curl http://127.0.0.1:17373/settings/model-provider
 curl -X POST http://127.0.0.1:17373/settings/model-provider \
   -H 'Content-Type: application/json' \

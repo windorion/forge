@@ -1644,6 +1644,15 @@ private struct GitWorkingTreeCard: View {
                         }
                     )
                 }
+
+                GitCommitPreviewCard(
+                    task: task,
+                    preview: workspace.gitCommitPreview(for: task.id),
+                    isLoading: workspace.isPreparingGitCommitReview(taskID: task.id),
+                    prepare: {
+                        workspace.prepareGitCommitReview(for: task)
+                    }
+                )
             } else {
                 VStack(alignment: .leading, spacing: 6) {
                     Label("Git status unavailable.", systemImage: "exclamationmark.triangle")
@@ -1719,6 +1728,196 @@ private struct GitWorkingTreeCard: View {
             parts.append("behind \(behind)")
         }
         return parts.joined(separator: " / ")
+    }
+}
+
+private struct GitCommitPreviewCard: View {
+    var task: ForgeTask
+    var preview: GitCommitPreview?
+    var isLoading: Bool
+    var prepare: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Label("Commit Review", systemImage: "doc.badge.gearshape")
+                    .font(.subheadline.weight(.semibold))
+
+                Spacer()
+
+                Button {
+                    prepare()
+                } label: {
+                    Label(isLoading ? "Preparing" : "Prepare", systemImage: "doc.text.magnifyingglass")
+                }
+                .labelStyle(.iconOnly)
+                .disabled(isLoading)
+                .help("Prepare commit review")
+            }
+
+            if let preview {
+                HStack(spacing: 8) {
+                    Label(preview.readiness, systemImage: readinessImage)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(readinessColor)
+
+                    Spacer(minLength: 8)
+
+                    Text(preview.generatedAt)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+
+                Text(preview.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if let relatedTask = preview.relatedTask {
+                    Label("\(relatedTask.title) / \(relatedTask.status) / \(relatedTask.currentPhase)", systemImage: "target")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Suggested Message")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    Text(preview.suggestedTitle)
+                        .font(.caption.monospaced().weight(.semibold))
+                        .textSelection(.enabled)
+
+                    ForEach(Array(preview.suggestedBody.enumerated()), id: \.offset) { _, line in
+                        Text(line)
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.background)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+
+                if !preview.blockers.isEmpty {
+                    CommitPreviewNoteList(
+                        title: "Blockers",
+                        systemImage: "xmark.octagon",
+                        notes: preview.blockers,
+                        color: .red
+                    )
+                }
+
+                if !preview.riskNotes.isEmpty {
+                    CommitPreviewNoteList(
+                        title: "Risk Notes",
+                        systemImage: "exclamationmark.triangle",
+                        notes: preview.riskNotes,
+                        color: .orange
+                    )
+                }
+
+                if !preview.validationCommands.isEmpty {
+                    CommitPreviewNoteList(
+                        title: "Suggested Validation",
+                        systemImage: "checkmark.shield",
+                        notes: preview.validationCommands,
+                        color: .secondary
+                    )
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Included Files")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    ForEach(preview.includedFiles.prefix(10)) { file in
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Text(file.status)
+                                .font(.caption2.weight(.medium))
+                                .frame(width: 64, alignment: .leading)
+                                .foregroundStyle(.secondary)
+
+                            Text(file.path)
+                                .font(.caption2.monospaced())
+                                .lineLimit(1)
+
+                            Spacer(minLength: 6)
+
+                            if let additions = file.additions, let deletions = file.deletions {
+                                Text("+\(additions) -\(deletions)")
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                    }
+
+                    if preview.includedFiles.count > 10 {
+                        Text("\(preview.includedFiles.count - 10) more file(s) in commit preview.")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+
+                Label(preview.operationBoundary, systemImage: "lock.shield")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            } else {
+                Label(isLoading ? "Preparing commit review..." : "Commit review has not been prepared.", systemImage: isLoading ? "hourglass" : "doc.text.magnifyingglass")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(8)
+        .background(.quaternary)
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+    }
+
+    private var readinessImage: String {
+        switch preview?.readiness {
+        case "Ready":
+            return "checkmark.circle"
+        case "Blocked":
+            return "xmark.octagon"
+        default:
+            return "exclamationmark.triangle"
+        }
+    }
+
+    private var readinessColor: Color {
+        switch preview?.readiness {
+        case "Ready":
+            return .green
+        case "Blocked":
+            return .red
+        default:
+            return .orange
+        }
+    }
+}
+
+private struct CommitPreviewNoteList: View {
+    var title: String
+    var systemImage: String
+    var notes: [String]
+    var color: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(title, systemImage: systemImage)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(color)
+
+            ForEach(Array(notes.enumerated()), id: \.offset) { _, note in
+                Text(note)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

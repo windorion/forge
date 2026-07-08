@@ -1978,3 +1978,48 @@ Next:
   changed files, validation summary, and explicit approval.
 - Harden the git/diff panel for larger real repositories and binary files.
 - Continue toward broader patch apply and rollback/recovery flows.
+
+### 2026-07-08 20:58:30 CEST +0200
+
+Conversation summary:
+
+- User asked to commit all current changes to the remote repository and then
+  continue the next implementation step. After pushing the prior work, this
+  session continued into commit preparation as the next git review artifact.
+
+Done:
+
+- Staged, committed, and pushed the previous agent-review/git-diff/runtime
+  lifecycle work to `origin/main` as `0b9117c Advance Forge agent review
+  workflows`.
+- Added runtime `GET /git/commit-preview`, a read-only commit preparation
+  endpoint that summarizes working tree state, optional task context, latest
+  task validation state, suggested commit message, included files, validation
+  suggestions, blockers, risk notes, and a non-mutating operation boundary.
+- Added TypeScript commit preview types and smoke coverage for the new
+  endpoint.
+- Added macOS app models, runtime client method, workspace state, and a
+  `Commit Review` card inside the Review panel's Working Tree section.
+- Updated README, runtime README, project status, TODO, development, runtime
+  architecture, git workflow, security permissions, and V0 scope docs.
+- Verified `npm run check`, `npm run build`, `swift build`,
+  `npm run smoke:core`, and `git diff --check`.
+- Confirmed no persistent runtime service was listening on the default
+  `127.0.0.1:17373` port after smoke finished.
+
+Not done:
+
+- Did not add actual staging, unstaging, commit, push, branch creation, or PR
+  publication actions.
+- Did not add binary diff viewing, full diff filtering, large-diff navigation,
+  or packaged-app runtime lifecycle hardening.
+- Did not adapt the shipped UI design handoff into the SwiftUI visual system.
+
+Next:
+
+- Add explicit approved staging and commit actions on top of the commit
+  preview artifact.
+- Add branch awareness and task-scoped branch suggestions before real commit
+  and PR handoff.
+- Continue hardening git/diff review for large and mixed staged/unstaged
+  working trees.

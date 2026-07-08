@@ -31,14 +31,18 @@ Examples:
 - search repository
 - inspect git status
 - inspect bounded git diffs for repo-relative changed files
+- prepare a read-only commit review artifact from git status, optional task
+  context, and latest task validation state
 - read project docs
 
 Can run automatically after workspace access is granted.
 
 Current git review endpoints are low risk and read-only. They run `git status`
 and `git diff` without a shell, require repo-relative paths for per-file diffs,
-and block `.git` and `.forge` internals. They must not stage, unstage, commit,
-checkout, reset, clean, or otherwise mutate the repository.
+and block `.git` and `.forge` internals. The commit-preview endpoint only
+summarizes the working tree, task context, validation state, and suggested
+next checks. These endpoints must not stage, unstage, commit, checkout, reset,
+clean, push, or otherwise mutate the repository.
 
 ### Medium Risk
 

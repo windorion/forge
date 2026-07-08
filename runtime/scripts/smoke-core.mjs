@@ -477,6 +477,25 @@ async function assertGitReadOnlyEndpoints() {
   assert(diff.path === appendSmokePath, `Git diff returned unexpected path ${diff.path}.`);
   assert(diff.diff.includes("Forge Append Smoke"), "Git diff did not include the smoke fixture content.");
   assert(diff.truncated === false, "Git diff for the small smoke fixture should not be truncated.");
+
+  const commitPreview = await get("/git/commit-preview");
+  assert(
+    commitPreview.includedFiles.some((change) => change.path === appendSmokePath),
+    `Git commit preview did not include the untracked smoke fixture ${appendSmokePath}.`
+  );
+  assert(commitPreview.suggestedTitle, "Git commit preview did not include a suggested title.");
+  assert(
+    commitPreview.validationCommands.includes("git diff --check"),
+    "Git commit preview did not suggest git diff whitespace validation."
+  );
+  assert(
+    commitPreview.operationBoundary.includes("has not staged"),
+    "Git commit preview did not state the non-mutating operation boundary."
+  );
+  assert(
+    commitPreview.readiness === "Ready" || commitPreview.readiness === "NeedsReview",
+    `Git commit preview should not be blocked for the smoke fixture: ${commitPreview.readiness}.`
+  );
 }
 
 async function createSmokeFiles() {

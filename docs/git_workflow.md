@@ -29,6 +29,11 @@ Current implementation:
 - the macOS Review panel shows the working tree and highlights files related
   to the selected task
 - `.git` and `.forge` internals are not exposed through the review endpoints
+- the runtime exposes `GET /git/commit-preview` as a read-only commit
+  preparation artifact with suggested message, included files, validation
+  suggestions, risk notes, blockers, and a non-mutating operation boundary
+- the macOS Review panel can request and display that commit review artifact
+  from the Working Tree surface
 
 ## Diff Workflow
 
@@ -58,7 +63,7 @@ Current implementation:
 
 Current limitations:
 
-- no staging, unstaging, discard, checkout, reset, or commit actions
+- no staging, unstaging, discard, checkout, reset, or actual commit actions
 - no binary diff viewer
 - no full-file diff navigation or filtering beyond the first review list
 - large diffs are truncated by the runtime
@@ -75,6 +80,15 @@ Commit steps:
 6. Forge links commit to task.
 
 Never commit without explicit user approval.
+
+Current implementation:
+
+- Forge can prepare steps 2 and 3 through a read-only commit preview.
+- The preview can include blockers such as clean working tree or unmerged
+  files, plus risk notes such as unstaged/untracked changes or failed/missing
+  task validation.
+- Forge does not yet stage files, create the commit, or link a created commit
+  back to the task.
 
 ## Push Workflow
 

@@ -69,6 +69,7 @@ The product should show:
 - approved runtime validation preset
 - workspace validation preset config
 - command permission request surface
+- read-only git status, diff, and commit preparation review surfaces
 - app-visible runtime state and diagnostics
 - copy/open runtime diagnostics actions
 - no automatic file changes
@@ -79,7 +80,7 @@ The product should show:
 - autonomous file edits
 - arbitrary command execution
 - general test runner orchestration
-- git diff generation
+- actual git staging, commit, push, or PR publication
 - full repository index
 - Tree-sitter parsing
 - provider ecosystem beyond local deterministic and optional OpenAI
@@ -142,6 +143,9 @@ V0 is complete when:
   connection targets rather than kill targets.
 - The app can show read-only git working tree status and bounded per-file diff
   previews in the Review panel, with open/reveal actions for changed files.
+- The app can prepare a read-only commit review artifact with suggested commit
+  message, included files, validation suggestions, blockers, risk notes, and
+  an explicit non-mutating operation boundary.
 
 ## V0 Next After Completion
 

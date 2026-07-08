@@ -16,6 +16,8 @@ what to do next without rereading the whole project history.
   runtime state, diagnostics, and provider settings paths.
 - Harden the macOS git/diff review panel for larger diffs, binary files, and
   packaged app workflows.
+- Harden commit preparation review for mixed staged/unstaged states, large
+  change sets, and validation readiness.
 - Harden app-managed runtime start/stop for packaged app locations, stale
   process handling, and user-facing launch failures.
 - Run a provider settings smoke test with an intentionally supplied OpenAI API
@@ -40,7 +42,7 @@ what to do next without rereading the whole project history.
 
 - Improve the first-pass native side-by-side diff view with file filtering and
   better large-diff navigation.
-- Add commit preparation as a review artifact, not an automatic action.
+- Add explicit approved staging and commit actions after commit preparation.
 - Add branch awareness.
 - Add PR handoff planning, likely through GitHub integration later.
 
@@ -108,6 +110,10 @@ what to do next without rereading the whole project history.
 - Added read-only runtime git status and bounded per-file diff endpoints, plus
   a macOS Review working-tree panel with side-by-side diff preview and
   open/reveal actions.
+- Added read-only commit preparation previews with suggested commit message,
+  included files, validation suggestions, blockers, risk notes, and a macOS
+  Review commit card. The preview does not stage, commit, push, or mutate the
+  repository.
 - Extended `npm run smoke:core` with a mock OpenAI Responses server that
   verifies the model-guided context loop, append/create apply,
   blocked-to-repaired proposal flow, failed validation repair briefs,

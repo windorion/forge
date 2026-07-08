@@ -26,6 +26,7 @@ import type {
   EditProposalValidation,
   FileChangeValidation,
   ForgeTask,
+  GitCommitPreview,
   GitFileChange,
   GitFileDiff,
   GitStatusSnapshot,
@@ -374,6 +375,11 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/git/commit-preview") {
+      writeJson(response, 200, await getGitCommitPreview(url.searchParams.get("taskID")));
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === "/validation-presets") {
       const registry = await loadValidationPresetRegistry();
       writeJson(response, 200, {
@@ -635,6 +641,243 @@ async function getGitFileDiff(rawPath: string | null): Promise<GitFileDiff> {
       ? `Diff for ${change.path}${bounded.truncated ? " was truncated." : "."}`
       : `No textual diff is available for ${change.path}.`
   };
+}
+
+async function getGitCommitPreview(rawTaskID: string | null): Promise<GitCommitPreview> {
+  const status = await getGitStatusSnapshot();
+  const generatedAt = new Date().toISOString();
+  const task = rawTaskID ? tasks.get(rawTaskID) : undefined;
+  const taskMissing = Boolean(rawTaskID && !task);
+  const operationBoundary = "Review artifact only. Forge has not staged, committed, pushed, or mutated the repository.";
+
+  if (!status.isRepository) {
+    return {
+      generatedAt,
+      readiness: "Blocked",
+      summary: "Commit preparation is blocked because git status is unavailable.",
+      suggestedTitle: "Update workspace",
+      suggestedBody: [],
+      includedFiles: [],
+      relatedTask: undefined,
+      validationSummary: "Validation was not inspected because this workspace is not a git repository.",
+      validationCommands: [],
+      riskNotes: taskMissing ? [`Task ${rawTaskID} was not found.`] : [],
+      blockers: [status.error ?? "Workspace is not inside a git repository."],
+      operationBoundary
+    };
+  }
+
+  const includedFiles = status.changedFiles;
+  const blockers = commitPreviewBlockers(status, includedFiles);
+  const validationSummary = commitValidationSummary(task);
+  const validationCommands = suggestedCommitValidationCommands(includedFiles);
+  const riskNotes = commitPreviewRiskNotes(status, includedFiles, task, taskMissing, validationSummary);
+  const readiness: GitCommitPreview["readiness"] = blockers.length > 0
+    ? "Blocked"
+    : riskNotes.length > 0
+      ? "NeedsReview"
+      : "Ready";
+  const suggestedTitle = suggestCommitTitle(task, includedFiles);
+
+  return {
+    generatedAt,
+    readiness,
+    summary: commitPreviewSummary(status, includedFiles, readiness),
+    suggestedTitle,
+    suggestedBody: buildSuggestedCommitBody(status, task, includedFiles, validationSummary),
+    includedFiles,
+    relatedTask: task ? {
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      currentPhase: task.currentPhase,
+      summary: task.reviewSummary ?? task.objective
+    } : undefined,
+    validationSummary,
+    validationCommands,
+    riskNotes,
+    blockers,
+    operationBoundary
+  };
+}
+
+function commitPreviewBlockers(status: GitStatusSnapshot, files: GitFileChange[]): string[] {
+  const blockers: string[] = [];
+
+  if (!status.isDirty || files.length === 0) {
+    blockers.push("Working tree is clean; there are no file changes to commit.");
+  }
+
+  const unmergedFiles = files.filter((file) => file.status === "Unmerged");
+  if (unmergedFiles.length > 0) {
+    blockers.push(`Resolve ${unmergedFiles.length} unmerged file(s) before preparing a commit.`);
+  }
+
+  return blockers;
+}
+
+function commitPreviewRiskNotes(
+  status: GitStatusSnapshot,
+  files: GitFileChange[],
+  task: ForgeTask | undefined,
+  taskMissing: boolean,
+  validationSummary: string
+): string[] {
+  const notes: string[] = [];
+
+  if (taskMissing) {
+    notes.push("The requested task was not found, so this preview is based on working tree state only.");
+  }
+
+  if (!task) {
+    notes.push("No task context is linked to this preview.");
+  }
+
+  const unstagedCount = files.filter((file) => file.unstaged || file.untracked).length;
+  if (unstagedCount > 0) {
+    notes.push(`${unstagedCount} file(s) are unstaged or untracked; review inclusion before committing.`);
+  }
+
+  const stagedCount = files.filter((file) => file.staged).length;
+  if (stagedCount > 0 && unstagedCount > 0) {
+    notes.push("The working tree mixes staged and unstaged changes; the eventual commit boundary needs explicit review.");
+  }
+
+  if ((status.behind ?? 0) > 0) {
+    notes.push(`Current branch is behind upstream by ${status.behind} commit(s).`);
+  }
+
+  if (validationSummary.includes("Failed")) {
+    notes.push("Latest task validation failed; repair or explicitly accept the risk before committing.");
+  } else if (validationSummary.includes("No validation run")) {
+    notes.push("No task validation run is linked yet.");
+  }
+
+  return notes;
+}
+
+function suggestedCommitValidationCommands(files: GitFileChange[]): string[] {
+  const paths = files.map((file) => file.path);
+  const commands = ["git diff --check"];
+
+  if (paths.some((filePath) => filePath.startsWith("runtime/"))) {
+    commands.push("cd runtime && npm run check");
+    commands.push("cd runtime && npm run build");
+  }
+
+  if (paths.some((filePath) => filePath.startsWith("apps/macos/") || filePath === "Package.swift")) {
+    commands.push("swift build");
+  }
+
+  return [...new Set(commands)];
+}
+
+function commitValidationSummary(task: ForgeTask | undefined): string {
+  if (!task) {
+    return "No validation run is linked to this preview.";
+  }
+
+  const latestRun = task.validationRuns.at(-1);
+  if (!latestRun) {
+    return "No validation run is linked to this task yet.";
+  }
+
+  return `${latestRun.status}: ${latestRun.summary}`;
+}
+
+function suggestCommitTitle(task: ForgeTask | undefined, files: GitFileChange[]): string {
+  if (task?.title) {
+    return normalizeCommitTitle(task.title);
+  }
+
+  const paths = files.map((file) => file.path);
+  const touchesRuntime = paths.some((filePath) => filePath.startsWith("runtime/"));
+  const touchesMacApp = paths.some((filePath) => filePath.startsWith("apps/macos/") || filePath === "Package.swift");
+  const touchesDocs = paths.some((filePath) => filePath === "README.md" || filePath.startsWith("docs/"));
+  const touchesDesign = paths.some((filePath) => filePath.startsWith("design_handoff_forge/"));
+
+  if (touchesRuntime && touchesMacApp) {
+    return "Advance Forge agent review workflow";
+  }
+
+  if (touchesRuntime) {
+    return "Update Forge runtime workflow";
+  }
+
+  if (touchesMacApp) {
+    return "Update Forge macOS review UI";
+  }
+
+  if (touchesDesign) {
+    return "Add Forge design handoff assets";
+  }
+
+  if (touchesDocs) {
+    return "Update Forge documentation";
+  }
+
+  return "Update Forge workspace";
+}
+
+function normalizeCommitTitle(title: string): string {
+  const normalized = title.replace(/\s+/g, " ").replace(/[.!?]+$/, "").trim();
+  if (!normalized) {
+    return "Update Forge workspace";
+  }
+
+  const capitalized = `${normalized[0]?.toUpperCase() ?? ""}${normalized.slice(1)}`;
+  return capitalized.length > 72 ? `${capitalized.slice(0, 69).trimEnd()}...` : capitalized;
+}
+
+function buildSuggestedCommitBody(
+  status: GitStatusSnapshot,
+  task: ForgeTask | undefined,
+  files: GitFileChange[],
+  validationSummary: string
+): string[] {
+  const body = [
+    `Branch: ${status.branch ?? "detached"}${status.head ? ` @ ${status.head}` : ""}`,
+    `Files: ${files.length} changed`,
+    `Validation: ${validationSummary}`
+  ];
+
+  if (task) {
+    body.splice(1, 0, `Task: ${task.title} (${task.id})`);
+  }
+
+  const fileLines = files.slice(0, 8).map((file) => `- ${commitFileSummary(file)}`);
+  if (fileLines.length > 0) {
+    body.push("Changed files:", ...fileLines);
+  }
+
+  if (files.length > fileLines.length) {
+    body.push(`- ${files.length - fileLines.length} more file(s)`);
+  }
+
+  return body;
+}
+
+function commitPreviewSummary(
+  status: GitStatusSnapshot,
+  files: GitFileChange[],
+  readiness: GitCommitPreview["readiness"]
+): string {
+  if (readiness === "Blocked") {
+    return `Commit preparation is blocked on ${status.branch ?? "current checkout"}.`;
+  }
+
+  const stagedCount = files.filter((file) => file.staged).length;
+  const unstagedCount = files.filter((file) => file.unstaged || file.untracked).length;
+  return `${files.length} file(s) on ${status.branch ?? "current checkout"}; ${stagedCount} staged, ${unstagedCount} unstaged or untracked.`;
+}
+
+function commitFileSummary(file: GitFileChange): string {
+  const stats = file.additions === undefined || file.deletions === undefined
+    ? ""
+    : ` (+${file.additions} -${file.deletions})`;
+  const staged = file.staged ? "staged" : "not staged";
+  const working = file.untracked ? "untracked" : file.unstaged ? "unstaged" : "clean index";
+  return `${file.status}: ${file.path}${stats} [${staged}, ${working}]`;
 }
 
 async function collectGitNumstat(gitRoot: string): Promise<Map<string, { additions?: number; deletions?: number }>> {
@@ -4106,6 +4349,7 @@ function renderRuntimeHome(): string {
       <li><a href="/tasks">GET /tasks</a></li>
       <li><a href="/git/status">GET /git/status</a></li>
       <li><code>GET /git/diff?path=README.md</code></li>
+      <li><a href="/git/commit-preview">GET /git/commit-preview</a></li>
       <li><a href="/validation-presets">GET /validation-presets</a></li>
       <li><a href="/settings/model-provider">GET /settings/model-provider</a></li>
       <li><code>POST /settings/model-provider</code></li>

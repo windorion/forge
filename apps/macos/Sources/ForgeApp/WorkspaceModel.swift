@@ -38,7 +38,9 @@ final class WorkspaceModel: ObservableObject {
     @Published private var approvingValidationPresetTaskIDs = Set<String>()
     @Published private var refreshingGitStatus = false
     @Published private var loadingGitDiffPaths = Set<String>()
+    @Published private var loadingGitCommitPreviewTaskIDs = Set<ForgeTask.ID>()
     @Published private var gitFileDiffs: [String: GitFileDiff] = [:]
+    @Published private var gitCommitPreviews: [ForgeTask.ID: GitCommitPreview] = [:]
     @Published private var updatingModelProviderSettings = false
 
     private let runtime = RuntimeClient()
@@ -530,6 +532,30 @@ final class WorkspaceModel: ObservableObject {
         loadingGitDiffPaths.contains(path)
     }
 
+    func prepareGitCommitReview(for task: ForgeTask) {
+        loadingGitCommitPreviewTaskIDs.insert(task.id)
+
+        Task {
+            do {
+                let taskID = task.id == ForgeTask.sample.id ? nil : task.id
+                gitCommitPreviews[task.id] = try await runtime.gitCommitPreview(taskID: taskID)
+                gitStatusLastError = nil
+            } catch {
+                gitStatusLastError = "Prepare commit review failed: \(error.localizedDescription)"
+            }
+
+            loadingGitCommitPreviewTaskIDs.remove(task.id)
+        }
+    }
+
+    func gitCommitPreview(for taskID: ForgeTask.ID) -> GitCommitPreview? {
+        gitCommitPreviews[taskID]
+    }
+
+    func isPreparingGitCommitReview(taskID: ForgeTask.ID) -> Bool {
+        loadingGitCommitPreviewTaskIDs.contains(taskID)
+    }
+
     func revealGitFile(path: String) {
         guard let root = gitStatus?.root else {
             statusMessage = "Git root is not available."
@@ -834,6 +860,7 @@ final class WorkspaceModel: ObservableObject {
         do {
             gitStatus = try await runtime.gitStatus()
             gitStatusLastError = gitStatus?.error
+            gitCommitPreviews.removeAll()
         } catch {
             gitStatus = nil
             gitStatusLastError = error.localizedDescription

@@ -136,7 +136,11 @@ endpoints. It refreshes `GET /git/status`, highlights files related to the
 selected task, shows staged/unstaged/untracked state plus line stats when git
 provides them, and can load a bounded side-by-side diff from
 `GET /git/diff?path=<repo-relative-path>`. File actions are read-only: open
-the file or reveal it in Finder.
+the file or reveal it in Finder. The same section can prepare a read-only
+Commit Review through `GET /git/commit-preview?taskID=<task-id>`, showing a
+suggested commit message, included files, validation suggestions, blockers,
+risk notes, and the explicit boundary that Forge has not staged, committed, or
+pushed anything.
 
 Use the sidebar composer to create a custom task. The app connects to
 `GET /events` and refreshes tasks as runtime events arrive.
