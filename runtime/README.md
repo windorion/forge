@@ -7,6 +7,8 @@ This first slice is intentionally small:
 - `GET /`
 - `GET /health`
 - `GET /tasks`
+- `GET /git/status`
+- `GET /git/diff?path=<repo-relative-path>`
 - `GET /validation-presets`
 - `GET /settings/model-provider`
 - `POST /settings/model-provider`
@@ -17,6 +19,7 @@ This first slice is intentionally small:
 - `POST /tasks/:taskID/approve-plan`
 - `POST /tasks/:taskID/generate-edit-proposal`
 - `POST /tasks/:taskID/revise-edit-proposal`
+- `POST /tasks/:taskID/generate-validation-repair-proposal`
 - `POST /tasks/:taskID/validate-edit-proposal`
 - `POST /tasks/:taskID/apply-edit-proposal`
 - `POST /tasks/:taskID/reject-edit-proposal`
@@ -50,6 +53,12 @@ revision. The runtime replaces the visible plan steps with the revision, clears
 any prepared execution proposal, returns the task to `Human Review`, and
 requires a fresh plan approval before execution can continue. The endpoint is
 blocked while an edit proposal is still proposed or already applied.
+When the OpenAI provider is active, plan revision first asks the model for a
+bounded context loop. Each round returns either `SearchAndRead` with search
+terms and repo-relative read paths or `ReadyForPlan` to stop. The runtime
+validates those requests, runs only logged read-only repo tools, stops on
+repeated context or the round limit, stores compact context summaries, and only
+then asks for the plan revision.
 
 Approving a plan records an approval and opens the controlled execution
 preparation phase. The runtime then asks the configured model provider for a
@@ -60,12 +69,35 @@ user explicitly applies it. If the user requests changes, the rejected proposal
 can be revised through `POST /tasks/:taskID/revise-edit-proposal`; the runtime
 archives the rejected proposal, asks the model provider for a new proposal from
 the latest task conversation, validates it, and returns to human review without
-writing files. The apply path revalidates against the current workspace before
-writing. The current apply path is intentionally narrow: it only supports
+writing files. If generated validation is blocked, the runtime can run a
+bounded repair loop by feeding failed validation checks back to the model
+provider; blocked intermediate proposals are archived as `Superseded`. The
+apply path revalidates against the current workspace before writing. The
+current apply path is intentionally narrow: it only supports
 append-text and exact replace-text operations on existing Markdown files in
-`README.md` or `docs/`. Exact replace requires the find text to appear once.
+`README.md` or `docs/`, plus create-file operations for new `docs/*.md`
+files. Exact replace requires the find text to appear once.
 After apply, the runtime runs controlled built-in validation commands and only
 marks the task completed if validation passes.
+If validation fails, the runtime asks the model provider for a repair brief
+from compact failed command summaries. The brief records likely cause,
+recommended actions, and a follow-up prompt without rerunning commands or
+editing files.
+After a repair brief exists, `POST /tasks/:taskID/generate-validation-repair-proposal`
+can create a new proposed repair diff linked to that brief. The previous
+applied proposal is archived for audit, the new proposal is validated, and no
+files are changed until the user explicitly applies it.
+OpenAI-backed edit proposals can include multiple file changes and
+preview-only unsupported operations. Unsupported changes are kept as review
+artifacts; validation blocks apply until every proposed change fits the current
+restricted apply engine.
+
+The runtime also exposes read-only git review endpoints. `GET /git/status`
+returns git root, branch, head, ahead/behind, dirty state, changed files,
+staged/unstaged/untracked flags, and available line-count stats. `GET /git/diff`
+returns a bounded per-file diff for a repo-relative path from that status
+snapshot. Diff reads are low-risk and run through `git` without a shell; paths
+must stay repo-relative and `.git`/`.forge` internals are blocked.
 
 Validation presets:
 
@@ -147,8 +179,9 @@ and syncs it into runtime memory.
 
 The OpenAI provider uses Responses API Structured Outputs for model-provider
 artifacts. It receives compact task and context summaries, not whole
-repositories. The runtime still owns approval gates, validation, IDs,
-timestamps, and restricted file apply operations.
+repositories. Before plan revisions it may run a bounded read/search context
+loop, but the runtime still owns tool execution, approval gates, validation,
+IDs, timestamps, and restricted file apply operations.
 
 `GET /health` returns `modelProviderConfiguration` so the macOS Settings
 window can show provider readiness, missing configuration, non-secret settings,
@@ -181,12 +214,22 @@ uses temporary SQLite and provider settings paths, creates and cleans unique
 Markdown fixtures under `docs/`, and verifies create task, file-reference
 messages, plan revision, plan approval, edit proposal generation, validation,
 apply, post-apply validation, restart recovery, and both append/replace
-restricted edit operations.
+restricted edit operations. It also verifies read-only git status and bounded
+git diff endpoints against temporary fixtures. It also starts a mock OpenAI Responses server to
+verify the model-guided context loop path before an OpenAI-backed plan
+revision, a richer edit proposal with append/create apply, and a blocked
+preview-only artifact. It also verifies a blocked-to-repaired proposal path and
+bounded stop behavior for proposals that remain preview-only. The smoke also
+forces a temporary TypeScript validation failure and verifies provider-backed
+repair brief generation plus follow-up repair proposal generation before
+cleaning the temporary file.
 
 ## Example
 
 ```bash
 curl http://127.0.0.1:17373/health
+curl http://127.0.0.1:17373/git/status
+curl "http://127.0.0.1:17373/git/diff?path=README.md"
 curl http://127.0.0.1:17373/settings/model-provider
 curl -X POST http://127.0.0.1:17373/settings/model-provider \
   -H 'Content-Type: application/json' \

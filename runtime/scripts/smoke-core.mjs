@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createServer } from "node:http";
 import { spawn } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -13,9 +14,12 @@ const tempRoot = join(tmpdir(), smokeID);
 const dbPath = join(tempRoot, "forge.sqlite");
 const settingsPath = join(tempRoot, "model-provider-settings.json");
 const port = 17400 + Math.floor(Math.random() * 1000);
+const mockOpenAIPort = port + 2000;
 const baseURL = `http://127.0.0.1:${port}`;
 const appendSmokePath = `docs/${smokeID}-append.md`;
 const replaceSmokePath = `docs/${smokeID}-replace.md`;
+const createSmokePath = `docs/${smokeID}-openai-created.md`;
+const brokenTypeScriptSmokePath = `runtime/src/${smokeID}-broken.ts`;
 
 const smokeFiles = [
   {
@@ -29,12 +33,14 @@ const smokeFiles = [
 ];
 
 let runtime;
+let mockOpenAI;
 
 try {
   await mkdir(tempRoot, { recursive: true });
   await createSmokeFiles();
 
   runtime = await startRuntime();
+  await assertGitReadOnlyEndpoints();
   const appendTask = await runAppendFlow();
 
   await stopRuntime(runtime);
@@ -43,13 +49,33 @@ try {
 
   const replaceTask = await runReplaceFlow();
 
+  await stopRuntime(runtime);
+  runtime = undefined;
+
+  mockOpenAI = await startMockOpenAI();
+  runtime = await startRuntime({
+    providerID: "openai",
+    modelName: "openai-context-smoke",
+    openAIBaseURL: mockOpenAI.baseURL,
+    openAIAPIKey: "sk-forge-smoke"
+  });
+  const openAIContextTask = await runOpenAIContextFlow();
+  const openAIAutoRepairTask = await runOpenAIAutoRepairFlow();
+  const openAIValidationRepairTask = await runOpenAIValidationFailureRepairFlow();
+  const openAIPreviewBlockedTask = await runOpenAIPreviewBlockedFlow();
+
   console.log("Core runtime smoke passed.");
   console.log(`- Runtime: ${baseURL}`);
   console.log(`- Append task: ${appendTask.id}`);
   console.log(`- Replace task: ${replaceTask.id}`);
+  console.log(`- OpenAI context task: ${openAIContextTask.id}`);
+  console.log(`- OpenAI auto-repair task: ${openAIAutoRepairTask.id}`);
+  console.log(`- OpenAI validation repair task: ${openAIValidationRepairTask.id}`);
+  console.log(`- OpenAI preview-blocked task: ${openAIPreviewBlockedTask.id}`);
   console.log(`- Temporary database: ${dbPath}`);
 } finally {
   await stopRuntime(runtime);
+  await stopMockOpenAI(mockOpenAI);
   await cleanupSmokeFiles();
   await rm(tempRoot, { recursive: true, force: true });
 }
@@ -143,6 +169,284 @@ async function runReplaceFlow() {
   return current;
 }
 
+async function runOpenAIContextFlow() {
+  const task = await createTask({
+    title: "Smoke OpenAI model-guided context",
+    objective: `Plan a model-guided context smoke against @${appendSmokePath}.`
+  });
+
+  await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "OpenAI context task to reach initial plan review"
+  );
+
+  let current = await post(`/tasks/${task.id}/messages`, {
+    content: `Use @${appendSmokePath} and docs/runtime_architecture.md when revising this plan.`
+  });
+  assertResolvedReference(current, appendSmokePath);
+
+  current = await post(`/tasks/${task.id}/generate-plan-revision`, {});
+  assertState(current, "Human Review", "Plan Review");
+  assert(
+    current.planRevisions?.at(-1)?.provider?.id === "openai",
+    "OpenAI context flow did not create an OpenAI-backed plan revision."
+  );
+  assert(
+    current.contextFiles?.some((file) => file.path === appendSmokePath),
+    `OpenAI context flow did not inspect requested fixture ${appendSmokePath}.`
+  );
+  assert(
+    ["list_repo_files", "search_repo_context", "read_context_file"].every((toolName) =>
+      current.toolCalls?.some((tool) => tool.name === toolName && tool.status === "Completed")
+    ),
+    "OpenAI context flow did not run the expected read-only repository tools."
+  );
+  assert(
+    current.events?.some((event) => event.type === "model.context_loop.completed"),
+    "OpenAI context flow did not record a model-guided context loop completion event."
+  );
+  const contextRequestCount = mockOpenAI.requests.filter((request) => request.name === "forge_plan_context_request").length;
+  assert(
+    contextRequestCount === 2,
+    `Mock OpenAI server expected 2 plan context requests, got ${contextRequestCount}.`
+  );
+
+  current = await post(`/tasks/${task.id}/approve-plan`, {
+    note: "Core smoke test approves the OpenAI context plan."
+  });
+  assert(current.executionProposal, "OpenAI context flow did not create an execution proposal.");
+
+  current = await post(`/tasks/${task.id}/generate-edit-proposal`, {});
+  assertState(current, "Human Review", "Edit Proposal Review");
+  assert(current.editProposal?.status === "Proposed", "OpenAI context flow did not create an edit proposal.");
+  assert(
+    current.editProposal.fileChanges?.length === 2,
+    `Expected 2 rich OpenAI proposal changes, got ${current.editProposal.fileChanges?.length ?? 0}.`
+  );
+  assert(
+    current.editProposal.validation?.status === "Ready",
+    current.editProposal.validation?.summary ?? "Rich OpenAI proposal should be ready for safe append/create apply."
+  );
+  assert(
+    current.editProposal.fileChanges?.some((change) =>
+      change.path === createSmokePath &&
+        change.changeType === "Create" &&
+        change.applyOperation?.kind === "CreateFile"
+    ),
+    "Rich OpenAI proposal did not retain the create-file operation."
+  );
+
+  current = await post(`/tasks/${task.id}/apply-edit-proposal`, {
+    note: "Core smoke test applies the OpenAI append/create proposal."
+  });
+  assertCompletedTask(current, appendSmokePath);
+  assert(
+    current.changedFiles?.includes(createSmokePath),
+    `Changed files did not include created file ${createSmokePath}.`
+  );
+  const created = await readFile(join(repoRoot, createSmokePath), "utf8");
+  assert(created.includes("Preview created by the OpenAI smoke flow."), "CreateFile smoke did not write expected content.");
+
+  return current;
+}
+
+async function runOpenAIPreviewBlockedFlow() {
+  const task = await createTask({
+    title: "Smoke preview-only blocked proposal",
+    objective: `Generate a preview-only blocked proposal for @${appendSmokePath}.`
+  });
+
+  await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "OpenAI preview-only task to reach initial plan review"
+  );
+
+  let current = await post(`/tasks/${task.id}/approve-plan`, {
+    note: "Core smoke test approves the preview-only plan."
+  });
+  assert(current.executionProposal, "OpenAI preview-only flow did not create an execution proposal.");
+
+  current = await post(`/tasks/${task.id}/generate-edit-proposal`, {});
+  assertState(current, "Human Review", "Edit Proposal Validation Blocked");
+  assert(current.editProposal?.status === "Proposed", "OpenAI preview-only flow did not create an edit proposal.");
+  assert(
+    current.editProposal.validation?.status === "Blocked",
+    "Preview-only proposal should be blocked from apply."
+  );
+  assert(
+    current.editProposal.fileChanges?.some((change) => change.applyOperation?.kind === "PreviewOnly"),
+    "Preview-only proposal did not retain the preview-only operation."
+  );
+  assert(
+    current.editProposal.revisionNumber === 3,
+    `Preview-only proposal should stop after revision 3, got ${current.editProposal.revisionNumber}.`
+  );
+  assert(
+    current.editProposalRevisions?.filter((proposal) => proposal.status === "Superseded").length >= 2,
+    "Preview-only proposal did not archive superseded repair attempts."
+  );
+  assert(
+    current.events?.filter((event) => event.type === "edit.proposal.repair.started").length >= 2,
+    "Preview-only proposal did not record repair attempt events."
+  );
+
+  return current;
+}
+
+async function runOpenAIAutoRepairFlow() {
+  const task = await createTask({
+    title: "Smoke auto-repair blocked proposal",
+    objective: `Generate a blocked proposal first, then repair it for @${appendSmokePath}.`
+  });
+
+  await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "OpenAI auto-repair task to reach initial plan review"
+  );
+
+  let current = await post(`/tasks/${task.id}/approve-plan`, {
+    note: "Core smoke test approves the auto-repair plan."
+  });
+  assert(current.executionProposal, "OpenAI auto-repair flow did not create an execution proposal.");
+
+  current = await post(`/tasks/${task.id}/generate-edit-proposal`, {});
+  assertState(current, "Human Review", "Edit Proposal Review");
+  assert(current.editProposal?.status === "Proposed", "OpenAI auto-repair flow did not create an edit proposal.");
+  assert(
+    current.editProposal.validation?.status === "Ready",
+    current.editProposal.validation?.summary ?? "Auto-repaired proposal should be ready."
+  );
+  assert(
+    current.editProposal.revisionNumber === 2,
+    `Auto-repaired proposal should expose revision 2, got ${current.editProposal.revisionNumber}.`
+  );
+  assert(
+    current.editProposal.fileChanges?.some((change) => change.applyOperation?.kind === "AppendText"),
+    "Auto-repaired proposal did not switch to an apply-ready AppendText operation."
+  );
+  assert(
+    current.editProposalRevisions?.some((proposal) =>
+      proposal.status === "Superseded" &&
+        proposal.validation?.status === "Blocked" &&
+        proposal.fileChanges?.some((change) => change.applyOperation?.kind === "PreviewOnly")
+    ),
+    "Auto-repaired proposal did not retain the blocked superseded proposal in history."
+  );
+  assert(
+    current.events?.some((event) => event.type === "edit.proposal.repair.started"),
+    "Auto-repaired proposal did not record a repair attempt event."
+  );
+
+  return current;
+}
+
+async function runOpenAIValidationFailureRepairFlow() {
+  const task = await createTask({
+    title: "Smoke validation failure repair brief",
+    objective: `Generate a safe edit, then analyze a failed runtime validation for @${appendSmokePath}.`
+  });
+
+  await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "OpenAI validation-repair task to reach initial plan review"
+  );
+
+  let current = await post(`/tasks/${task.id}/approve-plan`, {
+    note: "Core smoke test approves the validation repair plan."
+  });
+  assert(current.executionProposal, "OpenAI validation-repair flow did not create an execution proposal.");
+
+  current = await post(`/tasks/${task.id}/generate-edit-proposal`, {});
+  assertState(current, "Human Review", "Edit Proposal Review");
+  assert(current.editProposal?.validation?.status === "Ready", "Validation-repair proposal should be ready.");
+  assert(
+    current.editProposal.fileChanges?.some((change) => change.applyOperation?.kind === "AppendText"),
+    "Validation-repair proposal did not include an append operation."
+  );
+
+  current = await post(`/tasks/${task.id}/apply-edit-proposal`, {
+    note: "Core smoke test applies before forcing validation failure."
+  });
+  assertCompletedTask(current, appendSmokePath);
+
+  const brokenPath = join(repoRoot, brokenTypeScriptSmokePath);
+  await mkdir(dirname(brokenPath), { recursive: true });
+  await writeFile(brokenPath, "export const forgeSmokeBroken: string = ;\n", "utf8");
+
+  current = await post(`/tasks/${task.id}/approve-validation-preset`, {
+    presetID: "runtime-typescript",
+    note: "Core smoke test approves runtime validation failure analysis."
+  });
+  assert(
+    current.approvals?.some((approval) => approval.action === "Approve Validation Preset" && approval.targetID === "runtime-typescript"),
+    "Validation-repair flow did not approve the runtime-typescript preset."
+  );
+
+  current = await post(`/tasks/${task.id}/run-validation`, {
+    presetID: "runtime-typescript"
+  });
+  assertState(current, "Failed", "Validation Failed");
+  const failedRun = current.validationRuns?.at(-1);
+  assert(failedRun?.status === "Failed", "Validation-repair flow did not record a failed validation run.");
+  assert(
+    current.validationRepairBriefs?.some((brief) =>
+      brief.validationRunID === failedRun.id &&
+        brief.provider?.id === "openai" &&
+        brief.recommendedActions?.length > 0
+    ),
+    "Validation-repair flow did not create an OpenAI repair brief."
+  );
+  assert(
+    current.events?.some((event) => event.type === "validation.repair_brief.ready"),
+    "Validation-repair flow did not record a repair brief ready event."
+  );
+  assert(
+    current.planSteps?.some((step) => step.id === "plan-validation-repair" && step.status === "Active"),
+    "Validation-repair flow did not create an active repair planning step."
+  );
+  const repairBrief = current.validationRepairBriefs.at(-1);
+  const appliedProposalID = current.editProposal?.id;
+  const changedFilesBeforeRepairProposal = [...(current.changedFiles ?? [])];
+
+  current = await post(`/tasks/${task.id}/generate-validation-repair-proposal`, {});
+  assertState(current, "Human Review", "Edit Proposal Review");
+  assert(current.editProposal?.status === "Proposed", "Validation repair proposal was not proposed.");
+  assert(
+    current.editProposal.validationRepairBriefID === repairBrief.id,
+    "Validation repair proposal did not retain the repair brief link."
+  );
+  assert(
+    current.editProposal.revisionNumber === 2,
+    `Validation repair proposal should be revision 2, got ${current.editProposal.revisionNumber}.`
+  );
+  assert(
+    current.editProposal.validation?.status === "Ready",
+    current.editProposal.validation?.summary ?? "Validation repair proposal should validate as ready."
+  );
+  assert(
+    current.editProposal.fileChanges?.some((change) => change.applyOperation?.kind === "AppendText"),
+    "Validation repair proposal did not include a safe append operation."
+  );
+  assert(
+    current.editProposalRevisions?.some((proposal) => proposal.id === appliedProposalID && proposal.status === "Applied"),
+    "Validation repair proposal did not archive the previously applied proposal."
+  );
+  assert(
+    JSON.stringify(current.changedFiles ?? []) === JSON.stringify(changedFilesBeforeRepairProposal),
+    "Validation repair proposal generation should not mutate changedFiles."
+  );
+  assert(
+    current.events?.some((event) => event.type === "edit.proposal.validation_repair.ready"),
+    "Validation repair proposal did not record a ready event."
+  );
+
+  return current;
+}
+
 async function assertRestartRecovery(taskID, expectedChangedFile) {
   const recovered = await waitForTask(
     taskID,
@@ -159,6 +463,22 @@ async function createTask(body) {
   return task;
 }
 
+async function assertGitReadOnlyEndpoints() {
+  const status = await get("/git/status");
+  assert(status.isRepository === true, `Git status did not detect the repository: ${JSON.stringify(status)}`);
+  assert(typeof status.summary === "string" && status.summary.length > 0, "Git status did not include a summary.");
+  assert(Array.isArray(status.changedFiles), "Git status did not include changed files.");
+  assert(
+    status.changedFiles.some((change) => change.path === appendSmokePath && change.status === "Untracked"),
+    `Git status did not include the untracked smoke fixture ${appendSmokePath}.`
+  );
+
+  const diff = await get(`/git/diff?path=${encodeURIComponent(appendSmokePath)}`);
+  assert(diff.path === appendSmokePath, `Git diff returned unexpected path ${diff.path}.`);
+  assert(diff.diff.includes("Forge Append Smoke"), "Git diff did not include the smoke fixture content.");
+  assert(diff.truncated === false, "Git diff for the small smoke fixture should not be truncated.");
+}
+
 async function createSmokeFiles() {
   for (const file of smokeFiles) {
     const absolutePath = join(repoRoot, file.relativePath);
@@ -171,9 +491,11 @@ async function cleanupSmokeFiles() {
   for (const file of smokeFiles) {
     await rm(join(repoRoot, file.relativePath), { force: true });
   }
+  await rm(join(repoRoot, createSmokePath), { force: true });
+  await rm(join(repoRoot, brokenTypeScriptSmokePath), { force: true });
 }
 
-async function startRuntime() {
+async function startRuntime(options = {}) {
   const child = spawn("node", ["--disable-warning=ExperimentalWarning", "dist/server.js"], {
     cwd: runtimeRoot,
     shell: false,
@@ -182,8 +504,10 @@ async function startRuntime() {
       FORGE_RUNTIME_PORT: String(port),
       FORGE_RUNTIME_DB_PATH: dbPath,
       FORGE_MODEL_PROVIDER_SETTINGS_PATH: settingsPath,
-      FORGE_MODEL_PROVIDER: "local",
-      FORGE_MODEL_NAME: "local-deterministic-smoke"
+      FORGE_MODEL_PROVIDER: options.providerID ?? "local",
+      FORGE_MODEL_NAME: options.modelName ?? "local-deterministic-smoke",
+      FORGE_OPENAI_BASE_URL: options.openAIBaseURL ?? "",
+      OPENAI_API_KEY: options.openAIAPIKey ?? ""
     }
   });
 
@@ -228,6 +552,344 @@ async function startRuntime() {
 
   await waitForHealth(handle);
   return handle;
+}
+
+async function startMockOpenAI() {
+  const requests = [];
+  const server = createServer(async (request, response) => {
+    if (request.method !== "POST" || request.url !== "/responses") {
+      response.writeHead(404, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ error: "not found" }));
+      return;
+    }
+
+    const raw = await readRequestBody(request);
+    const body = JSON.parse(raw);
+    const name = body?.text?.format?.name;
+    requests.push({ name, body });
+    const output = mockOpenAIOutput(name, requests, body);
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({
+      status: "completed",
+      output: [
+        {
+          type: "message",
+          content: [
+            {
+              type: "output_text",
+              text: JSON.stringify(output)
+            }
+          ]
+        }
+      ]
+    }));
+  });
+
+  await new Promise((resolveListen, rejectListen) => {
+    server.once("error", rejectListen);
+    server.listen(mockOpenAIPort, "127.0.0.1", () => {
+      server.off("error", rejectListen);
+      resolveListen();
+    });
+  });
+
+  return {
+    server,
+    requests,
+    baseURL: `http://127.0.0.1:${mockOpenAIPort}`
+  };
+}
+
+async function stopMockOpenAI(handle) {
+  if (!handle) {
+    return;
+  }
+
+  await new Promise((resolveClose) => handle.server.close(resolveClose));
+}
+
+function mockOpenAIOutput(name, requests, body) {
+  const bodyText = JSON.stringify(body);
+  if (name === "forge_intent_brief") {
+    return {
+      summary: "Plan the smoke task using explicitly referenced local files.",
+      constraints: [
+        "Use only read-only context tools before planning.",
+        "Keep file changes behind human approval."
+      ],
+      acceptanceCriteria: [
+        "The runtime records model-guided context tool calls.",
+        "The revised plan is ready for human review."
+      ],
+      openQuestions: [],
+      nextAction: "Build bounded repository context, then revise the plan."
+    };
+  }
+
+  if (name === "forge_plan_context_request") {
+    const contextRequestCount = requests.filter((request) => request.name === "forge_plan_context_request").length;
+    if (contextRequestCount > 1) {
+      return {
+        status: "ReadyForPlan",
+        rationale: "The requested fixture and architecture context are already available.",
+        searchTerms: [],
+        readPaths: []
+      };
+    }
+
+    return {
+      status: "SearchAndRead",
+      rationale: "The task names a smoke fixture and runtime architecture docs, so inspect those before planning.",
+      searchTerms: ["smoke", "runtime", "architecture"],
+      readPaths: [appendSmokePath, "docs/runtime_architecture.md"]
+    };
+  }
+
+  if (name === "forge_plan_revision") {
+    return {
+      intentSummary: "Verify OpenAI model-guided context before a plan revision.",
+      summary: "Model-guided context was requested and the plan is ready for review.",
+      rationale: "The runtime should own tool execution while the provider chooses useful read-only context.",
+      riskLevel: "Low",
+      steps: [
+        {
+          id: "read-context",
+          title: "Read model-requested context",
+          status: "Done",
+          summary: "Inspect the referenced smoke fixture and architecture docs."
+        },
+        {
+          id: "revise-plan",
+          title: "Revise the plan",
+          status: "Done",
+          summary: "Use inspected context to make the plan reviewable."
+        },
+        {
+          id: "request-human-review",
+          title: "Request human review",
+          status: "Active",
+          summary: "Pause before file, command, or git side effects."
+        }
+      ]
+    };
+  }
+
+  if (name === "forge_execution_proposal") {
+    return {
+      summary: "Prepare a reviewable edit proposal after model-guided context.",
+      proposedActions: [
+        "Propose one safe append to the referenced smoke fixture.",
+        "Include one create-file preview so the review surface can show unsupported future work.",
+        "Keep all file writes behind validation and human approval."
+      ],
+      riskLevel: "Medium"
+    };
+  }
+
+  if (name === "forge_validation_repair_brief") {
+    return {
+      summary: "Runtime TypeScript validation failed after the reviewed edit; inspect the temporary syntax error before retrying.",
+      likelyCause: "The validation output reports a TypeScript syntax error in the temporary smoke fixture.",
+      recommendedActions: [
+        "Remove or fix the invalid TypeScript fixture.",
+        "Generate a revised proposal only if the reviewed edit caused the failure.",
+        "Rerun the approved runtime-typescript preset after the repair is reviewed."
+      ],
+      followUpPrompt: "Repair the TypeScript validation failure, then rerun runtime-typescript.",
+      riskLevel: "Medium"
+    };
+  }
+
+  if (name === "forge_edit_proposal") {
+    if (bodyText.includes("validation failure repair brief")) {
+      if (bodyText.includes("followUpPrompt")) {
+        return {
+          summary: "Generate a follow-up proposal from the validation repair brief.",
+          riskLevel: "Medium",
+          fileChanges: [
+            {
+              path: appendSmokePath,
+              changeType: "Modify",
+              rationale: "Use the repair brief to propose the next reviewed fix without applying it automatically.",
+              diffPreview: [
+                `--- a/${appendSmokePath}`,
+                `+++ b/${appendSmokePath}`,
+                "@@ validation repair follow-up @@",
+                "+",
+                "+## OpenAI Validation Repair Follow-up",
+                "+",
+                "+- Proposed from the validation repair brief after a failed runtime check."
+              ].join("\n"),
+              operationKind: "AppendText",
+              appendText: "\n## OpenAI Validation Repair Follow-up\n\n- Proposed from the validation repair brief after a failed runtime check.\n",
+              findText: "",
+              replaceWith: "",
+              content: ""
+            }
+          ]
+        };
+      }
+
+      return {
+        summary: "Propose a safe append before validation failure analysis.",
+        riskLevel: "Low",
+        fileChanges: [
+          {
+            path: appendSmokePath,
+            changeType: "Modify",
+            rationale: "Add a distinct note before forcing a separate validation failure.",
+            diffPreview: [
+              `--- a/${appendSmokePath}`,
+              `+++ b/${appendSmokePath}`,
+              "@@ validation repair append @@",
+              "+",
+              "+## OpenAI Validation Repair Smoke",
+              "+",
+              "+- Prepared a reviewed edit before validation failure analysis."
+            ].join("\n"),
+            operationKind: "AppendText",
+            appendText: "\n## OpenAI Validation Repair Smoke\n\n- Prepared a reviewed edit before validation failure analysis.\n",
+            findText: "",
+            replaceWith: "",
+            content: ""
+          }
+        ]
+      };
+    }
+
+    if (bodyText.includes("auto-repair blocked proposal")) {
+      if (!bodyText.includes("validationFeedback")) {
+        return {
+          summary: "Start with an unsupported preview-only patch so the runtime can repair it.",
+          riskLevel: "Medium",
+          fileChanges: [
+            {
+              path: appendSmokePath,
+              changeType: "Modify",
+              rationale: "Represent the first attempt as an unsupported broad patch.",
+              diffPreview: [
+                `--- a/${appendSmokePath}`,
+                `+++ b/${appendSmokePath}`,
+                "@@ first unsupported attempt @@",
+                "+This patch should be repaired into a restricted operation."
+              ].join("\n"),
+              operationKind: "PreviewOnly",
+              appendText: "",
+              findText: "",
+              replaceWith: "",
+              content: ""
+            }
+          ]
+        };
+      }
+
+      return {
+        summary: "Repair the blocked proposal into a safe append operation.",
+        riskLevel: "Low",
+        fileChanges: [
+          {
+            path: appendSmokePath,
+            changeType: "Modify",
+            rationale: "Address runtime validation feedback by switching to an apply-ready append operation.",
+            diffPreview: [
+              `--- a/${appendSmokePath}`,
+              `+++ b/${appendSmokePath}`,
+              "@@ repaired safe append @@",
+              "+",
+              "+## OpenAI Auto Repair Smoke",
+              "+",
+              "+- Repaired a preview-only proposal into a restricted append."
+            ].join("\n"),
+            operationKind: "AppendText",
+            appendText: "\n## OpenAI Auto Repair Smoke\n\n- Repaired a preview-only proposal into a restricted append.\n",
+            findText: "",
+            replaceWith: "",
+            content: ""
+          }
+        ]
+      };
+    }
+
+    if (bodyText.includes("preview-only blocked proposal")) {
+      return {
+        summary: "Preview an unsupported patch without allowing apply.",
+        riskLevel: "Medium",
+        fileChanges: [
+          {
+            path: appendSmokePath,
+            changeType: "Modify",
+            rationale: "Represent a broad patch as a review-only artifact.",
+            diffPreview: [
+              `--- a/${appendSmokePath}`,
+              `+++ b/${appendSmokePath}`,
+              "@@ preview-only unsupported patch @@",
+              "+This patch is intentionally preview-only."
+            ].join("\n"),
+            operationKind: "PreviewOnly",
+            appendText: "",
+            findText: "",
+            replaceWith: "",
+            content: ""
+          }
+        ]
+      };
+    }
+
+    return {
+      summary: "Propose a safe append plus a safe Markdown create-file change.",
+      riskLevel: "Medium",
+      fileChanges: [
+        {
+          path: appendSmokePath,
+          changeType: "Modify",
+          rationale: "Add an audit note to the explicit smoke fixture using the current v0 append operation.",
+          diffPreview: [
+            `--- a/${appendSmokePath}`,
+            `+++ b/${appendSmokePath}`,
+            "@@ proposed safe append @@",
+            "+",
+            "+## OpenAI Context Smoke",
+            "+",
+            "+- Verified model-guided context before edit proposal generation."
+          ].join("\n"),
+          operationKind: "AppendText",
+          appendText: "\n## OpenAI Context Smoke\n\n- Verified model-guided context before edit proposal generation.\n",
+          findText: "",
+          replaceWith: "",
+          content: ""
+        },
+        {
+          path: createSmokePath,
+          changeType: "Create",
+          rationale: "Create a new Markdown smoke artifact inside the docs boundary.",
+          diffPreview: [
+            "--- /dev/null",
+            `+++ b/${createSmokePath}`,
+            "@@ create file @@",
+            "+# OpenAI Created Smoke",
+            "+",
+            "+Preview created by the OpenAI smoke flow."
+          ].join("\n"),
+          operationKind: "CreateFile",
+          appendText: "",
+          findText: "",
+          replaceWith: "",
+          content: "# OpenAI Created Smoke\n\nPreview created by the OpenAI smoke flow.\n"
+        }
+      ]
+    };
+  }
+
+  throw new Error(`Unexpected mock OpenAI structured output request: ${name}`);
+}
+
+async function readRequestBody(request) {
+  const chunks = [];
+  for await (const chunk of request) {
+    chunks.push(chunk);
+  }
+
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 async function stopRuntime(handle) {
@@ -351,8 +1013,9 @@ function assertResolvedReference(task, expectedPath) {
 }
 
 function assertState(task, status, phase) {
-  assert(task.status === status, `Expected task status ${status}, got ${task.status}.`);
-  assert(task.currentPhase === phase, `Expected task phase ${phase}, got ${task.currentPhase}.`);
+  const summary = JSON.stringify(summarizeTask(task), null, 2);
+  assert(task.status === status, `Expected task status ${status}, got ${task.status}.\n${summary}`);
+  assert(task.currentPhase === phase, `Expected task phase ${phase}, got ${task.currentPhase}.\n${summary}`);
 }
 
 function assert(condition, message) {
@@ -378,6 +1041,7 @@ function summarizeTask(task) {
           status: task.editProposal.status,
           summary: task.editProposal.summary,
           validation: task.editProposal.validation?.summary,
+          fileResults: task.editProposal.validation?.fileResults,
           changes: task.editProposal.fileChanges?.map((change) => ({
             path: change.path,
             operation: change.applyOperation?.kind

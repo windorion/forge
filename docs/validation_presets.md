@@ -98,6 +98,9 @@ The UI should not locally invent a different permission policy.
 - Permission cards show command boundaries before approval or execution.
 - Exit code and output summary are recorded for every command.
 - Failed commands make the validation run fail.
+- Failed validation runs can trigger a provider-generated repair brief from
+  compact command summaries. The brief is advisory and does not rerun commands
+  or change files.
 
 ## Future Work
 

@@ -44,15 +44,30 @@ Implemented today:
 - Deterministic Agent Loop v0 with visible Manager, Planner, Coder, Tester, and Reviewer states.
 - Bounded repo context search and file reading.
 - Structured intent briefs and conversation-driven plan revisions.
+- OpenAI plan revisions can run a bounded model-guided read/search context
+  loop through logged read-only repo tools.
 - Explicit human review gates for plans and edits.
-- Safe edit proposals with `AppendText` and exact `ReplaceText` operations for Markdown files.
-- Edit proposal validation, apply/reject flow, revision loop, and post-apply validation.
+- Safe edit proposals with multi-file OpenAI proposal artifacts, including
+  blocked preview-only operations, while apply remains restricted to Markdown
+  `AppendText`, exact `ReplaceText`, and new `docs/*.md` `CreateFile` changes.
+- Edit proposal validation, bounded validation-feedback repair, apply/reject
+  flow, revision loop, and post-apply validation.
+- Validation failure repair briefs that turn failed command output into a
+  reviewable next-step diagnosis.
+- Follow-up repair edit proposals generated from validation repair briefs,
+  surfaced in the macOS Review UI and still behind human review.
+- Read-only git status and bounded file diff inspection surfaced in the macOS
+  Review UI, including open/reveal actions for changed files.
 - SQLite task persistence.
 - Validation presets and runtime-derived command permission state.
 - Local deterministic model provider and optional OpenAI Responses provider.
 - Editable model-provider settings in macOS Settings with Keychain-backed OpenAI API key sync.
+- First-pass app-managed runtime start/stop from the macOS toolbar, sidebar
+  runtime badge, and Settings window.
 - Core runtime smoke regression for the main task lifecycle, restricted
-  append/replace edits, post-apply validation, and restart recovery.
+  append/replace/create edits, post-apply validation, restart recovery, and a
+  mock OpenAI model-guided context/repair loop plus validation failure
+  diagnosis.
 - App-visible runtime state and diagnostics for endpoint, version, provider
   configuration, SSE stream, and copy/open diagnostics actions.
 
@@ -60,9 +75,9 @@ Not finished yet:
 
 - Real autonomous model-backed tool loop.
 - General patch engine and richer diff review.
-- Git status, commit, and PR workflow.
+- Commit and PR workflow.
 - Durable repository index with symbols and semantic search.
-- App-managed runtime lifecycle.
+- Hardened app-managed runtime lifecycle for packaged distribution.
 - Packaged, signed, notarized, auto-updating Mac distribution.
 
 ## Completion Estimate
@@ -71,8 +86,8 @@ Product-readiness estimate:
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| V0 local demo | 87-90% | The local task-to-review demo is mostly implemented, has core runtime regression coverage, and surfaces runtime diagnostics. |
-| Useful developer alpha | 40-50% | Needs real model-backed work, richer diffs, git visibility, and recovery. |
+| V0 local demo | 90-93% | The local task-to-review demo is mostly implemented, has core runtime regression coverage, repair review UI, git status/diff visibility, and app-visible runtime lifecycle controls. |
+| Useful developer alpha | 44-54% | Needs real model-backed work, richer patching, commit/PR review artifacts, and recovery. |
 | Commercial beta | 25-30% | Needs packaging, onboarding, runtime management, trust polish, and integrations. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, git, memory, MCP/GitHub, and product polish. |
 
@@ -84,10 +99,10 @@ but it is not close to a commercial finished product yet.
 Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
 
 - broaden the V0 regression/demo path beyond the runtime core
-- improve edit proposal diff preview
-- add app-managed runtime start/stop
+- harden git/diff and edit proposal review for larger real changes
+- harden app-managed runtime start/stop
 - make real provider-backed planning and proposal generation usable
-- add git status and review surfaces
+- add commit/PR review surfaces
 - build a durable repository index
 
 ## Core Principles

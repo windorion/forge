@@ -158,7 +158,20 @@ export interface ReplaceTextOperation {
   replaceWith: string;
 }
 
-export type ProposedFileOperation = AppendTextOperation | ReplaceTextOperation;
+export interface CreateFileOperation {
+  kind: "CreateFile";
+  content: string;
+}
+
+export interface PreviewOnlyOperation {
+  kind: "PreviewOnly";
+}
+
+export type ProposedFileOperation =
+  | AppendTextOperation
+  | ReplaceTextOperation
+  | CreateFileOperation
+  | PreviewOnlyOperation;
 
 export interface EditProposalDecisionRequest {
   note?: string;
@@ -186,6 +199,7 @@ export interface EditProposal {
   provider: ModelProviderInfo;
   sourceMessageID?: string;
   revisionOfID?: string;
+  validationRepairBriefID?: string;
   revisionNumber: number;
   summary: string;
   fileChanges: ProposedFileChange[];
@@ -233,6 +247,18 @@ export interface ValidationRun {
   startedAt: string;
   endedAt?: string;
   commands: ValidationCommandResult[];
+}
+
+export interface ValidationRepairBrief {
+  id: string;
+  provider: ModelProviderInfo;
+  validationRunID: string;
+  summary: string;
+  likelyCause: string;
+  recommendedActions: string[];
+  followUpPrompt: string;
+  riskLevel: "Low" | "Medium" | "High";
+  generatedAt: string;
 }
 
 export interface ValidationCommandDefinition {
@@ -291,6 +317,44 @@ export interface ValidationPermissionEnvelope {
   permissions: ValidationPresetPermission[];
 }
 
+export interface GitFileChange {
+  path: string;
+  status: "Added" | "Modified" | "Deleted" | "Renamed" | "Copied" | "Untracked" | "Unmerged" | "Unknown";
+  indexStatus: string;
+  worktreeStatus: string;
+  staged: boolean;
+  unstaged: boolean;
+  untracked: boolean;
+  oldPath?: string;
+  additions?: number;
+  deletions?: number;
+}
+
+export interface GitStatusSnapshot {
+  isRepository: boolean;
+  root?: string;
+  branch?: string;
+  upstream?: string;
+  head?: string;
+  ahead?: number;
+  behind?: number;
+  isDirty: boolean;
+  summary: string;
+  generatedAt: string;
+  changedFiles: GitFileChange[];
+  error?: string;
+}
+
+export interface GitFileDiff {
+  path: string;
+  oldPath?: string;
+  status?: GitFileChange["status"];
+  generatedAt: string;
+  diff: string;
+  truncated: boolean;
+  summary: string;
+}
+
 export interface ContextFile {
   path: string;
   summary: string;
@@ -310,6 +374,7 @@ export interface ForgeTask {
   approvals: ApprovalRecord[];
   toolCalls: ToolCall[];
   validationRuns: ValidationRun[];
+  validationRepairBriefs: ValidationRepairBrief[];
   messages: TaskMessage[];
   planRevisions: PlanRevision[];
   editProposalRevisions: EditProposal[];

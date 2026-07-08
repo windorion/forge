@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type {
   EditProposal,
+  EditProposalValidation,
   ExecutionProposal,
   ForgeTask,
   IntentBrief,
@@ -11,11 +12,18 @@ import type {
   PlanStep,
   ProposedFileOperation,
   TaskFileReference,
-  TaskMessage
+  TaskMessage,
+  ValidationRepairBrief,
+  ValidationRun
 } from "./types.js";
 
 export interface ExecutionProposalRequest {
   task: ForgeTask;
+}
+
+export interface ValidationRepairBriefRequest {
+  task: ForgeTask;
+  validationRun: ValidationRun;
 }
 
 export interface PlanRevisionRequest {
@@ -23,11 +31,28 @@ export interface PlanRevisionRequest {
   sourceMessage?: TaskMessage;
 }
 
+export interface PlanContextRequest {
+  task: ForgeTask;
+  sourceMessage?: TaskMessage;
+  round: number;
+  maxRounds: number;
+}
+
+export interface PlanContextRequestResult {
+  status: "SearchAndRead" | "ReadyForPlan";
+  rationale: string;
+  searchTerms: string[];
+  readPaths: string[];
+}
+
 export interface EditProposalRequest {
   task: ForgeTask;
   previousProposal?: EditProposal;
   sourceMessage?: TaskMessage;
   revisionNumber: number;
+  repairAttempt?: number;
+  validationFeedback?: EditProposalValidation;
+  validationRepairBrief?: ValidationRepairBrief;
 }
 
 export interface IntentBriefRequest {
@@ -38,9 +63,11 @@ export interface IntentBriefRequest {
 export interface ModelProvider {
   readonly info: ModelProviderInfo;
   createIntentBrief(request: IntentBriefRequest): Promise<IntentBrief>;
+  createPlanContextRequest?(request: PlanContextRequest): Promise<PlanContextRequestResult>;
   createPlanRevision(request: PlanRevisionRequest): Promise<PlanRevision>;
   createExecutionProposal(request: ExecutionProposalRequest): Promise<ExecutionProposal>;
   createEditProposal(request: EditProposalRequest): Promise<EditProposal>;
+  createValidationRepairBrief(request: ValidationRepairBriefRequest): Promise<ValidationRepairBrief>;
 }
 
 type JsonSchema = Record<string, unknown>;
@@ -58,6 +85,20 @@ interface EditProposalGuidance {
   rationale: string;
   appendNote: string;
   riskLevel: EditProposal["riskLevel"];
+}
+
+interface RichEditProposalOutput {
+  summary: string;
+  riskLevel: EditProposal["riskLevel"];
+  fileChanges: RichEditProposalFileChange[];
+}
+
+interface RichEditProposalFileChange {
+  path: string;
+  changeType: "Create" | "Modify" | "Delete";
+  rationale: string;
+  diffPreview: string;
+  applyOperation?: ProposedFileOperation;
 }
 
 interface RestrictedEditDraft {
@@ -240,6 +281,10 @@ class UnavailableModelProvider implements ModelProvider {
   async createEditProposal(): Promise<EditProposal> {
     throw new Error(this.message);
   }
+
+  async createValidationRepairBrief(): Promise<ValidationRepairBrief> {
+    throw new Error(this.message);
+  }
 }
 
 class OpenAIResponsesModelProvider implements ModelProvider {
@@ -261,6 +306,26 @@ class OpenAIResponsesModelProvider implements ModelProvider {
     );
 
     return normalizeIntentBrief(output);
+  }
+
+  async createPlanContextRequest(request: PlanContextRequest): Promise<PlanContextRequestResult> {
+    const output = await this.createStructuredOutput(
+      "forge_plan_context_request",
+      planContextRequestSchema,
+      [
+        "Choose read-only repository context requests before Forge revises the plan.",
+        `This is context round ${request.round} of ${request.maxRounds}.`,
+        "Return search terms and repo-relative paths that would help a planner understand the task.",
+        "Use status SearchAndRead only when another bounded read/search pass is needed.",
+        "Use status ReadyForPlan when the provided context is enough; leave searchTerms and readPaths empty in that case.",
+        "Only request paths that are explicitly mentioned, already present in context, or highly likely from the provided task context.",
+        "Do not request secrets, generated files, .git, .forge, node_modules, build output, or absolute paths.",
+        "The runtime will validate every request, execute only allowlisted read-only tools, and summarize results before planning.",
+        taskProviderContext(request.task, request.sourceMessage)
+      ].join("\n\n")
+    );
+
+    return normalizePlanContextRequestOutput(output);
   }
 
   async createPlanRevision(request: PlanRevisionRequest): Promise<PlanRevision> {
@@ -314,38 +379,74 @@ class OpenAIResponsesModelProvider implements ModelProvider {
 
   async createEditProposal(request: EditProposalRequest): Promise<EditProposal> {
     const output = await this.createStructuredOutput(
-      "forge_edit_proposal_guidance",
-      editProposalGuidanceSchema,
+      "forge_edit_proposal",
+      editProposalSchema,
       [
-        "Create guidance for a safe Forge edit proposal.",
-        "The runtime will validate and apply only restricted append-text operations or explicit quoted replace-text operations to README.md or docs/*.md.",
-        "Choose a targetPath only if it is README.md or a docs/*.md file from the provided context.",
-        "Do not include raw code patches. Return concise proposal guidance.",
-        taskProviderContext(request.task, request.sourceMessage)
+        "Create a Forge edit proposal review artifact.",
+        "You may propose multiple file changes, but the runtime will validate all of them before any apply.",
+        "Use AppendText only for bounded appends to README.md or docs/*.md.",
+        "Use ReplaceText only when the task explicitly asks for an exact quoted replacement and you can provide the exact find text.",
+        "Use CreateFile only for new docs/*.md files with bounded Markdown content.",
+        "Use PreviewOnly for broad code patches, deletes, unsupported paths, overwrite attempts, or anything that should be reviewed but not applied by the current v0 engine.",
+        request.validationFeedback
+          ? "The previous proposal failed runtime validation. Generate a corrected proposal that addresses every blocked check while staying inside the supported operation boundary."
+          : request.validationRepairBrief
+            ? "This is a follow-up repair proposal after validation command failure. Use the validation repair brief to propose a narrow, reviewable fix inside the supported operation boundary."
+          : "Prefer an apply-ready proposal when the task can be satisfied inside the supported operation boundary.",
+        "Never claim files were changed. This proposal is not a workspace mutation.",
+        taskProviderContext(request.task, request.sourceMessage),
+        editProposalRequestContext(request)
       ].join("\n\n")
     );
-    const guidance = normalizeEditProposalGuidanceOutput(output);
-    const draft = buildRestrictedEditDraft(request, guidance);
+    const proposalOutput = normalizeRichEditProposalOutput(output, request);
 
     return {
       id: randomUUID(),
       provider: this.info,
       sourceMessageID: request.sourceMessage?.id,
       revisionOfID: request.previousProposal?.id,
+      validationRepairBriefID: request.validationRepairBrief?.id,
       revisionNumber: request.revisionNumber,
-      summary: guidance.summary,
-      fileChanges: [
-        {
-          id: randomUUID(),
-          path: draft.targetPath,
-          changeType: "Modify",
-          rationale: guidance.rationale,
-          diffPreview: draft.diffPreview,
-          applyOperation: draft.applyOperation
-        }
-      ],
-      riskLevel: guidance.riskLevel,
+      summary: proposalOutput.summary,
+      fileChanges: proposalOutput.fileChanges.map((change) => ({
+        id: randomUUID(),
+        path: change.path,
+        changeType: change.changeType,
+        rationale: change.rationale,
+        diffPreview: change.diffPreview,
+        applyOperation: change.applyOperation
+      })),
+      riskLevel: proposalOutput.riskLevel,
       status: "Proposed",
+      generatedAt: new Date().toISOString()
+    };
+  }
+
+  async createValidationRepairBrief(request: ValidationRepairBriefRequest): Promise<ValidationRepairBrief> {
+    const output = await this.createStructuredOutput(
+      "forge_validation_repair_brief",
+      validationRepairBriefSchema,
+      [
+        "Create a Forge validation failure repair brief.",
+        "Do not claim files were changed, commands were rerun, commits were made, or tools were executed.",
+        "Use only the provided validation command summaries and task context.",
+        "Recommend reviewable next actions that preserve human approval and runtime validation boundaries.",
+        "If a new edit is needed, describe the next proposal direction rather than applying it.",
+        taskProviderContext(request.task),
+        validationRepairRequestContext(request)
+      ].join("\n\n")
+    );
+    const normalized = normalizeValidationRepairBriefOutput(output);
+
+    return {
+      id: randomUUID(),
+      provider: this.info,
+      validationRunID: request.validationRun.id,
+      summary: normalized.summary,
+      likelyCause: normalized.likelyCause,
+      recommendedActions: normalized.recommendedActions,
+      followUpPrompt: normalized.followUpPrompt,
+      riskLevel: normalized.riskLevel,
       generatedAt: new Date().toISOString()
     };
   }
@@ -451,6 +552,18 @@ const planRevisionSchema: JsonSchema = {
   required: ["intentSummary", "summary", "rationale", "riskLevel", "steps"]
 };
 
+const planContextRequestSchema: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    status: { type: "string", enum: ["SearchAndRead", "ReadyForPlan"] },
+    rationale: { type: "string" },
+    searchTerms: { type: "array", items: { type: "string" } },
+    readPaths: { type: "array", items: { type: "string" } }
+  },
+  required: ["status", "rationale", "searchTerms", "readPaths"]
+};
+
 const executionProposalSchema: JsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -473,6 +586,57 @@ const editProposalGuidanceSchema: JsonSchema = {
     riskLevel: { type: "string", enum: ["Low", "Medium", "High"] }
   },
   required: ["summary", "targetPath", "rationale", "appendNote", "riskLevel"]
+};
+
+const editProposalFileChangeSchema: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    path: { type: "string" },
+    changeType: { type: "string", enum: ["Create", "Modify", "Delete"] },
+    rationale: { type: "string" },
+    diffPreview: { type: "string" },
+    operationKind: { type: "string", enum: ["AppendText", "ReplaceText", "CreateFile", "PreviewOnly"] },
+    appendText: { type: "string" },
+    findText: { type: "string" },
+    replaceWith: { type: "string" },
+    content: { type: "string" }
+  },
+  required: [
+    "path",
+    "changeType",
+    "rationale",
+    "diffPreview",
+    "operationKind",
+    "appendText",
+    "findText",
+    "replaceWith",
+    "content"
+  ]
+};
+
+const editProposalSchema: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    summary: { type: "string" },
+    riskLevel: { type: "string", enum: ["Low", "Medium", "High"] },
+    fileChanges: { type: "array", items: editProposalFileChangeSchema }
+  },
+  required: ["summary", "riskLevel", "fileChanges"]
+};
+
+const validationRepairBriefSchema: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    summary: { type: "string" },
+    likelyCause: { type: "string" },
+    recommendedActions: { type: "array", items: { type: "string" } },
+    followUpPrompt: { type: "string" },
+    riskLevel: { type: "string", enum: ["Low", "Medium", "High"] }
+  },
+  required: ["summary", "likelyCause", "recommendedActions", "followUpPrompt", "riskLevel"]
 };
 
 class LocalDeterministicModelProvider implements ModelProvider {
@@ -603,16 +767,25 @@ class LocalDeterministicModelProvider implements ModelProvider {
       provider: this.info,
       sourceMessageID: request.sourceMessage?.id,
       revisionOfID: request.previousProposal?.id,
+      validationRepairBriefID: request.validationRepairBrief?.id,
       revisionNumber: request.revisionNumber,
       summary: request.previousProposal
-        ? `Revise proposal ${request.previousProposal.revisionNumber} with ${operationLabel} in ${draft.targetPath}.`
+        ? request.validationRepairBrief
+          ? `Propose a follow-up repair for validation brief ${request.validationRepairBrief.id} with ${operationLabel} in ${draft.targetPath}.`
+          : request.validationFeedback
+          ? `Repair proposal ${request.previousProposal.revisionNumber} after validation feedback with ${operationLabel} in ${draft.targetPath}.`
+          : `Revise proposal ${request.previousProposal.revisionNumber} with ${operationLabel} in ${draft.targetPath}.`
         : `Propose ${operationLabel} touching ${draft.targetPath}.`,
       fileChanges: [
         {
           id: randomUUID(),
           path: draft.targetPath,
           changeType: "Modify",
-          rationale: request.previousProposal
+          rationale: request.validationRepairBrief
+            ? "Use the validation repair brief to propose a reviewed follow-up edit without mutating files automatically."
+            : request.validationFeedback
+            ? "Address the runtime validation feedback while preserving the review boundary and avoiding workspace mutation."
+            : request.previousProposal
             ? "Revise the rejected proposal using the latest task conversation while preserving the review boundary."
             : "Keep the first edit proposal narrow, visible, and reversible before any workspace mutation.",
           diffPreview: draft.diffPreview,
@@ -621,6 +794,31 @@ class LocalDeterministicModelProvider implements ModelProvider {
       ],
       riskLevel: "Low",
       status: "Proposed",
+      generatedAt: new Date().toISOString()
+    };
+  }
+
+  async createValidationRepairBrief(request: ValidationRepairBriefRequest): Promise<ValidationRepairBrief> {
+    const failedCommands = request.validationRun.commands.filter((command) => command.status === "Failed");
+    const failedNames = failedCommands.map((command) => command.name).join(", ") || request.validationRun.presetName;
+    const firstFailure = failedCommands[0];
+    const likelyCause = firstFailure
+      ? singleLine(firstFailure.outputSummary).slice(0, 700)
+      : "The validation preset reported a failure, but no failed command summary was retained.";
+
+    return {
+      id: randomUUID(),
+      provider: this.info,
+      validationRunID: request.validationRun.id,
+      summary: `Validation repair brief for ${request.validationRun.presetName}: ${failedNames} failed.`,
+      likelyCause,
+      recommendedActions: [
+        "Review the failed command summary before changing files.",
+        "Add a task message with any intended repair constraint.",
+        "Generate a revised edit proposal or rerun the approved validation preset after a reviewed fix."
+      ],
+      followUpPrompt: `Repair validation failure in ${request.validationRun.presetName}; focus on ${failedNames}.`,
+      riskLevel: request.validationRun.riskLevel,
       generatedAt: new Date().toISOString()
     };
   }
@@ -680,6 +878,25 @@ function normalizePlanRevisionOutput(
   };
 }
 
+function normalizePlanContextRequestOutput(output: unknown): PlanContextRequestResult {
+  if (!isRecord(output)) {
+    throw new Error("OpenAI plan context request output was not an object.");
+  }
+
+  return {
+    status: output.status === "ReadyForPlan" ? "ReadyForPlan" : "SearchAndRead",
+    rationale: requiredString(output.rationale, "rationale").slice(0, 500),
+    searchTerms: boundedStringArray(output.searchTerms, "searchTerms", 8)
+      .map((term) => term.toLowerCase().replace(/[^a-z0-9._/-]+/g, " ").trim())
+      .filter((term) => term.length >= 2)
+      .slice(0, 8),
+    readPaths: boundedStringArray(output.readPaths, "readPaths", 6)
+      .map((path) => path.replace(/^@/, "").replace(/^\.\/+/, "").trim())
+      .filter(Boolean)
+      .slice(0, 6)
+  };
+}
+
 function normalizeExecutionProposalOutput(
   output: unknown
 ): Pick<ExecutionProposal, "summary" | "proposedActions" | "riskLevel"> {
@@ -706,6 +923,99 @@ function normalizeEditProposalGuidanceOutput(
     targetPath: optionalString(output.targetPath),
     rationale: requiredString(output.rationale, "rationale"),
     appendNote: optionalString(output.appendNote),
+    riskLevel: normalizeRiskLevel(output.riskLevel)
+  };
+}
+
+function normalizeRichEditProposalOutput(
+  output: unknown,
+  request: EditProposalRequest
+): RichEditProposalOutput {
+  if (!isRecord(output)) {
+    throw new Error("OpenAI edit proposal output was not an object.");
+  }
+
+  const rawChanges = Array.isArray(output.fileChanges) ? output.fileChanges : [];
+  const fileChanges = rawChanges
+    .slice(0, 4)
+    .map(normalizeRichEditProposalFileChange)
+    .filter((change): change is RichEditProposalFileChange => change !== undefined);
+
+  if (fileChanges.length === 0) {
+    const draft = buildRestrictedEditDraft(request);
+    fileChanges.push({
+      path: draft.targetPath,
+      changeType: "Modify",
+      rationale: "Fallback restricted edit proposal generated because the provider returned no usable file changes.",
+      diffPreview: draft.diffPreview,
+      applyOperation: draft.applyOperation
+    });
+  }
+
+  return {
+    summary: requiredString(output.summary, "summary"),
+    riskLevel: normalizeRiskLevel(output.riskLevel),
+    fileChanges
+  };
+}
+
+function normalizeRichEditProposalFileChange(output: unknown): RichEditProposalFileChange | undefined {
+  if (!isRecord(output)) {
+    return undefined;
+  }
+
+  const path = optionalString(output.path).replace(/^@/, "").replace(/^\.\/+/, "").slice(0, 240);
+  const diffPreview = optionalMultilineString(output.diffPreview, 20_000);
+  if (!path || !diffPreview) {
+    return undefined;
+  }
+
+  const changeType = output.changeType === "Create" || output.changeType === "Delete" || output.changeType === "Modify"
+    ? output.changeType
+    : "Modify";
+  const operationKind = optionalString(output.operationKind);
+  const rationale = requiredString(output.rationale, "rationale");
+  let applyOperation: ProposedFileOperation | undefined;
+
+  if (operationKind === "AppendText") {
+    const text = optionalMultilineString(output.appendText, 10_000);
+    applyOperation = text ? { kind: "AppendText", text } : { kind: "PreviewOnly" };
+  } else if (operationKind === "ReplaceText") {
+    const findText = optionalMultilineString(output.findText, 10_000);
+    const replaceWith = optionalMultilineString(output.replaceWith, 10_000);
+    applyOperation = findText && replaceWith
+      ? { kind: "ReplaceText", findText, replaceWith }
+      : { kind: "PreviewOnly" };
+  } else if (operationKind === "CreateFile") {
+    applyOperation = {
+      kind: "CreateFile",
+      content: optionalMultilineString(output.content, 20_000)
+    };
+  } else {
+    applyOperation = { kind: "PreviewOnly" };
+  }
+
+  return {
+    path,
+    changeType,
+    rationale,
+    diffPreview,
+    applyOperation
+  };
+}
+
+function normalizeValidationRepairBriefOutput(
+  output: unknown
+): Pick<ValidationRepairBrief, "summary" | "likelyCause" | "recommendedActions" | "followUpPrompt" | "riskLevel"> {
+  if (!isRecord(output)) {
+    throw new Error("OpenAI validation repair brief output was not an object.");
+  }
+
+  return {
+    summary: requiredString(output.summary, "summary"),
+    likelyCause: requiredString(output.likelyCause, "likelyCause"),
+    recommendedActions: boundedStringArray(output.recommendedActions, "recommendedActions", 6),
+    followUpPrompt: requiredString(output.followUpPrompt, "followUpPrompt"),
     riskLevel: normalizeRiskLevel(output.riskLevel)
   };
 }
@@ -758,6 +1068,10 @@ function requiredString(value: unknown, fieldName: string): string {
 
 function optionalString(value: unknown): string {
   return typeof value === "string" ? singleLine(value).slice(0, 1200) : "";
+}
+
+function optionalMultilineString(value: unknown, maxLength: number): string {
+  return typeof value === "string" ? value.replace(/\0/g, "").slice(0, maxLength) : "";
 }
 
 function boundedStringArray(value: unknown, fieldName: string, maxItems: number): string[] {
@@ -825,6 +1139,7 @@ function forgeProviderSystemPrompt(): string {
     "You are Forge's model-provider adapter for a macOS-native, local-first software engineering workspace.",
     "Return only JSON that matches the supplied schema.",
     "Do not claim to have changed files, run commands, committed code, pushed branches, or used tools.",
+    "When a schema asks for context requests, you may request read-only repository search or file context; the runtime decides what is safe to execute.",
     "Treat all file changes, commands, git actions, and external effects as proposals that require runtime validation and human approval.",
     "Use provided repository context summaries when helpful, but ask explicit open questions when information is missing."
   ].join(" ");
@@ -852,6 +1167,12 @@ function taskProviderContext(task: ForgeTask, sourceMessage?: TaskMessage): stri
       summary: step.summary
     })),
     changedFiles: task.changedFiles,
+    validationRepairBriefs: task.validationRepairBriefs?.slice(-3).map((brief) => ({
+      validationRunID: brief.validationRunID,
+      summary: brief.summary,
+      likelyCause: brief.likelyCause,
+      recommendedActions: brief.recommendedActions
+    })) ?? [],
     existingEditProposal: task.editProposal
       ? {
           status: task.editProposal.status,
@@ -863,6 +1184,89 @@ function taskProviderContext(task: ForgeTask, sourceMessage?: TaskMessage): stri
           }))
         }
       : undefined
+  }, null, 2);
+}
+
+function editProposalRequestContext(request: EditProposalRequest): string {
+  if (!request.previousProposal && !request.validationFeedback) {
+    return JSON.stringify({
+      editProposalRequest: {
+        revisionNumber: request.revisionNumber,
+        repairAttempt: request.repairAttempt ?? 0
+      }
+    }, null, 2);
+  }
+
+  return JSON.stringify({
+    editProposalRequest: {
+      revisionNumber: request.revisionNumber,
+      repairAttempt: request.repairAttempt ?? 0,
+      previousProposal: request.previousProposal
+        ? {
+            id: request.previousProposal.id,
+            revisionNumber: request.previousProposal.revisionNumber,
+            status: request.previousProposal.status,
+            summary: request.previousProposal.summary,
+            validationStatus: request.previousProposal.validation?.status,
+            validationSummary: request.previousProposal.validation?.summary,
+            fileChanges: request.previousProposal.fileChanges.map((change) => ({
+              path: change.path,
+              changeType: change.changeType,
+              rationale: change.rationale,
+              operationKind: change.applyOperation?.kind
+            }))
+          }
+        : undefined,
+      validationFeedback: request.validationFeedback
+        ? {
+            status: request.validationFeedback.status,
+            summary: request.validationFeedback.summary,
+            fileResults: request.validationFeedback.fileResults.map((result) => ({
+              path: result.path,
+              status: result.status,
+              summary: result.summary,
+              checks: result.checks
+            }))
+          }
+        : undefined,
+      validationRepairBrief: request.validationRepairBrief
+        ? {
+            id: request.validationRepairBrief.id,
+            validationRunID: request.validationRepairBrief.validationRunID,
+            summary: request.validationRepairBrief.summary,
+            likelyCause: request.validationRepairBrief.likelyCause,
+            recommendedActions: request.validationRepairBrief.recommendedActions,
+            followUpPrompt: request.validationRepairBrief.followUpPrompt,
+            riskLevel: request.validationRepairBrief.riskLevel
+          }
+        : undefined
+    }
+  }, null, 2);
+}
+
+function validationRepairRequestContext(request: ValidationRepairBriefRequest): string {
+  return JSON.stringify({
+    validationRepairRequest: {
+      validationRun: {
+        id: request.validationRun.id,
+        trigger: request.validationRun.trigger,
+        presetID: request.validationRun.presetID,
+        presetName: request.validationRun.presetName,
+        riskLevel: request.validationRun.riskLevel,
+        status: request.validationRun.status,
+        summary: request.validationRun.summary,
+        commands: request.validationRun.commands.map((command) => ({
+          name: command.name,
+          command: command.command,
+          kind: command.kind,
+          riskLevel: command.riskLevel,
+          cwd: command.cwd,
+          status: command.status,
+          exitCode: command.exitCode,
+          outputSummary: command.outputSummary.slice(0, 1800)
+        }))
+      }
+    }
   }, null, 2);
 }
 
@@ -916,7 +1320,8 @@ function buildRestrictedEditDraft(
   request: EditProposalRequest,
   guidance?: EditProposalGuidance
 ): RestrictedEditDraft {
-  const targetPath = chooseTargetPath(request.task, guidance?.targetPath);
+  const previousTargetPath = request.previousProposal?.fileChanges.find((change) => isEditableMarkdownPath(change.path))?.path;
+  const targetPath = chooseTargetPath(request.task, guidance?.targetPath ?? previousTargetPath);
   const replaceInstruction = parseExactReplaceInstruction(request.sourceMessage?.content ?? request.task.objective);
   if (replaceInstruction) {
     const applyOperation: ProposedFileOperation = {
@@ -1023,6 +1428,17 @@ function buildAppendText(
     if (guidance.appendNote.trim()) {
       lines.push(`- Provider note: ${singleLine(guidance.appendNote)}`);
     }
+  }
+
+  if (request.validationFeedback) {
+    lines.push(`- Repair attempt: ${request.repairAttempt ?? 0}`);
+    lines.push(`- Validation feedback: ${singleLine(request.validationFeedback.summary)}`);
+  }
+
+  if (request.validationRepairBrief) {
+    lines.push(`- Validation repair brief: ${singleLine(request.validationRepairBrief.summary)}`);
+    lines.push(`- Likely cause: ${singleLine(request.validationRepairBrief.likelyCause)}`);
+    lines.push(`- Follow-up prompt: ${singleLine(request.validationRepairBrief.followUpPrompt)}`);
   }
 
   lines.push("- Safety: generated as an edit proposal first, then applied only after explicit human approval.");

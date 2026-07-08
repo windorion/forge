@@ -14,9 +14,10 @@ what to do next without rereading the whole project history.
 
 - Broaden automated regression coverage from the runtime core to app-facing
   runtime state, diagnostics, and provider settings paths.
-- Improve the macOS edit proposal panel with clearer diff preview and operation
-  metadata.
-- Add app-managed runtime start/stop.
+- Harden the macOS git/diff review panel for larger diffs, binary files, and
+  packaged app workflows.
+- Harden app-managed runtime start/stop for packaged app locations, stale
+  process handling, and user-facing launch failures.
 - Run a provider settings smoke test with an intentionally supplied OpenAI API
   key, without committing secrets.
 - Add a short V0 demo script in `docs/development.md`.
@@ -25,21 +26,20 @@ what to do next without rereading the whole project history.
 
 - Wire the OpenAI provider into the normal task flow beyond deterministic
   fallback demos.
-- Add a tool-call planning loop where the model can request bounded read/search
-  actions through the runtime rather than only receiving prebuilt context.
+- Extend the bounded OpenAI model-guided context loop into broader
+  tool-call-driven planning and execution loops beyond read-only context.
 - Add stricter model output normalization and failure recovery.
-- Add a richer patch proposal format:
-  file create, file replace section, multi-change proposal, and preview-only
-  unsupported operation states.
+- Extend the richer proposal artifact into a real patch apply engine: section
+  replace, structured multi-change rollback/recovery, and stronger workspace
+  revalidation.
 - Keep all patch application behind runtime validation and human approval.
-- Add retry/revision prompts that incorporate validation failures and user
-  request-changes notes.
+- Connect follow-up repair proposals to commit preparation and rollback
+  surfaces.
 
 ## P2: Review, Diff, And Git
 
-- Add a native side-by-side diff view.
-- Show working tree git status in the app.
-- Show changed files after apply with open/reveal actions.
+- Improve the first-pass native side-by-side diff view with file filtering and
+  better large-diff navigation.
 - Add commit preparation as a review artifact, not an automatic action.
 - Add branch awareness.
 - Add PR handoff planning, likely through GitHub integration later.
@@ -84,6 +84,34 @@ what to do next without rereading the whole project history.
 
 ## Done Recently
 
+- Added a bounded OpenAI model-guided context loop before plan revisions: the
+  provider can ask for up to three read/search rounds, while the runtime
+  validates and executes only logged read-only repo tools with stop conditions.
+- Added richer OpenAI edit proposal artifacts: multi-file proposals can include
+  safe append/replace/create operations plus preview-only unsupported
+  operations, while apply remains v0-restricted.
+- Added restricted `CreateFile` apply for new `docs/*.md` files and Review UI
+  treatment for blocked `PreviewOnly` proposal operations.
+- Added a bounded validation-feedback repair loop for edit proposals: blocked
+  proposals are archived as `Superseded`, the provider receives failed checks,
+  and repair stops after a fixed attempt limit.
+- Added validation failure repair briefs: failed command output is summarized
+  by the provider into likely cause, recommended actions, and a follow-up
+  repair prompt without mutating files.
+- Added follow-up repair edit proposals generated from validation repair
+  briefs. The previous applied proposal is archived and the new repair proposal
+  remains review-only until explicit apply.
+- Surfaced validation repair briefs and follow-up repair proposal generation in
+  the macOS Review UI.
+- Added first-pass app-managed runtime start/stop controls in the toolbar,
+  sidebar runtime badge, and Settings window.
+- Added read-only runtime git status and bounded per-file diff endpoints, plus
+  a macOS Review working-tree panel with side-by-side diff preview and
+  open/reveal actions.
+- Extended `npm run smoke:core` with a mock OpenAI Responses server that
+  verifies the model-guided context loop, append/create apply,
+  blocked-to-repaired proposal flow, failed validation repair briefs,
+  follow-up repair proposals, and bounded blocked preview-only paths.
 - App-level runtime state and diagnostics for unchecked/checking/running,
   disconnected, wrong version, provider configuration issues, event stream
   state, startup guidance, and copy/open diagnostics actions.

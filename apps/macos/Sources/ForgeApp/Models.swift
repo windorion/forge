@@ -14,6 +14,7 @@ struct ForgeTask: Identifiable, Codable, Hashable {
     var approvals: [ApprovalRecord]
     var toolCalls: [ToolCall]
     var validationRuns: [ValidationRun]
+    var validationRepairBriefs: [ValidationRepairBrief]
     var messages: [TaskMessage]
     var planRevisions: [PlanRevision]
     var editProposalRevisions: [EditProposal]
@@ -50,6 +51,7 @@ struct ForgeTask: Identifiable, Codable, Hashable {
         approvals: [],
         toolCalls: [],
         validationRuns: [],
+        validationRepairBriefs: [],
         messages: [
             TaskMessage(
                 id: "local-message",
@@ -152,6 +154,18 @@ struct ValidationRun: Identifiable, Codable, Hashable {
     var commands: [ValidationCommandResult]
 }
 
+struct ValidationRepairBrief: Identifiable, Codable, Hashable {
+    var id: String
+    var provider: ModelProviderInfo
+    var validationRunID: String
+    var summary: String
+    var likelyCause: String
+    var recommendedActions: [String]
+    var followUpPrompt: String
+    var riskLevel: String
+    var generatedAt: String
+}
+
 struct ValidationCommandDefinition: Identifiable, Codable, Hashable {
     var id: String
     var name: String
@@ -210,6 +224,45 @@ struct ValidationPermissionEnvelope: Codable, Hashable {
     var taskStatus: String
     var currentPhase: String
     var permissions: [ValidationPresetPermission]
+}
+
+struct GitFileChange: Identifiable, Codable, Hashable {
+    var id: String { path }
+    var path: String
+    var status: String
+    var indexStatus: String
+    var worktreeStatus: String
+    var staged: Bool
+    var unstaged: Bool
+    var untracked: Bool
+    var oldPath: String?
+    var additions: Int?
+    var deletions: Int?
+}
+
+struct GitStatusSnapshot: Codable, Hashable {
+    var isRepository: Bool
+    var root: String?
+    var branch: String?
+    var upstream: String?
+    var head: String?
+    var ahead: Int?
+    var behind: Int?
+    var isDirty: Bool
+    var summary: String
+    var generatedAt: String
+    var changedFiles: [GitFileChange]
+    var error: String?
+}
+
+struct GitFileDiff: Codable, Hashable {
+    var path: String
+    var oldPath: String?
+    var status: String?
+    var generatedAt: String
+    var diff: String
+    var truncated: Bool
+    var summary: String
 }
 
 struct ContextFile: Identifiable, Codable, Hashable {
@@ -313,6 +366,7 @@ struct ProposedFileOperation: Codable, Hashable {
     var text: String?
     var findText: String?
     var replaceWith: String?
+    var content: String?
 }
 
 struct EditProposal: Identifiable, Codable, Hashable {
@@ -320,6 +374,7 @@ struct EditProposal: Identifiable, Codable, Hashable {
     var provider: ModelProviderInfo
     var sourceMessageID: String?
     var revisionOfID: String?
+    var validationRepairBriefID: String?
     var revisionNumber: Int
     var summary: String
     var fileChanges: [ProposedFileChange]
@@ -374,6 +429,15 @@ enum RuntimeEventStreamState: String, Hashable {
     case disconnected = "Disconnected"
     case connecting = "Connecting"
     case connected = "Connected"
+}
+
+enum RuntimeProcessState: String, Hashable {
+    case notStarted = "Not Started"
+    case starting = "Starting"
+    case running = "Running"
+    case stopping = "Stopping"
+    case stopped = "Stopped"
+    case failed = "Failed"
 }
 
 struct CreateTaskRequest: Encodable {

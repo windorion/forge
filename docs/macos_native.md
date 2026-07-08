@@ -62,6 +62,30 @@ Purpose:
 - make long-running work visible without opening the app
 - show indexing, testing, or task progress
 
+### Local Runtime Lifecycle
+
+Purpose:
+
+- start the local agent runtime without requiring a separate terminal session
+- stop the app-managed runtime process when the user is done
+- show whether the runtime is external, app-managed, starting, running,
+  stopping, stopped, or failed
+- include process state, PID, and runtime directory in diagnostics
+
+Current implementation:
+
+- the toolbar, sidebar runtime badge, and Settings window can start/stop an
+  app-managed runtime process
+- the app builds `runtime` and launches `node dist/server.js` directly
+- stop only terminates the process that the app started, avoiding broad process
+  killing
+
+Future hardening:
+
+- handle packaged app locations that no longer sit next to a checkout
+- expose launch output when build/start fails
+- detect stale externally launched processes more explicitly
+
 ### Finder Integration
 
 Purpose:

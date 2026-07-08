@@ -44,6 +44,8 @@ The product should show:
 - deterministic Agent Loop v0
 - local file listing and file reads
 - task-intent repo context search
+- OpenAI plan revision model-guided context loop through bounded read-only repo
+  tools
 - visible tool calls
 - visible context files
 - visible plan steps
@@ -58,6 +60,8 @@ The product should show:
 - editable model-provider settings
 - execution proposals
 - safe edit proposals
+- richer OpenAI edit proposal artifacts for review, including blocked
+  preview-only unsupported operations
 - revised edit proposals after requested changes
 - edit proposal validation
 - explicit apply/reject actions for edit proposals
@@ -107,11 +111,18 @@ V0 is complete when:
 - A rejected edit proposal can be revised from the latest task conversation
   without changing files, while preserving the rejected proposal in history.
 - A generated edit proposal can be explicitly applied through a restricted
-  Markdown append or exact replace operation.
+  Markdown append, exact replace, or new docs create-file operation.
 - A generated edit proposal can be validated before apply, and blocked if the
-  workspace no longer matches the safe append or exact replace boundary.
+  workspace no longer matches the safe append, exact replace, or create-file
+  boundary.
+- A blocked generated edit proposal can be repaired through bounded validation
+  feedback before returning to human review.
 - Applying an edit proposal runs controlled built-in validation before the task
   is marked completed.
+- Failed validation can produce a provider-backed repair brief without
+  changing files or rerunning commands.
+- A failed validation repair brief can seed a follow-up edit proposal without
+  changing files.
 - A task can approve and run the `runtime-typescript` validation preset for
   `npm run check` and `npm run build`.
 - A task can approve and run the `macos-swiftpm` validation preset for
@@ -126,6 +137,11 @@ V0 is complete when:
 - The app shows whether the expected runtime endpoint is unchecked, checking,
   running, disconnected, wrong version, or blocked by provider configuration,
   and exposes copy/open diagnostics actions.
+- The app can build, start, and stop the local runtime process it owns during
+  development, while treating externally launched runtime processes as
+  connection targets rather than kill targets.
+- The app can show read-only git working tree status and bounded per-file diff
+  previews in the Review panel, with open/reveal actions for changed files.
 
 ## V0 Next After Completion
 
@@ -141,15 +157,33 @@ controlled execution preparation, but it does not yet run model-driven edits.
 The model-provider abstraction has also started: the default local
 deterministic provider creates task intent briefs, plan revisions, and an
 execution proposal after plan approval. An optional OpenAI Responses provider
-exists behind the same boundary, but full autonomous tool use through a real
-LLM loop is still future work.
+exists behind the same boundary and can run a bounded read/search context loop
+before plan revisions. Full autonomous tool use beyond pre-plan read-only
+context is still future work.
 
 Safe edit proposals have started: Forge can create a proposed diff preview and
 return the task to human review without mutating files. A proposal can now be
 validated, rejected without touching files, or applied through a narrow
-append-text or exact replace-text operation against existing Markdown files.
+append-text or exact replace-text operation against existing Markdown files,
+plus create-file for new `docs/*.md` files.
 Applied proposals now run built-in validation before completion. Approved
 runtime validation presets can also run allowlisted project checks after
 completion, including presets composed from workspace config. The Review panel
 now shows command permission requests from runtime-derived permission snapshots
 instead of only listing preset commands.
+OpenAI proposals can also include richer multi-file review artifacts and
+preview-only unsupported operations. Unsupported operations still validate as
+blocked until the apply engine grows beyond the v0 boundary.
+When possible, blocked generated proposals can now be repaired by feeding
+runtime validation failures back to the provider, but repair still produces
+review artifacts only and never applies files.
+Failed validation runs can also produce repair briefs, which turn compact
+command output into likely cause and next repair prompt without taking further
+side effects.
+Those briefs can now seed a follow-up repair proposal, preserving the human
+review gate before any additional file mutation.
+The macOS app now surfaces those repair briefs in the Review panel and exposes
+the follow-up repair proposal action when the failed validation run has a
+matching brief.
+The macOS toolbar, sidebar runtime badge, and Settings window now include
+first-pass app-managed runtime start/stop controls.

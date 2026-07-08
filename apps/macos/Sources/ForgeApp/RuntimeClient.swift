@@ -25,6 +25,33 @@ struct RuntimeClient {
         return try JSONDecoder().decode(ValidationPresetListEnvelope.self, from: data)
     }
 
+    func gitStatus() async throws -> GitStatusSnapshot {
+        let url = baseURL
+            .appending(path: "git")
+            .appending(path: "status")
+        let (data, response) = try await URLSession.shared.data(from: url)
+        try validate(response)
+        return try JSONDecoder().decode(GitStatusSnapshot.self, from: data)
+    }
+
+    func gitFileDiff(path: String) async throws -> GitFileDiff {
+        let url = baseURL
+            .appending(path: "git")
+            .appending(path: "diff")
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        components?.queryItems = [
+            URLQueryItem(name: "path", value: path)
+        ]
+
+        guard let requestURL = components?.url else {
+            throw RuntimeClientError.invalidResponse
+        }
+
+        let (data, response) = try await URLSession.shared.data(from: requestURL)
+        try validate(response)
+        return try JSONDecoder().decode(GitFileDiff.self, from: data)
+    }
+
     func modelProviderSettings() async throws -> ModelProviderSettingsEnvelope {
         let url = baseURL
             .appending(path: "settings")
@@ -135,6 +162,21 @@ struct RuntimeClient {
             .appending(path: "tasks")
             .appending(path: taskID)
             .appending(path: "revise-edit-proposal")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data("{}".utf8)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response)
+        return try JSONDecoder().decode(ForgeTask.self, from: data)
+    }
+
+    func generateValidationRepairProposal(taskID: ForgeTask.ID) async throws -> ForgeTask {
+        let url = baseURL
+            .appending(path: "tasks")
+            .appending(path: taskID)
+            .appending(path: "generate-validation-repair-proposal")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

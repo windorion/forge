@@ -21,6 +21,15 @@ Forge should detect:
 - ignored files
 - merge or rebase state
 
+Current implementation:
+
+- the runtime exposes `GET /git/status`
+- the response includes git root, branch, upstream, head, dirty state,
+  staged/unstaged/untracked files, and line stats when available
+- the macOS Review panel shows the working tree and highlights files related
+  to the selected task
+- `.git` and `.forge` internals are not exposed through the review endpoints
+
 ## Diff Workflow
 
 The diff should answer:
@@ -38,6 +47,21 @@ Diff views should support:
 - file-level summary
 - accept/reject where possible
 - open in external IDE
+
+Current implementation:
+
+- the runtime exposes `GET /git/diff?path=<repo-relative-path>`
+- the endpoint returns a bounded textual diff for tracked files and a bounded
+  synthetic diff for untracked text files
+- the macOS Review panel renders a compact side-by-side diff preview
+- changed files can be opened or revealed in Finder from the Review panel
+
+Current limitations:
+
+- no staging, unstaging, discard, checkout, reset, or commit actions
+- no binary diff viewer
+- no full-file diff navigation or filtering beyond the first review list
+- large diffs are truncated by the runtime
 
 ## Commit Workflow
 

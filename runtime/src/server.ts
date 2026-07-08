@@ -9,7 +9,8 @@ import { fileURLToPath } from "node:url";
 import {
   createModelProvider,
   defaultModelProviderRuntimeSettings,
-  getModelProviderConfiguration
+  getModelProviderConfiguration,
+  type PlanContextRequestResult
 } from "./modelProvider.js";
 import { SqliteTaskStore } from "./taskStore.js";
 import type {
@@ -25,6 +26,9 @@ import type {
   EditProposalValidation,
   FileChangeValidation,
   ForgeTask,
+  GitFileChange,
+  GitFileDiff,
+  GitStatusSnapshot,
   ModelProviderRuntimeSettings,
   ModelProviderSettingsUpdateRequest,
   PlanRevision,
@@ -41,6 +45,7 @@ import type {
   ValidationPermissionLastRun,
   ValidationPresetPermission,
   ValidationPreset,
+  ValidationRepairBrief,
   ValidationRun
 } from "./types.js";
 
@@ -57,7 +62,11 @@ const validationCommandTimeoutMs = 60_000;
 const repositoryScanMaxFiles = 400;
 const repositorySearchMaxFiles = 240;
 const repositoryContextMaxFiles = 6;
+const modelGuidedContextMaxRounds = 3;
+const modelGuidedContextMaxStoredFiles = 8;
+const editProposalRepairMaxAttempts = 2;
 const repositoryContextMaxFileBytes = 220_000;
+const gitDiffMaxBytes = 48_000;
 const repositoryIgnoredDirectories = new Set([
   ".build",
   ".forge",
@@ -355,6 +364,16 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/git/status") {
+      writeJson(response, 200, await getGitStatusSnapshot());
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/git/diff") {
+      writeJson(response, 200, await getGitFileDiff(url.searchParams.get("path")));
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === "/validation-presets") {
       const registry = await loadValidationPresetRegistry();
       writeJson(response, 200, {
@@ -432,6 +451,13 @@ const server = createServer(async (request, response) => {
     const reviseEditProposalTaskID = taskIDFromActionPath(url.pathname, "revise-edit-proposal");
     if (request.method === "POST" && reviseEditProposalTaskID) {
       const task = await reviseEditProposal(reviseEditProposalTaskID);
+      writeJson(response, 200, task);
+      return;
+    }
+
+    const generateValidationRepairProposalTaskID = taskIDFromActionPath(url.pathname, "generate-validation-repair-proposal");
+    if (request.method === "POST" && generateValidationRepairProposalTaskID) {
+      const task = await generateValidationRepairProposal(generateValidationRepairProposalTaskID);
       writeJson(response, 200, task);
       return;
     }
@@ -515,6 +541,375 @@ function resolveModelProviderSettingsPath(): string {
   }
 
   return path.join(repoRoot, ".forge", "model-provider-settings.json");
+}
+
+async function getGitStatusSnapshot(): Promise<GitStatusSnapshot> {
+  const generatedAt = new Date().toISOString();
+
+  try {
+    const inside = await runGitCommand(["rev-parse", "--is-inside-work-tree"], repoRoot);
+    if (inside.exitCode !== 0 || inside.output.trim() !== "true") {
+      return {
+        isRepository: false,
+        isDirty: false,
+        summary: "Workspace is not inside a git repository.",
+        generatedAt,
+        changedFiles: [],
+        error: inside.output.trim() || "git rev-parse did not report a repository."
+      };
+    }
+
+    const rootResult = await runGitCommand(["rev-parse", "--show-toplevel"], repoRoot);
+    const gitRoot = rootResult.output.trim() || repoRoot;
+    const statusResult = await runGitCommand(["status", "--porcelain=v1", "-b"], gitRoot, 64_000);
+    if (statusResult.exitCode !== 0) {
+      throw new Error(statusResult.output.trim() || "git status failed.");
+    }
+
+    const branch = parseGitBranchLine(statusResult.output.split(/\r?\n/).find((line) => line.startsWith("## ")));
+    const changes = parseGitStatusChanges(statusResult.output).filter(isSafeGitChange);
+    const stats = await collectGitNumstat(gitRoot);
+    const changedFiles = changes.map((change) => ({
+      ...change,
+      ...stats.get(change.path)
+    }));
+    const headResult = await runGitCommand(["rev-parse", "--short", "HEAD"], gitRoot);
+    const head = headResult.exitCode === 0 ? headResult.output.trim() : undefined;
+    const isDirty = changedFiles.length > 0;
+
+    return {
+      isRepository: true,
+      root: gitRoot,
+      branch: branch.branch,
+      upstream: branch.upstream,
+      head,
+      ahead: branch.ahead,
+      behind: branch.behind,
+      isDirty,
+      summary: isDirty
+        ? `${changedFiles.length} changed file(s) in ${branch.branch ?? "current checkout"}.`
+        : `Working tree clean on ${branch.branch ?? "current checkout"}.`,
+      generatedAt,
+      changedFiles
+    };
+  } catch (error) {
+    return {
+      isRepository: false,
+      isDirty: false,
+      summary: "Git status could not be read.",
+      generatedAt,
+      changedFiles: [],
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+async function getGitFileDiff(rawPath: string | null): Promise<GitFileDiff> {
+  const relativePath = normalizeGitDiffPath(rawPath);
+  const status = await getGitStatusSnapshot();
+  if (!status.isRepository || !status.root) {
+    throw new HttpError(409, status.error ?? "Workspace is not inside a git repository.");
+  }
+
+  const change = status.changedFiles.find((candidate) =>
+    candidate.path === relativePath || candidate.oldPath === relativePath
+  );
+  if (!change) {
+    throw new HttpError(404, `No git change found for ${relativePath}.`);
+  }
+
+  const generatedAt = new Date().toISOString();
+  const diff = change.untracked
+    ? await buildUntrackedFileDiff(status.root, change.path)
+    : await buildTrackedFileDiff(status.root, change.path);
+  const bounded = truncateGitDiff(diff);
+
+  return {
+    path: change.path,
+    oldPath: change.oldPath,
+    status: change.status,
+    generatedAt,
+    diff: bounded.text,
+    truncated: bounded.truncated,
+    summary: bounded.text.trim()
+      ? `Diff for ${change.path}${bounded.truncated ? " was truncated." : "."}`
+      : `No textual diff is available for ${change.path}.`
+  };
+}
+
+async function collectGitNumstat(gitRoot: string): Promise<Map<string, { additions?: number; deletions?: number }>> {
+  const stats = new Map<string, { additions?: number; deletions?: number }>();
+  const outputs = await Promise.all([
+    runGitCommand(["diff", "--numstat", "--"], gitRoot),
+    runGitCommand(["diff", "--cached", "--numstat", "--"], gitRoot)
+  ]);
+
+  for (const output of outputs) {
+    if (output.exitCode !== 0) {
+      continue;
+    }
+
+    for (const line of output.output.split(/\r?\n/)) {
+      if (!line.trim()) {
+        continue;
+      }
+
+      const [additionsText, deletionsText, ...pathParts] = line.split("\t");
+      const filePath = pathParts.join("\t");
+      if (!filePath) {
+        continue;
+      }
+
+      const current = stats.get(filePath) ?? {};
+      const additions = parseGitNumstatValue(additionsText);
+      const deletions = parseGitNumstatValue(deletionsText);
+      stats.set(filePath, {
+        additions: additions === undefined ? current.additions : (current.additions ?? 0) + additions,
+        deletions: deletions === undefined ? current.deletions : (current.deletions ?? 0) + deletions
+      });
+    }
+  }
+
+  return stats;
+}
+
+function parseGitBranchLine(line: string | undefined): {
+  branch?: string;
+  upstream?: string;
+  ahead?: number;
+  behind?: number;
+} {
+  if (!line?.startsWith("## ")) {
+    return {};
+  }
+
+  const content = line.slice(3).trim();
+  const bracketMatch = content.match(/\[(.*)\]$/);
+  const relation = bracketMatch?.[1];
+  const branchContent = bracketMatch ? content.slice(0, bracketMatch.index).trim() : content;
+  const [branch, upstream] = branchContent.split("...").map((part) => part.trim()).filter(Boolean);
+  const ahead = relation?.match(/ahead (\d+)/)?.[1];
+  const behind = relation?.match(/behind (\d+)/)?.[1];
+
+  return {
+    branch,
+    upstream,
+    ahead: ahead ? Number(ahead) : undefined,
+    behind: behind ? Number(behind) : undefined
+  };
+}
+
+function parseGitStatusChanges(output: string): GitFileChange[] {
+  const changes: GitFileChange[] = [];
+
+  for (const line of output.split(/\r?\n/)) {
+    if (!line || line.startsWith("## ")) {
+      continue;
+    }
+
+    const indexStatus = line[0] ?? " ";
+    const worktreeStatus = line[1] ?? " ";
+    const rawPath = line.slice(3);
+    const renamedParts = rawPath.split(" -> ");
+    const oldPath = renamedParts.length > 1 ? renamedParts[0] : undefined;
+    const filePath = renamedParts.length > 1 ? renamedParts.slice(1).join(" -> ") : rawPath;
+    const untracked = indexStatus === "?" && worktreeStatus === "?";
+    const staged = ![" ", "?"].includes(indexStatus);
+    const unstaged = ![" ", "?"].includes(worktreeStatus);
+
+    changes.push({
+      path: filePath,
+      oldPath,
+      status: gitChangeStatus(indexStatus, worktreeStatus),
+      indexStatus,
+      worktreeStatus,
+      staged,
+      unstaged,
+      untracked
+    });
+  }
+
+  return changes;
+}
+
+function gitChangeStatus(indexStatus: string, worktreeStatus: string): GitFileChange["status"] {
+  const combined = `${indexStatus}${worktreeStatus}`;
+  if (combined === "??") {
+    return "Untracked";
+  }
+
+  if (combined.includes("U") || ["AA", "DD"].includes(combined)) {
+    return "Unmerged";
+  }
+
+  if (combined.includes("R")) {
+    return "Renamed";
+  }
+
+  if (combined.includes("C")) {
+    return "Copied";
+  }
+
+  if (combined.includes("A")) {
+    return "Added";
+  }
+
+  if (combined.includes("D")) {
+    return "Deleted";
+  }
+
+  if (combined.includes("M")) {
+    return "Modified";
+  }
+
+  return "Unknown";
+}
+
+function parseGitNumstatValue(value: string): number | undefined {
+  return /^\d+$/.test(value) ? Number(value) : undefined;
+}
+
+async function buildTrackedFileDiff(gitRoot: string, relativePath: string): Promise<string> {
+  const [staged, unstaged] = await Promise.all([
+    runGitCommand(["diff", "--cached", "--no-ext-diff", "--", relativePath], gitRoot, gitDiffMaxBytes + 8_000),
+    runGitCommand(["diff", "--no-ext-diff", "--", relativePath], gitRoot, gitDiffMaxBytes + 8_000)
+  ]);
+  const parts: string[] = [];
+
+  if (staged.output.trim()) {
+    parts.push("# Staged changes", staged.output.trimEnd());
+  }
+
+  if (unstaged.output.trim()) {
+    parts.push("# Unstaged changes", unstaged.output.trimEnd());
+  }
+
+  if (staged.exitCode !== 0 && !staged.output.trim()) {
+    parts.push(`# Staged diff failed with exit code ${staged.exitCode}.`);
+  }
+
+  if (unstaged.exitCode !== 0 && !unstaged.output.trim()) {
+    parts.push(`# Unstaged diff failed with exit code ${unstaged.exitCode}.`);
+  }
+
+  return parts.join("\n\n");
+}
+
+async function buildUntrackedFileDiff(gitRoot: string, relativePath: string): Promise<string> {
+  const absolutePath = path.resolve(gitRoot, relativePath);
+  assertPathInside(gitRoot, absolutePath);
+  const fileStat = await stat(absolutePath);
+  if (!fileStat.isFile()) {
+    return `# Untracked path is not a regular file: ${relativePath}`;
+  }
+
+  const content = await readFile(absolutePath);
+  if (content.includes(0)) {
+    return `# Binary untracked file preview is unavailable: ${relativePath}`;
+  }
+
+  const text = content.toString("utf8");
+  const lines = text.split(/\r?\n/);
+  const previewLines = lines.slice(0, 420).map((line) => `+${line}`);
+  const truncated = lines.length > previewLines.length;
+  return [
+    `diff --git a/${relativePath} b/${relativePath}`,
+    "new file mode 100644",
+    "index 0000000..0000000",
+    "--- /dev/null",
+    `+++ b/${relativePath}`,
+    `@@ -0,0 +1,${lines.length} @@`,
+    ...previewLines,
+    truncated ? `# Diff preview truncated after ${previewLines.length} line(s).` : ""
+  ].filter(Boolean).join("\n");
+}
+
+function truncateGitDiff(diff: string): { text: string; truncated: boolean } {
+  if (Buffer.byteLength(diff, "utf8") <= gitDiffMaxBytes) {
+    return { text: diff, truncated: false };
+  }
+
+  const buffer = Buffer.from(diff, "utf8").subarray(0, gitDiffMaxBytes);
+  return {
+    text: `${buffer.toString("utf8")}\n\n# Forge truncated this diff preview at ${gitDiffMaxBytes} bytes.`,
+    truncated: true
+  };
+}
+
+function normalizeGitDiffPath(rawPath: string | null): string {
+  if (!rawPath?.trim()) {
+    throw new HttpError(400, "A repo-relative git diff path is required.");
+  }
+
+  if (path.isAbsolute(rawPath)) {
+    throw new HttpError(400, "Git diff paths must be repo-relative.");
+  }
+
+  const normalized = path.posix.normalize(rawPath.replace(/\\/g, "/"));
+  if (
+    normalized === "." ||
+    normalized.startsWith("../") ||
+    normalized === ".." ||
+    normalized.startsWith(".git/") ||
+    normalized === ".git" ||
+    normalized.startsWith(".forge/") ||
+    normalized === ".forge"
+  ) {
+    throw new HttpError(400, `Unsafe git diff path: ${rawPath}`);
+  }
+
+  return normalized;
+}
+
+function isSafeGitChange(change: GitFileChange): boolean {
+  return [change.path, change.oldPath].every((candidate) => {
+    if (!candidate) {
+      return true;
+    }
+
+    return !(
+      candidate === ".git" ||
+      candidate.startsWith(".git/") ||
+      candidate === ".forge" ||
+      candidate.startsWith(".forge/")
+    );
+  });
+}
+
+function assertPathInside(root: string, absolutePath: string): void {
+  const relative = path.relative(root, absolutePath);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new HttpError(400, `Path escapes git root: ${absolutePath}`);
+  }
+}
+
+function runGitCommand(
+  args: string[],
+  cwd: string,
+  maxOutputBytes = 32_000
+): Promise<{ exitCode: number; output: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("git", args, {
+      cwd,
+      shell: false,
+      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" }
+    });
+
+    let output = "";
+    const appendOutput = (chunk: Buffer) => {
+      output += chunk.toString("utf8");
+      if (Buffer.byteLength(output, "utf8") > maxOutputBytes) {
+        output = output.slice(output.length - maxOutputBytes);
+      }
+    };
+
+    child.stdout.on("data", appendOutput);
+    child.stderr.on("data", appendOutput);
+    child.on("error", reject);
+    child.on("close", (code) => {
+      resolve({ exitCode: code ?? 1, output });
+    });
+  });
 }
 
 function loadModelProviderRuntimeSettings(): ModelProviderRuntimeSettings {
@@ -1047,6 +1442,7 @@ async function createTask(input: CreateTaskRequest): Promise<ForgeTask> {
     approvals: [],
     toolCalls: [],
     validationRuns: [],
+    validationRepairBriefs: [],
     messages: [userMessage],
     planRevisions: [],
     editProposalRevisions: [],
@@ -1176,6 +1572,8 @@ async function generatePlanRevision(taskID: string): Promise<ForgeTask> {
   started.createdAt = new Date().toISOString();
   saveAndBroadcast(task, started);
 
+  await buildProviderGuidedPlanContext(task, sourceMessage);
+
   const revision = await modelProvider.createPlanRevision({ task, sourceMessage });
   task.planRevisions.push(revision);
   task.planSteps = revision.steps.map((step) => ({ ...step }));
@@ -1190,6 +1588,119 @@ async function generatePlanRevision(taskID: string): Promise<ForgeTask> {
   ready.createdAt = revision.generatedAt;
   saveAndBroadcast(task, ready);
   return task;
+}
+
+async function buildProviderGuidedPlanContext(
+  task: ForgeTask,
+  sourceMessage?: TaskMessage
+): Promise<void> {
+  if (!modelProvider.createPlanContextRequest) {
+    return;
+  }
+
+  setAgent(task, "Planner", "Active", `Asking ${modelProvider.info.name} which repo context to inspect.`);
+  upsertPlanStep(task, {
+    id: "build-model-guided-context",
+    title: "Build model-guided context",
+    status: "Active",
+    summary: `The model provider can request up to ${modelGuidedContextMaxRounds} bounded read-only context round(s).`
+  });
+
+  let projectFiles: string[] | undefined;
+  const executedSearchKeys = new Set<string>();
+  const inspectedPaths = new Set(task.contextFiles.map((file) => file.path));
+  const roundSummaries: string[] = [];
+  let stopReason = "Reached the bounded context round limit.";
+
+  for (let round = 1; round <= modelGuidedContextMaxRounds; round += 1) {
+    const requestStarted = event(
+      "model.context_request.started",
+      `Model provider is selecting bounded read-only repository context (round ${round}/${modelGuidedContextMaxRounds}).`
+    );
+    requestStarted.createdAt = new Date().toISOString();
+    saveAndBroadcast(task, requestStarted);
+
+    const contextRequest = await modelProvider.createPlanContextRequest({
+      task,
+      sourceMessage,
+      round,
+      maxRounds: modelGuidedContextMaxRounds
+    });
+
+    if (contextRequest.status === "ReadyForPlan") {
+      stopReason = `Provider reported enough context: ${contextRequest.rationale}`;
+      roundSummaries.push(`Round ${round}: ready for plan.`);
+      break;
+    }
+
+    if (!projectFiles) {
+      projectFiles = await runTool(
+        task,
+        "list_repo_files",
+        "Model-guided bounded repo scan excluding private and generated directories",
+        listRepositoryFiles
+      );
+    }
+
+    const searchTerms = normalizeProviderSearchTerms(contextRequest, task);
+    const requestedReadPaths = normalizeProviderReadPaths(contextRequest.readPaths, projectFiles);
+    const searchKey = searchTerms.join("\0");
+    const hasNewSearch = !executedSearchKeys.has(searchKey);
+    const newReadPaths = requestedReadPaths.filter((readPath) => !inspectedPaths.has(readPath));
+
+    if (!hasNewSearch && newReadPaths.length === 0) {
+      stopReason = `Provider repeated context that was already inspected: ${contextRequest.rationale}`;
+      roundSummaries.push(`Round ${round}: stopped because no new safe context was requested.`);
+      break;
+    }
+
+    executedSearchKeys.add(searchKey);
+    const contextMatches = await runTool(
+      task,
+      "search_repo_context",
+      searchTerms.join(", "),
+      () => searchRepositoryContext(
+        projectFiles as string[],
+        searchTerms,
+        [...explicitContextPathsForTask(task), ...requestedReadPaths]
+      )
+    );
+    const contextFiles = await buildContextFiles(task, projectFiles, contextMatches, requestedReadPaths);
+    task.contextFiles = mergeContextFiles(task.contextFiles, contextFiles);
+    for (const contextFile of contextFiles) {
+      inspectedPaths.add(contextFile.path);
+    }
+
+    const roundSummary = [
+      `Round ${round}: ${contextRequest.rationale}`,
+      `Search: ${searchTerms.join(", ")}`,
+      requestedReadPaths.length > 0 ? `Requested reads: ${requestedReadPaths.join(", ")}` : undefined,
+      `Stored ${task.contextFiles.length} context file(s).`
+    ].filter(Boolean).join(" ");
+    roundSummaries.push(roundSummary);
+
+    const completed = event(
+      "model.context_request.completed",
+      `Model-guided context round ${round} inspected ${contextFiles.length} file(s).`
+    );
+    completed.createdAt = new Date().toISOString();
+    saveAndBroadcast(task, completed);
+  }
+
+  setAgent(task, "Planner", "Active", `Inspected ${task.contextFiles.length} model-guided context file(s).`);
+  upsertPlanStep(task, {
+    id: "build-model-guided-context",
+    title: "Build model-guided context",
+    status: "Done",
+    summary: [stopReason, ...roundSummaries].join(" ").slice(0, 500)
+  });
+
+  const loopCompleted = event(
+    "model.context_loop.completed",
+    `Model-guided context loop completed before plan revision: ${stopReason.slice(0, 180)}`
+  );
+  loopCompleted.createdAt = new Date().toISOString();
+  saveAndBroadcast(task, loopCompleted);
 }
 
 async function createUserTaskMessage(content: string, createdAt: string): Promise<TaskMessage> {
@@ -1549,101 +2060,279 @@ async function reviseEditProposal(taskID: string): Promise<ForgeTask> {
   return createEditProposalForTask(task, "Revision", task.editProposal);
 }
 
+async function generateValidationRepairProposal(taskID: string): Promise<ForgeTask> {
+  const task = tasks.get(taskID);
+  if (!task) {
+    throw new HttpError(404, `Task not found: ${taskID}`);
+  }
+
+  if (!task.executionProposal) {
+    throw new HttpError(409, "An execution proposal is required before generating validation repair proposals.");
+  }
+
+  if (task.editProposal?.status === "Proposed") {
+    throw new HttpError(409, "This task already has a proposed edit awaiting review.");
+  }
+
+  if (task.editProposal?.status !== "Applied") {
+    throw new HttpError(409, "An applied edit proposal is required before generating a validation repair proposal.");
+  }
+
+  const failedRun = latestFailedValidationRun(task);
+  if (!failedRun) {
+    throw new HttpError(409, "A failed validation run is required before generating a validation repair proposal.");
+  }
+
+  const repairBrief = latestValidationRepairBriefForRun(task, failedRun.id);
+  if (!repairBrief) {
+    throw new HttpError(409, "A validation repair brief is required before generating a repair proposal.");
+  }
+
+  return createEditProposalForTask(task, "ValidationRepair", task.editProposal, {
+    validationRepairBrief: repairBrief,
+    preserveChangedFiles: true
+  });
+}
+
 async function createEditProposalForTask(
   task: ForgeTask,
-  mode: "Initial" | "Revision",
-  previousProposal?: EditProposal
+  mode: "Initial" | "Revision" | "ValidationRepair",
+  previousProposal?: EditProposal,
+  options: {
+    validationRepairBrief?: ValidationRepairBrief;
+    preserveChangedFiles?: boolean;
+  } = {}
 ): Promise<ForgeTask> {
   const isRevision = mode === "Revision";
+  const isValidationRepair = mode === "ValidationRepair";
   const sourceMessage = latestTaskMessage(task, "User");
   const revisionNumber = previousProposal ? (previousProposal.revisionNumber ?? 1) + 1 : 1;
+  const stepID = isValidationRepair
+    ? "generate-validation-repair-proposal"
+    : isRevision
+      ? "revise-edit-proposal"
+      : "generate-safe-edit-proposal";
+  const stepTitle = isValidationRepair
+    ? "Generate validation repair proposal"
+    : isRevision
+      ? "Revise edit proposal"
+      : "Generate safe edit proposal";
 
   task.status = "Running";
-  task.currentPhase = isRevision ? "Edit Proposal Revision" : "Edit Proposal Generation";
-  task.reviewSummary = isRevision
-    ? "Revising the rejected edit proposal from the latest task conversation. No files will be changed."
-    : "Generating a safe edit proposal. No files will be changed.";
+  task.currentPhase = isValidationRepair
+    ? "Validation Repair Proposal Generation"
+    : isRevision
+      ? "Edit Proposal Revision"
+      : "Edit Proposal Generation";
+  task.reviewSummary = isValidationRepair
+    ? "Generating a follow-up repair proposal from the validation repair brief. No files will be changed."
+    : isRevision
+      ? "Revising the rejected edit proposal from the latest task conversation. No files will be changed."
+      : "Generating a safe edit proposal. No files will be changed.";
   setAgent(
     task,
     "Coder",
     "Active",
-    isRevision
+    isValidationRepair
+      ? `Generating a validation repair proposal with ${modelProvider.info.name}.`
+      : isRevision
       ? `Revising a safe edit proposal with ${modelProvider.info.name}.`
       : `Generating a safe edit proposal with ${modelProvider.info.name}.`
   );
   setAgent(task, "Reviewer", "Idle", "Waiting for a proposed diff to review.");
   upsertPlanStep(task, {
-    id: isRevision ? "revise-edit-proposal" : "generate-safe-edit-proposal",
-    title: isRevision ? "Revise edit proposal" : "Generate safe edit proposal",
+    id: stepID,
+    title: stepTitle,
     status: "Active",
-    summary: isRevision
+    summary: isValidationRepair
+      ? "Using the validation repair brief to draft a follow-up proposal without touching files."
+      : isRevision
       ? "Using the latest task conversation to revise the rejected proposal without touching files."
       : "Drafting a proposed diff without touching the working tree."
   });
 
   const started = event(
-    isRevision ? "edit.proposal.revision.started" : "edit.proposal.started",
-    isRevision
+    isValidationRepair
+      ? "edit.proposal.validation_repair.started"
+      : isRevision ? "edit.proposal.revision.started" : "edit.proposal.started",
+    isValidationRepair
+      ? "Generating a validation repair proposal without applying file changes."
+      : isRevision
       ? "Revising a rejected edit proposal without applying file changes."
       : "Generating a safe edit proposal without applying file changes."
   );
   started.createdAt = new Date().toISOString();
   saveAndBroadcast(task, started);
 
-  const proposal = await modelProvider.createEditProposal({
+  const proposalResult = await createValidatedEditProposalWithRepair({
     task,
     previousProposal,
     sourceMessage,
-    revisionNumber
+    revisionNumber,
+    validationRepairBrief: options.validationRepairBrief
   });
-  proposal.validation = await buildEditProposalValidation(proposal.fileChanges);
+  const { proposal, repairAttempts } = proposalResult;
+  const validation = proposal.validation;
+  if (!validation) {
+    throw new Error("Generated edit proposal is missing runtime validation.");
+  }
   if (previousProposal) {
     archiveEditProposalRevision(task, previousProposal);
   }
   task.editProposal = proposal;
   task.status = "Human Review";
-  task.currentPhase = "Edit Proposal Review";
-  task.changedFiles = [];
+  task.currentPhase =
+    validation.status === "Ready" ? "Edit Proposal Review" : "Edit Proposal Validation Blocked";
+  if (!options.preserveChangedFiles) {
+    task.changedFiles = [];
+  }
   task.reviewSummary =
-    proposal.validation.status === "Ready"
+    validation.status === "Ready"
       ? "Edit proposal ready and validated for review. No file changes have been applied."
-      : proposal.validation.summary;
-  setAgent(task, "Coder", "Done", "Prepared a proposed diff without modifying files.");
-  setAgent(task, "Reviewer", "Active", "Review the proposed file changes and validation result before applying.");
+      : validation.summary;
+  setAgent(
+    task,
+    "Coder",
+    validation.status === "Ready" ? "Done" : "Blocked",
+    validation.status === "Ready"
+      ? "Prepared a proposed diff without modifying files."
+      : "Could not repair the proposal into an apply-ready shape."
+  );
+  setAgent(
+    task,
+    "Reviewer",
+    validation.status === "Ready" ? "Active" : "Blocked",
+    validation.status === "Ready"
+      ? "Review the proposed file changes and validation result before applying."
+      : "Review failed proposal validation checks before requesting another revision."
+  );
   upsertPlanStep(task, {
-    id: isRevision ? "revise-edit-proposal" : "generate-safe-edit-proposal",
-    title: isRevision ? "Revise edit proposal" : "Generate safe edit proposal",
+    id: stepID,
+    title: stepTitle,
     status: "Done",
-    summary: isRevision
-      ? `Proposed revision ${proposal.revisionNumber} with ${proposal.fileChanges.length} file change(s). No files changed.`
-      : `Proposed ${proposal.fileChanges.length} file change(s). No files changed.`
+    summary: isValidationRepair
+      ? `Proposed validation repair revision ${proposal.revisionNumber} from repair brief ${options.validationRepairBrief?.id ?? "unknown"} with ${proposal.fileChanges.length} file change(s). ${repairSummary(repairAttempts)} No files changed.`
+      : isRevision
+      ? `Proposed revision ${proposal.revisionNumber} with ${proposal.fileChanges.length} file change(s). ${repairSummary(repairAttempts)} No files changed.`
+      : `Proposed ${proposal.fileChanges.length} file change(s). ${repairSummary(repairAttempts)} No files changed.`
   });
   upsertPlanStep(task, {
     id: "validate-edit-proposal",
     title: "Validate edit proposal",
-    status: proposal.validation.status === "Ready" ? "Done" : "Blocked",
-    summary: proposal.validation.summary
+    status: validation.status === "Ready" ? "Done" : "Blocked",
+    summary: validation.summary
   });
+  if (repairAttempts > 0) {
+    upsertPlanStep(task, {
+      id: "repair-edit-proposal",
+      title: "Repair edit proposal",
+      status: validation.status === "Ready" ? "Done" : "Blocked",
+      summary: validation.status === "Ready"
+        ? `Used validation feedback to repair the proposal after ${repairAttempts} attempt(s).`
+        : `Stopped after ${repairAttempts} automatic repair attempt(s): ${validation.summary}`
+    });
+  }
   upsertPlanStep(task, {
     id: "review-edit-proposal",
     title: "Review edit proposal",
-    status: "Active",
-    summary: "Human review required before applying proposed file changes."
+    status: validation.status === "Ready" ? "Active" : "Blocked",
+    summary: validation.status === "Ready"
+      ? "Human review required before applying proposed file changes."
+      : "Proposal is blocked; request changes before applying."
   });
 
   const ready = event(
-    proposal.validation.status === "Ready"
-      ? isRevision ? "edit.proposal.revision.ready" : "edit.proposal.ready"
+    validation.status === "Ready"
+      ? isValidationRepair
+        ? "edit.proposal.validation_repair.ready"
+        : isRevision ? "edit.proposal.revision.ready" : "edit.proposal.ready"
       : "edit.proposal.validation.blocked",
-    proposal.validation.status === "Ready"
-      ? isRevision
+    validation.status === "Ready"
+      ? isValidationRepair
+        ? "Validation repair proposal is validated and ready for human review. No files changed."
+        : isRevision
         ? "Revised edit proposal is validated and ready for human review. No files changed."
         : "Safe edit proposal is validated and ready for human review. No files changed."
-      : proposal.validation.summary
+      : validation.summary
   );
   ready.createdAt = proposal.generatedAt;
   saveAndBroadcast(task, ready);
   return task;
+}
+
+interface EditProposalGenerationOptions {
+  task: ForgeTask;
+  previousProposal?: EditProposal;
+  sourceMessage?: TaskMessage;
+  revisionNumber: number;
+  validationRepairBrief?: ValidationRepairBrief;
+}
+
+interface EditProposalGenerationResult {
+  proposal: EditProposal;
+  repairAttempts: number;
+}
+
+async function createValidatedEditProposalWithRepair(
+  options: EditProposalGenerationOptions
+): Promise<EditProposalGenerationResult> {
+  let previousProposal = options.previousProposal;
+  let validationFeedback: EditProposalValidation | undefined;
+  let revisionNumber = options.revisionNumber;
+  let repairAttempts = 0;
+
+  while (true) {
+    const proposal = await modelProvider.createEditProposal({
+      task: options.task,
+      previousProposal,
+      sourceMessage: options.sourceMessage,
+      revisionNumber,
+      repairAttempt: repairAttempts,
+      validationFeedback,
+      validationRepairBrief: options.validationRepairBrief
+    });
+    if (options.validationRepairBrief && !proposal.validationRepairBriefID) {
+      proposal.validationRepairBriefID = options.validationRepairBrief.id;
+    }
+    proposal.validation = await buildEditProposalValidation(proposal.fileChanges);
+
+    if (proposal.validation.status === "Ready" || repairAttempts >= editProposalRepairMaxAttempts) {
+      return { proposal, repairAttempts };
+    }
+
+    const nextAttempt = repairAttempts + 1;
+    const repairStarted = event(
+      "edit.proposal.repair.started",
+      `Proposal revision ${proposal.revisionNumber} failed validation; requesting repair ${nextAttempt}/${editProposalRepairMaxAttempts}. ${proposal.validation.summary}`
+    );
+    repairStarted.createdAt = proposal.validation.checkedAt;
+    saveAndBroadcast(options.task, repairStarted);
+
+    proposal.status = "Superseded";
+    proposal.decidedAt = new Date().toISOString();
+    proposal.decisionNote = `Superseded by automatic repair attempt ${nextAttempt}/${editProposalRepairMaxAttempts}.`;
+    archiveEditProposalRevision(options.task, proposal);
+
+    previousProposal = proposal;
+    validationFeedback = proposal.validation;
+    revisionNumber = proposal.revisionNumber + 1;
+    repairAttempts = nextAttempt;
+
+    upsertPlanStep(options.task, {
+      id: "repair-edit-proposal",
+      title: "Repair edit proposal",
+      status: "Active",
+      summary: `Using runtime validation feedback to request repair ${repairAttempts}/${editProposalRepairMaxAttempts}.`
+    });
+  }
+}
+
+function repairSummary(repairAttempts: number): string {
+  if (repairAttempts === 0) {
+    return "No automatic repair was needed.";
+  }
+
+  return `Automatic repair attempts: ${repairAttempts}.`;
 }
 
 function archiveEditProposalRevision(task: ForgeTask, proposal: EditProposal): void {
@@ -2005,7 +2694,67 @@ async function runValidation(
   );
   finished.createdAt = endedAt;
   saveAndBroadcast(task, finished);
+  if (validationRun.status === "Failed") {
+    await createValidationRepairBriefForRun(task, validationRun);
+  }
   return task;
+}
+
+async function createValidationRepairBriefForRun(
+  task: ForgeTask,
+  validationRun: ValidationRun
+): Promise<void> {
+  const startedAt = new Date().toISOString();
+  upsertPlanStep(task, {
+    id: "analyze-validation-failure",
+    title: "Analyze validation failure",
+    status: "Active",
+    summary: `Asking ${modelProvider.info.name} for a repair brief from failed validation output.`
+  });
+
+  const started = event(
+    "validation.repair_brief.started",
+    `Generating repair brief for failed validation run: ${validationRun.presetName}.`
+  );
+  started.createdAt = startedAt;
+  saveAndBroadcast(task, started);
+
+  try {
+    const brief = await modelProvider.createValidationRepairBrief({ task, validationRun });
+    task.validationRepairBriefs.push(brief);
+    task.reviewSummary = `${validationRun.summary} Repair brief: ${brief.summary}`;
+    setAgent(task, "Planner", "Done", "Prepared a repair brief from validation failure output.");
+    setAgent(task, "Coder", "Ready", "Ready to turn the repair brief into a revised proposal after human review.");
+    setAgent(task, "Reviewer", "Active", "Review the validation failure and repair brief before continuing.");
+    upsertPlanStep(task, {
+      id: "analyze-validation-failure",
+      title: "Analyze validation failure",
+      status: "Done",
+      summary: brief.summary
+    });
+    upsertPlanStep(task, {
+      id: "plan-validation-repair",
+      title: "Plan validation repair",
+      status: "Active",
+      summary: brief.followUpPrompt
+    });
+
+    const ready = event("validation.repair_brief.ready", brief.summary);
+    ready.createdAt = brief.generatedAt;
+    saveAndBroadcast(task, ready);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    upsertPlanStep(task, {
+      id: "analyze-validation-failure",
+      title: "Analyze validation failure",
+      status: "Blocked",
+      summary: message
+    });
+
+    const failed = event("validation.repair_brief.failed", message);
+    failed.createdAt = new Date().toISOString();
+    saveAndBroadcast(task, failed);
+  }
 }
 
 async function runValidationCommand(
@@ -2175,15 +2924,64 @@ async function validateProposedFileChange(change: ProposedFileChange): Promise<F
   const checks: string[] = [];
 
   try {
-    if (change.changeType !== "Modify") {
-      return blockedValidation(change, `Only modify changes can be applied in v0: ${change.path}`, checks);
-    }
-    checks.push("Change type is supported.");
-
     const operation = change.applyOperation;
     if (!operation) {
       return blockedValidation(change, `No apply operation was provided: ${change.path}`, checks);
     }
+
+    if (change.changeType === "Create") {
+      checks.push("Change type is create.");
+
+      if (operation.kind !== "CreateFile") {
+        return blockedValidation(change, `Create changes require a CreateFile operation in v0: ${change.path}`, checks);
+      }
+
+      const { absolutePath, relativePath } = resolveMarkdownWorkspacePath(change.path);
+      if (!relativePath.startsWith("docs/")) {
+        return blockedValidation(change, `CreateFile can only create docs/*.md files in v0: ${relativePath}`, checks);
+      }
+      checks.push("Path is inside the createable docs Markdown boundary.");
+
+      if (operation.content.length === 0) {
+        return blockedValidation(change, `CreateFile content is empty: ${relativePath}`, checks);
+      }
+
+      if (operation.content.length > 20_000) {
+        return blockedValidation(change, `CreateFile content is too large for v0 apply: ${relativePath}`, checks);
+      }
+
+      if (operation.content.includes("\0")) {
+        return blockedValidation(change, `CreateFile content contains a null byte: ${relativePath}`, checks);
+      }
+      checks.push("CreateFile content is within the v0 limit.");
+
+      try {
+        const fileStat = await stat(absolutePath);
+        if (fileStat.isFile()) {
+          return blockedValidation(change, `CreateFile target already exists: ${relativePath}`, checks);
+        }
+
+        return blockedValidation(change, `CreateFile target exists but is not a file: ${relativePath}`, checks);
+      } catch (error) {
+        if (!isNodeError(error) || error.code !== "ENOENT") {
+          throw error;
+        }
+      }
+      checks.push("CreateFile target does not already exist.");
+
+      return {
+        id: change.id,
+        path: relativePath,
+        status: "Ready",
+        summary: `${relativePath} is ready for restricted Markdown file creation.`,
+        checks
+      };
+    }
+
+    if (change.changeType !== "Modify") {
+      return blockedValidation(change, `Only create and modify changes can be applied in v0: ${change.path}`, checks);
+    }
+    checks.push("Change type is modify.");
 
     const { absolutePath, relativePath } = resolveMarkdownWorkspacePath(change.path);
     checks.push("Path is inside the editable Markdown workspace boundary.");
@@ -2350,14 +3148,69 @@ function findLastValidationRun(task: ForgeTask, presetID: string): ValidationPer
   };
 }
 
-async function applyProposedFileChange(change: ProposedFileChange): Promise<string> {
-  if (change.changeType !== "Modify") {
-    throw new HttpError(409, `Only modify changes can be applied in v0: ${change.path}`);
-  }
+function latestFailedValidationRun(task: ForgeTask): ValidationRun | undefined {
+  return [...task.validationRuns].reverse().find((run) => run.status === "Failed");
+}
 
+function latestValidationRepairBriefForRun(
+  task: ForgeTask,
+  validationRunID: string
+): ValidationRepairBrief | undefined {
+  return [...task.validationRepairBriefs].reverse().find((brief) => brief.validationRunID === validationRunID);
+}
+
+async function applyProposedFileChange(change: ProposedFileChange): Promise<string> {
   const operation = change.applyOperation;
   if (!operation) {
     throw new HttpError(409, `No apply operation was provided: ${change.path}`);
+  }
+
+  if (change.changeType === "Create") {
+    if (operation.kind !== "CreateFile") {
+      throw new HttpError(409, `Create changes require a CreateFile operation in v0: ${change.path}`);
+    }
+
+    const { absolutePath, relativePath } = resolveMarkdownWorkspacePath(change.path);
+    if (!relativePath.startsWith("docs/")) {
+      throw new HttpError(409, `CreateFile can only create docs/*.md files in v0: ${relativePath}`);
+    }
+
+    if (operation.content.length === 0) {
+      throw new HttpError(409, `CreateFile content is empty: ${relativePath}`);
+    }
+
+    if (operation.content.length > 20_000) {
+      throw new HttpError(409, `CreateFile content is too large for v0 apply: ${relativePath}`);
+    }
+
+    if (operation.content.includes("\0")) {
+      throw new HttpError(409, `CreateFile content contains a null byte: ${relativePath}`);
+    }
+
+    try {
+      const fileStat = await stat(absolutePath);
+      if (fileStat.isFile()) {
+        throw new HttpError(409, `CreateFile target already exists: ${relativePath}`);
+      }
+
+      throw new HttpError(409, `CreateFile target exists but is not a file: ${relativePath}`);
+    } catch (error) {
+      if (error instanceof HttpError) {
+        throw error;
+      }
+
+      if (!isNodeError(error) || error.code !== "ENOENT") {
+        throw error;
+      }
+    }
+
+    await mkdir(path.dirname(absolutePath), { recursive: true });
+    await writeFile(absolutePath, operation.content, { encoding: "utf8", flag: "wx" });
+    return relativePath;
+  }
+
+  if (change.changeType !== "Modify") {
+    throw new HttpError(409, `Only create and modify changes can be applied in v0: ${change.path}`);
   }
 
   const { absolutePath, relativePath } = resolveMarkdownWorkspacePath(change.path);
@@ -2805,9 +3658,10 @@ function matchedLinesForTerms(content: string, searchTerms: string[]): string[] 
 async function buildContextFiles(
   task: ForgeTask,
   files: string[],
-  matches: RepositorySearchMatch[]
+  matches: RepositorySearchMatch[],
+  preferredPaths: string[] = []
 ): Promise<ContextFile[]> {
-  const selected = selectRepositoryContextPaths(task, files, matches);
+  const selected = selectRepositoryContextPaths(task, files, matches, preferredPaths);
   const contextFiles: ContextFile[] = [];
 
   for (const file of selected) {
@@ -2822,10 +3676,21 @@ async function buildContextFiles(
   return contextFiles;
 }
 
+function mergeContextFiles(existing: ContextFile[], incoming: ContextFile[]): ContextFile[] {
+  const byPath = new Map(existing.map((file) => [file.path, file]));
+
+  for (const file of incoming) {
+    byPath.set(file.path, file);
+  }
+
+  return [...byPath.values()].slice(0, modelGuidedContextMaxStoredFiles);
+}
+
 function selectRepositoryContextPaths(
   task: ForgeTask,
   files: string[],
-  matches: RepositorySearchMatch[]
+  matches: RepositorySearchMatch[],
+  preferredPaths: string[] = []
 ): string[] {
   const selected: string[] = [];
   const fileSet = new Set(files);
@@ -2843,6 +3708,10 @@ function selectRepositoryContextPaths(
     add(explicitPath);
   }
 
+  for (const preferredPath of preferredPaths) {
+    add(preferredPath);
+  }
+
   for (const match of matches) {
     add(match.path);
   }
@@ -2852,6 +3721,66 @@ function selectRepositoryContextPaths(
   }
 
   return selected.slice(0, repositoryContextMaxFiles);
+}
+
+function normalizeProviderSearchTerms(
+  contextRequest: PlanContextRequestResult,
+  task: ForgeTask
+): string[] {
+  const terms = new Set<string>();
+  const addTerm = (term: string) => {
+    const normalized = term
+      .toLowerCase()
+      .replace(/[^a-z0-9._/-]+/g, " ")
+      .split(/\s+/)
+      .map((part) => part.trim())
+      .filter((part) => part.length >= 2 && !repositorySearchStopWords.has(part));
+
+    for (const part of normalized) {
+      terms.add(part.slice(0, 64));
+    }
+  };
+
+  for (const term of contextRequest.searchTerms) {
+    addTerm(term);
+  }
+
+  if (terms.size === 0) {
+    for (const fallbackTerm of deriveRepositorySearchTerms(task)) {
+      addTerm(fallbackTerm);
+    }
+  }
+
+  return [...terms].slice(0, 10);
+}
+
+function normalizeProviderReadPaths(readPaths: string[], files: string[]): string[] {
+  const fileSet = new Set(files);
+  const normalizedPaths: string[] = [];
+
+  for (const readPath of readPaths) {
+    const normalized = path.posix.normalize(readPath.replaceAll("\\", "/").replace(/^@/, "").replace(/^\.\/+/, ""));
+    if (
+      !normalized ||
+      normalized === "." ||
+      normalized === ".." ||
+      normalized.startsWith("../") ||
+      normalized.startsWith("/") ||
+      normalized.startsWith(".git/") ||
+      normalized.startsWith(".forge/") ||
+      normalized.includes("/.git/") ||
+      normalized.includes("/.forge/") ||
+      normalized.includes("\0")
+    ) {
+      continue;
+    }
+
+    if (fileSet.has(normalized) && !normalizedPaths.includes(normalized)) {
+      normalizedPaths.push(normalized);
+    }
+  }
+
+  return normalizedPaths.slice(0, repositoryContextMaxFiles);
 }
 
 function explicitContextPathsForTask(task: ForgeTask): string[] {
@@ -3175,6 +4104,8 @@ function renderRuntimeHome(): string {
     <ul>
       <li><a href="/health">GET /health</a></li>
       <li><a href="/tasks">GET /tasks</a></li>
+      <li><a href="/git/status">GET /git/status</a></li>
+      <li><code>GET /git/diff?path=README.md</code></li>
       <li><a href="/validation-presets">GET /validation-presets</a></li>
       <li><a href="/settings/model-provider">GET /settings/model-provider</a></li>
       <li><code>POST /settings/model-provider</code></li>
@@ -3184,6 +4115,7 @@ function renderRuntimeHome(): string {
       <li><code>POST /tasks/:taskID/approve-plan</code></li>
       <li><code>POST /tasks/:taskID/generate-edit-proposal</code></li>
       <li><code>POST /tasks/:taskID/revise-edit-proposal</code></li>
+      <li><code>POST /tasks/:taskID/generate-validation-repair-proposal</code></li>
       <li><code>POST /tasks/:taskID/validate-edit-proposal</code></li>
       <li><code>POST /tasks/:taskID/apply-edit-proposal</code></li>
       <li><code>POST /tasks/:taskID/reject-edit-proposal</code></li>

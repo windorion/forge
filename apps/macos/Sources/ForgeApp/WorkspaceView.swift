@@ -17,6 +17,20 @@ struct WorkspaceView: View {
         .toolbar {
             ToolbarItemGroup {
                 Button {
+                    workspace.startRuntimeProcess()
+                } label: {
+                    Label("Start Runtime", systemImage: "play.circle")
+                }
+                .disabled(!workspace.canStartRuntimeProcess)
+
+                Button {
+                    workspace.stopRuntimeProcess()
+                } label: {
+                    Label("Stop Runtime", systemImage: "stop.circle")
+                }
+                .disabled(!workspace.canStopRuntimeProcess)
+
+                Button {
                     workspace.refreshRuntimeHealth()
                 } label: {
                     Label("Check Runtime", systemImage: "bolt.horizontal.circle")
@@ -102,7 +116,28 @@ private struct RuntimeBadge: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
 
+            Label(processDetail, systemImage: processSystemImage)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
             HStack(spacing: 8) {
+                Button {
+                    workspace.startRuntimeProcess()
+                } label: {
+                    Label("Start", systemImage: "play.fill")
+                }
+                .disabled(!workspace.canStartRuntimeProcess)
+                .help("Start app-managed runtime")
+
+                Button {
+                    workspace.stopRuntimeProcess()
+                } label: {
+                    Label("Stop", systemImage: "stop.fill")
+                }
+                .disabled(!workspace.canStopRuntimeProcess)
+                .help("Stop app-managed runtime")
+
                 Button {
                     workspace.refreshRuntimeHealth()
                 } label: {
@@ -158,6 +193,10 @@ private struct RuntimeBadge: View {
         "\(workspace.eventStreamState.rawValue) · \(workspace.eventStreamStatus)"
     }
 
+    private var processDetail: String {
+        "\(workspace.runtimeProcessState.rawValue) · \(workspace.runtimeProcessMessage)"
+    }
+
     private var runtimeSystemImage: String {
         switch workspace.runtimeState {
         case .unchecked:
@@ -196,6 +235,23 @@ private struct RuntimeBadge: View {
             return "antenna.radiowaves.left.and.right"
         case .disconnected:
             return "wifi.slash"
+        }
+    }
+
+    private var processSystemImage: String {
+        switch workspace.runtimeProcessState {
+        case .notStarted:
+            return "power"
+        case .starting:
+            return "hourglass"
+        case .running:
+            return "play.circle.fill"
+        case .stopping:
+            return "stopwatch"
+        case .stopped:
+            return "stop.circle"
+        case .failed:
+            return "exclamationmark.triangle.fill"
         }
     }
 }
@@ -780,6 +836,8 @@ private struct ReviewPanel: View {
                     }
                 }
 
+                GitWorkingTreeCard(task: task)
+
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Review Summary")
                         .font(.headline)
@@ -844,6 +902,11 @@ private struct ReviewPanel: View {
                                     .font(.caption2)
                                     .foregroundStyle(.tertiary)
                             }
+                            if let validationRepairBriefID = editProposal.validationRepairBriefID {
+                                Label("From repair brief \(validationRepairBriefID)", systemImage: "wrench.and.screwdriver")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                            }
                         }
 
                         if let validation = editProposal.validation {
@@ -883,37 +946,10 @@ private struct ReviewPanel: View {
                         }
 
                         ForEach(editProposal.fileChanges) { change in
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack {
-                                    Label(change.path, systemImage: "doc.text")
-                                        .font(.subheadline.weight(.semibold))
-                                    Spacer()
-                                    Text(change.changeType)
-                                        .font(.caption2.weight(.medium))
-                                        .padding(.horizontal, 7)
-                                        .padding(.vertical, 3)
-                                        .background(.quaternary)
-                                        .clipShape(RoundedRectangle(cornerRadius: 5))
-                                }
-                                Text(change.rationale)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                if let operation = change.applyOperation {
-                                    Label(operationSummary(operation), systemImage: operationSystemImage(operation))
-                                        .font(.caption.weight(.medium))
-                                        .foregroundStyle(.secondary)
-                                }
-                                Text(change.diffPreview)
-                                    .font(.caption.monospaced())
-                                    .textSelection(.enabled)
-                                    .padding(8)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(.quaternary)
-                                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                            }
-                            .padding(10)
-                            .background(.background)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            EditProposalFileChangeCard(
+                                change: change,
+                                validationResult: validationResult(for: change, in: editProposal)
+                            )
                         }
                     }
                 }
@@ -939,6 +975,11 @@ private struct ReviewPanel: View {
                                 Text(proposal.decisionNote ?? "No reviewer note.")
                                     .font(.caption2)
                                     .foregroundStyle(.tertiary)
+                                if let validationRepairBriefID = proposal.validationRepairBriefID {
+                                    Label("From repair brief \(validationRepairBriefID)", systemImage: "wrench.and.screwdriver")
+                                        .font(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                }
                             }
                             .padding(10)
                             .background(.background)
@@ -990,6 +1031,21 @@ private struct ReviewPanel: View {
                             .padding(10)
                             .background(.background)
                             .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                    }
+                }
+
+                if !task.validationRepairBriefs.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Validation Repair Briefs")
+                            .font(.headline)
+
+                        ForEach(task.validationRepairBriefs.reversed()) { brief in
+                            ValidationRepairBriefCard(
+                                brief: brief,
+                                validationRun: validationRun(for: brief.validationRunID),
+                                isCurrentProposalSource: task.editProposal?.validationRepairBriefID == brief.id
+                            )
                         }
                     }
                 }
@@ -1177,6 +1233,14 @@ private struct ReviewPanel: View {
                             .frame(maxWidth: .infinity)
                     }
                     .disabled(!canRunValidation)
+
+                    Button {
+                        workspace.generateValidationRepairProposal(for: task)
+                    } label: {
+                        Label(generateValidationRepairProposalButtonTitle, systemImage: "wrench.and.screwdriver")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .disabled(!canGenerateValidationRepairProposal)
                 }
 
                 Text("Task ID: \(task.id)")
@@ -1195,25 +1259,18 @@ private struct ReviewPanel: View {
         task.status == "Human Review" && !hasApprovedCurrentPlan && !isApproving
     }
 
-    private func operationSummary(_ operation: ProposedFileOperation) -> String {
-        switch operation.kind {
-        case "AppendText":
-            return "AppendText / \(operation.text?.count ?? 0) chars"
-        case "ReplaceText":
-            return "ReplaceText / \(operation.findText?.count ?? 0) -> \(operation.replaceWith?.count ?? 0) chars"
-        default:
-            return "\(operation.kind) / unsupported"
+    private func validationResult(
+        for change: ProposedFileChange,
+        in proposal: EditProposal
+    ) -> FileChangeValidation? {
+        proposal.validation?.fileResults.first { result in
+            result.id == change.id || result.path == change.path
         }
     }
 
-    private func operationSystemImage(_ operation: ProposedFileOperation) -> String {
-        switch operation.kind {
-        case "AppendText":
-            return "text.append"
-        case "ReplaceText":
-            return "arrow.left.arrow.right"
-        default:
-            return "questionmark.diamond"
+    private func validationRun(for id: String) -> ValidationRun? {
+        task.validationRuns.first { run in
+            run.id == id
         }
     }
 
@@ -1245,6 +1302,10 @@ private struct ReviewPanel: View {
         workspace.isGeneratingEditProposal(taskID: task.id)
     }
 
+    private var isGeneratingValidationRepairProposal: Bool {
+        workspace.isGeneratingValidationRepairProposal(taskID: task.id)
+    }
+
     private var isValidatingEditProposal: Bool {
         workspace.isValidatingEditProposal(taskID: task.id)
     }
@@ -1253,6 +1314,7 @@ private struct ReviewPanel: View {
         task.executionProposal != nil &&
             (task.editProposal == nil || task.editProposal?.status == "Rejected") &&
             !isGeneratingEditProposal &&
+            !isGeneratingValidationRepairProposal &&
             !isApplyingEditProposal &&
             !isRejectingEditProposal
     }
@@ -1277,6 +1339,7 @@ private struct ReviewPanel: View {
         task.editProposal?.status == "Proposed" &&
             !isValidatingEditProposal &&
             !isApplyingEditProposal &&
+            !isGeneratingValidationRepairProposal &&
             !isRejectingEditProposal
     }
 
@@ -1313,6 +1376,7 @@ private struct ReviewPanel: View {
             validationAllowsApply &&
             !isValidatingEditProposal &&
             !isApplyingEditProposal &&
+            !isGeneratingValidationRepairProposal &&
             !isRejectingEditProposal
     }
 
@@ -1333,7 +1397,10 @@ private struct ReviewPanel: View {
     }
 
     private var canRejectEditProposal: Bool {
-        task.editProposal?.status == "Proposed" && !isApplyingEditProposal && !isRejectingEditProposal
+        task.editProposal?.status == "Proposed" &&
+            !isApplyingEditProposal &&
+            !isGeneratingValidationRepairProposal &&
+            !isRejectingEditProposal
     }
 
     private var rejectEditProposalButtonTitle: String {
@@ -1349,7 +1416,10 @@ private struct ReviewPanel: View {
     }
 
     private var canRunValidation: Bool {
-        task.editProposal?.status == "Applied" && task.status != "Testing" && !isRunningValidation
+        task.editProposal?.status == "Applied" &&
+            task.status != "Testing" &&
+            !isRunningValidation &&
+            !isGeneratingValidationRepairProposal
     }
 
     private var runValidationButtonTitle: String {
@@ -1362,6 +1432,51 @@ private struct ReviewPanel: View {
         }
 
         return "Run Validation"
+    }
+
+    private var latestFailedValidationRun: ValidationRun? {
+        task.validationRuns.reversed().first { run in
+            run.status == "Failed"
+        }
+    }
+
+    private var latestValidationRepairBrief: ValidationRepairBrief? {
+        guard let latestFailedValidationRun else {
+            return nil
+        }
+
+        return task.validationRepairBriefs.reversed().first { brief in
+            brief.validationRunID == latestFailedValidationRun.id
+        }
+    }
+
+    private var canGenerateValidationRepairProposal: Bool {
+        task.executionProposal != nil &&
+            task.editProposal?.status == "Applied" &&
+            latestFailedValidationRun != nil &&
+            latestValidationRepairBrief != nil &&
+            !isGeneratingValidationRepairProposal &&
+            !isGeneratingEditProposal &&
+            !isValidatingEditProposal &&
+            !isApplyingEditProposal &&
+            !isRejectingEditProposal &&
+            !isRunningValidation
+    }
+
+    private var generateValidationRepairProposalButtonTitle: String {
+        if isGeneratingValidationRepairProposal {
+            return "Generating Repair Proposal"
+        }
+
+        if task.editProposal?.validationRepairBriefID == latestValidationRepairBrief?.id {
+            return "Repair Proposal Ready"
+        }
+
+        if latestFailedValidationRun != nil && latestValidationRepairBrief == nil {
+            return "Repair Brief Needed"
+        }
+
+        return "Generate Repair Proposal"
     }
 
     private func canApproveValidationPermission(_ permission: ValidationPresetPermission) -> Bool {
@@ -1427,6 +1542,724 @@ private struct ReviewPanel: View {
         }
 
         return "No file changes yet."
+    }
+}
+
+private struct GitWorkingTreeCard: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
+
+    var task: ForgeTask
+
+    @State private var selectedPath: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Label("Working Tree", systemImage: "arrow.triangle.branch")
+                    .font(.headline)
+
+                Spacer()
+
+                Button {
+                    workspace.refreshGitStatus()
+                } label: {
+                    Label(refreshTitle, systemImage: "arrow.clockwise")
+                }
+                .labelStyle(.iconOnly)
+                .disabled(workspace.isRefreshingGitStatus())
+                .help("Refresh git status")
+            }
+
+            if let status = workspace.gitStatus {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        Label(status.branch ?? "Detached", systemImage: status.isDirty ? "exclamationmark.circle" : "checkmark.circle")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(status.isDirty ? .orange : .green)
+
+                        if let head = status.head {
+                            Text(head)
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer(minLength: 8)
+
+                        Text("\(status.changedFiles.count) files")
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Text(status.summary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if let upstream = status.upstream {
+                        Label(upstreamDetail(upstream: upstream, ahead: status.ahead, behind: status.behind), systemImage: "arrow.up.arrow.down")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+
+                if orderedChanges.isEmpty {
+                    Label("Working tree is clean.", systemImage: "checkmark.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(orderedChanges.prefix(18)) { change in
+                            GitFileChangeRow(
+                                change: change,
+                                isTaskChange: taskRelevantPaths.contains(change.path),
+                                isSelected: activePath == change.path,
+                                selectDiff: {
+                                    selectedPath = change.path
+                                    workspace.refreshGitDiff(path: change.path)
+                                },
+                                openFile: {
+                                    workspace.openGitFile(path: change.path)
+                                },
+                                revealFile: {
+                                    workspace.revealGitFile(path: change.path)
+                                },
+                                isLoadingDiff: workspace.isLoadingGitDiff(path: change.path)
+                            )
+                        }
+
+                        if orderedChanges.count > 18 {
+                            Text("\(orderedChanges.count - 18) more file(s) not shown.")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                }
+
+                if let activePath {
+                    GitDiffCard(
+                        path: activePath,
+                        diff: workspace.gitDiff(for: activePath),
+                        isLoading: workspace.isLoadingGitDiff(path: activePath),
+                        load: {
+                            workspace.refreshGitDiff(path: activePath)
+                        }
+                    )
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("Git status unavailable.", systemImage: "exclamationmark.triangle")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    if let error = workspace.gitStatusLastError {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Button {
+                        workspace.refreshGitStatus()
+                    } label: {
+                        Label("Refresh Git Status", systemImage: "arrow.clockwise")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .disabled(workspace.isRefreshingGitStatus())
+                }
+            }
+        }
+        .padding(10)
+        .background(.background)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .onAppear {
+            if workspace.gitStatus == nil {
+                workspace.refreshGitStatus()
+            }
+        }
+    }
+
+    private var orderedChanges: [GitFileChange] {
+        guard let changes = workspace.gitStatus?.changedFiles else {
+            return []
+        }
+
+        return changes.sorted { first, second in
+            let firstRelevant = taskRelevantPaths.contains(first.path)
+            let secondRelevant = taskRelevantPaths.contains(second.path)
+            if firstRelevant != secondRelevant {
+                return firstRelevant && !secondRelevant
+            }
+
+            return first.path.localizedStandardCompare(second.path) == .orderedAscending
+        }
+    }
+
+    private var activePath: String? {
+        if let selectedPath, orderedChanges.contains(where: { $0.path == selectedPath }) {
+            return selectedPath
+        }
+
+        return orderedChanges.first?.path
+    }
+
+    private var taskRelevantPaths: Set<String> {
+        var paths = Set(task.changedFiles)
+        for change in task.editProposal?.fileChanges ?? [] {
+            paths.insert(change.path)
+        }
+        return paths
+    }
+
+    private var refreshTitle: String {
+        workspace.isRefreshingGitStatus() ? "Refreshing" : "Refresh"
+    }
+
+    private func upstreamDetail(upstream: String, ahead: Int?, behind: Int?) -> String {
+        var parts = [upstream]
+        if let ahead, ahead > 0 {
+            parts.append("ahead \(ahead)")
+        }
+        if let behind, behind > 0 {
+            parts.append("behind \(behind)")
+        }
+        return parts.joined(separator: " / ")
+    }
+}
+
+private struct GitFileChangeRow: View {
+    var change: GitFileChange
+    var isTaskChange: Bool
+    var isSelected: Bool
+    var selectDiff: () -> Void
+    var openFile: () -> Void
+    var revealFile: () -> Void
+    var isLoadingDiff: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: statusImage)
+                    .foregroundStyle(statusColor)
+                    .frame(width: 16)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(change.path)
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+
+                    HStack(spacing: 6) {
+                        Text(change.status)
+                        Text("index \(change.indexStatus) / worktree \(change.worktreeStatus)")
+                        if let additions = change.additions, let deletions = change.deletions {
+                            Text("+\(additions) -\(deletions)")
+                        }
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                if isTaskChange {
+                    Image(systemName: "target")
+                        .font(.caption)
+                        .foregroundStyle(.blue)
+                        .help("Related to the selected task")
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button {
+                    selectDiff()
+                } label: {
+                    Label(isLoadingDiff ? "Loading" : "Diff", systemImage: isSelected ? "doc.text.magnifyingglass" : "doc.text")
+                        .frame(maxWidth: .infinity)
+                }
+                .disabled(isLoadingDiff)
+
+                Button {
+                    openFile()
+                } label: {
+                    Label("Open", systemImage: "arrow.up.forward.app")
+                        .frame(maxWidth: .infinity)
+                }
+                .disabled(change.status == "Deleted")
+
+                Button {
+                    revealFile()
+                } label: {
+                    Label("Reveal", systemImage: "folder")
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .font(.caption)
+        }
+        .padding(8)
+        .background(isSelected ? Color.secondary.opacity(0.16) : Color.secondary.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+    }
+
+    private var statusImage: String {
+        switch change.status {
+        case "Added", "Untracked":
+            return "doc.badge.plus"
+        case "Deleted":
+            return "doc.badge.minus"
+        case "Renamed", "Copied":
+            return "arrow.triangle.2.circlepath"
+        case "Unmerged":
+            return "exclamationmark.triangle"
+        default:
+            return "doc.text"
+        }
+    }
+
+    private var statusColor: Color {
+        switch change.status {
+        case "Added", "Untracked":
+            return .green
+        case "Deleted", "Unmerged":
+            return .orange
+        case "Renamed", "Copied":
+            return .blue
+        default:
+            return .secondary
+        }
+    }
+}
+
+private struct GitDiffCard: View {
+    var path: String
+    var diff: GitFileDiff?
+    var isLoading: Bool
+    var load: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Label("Diff Preview", systemImage: "rectangle.split.2x1")
+                    .font(.subheadline.weight(.semibold))
+
+                Spacer()
+
+                Button {
+                    load()
+                } label: {
+                    Label(isLoading ? "Loading" : "Load", systemImage: "arrow.down.doc")
+                }
+                .labelStyle(.iconOnly)
+                .disabled(isLoading)
+                .help("Load diff")
+            }
+
+            Text(path)
+                .font(.caption2.monospaced())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            if let diff {
+                Text(diff.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if diff.truncated {
+                    Label("Preview truncated by the runtime.", systemImage: "scissors")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                }
+
+                SideBySideDiffView(diffText: diff.diff)
+            } else {
+                Label(isLoading ? "Loading diff..." : "Select Load to inspect this file.", systemImage: isLoading ? "hourglass" : "doc.text.magnifyingglass")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(8)
+        .background(.quaternary)
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+    }
+}
+
+private struct SideBySideDiffView: View {
+    var diffText: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 6) {
+                Text("Old")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text("New")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.secondary)
+
+            ForEach(diffLines.prefix(260)) { line in
+                DiffLineRow(line: line)
+            }
+
+            if diffLines.count > 260 {
+                Text("\(diffLines.count - 260) more diff line(s) hidden in the app preview.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 4)
+            }
+        }
+        .textSelection(.enabled)
+    }
+
+    private var diffLines: [DiffLine] {
+        diffText
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .enumerated()
+            .map { index, rawLine in
+                DiffLine(index: index, raw: String(rawLine))
+            }
+    }
+}
+
+private struct DiffLine: Identifiable {
+    var id: Int { index }
+    var index: Int
+    var raw: String
+
+    var kind: DiffLineKind {
+        if raw.hasPrefix("+++") || raw.hasPrefix("---") || raw.hasPrefix("diff --git") || raw.hasPrefix("index ") || raw.hasPrefix("# ") {
+            return .metadata
+        }
+        if raw.hasPrefix("@@") {
+            return .hunk
+        }
+        if raw.hasPrefix("+") {
+            return .addition
+        }
+        if raw.hasPrefix("-") {
+            return .deletion
+        }
+        return .context
+    }
+
+    var displayText: String {
+        switch kind {
+        case .addition, .deletion:
+            return String(raw.dropFirst())
+        default:
+            return raw
+        }
+    }
+}
+
+private enum DiffLineKind {
+    case metadata
+    case hunk
+    case addition
+    case deletion
+    case context
+}
+
+private struct DiffLineRow: View {
+    var line: DiffLine
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 6) {
+            oldText
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(oldBackground)
+
+            newText
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(newBackground)
+        }
+        .font(.caption2.monospaced())
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+    }
+
+    @ViewBuilder
+    private var oldText: some View {
+        switch line.kind {
+        case .addition:
+            Text("")
+        case .metadata, .hunk:
+            Text(line.displayText)
+                .foregroundStyle(.secondary)
+        default:
+            Text(line.displayText)
+        }
+    }
+
+    @ViewBuilder
+    private var newText: some View {
+        switch line.kind {
+        case .deletion:
+            Text("")
+        case .metadata, .hunk:
+            Text(line.displayText)
+                .foregroundStyle(.secondary)
+        default:
+            Text(line.displayText)
+        }
+    }
+
+    private var oldBackground: Color {
+        switch line.kind {
+        case .deletion:
+            return .red.opacity(0.16)
+        case .metadata, .hunk:
+            return .secondary.opacity(0.08)
+        default:
+            return .clear
+        }
+    }
+
+    private var newBackground: Color {
+        switch line.kind {
+        case .addition:
+            return .green.opacity(0.16)
+        case .metadata, .hunk:
+            return .secondary.opacity(0.08)
+        default:
+            return .clear
+        }
+    }
+}
+
+private struct ValidationRepairBriefCard: View {
+    var brief: ValidationRepairBrief
+    var validationRun: ValidationRun?
+    var isCurrentProposalSource: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Label(brief.summary, systemImage: "wrench.and.screwdriver")
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(2)
+
+                Spacer(minLength: 8)
+
+                Text(brief.riskLevel)
+                    .font(.caption2.weight(.medium))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(.quaternary)
+                    .clipShape(RoundedRectangle(cornerRadius: 5))
+            }
+
+            if let validationRun {
+                Label("\(validationRun.presetName) / \(validationRun.status)", systemImage: validationRun.status == "Failed" ? "exclamationmark.triangle" : "checkmark.circle")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+            }
+
+            Label("\(brief.provider.name) / \(brief.provider.model)", systemImage: "cpu")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+
+            if isCurrentProposalSource {
+                Label("Current edit proposal was generated from this brief.", systemImage: "arrow.triangle.branch")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.green)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Likely Cause")
+                    .font(.caption.weight(.semibold))
+                Text(brief.likelyCause)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            if !brief.recommendedActions.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Recommended Actions")
+                        .font(.caption.weight(.semibold))
+                    ForEach(brief.recommendedActions.prefix(5), id: \.self) { action in
+                        Text("- \(action)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Follow-up Prompt")
+                    .font(.caption.weight(.semibold))
+                Text(brief.followUpPrompt)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.quaternary)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+
+            Text(brief.generatedAt)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(10)
+        .background(.background)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct EditProposalFileChangeCard: View {
+    var change: ProposedFileChange
+    var validationResult: FileChangeValidation?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Label(change.path, systemImage: changeSystemImage)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+
+                Spacer(minLength: 8)
+
+                Text(change.changeType)
+                    .font(.caption2.weight(.medium))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(.quaternary)
+                    .clipShape(RoundedRectangle(cornerRadius: 5))
+
+                if let validationResult {
+                    ValidationStatusBadge(result: validationResult)
+                }
+            }
+
+            Text(change.rationale)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            OperationSummaryRow(operation: change.applyOperation)
+
+            if let validationResult {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(validationResult.summary)
+                        .font(.caption)
+                        .foregroundStyle(validationResult.status == "Blocked" ? .orange : .secondary)
+
+                    ForEach(validationResult.checks.prefix(4), id: \.self) { check in
+                        Text("- \(check)")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            }
+
+            Text(change.diffPreview)
+                .font(.caption.monospaced())
+                .textSelection(.enabled)
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.quaternary)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .padding(10)
+        .background(.background)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var changeSystemImage: String {
+        switch change.changeType {
+        case "Create":
+            return "doc.badge.plus"
+        case "Delete":
+            return "doc.badge.minus"
+        default:
+            return "doc.text"
+        }
+    }
+}
+
+private struct ValidationStatusBadge: View {
+    var result: FileChangeValidation
+
+    var body: some View {
+        Label(result.status, systemImage: result.status == "Blocked" ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(result.status == "Blocked" ? .orange : .green)
+            .labelStyle(.titleAndIcon)
+    }
+}
+
+private struct OperationSummaryRow: View {
+    var operation: ProposedFileOperation?
+
+    var body: some View {
+        if let operation {
+            VStack(alignment: .leading, spacing: 4) {
+                Label(operationSummary(operation), systemImage: operationSystemImage(operation))
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(operationForegroundStyle(operation))
+
+                if let note = operationNote(operation) {
+                    Text(note)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } else {
+            Label("No apply operation / blocked", systemImage: "nosign")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.orange)
+        }
+    }
+
+    private func operationSummary(_ operation: ProposedFileOperation) -> String {
+        switch operation.kind {
+        case "AppendText":
+            return "AppendText / \(operation.text?.count ?? 0) chars"
+        case "ReplaceText":
+            return "ReplaceText / \(operation.findText?.count ?? 0) -> \(operation.replaceWith?.count ?? 0) chars"
+        case "CreateFile":
+            return "CreateFile / \(operation.content?.count ?? 0) chars"
+        case "PreviewOnly":
+            return "PreviewOnly / not apply-ready in v0"
+        default:
+            return "\(operation.kind) / unsupported"
+        }
+    }
+
+    private func operationSystemImage(_ operation: ProposedFileOperation) -> String {
+        switch operation.kind {
+        case "AppendText":
+            return "text.append"
+        case "ReplaceText":
+            return "arrow.left.arrow.right"
+        case "CreateFile":
+            return "doc.badge.plus"
+        case "PreviewOnly":
+            return "eye"
+        default:
+            return "questionmark.diamond"
+        }
+    }
+
+    private func operationForegroundStyle(_ operation: ProposedFileOperation) -> Color {
+        switch operation.kind {
+        case "PreviewOnly":
+            return .orange
+        default:
+            return .secondary
+        }
+    }
+
+    private func operationNote(_ operation: ProposedFileOperation) -> String? {
+        switch operation.kind {
+        case "CreateFile":
+            return "Apply-ready only for new docs/*.md files after runtime validation."
+        case "PreviewOnly":
+            return "Review artifact only; revise or wait for a future patch engine before applying."
+        default:
+            return nil
+        }
     }
 }
 

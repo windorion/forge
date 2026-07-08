@@ -89,6 +89,14 @@ recent messages, and explicit file references; scores path/content matches;
 then reads selected context files with repo-local safety checks. This is not a
 full index yet.
 
+Current OpenAI provider slice: before generating a plan revision, the provider
+can run a bounded model-guided context loop. Each round returns either
+`SearchAndRead` with bounded search terms and repo-relative read paths or
+`ReadyForPlan` to stop. The runtime owns validation and execution, runs only
+logged read-only repo tools, stops on repeated requests or the round limit,
+and feeds compact summaries back into the plan revision. This is the first
+bounded tool loop, still limited to read-only pre-plan context.
+
 ### Tool Registry
 
 Defines tools with schemas, permissions, risk levels, and execution handlers.
@@ -164,19 +172,41 @@ task conversation. The runtime archives the rejected proposal, records the new
 proposal revision metadata, validates the new artifact, and returns the task to
 human review. The revision path must not write files.
 
+Current provider-backed repair slice: after generating an edit proposal, the
+runtime validates it immediately. If validation is blocked, the runtime can ask
+the provider for a bounded number of repair attempts with the failed per-file
+checks included as structured feedback. Each blocked intermediate proposal is
+archived as `Superseded`; the current review artifact is only the final
+proposal. This is still proposal-only and does not mutate files.
+
 ### Edit Proposal Validator
 
 Checks proposed file changes against the current workspace before apply. The
 v0 validator confirms supported operation type, safe Markdown path, existing
-target file, operation size, whether append text is already present at the file
+target file for modify operations, non-existing docs target for create
+operations, operation size, whether append text is already present at the file
 end, and whether exact replace text appears exactly once.
 
 ### Edit Proposal Applier
 
 Applies an explicitly approved proposal through restricted file operations.
-The v0 implementation only supports append-text edits and exact replace-text
-edits to existing Markdown files in `README.md` or `docs/`, revalidates before
-writing, and records rejected proposals without touching files.
+The v0 implementation supports append-text edits and exact replace-text edits
+to existing Markdown files in `README.md` or `docs/`, plus create-file edits
+for new `docs/*.md` files. It revalidates before writing and records rejected
+or superseded proposals without touching files.
+
+### Git Review Surface
+
+Exposes read-only git state for review. The runtime provides
+`GET /git/status` for branch, head, dirty state, staged/unstaged/untracked
+files, and available line stats. It provides `GET /git/diff` for a bounded
+per-file diff from a repo-relative path. These operations run `git` without a
+shell, block `.git` and `.forge` internals, and never commit, checkout, reset,
+stage, or mutate files.
+
+The macOS Review panel consumes these endpoints as the first native
+working-tree surface. It prioritizes files related to the selected task, shows
+open/reveal actions, and renders a compact side-by-side diff preview.
 
 ### Validation Runner
 
@@ -205,6 +235,17 @@ policy locally.
 Tasks enter `Testing` after apply and only move to `Completed` after
 validation passes. Failed validation moves the task to `Failed` with command
 results preserved for review.
+
+Current validation repair slice: when a validation run fails, the runtime asks
+the model provider for a repair brief using compact failed command summaries.
+The brief records likely cause, recommended actions, and a follow-up prompt in
+task state. It does not rerun commands or mutate files; it turns failure output
+into a reviewable next step.
+
+After a repair brief exists, the runtime can generate a follow-up validation
+repair proposal. It archives the previously applied proposal, links the new
+proposal to the repair brief, validates the proposal, and returns to human
+review. This still does not apply files automatically.
 
 ### Permission Manager
 

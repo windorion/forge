@@ -28,15 +28,27 @@ Implemented:
 - Repo-local file mentions in task messages.
 - Structured intent briefs.
 - Conversation-driven plan revisions.
+- OpenAI-backed plan revisions can first run a bounded model-guided
+  read/search context loop; the runtime validates and executes each requested
+  round through logged read-only repo tools.
 - Explicit human plan approval.
 - Execution proposals.
-- Safe edit proposal review flow.
+- Safe edit proposal review flow with multi-file OpenAI proposal artifacts,
+  including blocked preview-only unsupported operations.
 - `AppendText` and exact `ReplaceText` restricted edit operations for
   `README.md` and `docs/*.md`.
+- Restricted `CreateFile` apply for new Markdown files under `docs/`.
 - Edit proposal validation before apply and immediate revalidation during
   apply.
+- Bounded validation-feedback repair loop for blocked edit proposals.
 - Request-changes revision loop for rejected edit proposals.
 - Post-apply validation runs.
+- Validation failure repair briefs for failed validation command output.
+- Follow-up repair edit proposals generated from validation repair briefs.
+- macOS Review UI display and action flow for validation repair briefs and
+  follow-up repair proposals.
+- Read-only git status and bounded per-file diff inspection from the runtime,
+  surfaced in the macOS Review UI with changed-file open/reveal actions.
 - Built-in and allowlisted project validation presets.
 - Runtime-derived command permission state in the app.
 - Runtime model-provider abstraction.
@@ -47,10 +59,16 @@ Implemented:
 - Core runtime smoke regression command covering create task, file-reference
   messages, plan revision, plan approval, edit proposal generation,
   validation, apply, built-in post-apply validation, append/replace operations,
-  and SQLite restart recovery.
+  restricted docs create-file apply, SQLite restart recovery, a mock OpenAI
+  model-guided context loop, blocked-to-repaired proposal handling, and bounded
+  blocked preview-only proposal handling, plus failed project validation repair
+  brief generation and follow-up repair proposal generation.
 - App-visible runtime state and diagnostics for unchecked/checking/running,
   disconnected, wrong version, provider configuration issues, SSE stream state,
   expected endpoint, database/task count, and copy/open diagnostics actions.
+- First-pass app-managed runtime start/stop from the macOS toolbar, sidebar
+  runtime badge, and Settings window. The app builds the runtime and launches
+  the local Node process directly, then can stop only the process it started.
 
 ## Completion Estimate
 
@@ -58,8 +76,8 @@ These percentages are product-readiness estimates, not calendar estimates.
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| V0 local demo | 87-90% | A local demo can show task creation, context inspection, planning, review, restricted edits, validation, core runtime regression coverage, and runtime diagnostics. |
-| Useful developer alpha | 40-50% | A developer can use Forge on small real tasks with model-backed planning/editing, visible diffs, and reliable rollback. |
+| V0 local demo | 90-93% | A local demo can show task creation, context inspection, planning, review, restricted edits, validation, repair proposal review, git status/diff visibility, core runtime regression coverage, runtime diagnostics, and first-pass runtime lifecycle controls. |
+| Useful developer alpha | 44-54% | A developer can use Forge on small real tasks with model-backed planning/editing, visible diffs, runtime lifecycle controls, and reliable rollback. |
 | Commercial beta | 25-30% | A paid user can install it, connect providers, trust permissions, use git workflows, and recover from failures. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
 
@@ -88,8 +106,10 @@ restricted change, and see validation results.
 
 Remaining V0 gaps:
 
-- app-managed runtime start/stop
-- more useful diff preview in the macOS app
+- harden app-managed runtime start/stop for packaged app locations and failure
+  diagnostics
+- harden the first-pass git/diff review UI for larger diffs and packaged app
+  workflows
 - provider settings smoke test with a live key supplied intentionally
 - broadened regression coverage for app-facing runtime state and provider
   settings paths

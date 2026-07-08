@@ -14,6 +14,14 @@ struct SettingsView: View {
                 runtimeHealth: workspace.runtimeHealth,
                 runtimeLastCheckedAt: workspace.runtimeLastCheckedAt,
                 runtimeLastError: workspace.runtimeLastError,
+                runtimeProcessState: workspace.runtimeProcessState,
+                runtimeProcessMessage: workspace.runtimeProcessMessage,
+                runtimeProcessID: workspace.runtimeProcessID,
+                runtimeProcessDirectory: workspace.runtimeProcessDirectory,
+                canStartRuntimeProcess: workspace.canStartRuntimeProcess,
+                canStopRuntimeProcess: workspace.canStopRuntimeProcess,
+                startRuntimeProcess: workspace.startRuntimeProcess,
+                stopRuntimeProcess: workspace.stopRuntimeProcess,
                 refresh: workspace.refreshRuntimeHealth,
                 copyDiagnostics: workspace.copyRuntimeDiagnostics,
                 openRuntimeStatusPage: workspace.openRuntimeStatusPage
@@ -65,6 +73,14 @@ private struct RuntimeSettingsTab: View {
     var runtimeHealth: RuntimeHealth?
     var runtimeLastCheckedAt: Date?
     var runtimeLastError: String?
+    var runtimeProcessState: RuntimeProcessState
+    var runtimeProcessMessage: String
+    var runtimeProcessID: Int32?
+    var runtimeProcessDirectory: String?
+    var canStartRuntimeProcess: Bool
+    var canStopRuntimeProcess: Bool
+    var startRuntimeProcess: () -> Void
+    var stopRuntimeProcess: () -> Void
     var refresh: () -> Void
     var copyDiagnostics: () -> Void
     var openRuntimeStatusPage: () -> Void
@@ -81,6 +97,16 @@ private struct RuntimeSettingsTab: View {
                 }
                 LabeledContent("Status", value: statusMessage)
                 LabeledContent("Stream Detail", value: eventStreamStatus)
+                LabeledContent("Managed Process") {
+                    Text(runtimeProcessState.rawValue)
+                }
+                LabeledContent("Process Detail", value: runtimeProcessMessage)
+                if let runtimeProcessID {
+                    LabeledContent("Process ID", value: "\(runtimeProcessID)")
+                }
+                if let runtimeProcessDirectory {
+                    LabeledContent("Process Directory", value: runtimeProcessDirectory)
+                }
 
                 if let runtimeLastCheckedAt {
                     LabeledContent("Last Checked", value: runtimeLastCheckedAt.formatted(date: .abbreviated, time: .standard))
@@ -102,6 +128,18 @@ private struct RuntimeSettingsTab: View {
                 }
 
                 HStack {
+                    Button(action: startRuntimeProcess) {
+                        Label("Start Runtime", systemImage: "play.circle")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!canStartRuntimeProcess)
+
+                    Button(action: stopRuntimeProcess) {
+                        Label("Stop Runtime", systemImage: "stop.circle")
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(!canStopRuntimeProcess)
+
                     Button(action: refresh) {
                         Label("Refresh Runtime", systemImage: "arrow.clockwise")
                     }

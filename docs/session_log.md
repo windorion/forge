@@ -1527,3 +1527,454 @@ Next:
   more readable diff preview.
 - Add a short V0 demo script in `docs/development.md`.
 - Add app-facing regression checks for runtime state and diagnostics paths.
+
+### 2026-07-08 02:30:52 CST +0800
+
+Conversation summary:
+
+- User asked to inspect the new `design_handoff_forge` UI handoff, compare it
+  against Forge's current product/function state, judge implementability and
+  gaps, and plan how to implement the UI.
+
+Done:
+
+- Read the required project handoff/status docs, UI/runtime/macOS design docs,
+  V0 scope, current SwiftUI app files, runtime client/types, and the
+  `design_handoff_forge` README/HTML/logo.
+- Assessed that the new design strongly matches Forge's task-first,
+  review-centered direction for core flows, but assumes many alpha/beta/v1
+  capabilities that are not implemented yet.
+- Prepared an implementation sequencing plan that starts with reusable native
+  design tokens/components and the V0-real core workflow screens.
+
+Not done:
+
+- Did not change application or runtime code.
+- Did not update completion estimates or backlog priorities.
+- Did not run build/test commands because this was a read-only evaluation
+  and planning pass.
+
+Next:
+
+- If approved, implement the new native visual system and the 14a/1a/1b core
+  task workspace first, mapping only to existing runtime data.
+- Then upgrade edit proposal review toward 10a and settings toward the new
+  Settings group before tackling long-horizon system integrations.
+
+### 2026-07-08 02:34:45 CST +0800
+
+Conversation summary:
+
+- User asked when Forge's real agent capability can catch up to the new UI
+  vision, when complete agent functionality is realistic, and whether an
+  external agent framework is needed.
+
+Done:
+
+- Rechecked runtime architecture, model provider, security/permissions, and
+  multi-agent docs.
+- Compared Forge's current custom runtime/provider boundary with current
+  OpenAI Responses API and Agents SDK guidance.
+- Framed a staged path from current deterministic V0 to useful real-agent
+  alpha, then full PR-producing agent behavior.
+
+Not done:
+
+- Did not change runtime or app code.
+- Did not choose or install a new agent framework.
+
+Next:
+
+- Keep Forge's runtime as the orchestration owner in the near term.
+- Add a real tool-calling loop, general patch proposals, command execution,
+  validation repair, and git workflow before adopting any heavier agent
+  framework.
+
+### 2026-07-08 02:36:31 CST +0800
+
+Conversation summary:
+
+- User asked whether the next implementation priority should be agent
+  capability or the new UI.
+
+Done:
+
+- Recommended prioritizing the smallest real agent capability spine first,
+  with only foundational UI tokens/components in parallel.
+
+Not done:
+
+- Did not change implementation code.
+- Did not revise the official backlog yet.
+
+Next:
+
+- Implement model-driven tool calling, richer edit proposals, and validation
+  repair before the full UI redesign.
+- Build the new UI around real task states as those runtime capabilities land.
+
+### 2026-07-08 02:42:32 CST +0800
+
+Conversation summary:
+
+- User approved continuing with the recommended next step: prioritize the
+  smallest real agent capability spine before the full UI redesign.
+
+Done:
+
+- Added an optional `createPlanContextRequest` provider hook.
+- Implemented OpenAI Structured Output support for bounded plan-context
+  requests with rationale, search terms, and repo-relative read paths.
+- Added runtime execution for model-guided plan context before plan revisions:
+  the runtime validates requested paths, runs logged read-only repo tools, and
+  stores compact context summaries before asking for the revised plan.
+- Extended context selection so provider-requested safe files can be inspected
+  alongside explicit references, search matches, and important project files.
+- Extended `npm run smoke:core` with a mock OpenAI Responses server that
+  verifies the model-guided context request path.
+- Updated README, runtime README, and focused docs to describe the new ability
+  without overstating it as a full repeated tool loop.
+- Verified `npm run check`, `npm run build`, and `npm run smoke:core`.
+
+Not done:
+
+- Did not implement a repeated multi-step tool-call loop yet.
+- Did not expand patch application beyond Markdown append/exact replace.
+- Did not add command repair loops or git workflow.
+- Did not change the SwiftUI app UI.
+
+Next:
+
+- Extend model-guided context into a repeated planning/tool loop with explicit
+  stop conditions and failure recovery.
+- Then add richer edit proposal operations before building the new diff UI.
+
+### 2026-07-08 02:52:31 CST +0800
+
+Conversation summary:
+
+- User asked to continue the next step after the first model-guided context
+  request implementation.
+
+Done:
+
+- Extended the OpenAI plan-context request into a bounded loop with explicit
+  provider statuses: `SearchAndRead` for another read-only context round and
+  `ReadyForPlan` to stop.
+- Added a maximum of three model-guided context rounds.
+- Added stop behavior for repeated requests that do not introduce new safe
+  search/read context.
+- Added cumulative context merging with a stored context cap.
+- Added `model.context_loop.completed` events and round-specific context
+  request events.
+- Updated the mock OpenAI smoke flow so the first context request asks for
+  read/search work and the second reports `ReadyForPlan`.
+- Updated docs to describe the bounded context loop accurately.
+- Verified `npm run check`, `npm run build`, and `npm run smoke:core`.
+
+Not done:
+
+- Did not add write/edit tools to the model loop.
+- Did not add command execution or validation repair loops.
+- Did not change SwiftUI UI.
+
+Next:
+
+- Extend provider-guided execution from read-only planning context into richer
+  edit proposal generation with multi-file/create-file proposal shapes.
+- Keep file writes behind validation and human approval.
+
+### 2026-07-08 03:03:07 CST +0800
+
+Conversation summary:
+
+- User asked to continue with the next agent capability step after the bounded
+  context loop.
+
+Done:
+
+- Added richer OpenAI edit proposal output with a structured
+  `forge_edit_proposal` schema.
+- Allowed OpenAI proposals to include multiple file changes.
+- Added preview-only operation kinds to runtime types: `CreateFile` and
+  `PreviewOnly`.
+- Kept apply restricted to existing v0-safe Markdown `AppendText` and exact
+  `ReplaceText`; unsupported operations validate as blocked review artifacts.
+- Extended the mock OpenAI smoke flow to approve the OpenAI plan, generate a
+  richer edit proposal, and verify a create-file preview blocks apply.
+- Updated edit proposal, provider, development, V0, status, README, runtime
+  README, and TODO docs.
+- Verified `npm run check`, `npm run build`, and `npm run smoke:core`.
+
+Not done:
+
+- Did not implement create-file apply.
+- Did not implement a general patch engine or multi-change apply.
+- Did not change the SwiftUI review UI yet.
+
+Next:
+
+- Add native/UI review treatment for blocked preview-only proposal operations,
+  or continue runtime work by adding a safe create-file apply path behind
+  validation and approval.
+
+### 2026-07-08 03:15:03 CST +0800
+
+Conversation summary:
+
+- User asked to do both next steps: add safe create-file apply capability and
+  improve the UI treatment for blocked preview-only proposal operations.
+
+Done:
+
+- Added restricted `CreateFile` apply support for new `docs/*.md` files.
+- Kept create-file behind proposal validation, explicit apply approval,
+  no-overwrite checks, content limits, and runtime path safety.
+- Updated OpenAI edit-proposal instructions so `CreateFile` is only for new
+  docs Markdown files and `PreviewOnly` remains for unsupported patches,
+  deletes, overwrite attempts, and unsupported paths.
+- Extended the core smoke test so the mock OpenAI flow applies an append plus a
+  docs create-file proposal, then separately verifies a blocked `PreviewOnly`
+  proposal.
+- Added SwiftUI decoding for create-file content.
+- Replaced the edit proposal file-change inline UI with a dedicated card that
+  shows change type, operation metadata, validation status, validation checks,
+  and blocked preview-only notes.
+- Updated README, runtime README, project status, TODO, development, V0, and
+  edit proposal docs to reflect restricted create-file apply and the remaining
+  patch-engine gap.
+- Verified `npm run check`, `npm run build`, `npm run smoke:core`, and
+  `swift build`.
+
+Not done:
+
+- Did not build a general patch engine, section replace, delete apply, rollback,
+  side-by-side diff view, or git workflow.
+- Did not implement the full autonomous execution/tool-repair agent loop.
+
+Next:
+
+- Move from proposal generation toward the real agent loop: model-selected
+  bounded execution steps, validation feedback, repair/revision prompts, and
+  then richer diff/git review surfaces.
+
+### 2026-07-08 03:27:56 CST +0800
+
+Conversation summary:
+
+- User decided to defer UI design adaptation and asked to push current agent
+  capabilities as far as possible first.
+
+Done:
+
+- Added a bounded validation-feedback repair loop for edit proposal generation.
+- When a generated proposal is blocked, the runtime now archives the blocked
+  intermediate proposal as `Superseded`, sends failed validation summaries and
+  per-file checks back to the model provider, and asks for a repaired proposal.
+- Capped automatic proposal repair at two attempts so the agent can recover
+  without looping indefinitely.
+- Updated task phase, agent state, plan steps, events, and revision history to
+  distinguish repaired-ready proposals from proposals that remain blocked.
+- Extended the OpenAI provider prompt/context with previous proposal and
+  validation feedback details.
+- Added deterministic local provider repair context in generated append notes.
+- Extended `npm run smoke:core` with a blocked-to-repaired OpenAI proposal flow
+  and bounded still-blocked preview-only flow.
+- Updated runtime, provider, edit proposal, development, V0, status, README,
+  runtime README, and TODO docs.
+- Verified `npm run check`, `npm run build`, and `npm run smoke:core`.
+
+Not done:
+
+- Did not implement command/test failure repair after post-apply validation.
+- Did not add arbitrary tool execution, git workflow, rollback, or a general
+  patch engine.
+- Did not adapt the new design handoff UI yet.
+
+Next:
+
+- Extend the same feedback-loop pattern from proposal validation to
+  post-apply validation failures, then add model-selected bounded execution
+  steps beyond read-only context.
+
+### 2026-07-08 03:38:25 CST +0800
+
+Conversation summary:
+
+- User asked to continue with a longer agent-capability task and requested a
+  clearer sense of how much functionality remains.
+
+Done:
+
+- Added `ValidationRepairBrief` task artifacts for failed validation runs.
+- Added a model-provider method for validation failure repair briefs.
+- Implemented OpenAI Structured Output support for validation repair briefs
+  with summary, likely cause, recommended actions, follow-up prompt, risk, and
+  provider metadata.
+- Implemented local deterministic validation repair briefs for offline/local
+  mode.
+- Wired failed validation runs to generate a repair brief from compact failed
+  command summaries after the `validation.failed` event.
+- Updated task agents, plan steps, events, review summary, and task persistence
+  so failed validation now produces a reviewable next-step diagnosis instead
+  of only stopping at failure.
+- Extended `npm run smoke:core` with a real failed runtime TypeScript
+  validation scenario using a temporary broken `.ts` file, verified OpenAI
+  repair brief generation, and cleaned the temporary file afterward.
+- Updated README, runtime README, project status, TODO, runtime architecture,
+  model provider, validation preset, development, and V0 docs.
+- Verified `npm run check`, `npm run build`, `npm run smoke:core`, and
+  `swift build`.
+
+Not done:
+
+- Did not automatically turn validation repair briefs into new edit proposals.
+- Did not add arbitrary command/tool execution, rollback, git workflow, or a
+  general patch engine.
+- Did not adapt the design handoff UI.
+
+Next:
+
+- Let the user review a validation repair brief and request a follow-up edit
+  proposal seeded by that brief.
+- Then add model-selected bounded execution steps beyond read-only context,
+  still behind runtime policy and human review.
+
+### 2026-07-08 03:48:16 CST +0800
+
+Conversation summary:
+
+- User asked to continue the next long agent-capability task before adapting
+  the new UI handoff.
+
+Done:
+
+- Added follow-up validation repair edit proposal generation from failed
+  validation repair briefs.
+- Added `POST /tasks/:taskID/generate-validation-repair-proposal` to create a
+  new reviewable edit proposal after an applied proposal fails validation.
+- Linked generated repair proposals back to their `ValidationRepairBrief` via
+  `validationRepairBriefID`.
+- Archived the previous applied proposal revision, preserved changed file
+  context, and emitted dedicated validation-repair proposal events.
+- Extended OpenAI and local model providers so validation repair briefs are
+  included in proposal context and prompt generation.
+- Extended the core smoke script with assertions for validation repair proposal
+  generation, revision history, preserved changed files, and repair events.
+- Updated README, runtime README, project status, TODO, runtime architecture,
+  edit proposal, model provider, development, and V0 docs.
+- Verified `npm run check` and `npm run build`.
+
+Not done:
+
+- Could not run `npm run smoke:core` this turn because the required escalated
+  command approval was rejected by the automatic usage-limit review.
+- Did not add the macOS UI action for generating a validation repair proposal.
+- Did not implement automatic apply/re-validate for follow-up repair proposals,
+  arbitrary tool execution, rollback, git workflow, or a general patch engine.
+- Did not adapt the `design_handoff_forge/` UI design yet.
+
+Next:
+
+- Surface the validation repair proposal action in the macOS Review UI.
+- Rerun `npm run smoke:core` when command approval is available.
+- Continue toward richer diff/git surfaces and broader agent execution under
+  policy and human review.
+
+### 2026-07-08 08:08:43 CEST +0200
+
+Conversation summary:
+
+- User asked to terminate the local service and continue a larger feature
+  development task, ideally consuming a long work block.
+
+Done:
+
+- Confirmed the Forge runtime was not listening on `127.0.0.1:17373`; `/health`
+  could not connect, so the local service is stopped.
+- Added macOS app models for validation repair briefs and repair-proposal
+  linkage through `validationRepairBriefID`.
+- Added the macOS runtime client call for
+  `POST /tasks/:taskID/generate-validation-repair-proposal`.
+- Surfaced validation repair briefs in the Review panel with likely cause,
+  recommended actions, follow-up prompt, provider, risk, and source validation
+  run.
+- Added the Review action to generate a follow-up validation repair proposal
+  when an applied proposal has a latest failed validation run and matching
+  repair brief.
+- Added first-pass app-managed runtime lifecycle controls: toolbar, sidebar
+  runtime badge, and Settings can build/start the local Node runtime and stop
+  only the app-owned process.
+- Added runtime process state, PID, directory, and messages to diagnostics and
+  Settings.
+- Updated README, project status, TODO, development, macOS native, and V0 docs.
+- Verified `swift build`, `npm run check`, and `npm run build`.
+
+Not done:
+
+- Did not launch the macOS app interactively or start the runtime, because the
+  user explicitly asked to terminate local services and keep developing.
+- Did not run `npm run smoke:core` in this turn.
+- Did not harden packaged-app runtime discovery, stale external process
+  detection, launch-output capture, richer diff review, git workflow, rollback,
+  or a general patch engine.
+- Did not adapt `design_handoff_forge/` yet.
+
+Next:
+
+- Harden app-managed runtime lifecycle for packaged app locations and failed
+  launches.
+- Build richer side-by-side diff and changed-file review surfaces.
+- Continue agent execution work toward broader tool loops, patch application,
+  and git review artifacts.
+
+### 2026-07-08 18:46:48 CEST +0200
+
+Conversation summary:
+
+- User asked to continue the next long task. The work focused on Review/Diff/Git
+  visibility before moving to commit or PR actions.
+
+Done:
+
+- Added runtime read-only git review types for status snapshots, file changes,
+  and bounded per-file diffs.
+- Added `GET /git/status` for git root, branch, upstream, head, dirty state,
+  staged/unstaged/untracked files, and line stats when available.
+- Added `GET /git/diff?path=<repo-relative-path>` for bounded tracked-file
+  diffs and synthetic untracked text-file diffs.
+- Kept git endpoints read-only: they run `git` without a shell, require
+  repo-relative paths, block `.git` and `.forge` internals, and do not stage,
+  reset, checkout, commit, or mutate files.
+- Added macOS app models, runtime client calls, and workspace state for git
+  status and per-file diff caching.
+- Added a `Working Tree` section to the macOS Review panel with branch/head
+  summary, changed-file list, task-related file highlighting, line stats,
+  open/reveal actions, and a compact side-by-side diff preview.
+- Extended the core smoke test to verify read-only git status and bounded git
+  diff endpoints against temporary smoke fixtures.
+- Improved smoke assertion output for task state mismatches so validation
+  summaries and per-file checks are visible when a flow fails.
+- Fixed the mock OpenAI validation-repair flow so it distinguishes actual
+  validation repair brief context from the empty `validationRepairBriefs`
+  history list.
+- Updated README, runtime README, project status, TODO, development, runtime
+  architecture, git workflow, security permissions, and V0 scope docs.
+- Verified `npm run check`, `npm run build`, `swift build`, `npm run
+  smoke:core`, and `git diff --check`.
+
+Not done:
+
+- Did not add staging, unstaging, discard, reset, commit, push, or PR actions.
+- Did not add a binary diff viewer, full diff filtering, or large-diff
+  navigation beyond bounded previews.
+- Did not adapt `design_handoff_forge/`.
+- Did not start the persistent local runtime service; smoke used temporary
+  runtime ports and cleaned them up.
+
+Next:
+
+- Add commit preparation as a review artifact with proposed commit message,
+  changed files, validation summary, and explicit approval.
+- Harden the git/diff panel for larger real repositories and binary files.
+- Continue toward broader patch apply and rollback/recovery flows.

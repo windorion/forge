@@ -110,6 +110,7 @@ function parseTaskPayload(payload: unknown): ForgeTask {
       riskLevel: run.riskLevel ?? "Low",
       commands: run.commands ?? []
     })),
+    validationRepairBriefs: parsed.validationRepairBriefs ?? [],
     messages: (parsed.messages ?? []).map((message) => ({
       ...message,
       fileReferences: message.fileReferences ?? []

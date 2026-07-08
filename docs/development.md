@@ -17,6 +17,12 @@ intent briefs and execution proposals, SSE events, safe edit proposals, and
 SQLite task persistence. The loop now includes a bounded repo-context pass
 that scans safe local files, derives search terms from the task intent, records
 matching files, and reads selected context before planning.
+When the OpenAI provider generates a plan revision, it can first run a bounded
+read/search context loop. Each round returns either `SearchAndRead` with search
+terms and repo-relative read paths or `ReadyForPlan` to stop. The runtime
+validates requests, executes only logged read-only tools, stops on repeated
+context or the round limit, and then sends compact context summaries into the
+plan revision call.
 
 The runtime core has an automated smoke regression that exercises the main
 task lifecycle without using real project memory or provider settings.
@@ -110,15 +116,27 @@ swift run ForgeApp
 
 Use the toolbar buttons:
 
+- `Start Runtime`: builds the TypeScript runtime and launches the local Node
+  runtime process from the app when the repository checkout can be resolved.
+- `Stop Runtime`: stops the app-managed runtime process. It only controls the
+  process started by Forge, not an unrelated terminal-launched runtime.
 - `Check Runtime`: calls `GET /health` and refreshes tasks.
 - `Start Demo Agent`: calls `POST /tasks` and starts Agent Loop v0.
 
 The sidebar runtime badge shows app-level runtime state: unchecked, checking,
 running, disconnected, wrong version, provider configuration issues, endpoint,
 and event-stream state. It also provides actions to refresh health, open the
-runtime status page, and copy a diagnostics bundle. The Settings runtime tab
-shows the same state plus service, version, uptime, database path, task count,
-last checked time, and last error.
+runtime status page, copy a diagnostics bundle, and start/stop the app-managed
+runtime process. The Settings runtime tab shows the same state plus service,
+version, uptime, database path, task count, last checked time, last error, and
+the app-managed runtime process status, PID, and directory.
+
+The Review panel also shows a `Working Tree` section backed by runtime git
+endpoints. It refreshes `GET /git/status`, highlights files related to the
+selected task, shows staged/unstaged/untracked state plus line stats when git
+provides them, and can load a bounded side-by-side diff from
+`GET /git/diff?path=<repo-relative-path>`. File actions are read-only: open
+the file or reveal it in Finder.
 
 Use the sidebar composer to create a custom task. The app connects to
 `GET /events` and refreshes tasks as runtime events arrive.
@@ -141,6 +159,11 @@ provider for a new plan revision from the latest message and intent brief,
 shows the revision in the Planner panel, clears any prepared execution
 proposal, and moves the task back to `Human Review`. The user must approve the
 current plan revision before Forge prepares execution again.
+For the OpenAI provider, this action now performs a bounded model-guided
+context loop first: the provider can return `SearchAndRead` for additional
+read-only context or `ReadyForPlan` to stop, and the runtime executes
+`list_repo_files`, `search_repo_context`, and `read_context_file` only after
+repo-local safety checks.
 
 Agent Loop v0 currently runs local read-only tools:
 
@@ -166,6 +189,15 @@ After an execution proposal exists, the Review panel enables
 validates it against the current workspace, and returns the task to
 `Human Review` with current phase `Edit Proposal Review`. It still does not
 change files.
+For the OpenAI provider, edit proposals can now include multiple file changes.
+Only `AppendText`, exact `ReplaceText`, and restricted `CreateFile` operations
+inside the Markdown boundary can validate as apply-ready. Create-file apply is
+limited to new `docs/*.md` files. Delete, broad patch, unsupported path, or
+preview-only operations remain review artifacts and block apply until revised.
+If generated validation is blocked, the runtime can run a bounded repair loop:
+it archives the blocked proposal as `Superseded`, sends the failed checks back
+to the provider, and validates the repaired proposal before returning to human
+review.
 
 When an edit proposal is ready, the Review panel enables `Apply Edit Proposal`
 and `Request Changes`. It also exposes `Validate Proposal`, which calls
@@ -186,6 +218,17 @@ built-in validation commands. The Review panel shows `Validation Runs`,
 including each command name, status, command id, and output summary. The user
 can manually rerun validation with `POST /tasks/:taskID/run-validation` through
 the `Run Validation Again` button after an applied proposal exists.
+If a validation run fails, the runtime asks the model provider for a repair
+brief from compact failed command summaries. The brief is stored in task state
+with likely cause, recommended actions, and a follow-up repair prompt; it does
+not rerun commands or edit files. The Review panel shows repair briefs next to
+validation runs.
+After a repair brief exists, `POST /tasks/:taskID/generate-validation-repair-proposal`
+can generate a new proposed repair diff linked to the brief. The previously
+applied proposal is archived, the new proposal is validated, and no files are
+changed until explicit apply. The Review panel exposes this action when the
+latest failed validation run has a matching repair brief and the current edit
+proposal is still the applied proposal.
 
 Current validation presets:
 
@@ -232,6 +275,13 @@ It covers:
 - built-in post-apply validation
 - SQLite restart recovery
 - both `AppendText` and exact `ReplaceText`
+- read-only git status and bounded git diff endpoints
+- mock OpenAI plan-context loop before a plan revision
+- mock OpenAI richer edit proposal with append/create apply and blocked
+  preview-only artifact coverage
+- mock OpenAI blocked-to-repaired edit proposal flow
+- mock OpenAI failed validation repair brief flow
+- mock OpenAI validation repair brief to follow-up proposal flow
 
 In sandboxed Codex sessions, the command may need approval because it listens
 on `127.0.0.1`.
@@ -251,13 +301,32 @@ cd runtime && npm run smoke:core
   provider id, model name, base URL, timeout, max output tokens, and Keychain
   API key sync.
 - The OpenAI provider uses compact task/context summaries and Structured
-  Outputs, but it is not yet part of a full tool-using agent loop.
-- Edit proposal application is intentionally narrow: v0 only supports
-  append-text and exact replace-text operations on existing Markdown files in
-  `README.md` or `docs/`. Validation blocks unsupported paths, unsupported
-  operations, oversized edits, missing files, duplicate append text at the file
+  Outputs. It can now run a bounded read/search context loop before plan
+  revisions, but tool use is still limited to pre-plan read-only context.
+- Edit proposal application is intentionally narrow: v0 supports append-text
+  and exact replace-text operations on existing Markdown files in `README.md`
+  or `docs/`, plus create-file operations for new `docs/*.md` files only.
+  Validation blocks unsupported paths, unsupported operations, oversized edits,
+  missing files, existing create targets, duplicate append text at the file
   end, and replace operations whose find text is missing or appears more than
-  once.
+  once. Richer OpenAI proposals can include unsupported preview-only operations
+  for review, but those proposals are blocked from apply until revised to an
+  apply-ready subset.
+- Proposal repair is bounded and proposal-only. It can ask the provider to
+  revise a blocked artifact from runtime validation feedback, but it does not
+  apply files or run commands.
+- Validation failure repair briefs are advisory. They summarize failed command
+  output and suggest a next repair prompt, but they do not apply fixes or rerun
+  validation automatically.
+- Follow-up repair proposals are review artifacts. They can be generated from a
+  repair brief, but they still require validation and explicit human apply.
+- Git status and diff inspection are read-only review surfaces. The runtime
+  blocks absolute paths, parent-directory traversal, and `.git`/`.forge`
+  internals; diffs are bounded and large previews are truncated.
+- App-managed runtime start/stop is a development-lifecycle convenience. It
+  builds `runtime`, launches `node dist/server.js`, and can stop only the
+  process started by the app. External terminal-launched runtime processes are
+  detected through health checks but are not terminated by the app.
 - Post-apply validation defaults to built-in `forge:` checks. Medium-risk
   project validation commands are allowlisted runtime presets, run without a
   shell, and require explicit task-level approval before execution.

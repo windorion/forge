@@ -16,23 +16,34 @@ final class WorkspaceModel: ObservableObject {
     @Published var modelProviderSettingsEnvelope: ModelProviderSettingsEnvelope?
     @Published var validationPresets: [ValidationPreset] = []
     @Published var workspaceValidationPresetConfig: WorkspaceValidationPresetConfig?
+    @Published var gitStatus: GitStatusSnapshot?
+    @Published var gitStatusLastError: String?
     @Published var statusMessage = "Runtime not checked"
     @Published var eventStreamStatus = "Event stream disconnected"
     @Published var eventStreamState: RuntimeEventStreamState = .disconnected
+    @Published var runtimeProcessState: RuntimeProcessState = .notStarted
+    @Published var runtimeProcessMessage = "Runtime process has not been started by the app."
+    @Published var runtimeProcessID: Int32?
+    @Published var runtimeProcessDirectory: String?
     @Published private var validationPermissionSnapshots: [ForgeTask.ID: [ValidationPresetPermission]] = [:]
     @Published private var sendingMessageTaskIDs = Set<ForgeTask.ID>()
     @Published private var generatingPlanRevisionTaskIDs = Set<ForgeTask.ID>()
     @Published private var approvingTaskIDs = Set<ForgeTask.ID>()
     @Published private var generatingEditProposalTaskIDs = Set<ForgeTask.ID>()
+    @Published private var generatingValidationRepairProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var validatingEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var applyingEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var rejectingEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var runningValidationTaskIDs = Set<ForgeTask.ID>()
     @Published private var approvingValidationPresetTaskIDs = Set<String>()
+    @Published private var refreshingGitStatus = false
+    @Published private var loadingGitDiffPaths = Set<String>()
+    @Published private var gitFileDiffs: [String: GitFileDiff] = [:]
     @Published private var updatingModelProviderSettings = false
 
     private let runtime = RuntimeClient()
     private var eventStreamTask: Task<Void, Never>?
+    private var runtimeProcess: Process?
 
     var selectedTask: ForgeTask? {
         tasks.first { $0.id == selectedTaskID }
@@ -42,8 +53,79 @@ final class WorkspaceModel: ObservableObject {
         runtime.baseURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     }
 
+    var canStartRuntimeProcess: Bool {
+        switch runtimeProcessState {
+        case .starting, .running, .stopping:
+            return false
+        case .notStarted, .stopped, .failed:
+            return true
+        }
+    }
+
+    var canStopRuntimeProcess: Bool {
+        runtimeProcess?.isRunning == true &&
+            (runtimeProcessState == .running || runtimeProcessState == .starting)
+    }
+
     deinit {
         eventStreamTask?.cancel()
+        if runtimeProcess?.isRunning == true {
+            runtimeProcess?.terminate()
+        }
+    }
+
+    func startRuntimeProcess() {
+        guard canStartRuntimeProcess else {
+            statusMessage = "Runtime process is already managed by the app."
+            return
+        }
+
+        guard let runtimeDirectory = resolveRuntimeDirectory() else {
+            runtimeProcessState = .failed
+            runtimeProcessMessage = "Could not find the repository runtime directory."
+            statusMessage = runtimeProcessMessage
+            return
+        }
+
+        runtimeProcessState = .starting
+        runtimeProcessMessage = "Building runtime before launch..."
+        runtimeProcessDirectory = runtimeDirectory.path(percentEncoded: false)
+        statusMessage = "Starting Forge runtime..."
+
+        Task {
+            do {
+                try await Self.buildRuntime(at: runtimeDirectory)
+                try launchRuntimeNodeProcess(at: runtimeDirectory)
+                refreshRuntimeHealthAfterDelay()
+            } catch {
+                runtimeProcessState = .failed
+                runtimeProcessMessage = "Start failed: \(error.localizedDescription)"
+                runtimeProcessID = nil
+                runtimeProcess = nil
+                statusMessage = runtimeProcessMessage
+            }
+        }
+    }
+
+    func stopRuntimeProcess() {
+        guard let process = runtimeProcess, process.isRunning else {
+            runtimeProcessState = .stopped
+            runtimeProcessID = nil
+            runtimeProcessMessage = "No app-managed runtime process is running."
+            statusMessage = runtimeProcessMessage
+            eventStreamTask?.cancel()
+            eventStreamState = .disconnected
+            eventStreamStatus = "Event stream disconnected"
+            return
+        }
+
+        runtimeProcessState = .stopping
+        runtimeProcessMessage = "Stopping app-managed runtime process \(process.processIdentifier)..."
+        statusMessage = "Stopping Forge runtime..."
+        eventStreamTask?.cancel()
+        eventStreamState = .disconnected
+        eventStreamStatus = "Event stream disconnected"
+        process.terminate()
     }
 
     func refreshRuntimeHealth() {
@@ -61,11 +143,13 @@ final class WorkspaceModel: ObservableObject {
                 statusMessage = statusMessage(for: runtimeState)
                 try await refreshTasks()
                 try await refreshValidationPresets()
+                await refreshGitStatusSnapshot()
                 await refreshValidationPermissionSnapshotIfPossible(for: selectedTaskID)
                 startEventStream()
             } catch {
                 runtimeHealth = nil
                 modelProviderSettingsEnvelope = nil
+                gitStatus = nil
                 runtimeState = .disconnected
                 runtimeLastCheckedAt = Date()
                 runtimeLastError = error.localizedDescription
@@ -150,6 +234,7 @@ final class WorkspaceModel: ObservableObject {
                 upsert(task)
                 selectedTaskID = task.id
                 statusMessage = "Task created. Agent Loop v0 started."
+                await refreshGitStatusSnapshot()
                 await refreshValidationPermissionSnapshotIfPossible(for: task.id)
                 startEventStream()
             } catch {
@@ -263,6 +348,29 @@ final class WorkspaceModel: ObservableObject {
         generatingEditProposalTaskIDs.contains(taskID)
     }
 
+    func generateValidationRepairProposal(for task: ForgeTask) {
+        generatingValidationRepairProposalTaskIDs.insert(task.id)
+
+        Task {
+            do {
+                let updatedTask = try await runtime.generateValidationRepairProposal(taskID: task.id)
+                upsert(updatedTask)
+                selectedTaskID = updatedTask.id
+                statusMessage = "Validation repair proposal ready for review."
+                await refreshValidationPermissionSnapshotIfPossible(for: updatedTask.id)
+                startEventStream()
+            } catch {
+                statusMessage = "Generate validation repair proposal failed: \(error.localizedDescription)"
+            }
+
+            generatingValidationRepairProposalTaskIDs.remove(task.id)
+        }
+    }
+
+    func isGeneratingValidationRepairProposal(taskID: ForgeTask.ID) -> Bool {
+        generatingValidationRepairProposalTaskIDs.contains(taskID)
+    }
+
     func validateEditProposal(for task: ForgeTask) {
         validatingEditProposalTaskIDs.insert(task.id)
 
@@ -295,6 +403,7 @@ final class WorkspaceModel: ObservableObject {
                 upsert(updatedTask)
                 selectedTaskID = updatedTask.id
                 statusMessage = "Edit proposal applied. Review the changed files."
+                await refreshGitStatusSnapshot()
                 await refreshValidationPermissionSnapshotIfPossible(for: updatedTask.id)
                 startEventStream()
             } catch {
@@ -366,6 +475,7 @@ final class WorkspaceModel: ObservableObject {
                 upsert(updatedTask)
                 selectedTaskID = updatedTask.id
                 statusMessage = "Validation run completed."
+                await refreshGitStatusSnapshot()
                 await refreshValidationPermissionSnapshotIfPossible(for: updatedTask.id)
                 startEventStream()
             } catch {
@@ -382,6 +492,72 @@ final class WorkspaceModel: ObservableObject {
 
     func validationPermissions(for taskID: ForgeTask.ID) -> [ValidationPresetPermission] {
         validationPermissionSnapshots[taskID] ?? []
+    }
+
+    func refreshGitStatus() {
+        refreshingGitStatus = true
+
+        Task {
+            await refreshGitStatusSnapshot()
+            refreshingGitStatus = false
+        }
+    }
+
+    func isRefreshingGitStatus() -> Bool {
+        refreshingGitStatus
+    }
+
+    func refreshGitDiff(path: String) {
+        loadingGitDiffPaths.insert(path)
+
+        Task {
+            do {
+                gitFileDiffs[path] = try await runtime.gitFileDiff(path: path)
+                gitStatusLastError = nil
+            } catch {
+                gitStatusLastError = "Load git diff failed: \(error.localizedDescription)"
+            }
+
+            loadingGitDiffPaths.remove(path)
+        }
+    }
+
+    func gitDiff(for path: String) -> GitFileDiff? {
+        gitFileDiffs[path]
+    }
+
+    func isLoadingGitDiff(path: String) -> Bool {
+        loadingGitDiffPaths.contains(path)
+    }
+
+    func revealGitFile(path: String) {
+        guard let root = gitStatus?.root else {
+            statusMessage = "Git root is not available."
+            return
+        }
+
+        let targetURL = URL(fileURLWithPath: root).appendingPathComponent(path)
+        let revealURL = FileManager.default.fileExists(atPath: targetURL.path)
+            ? targetURL
+            : targetURL.deletingLastPathComponent()
+        NSWorkspace.shared.activateFileViewerSelecting([revealURL])
+        statusMessage = "Revealed \(path) in Finder."
+    }
+
+    func openGitFile(path: String) {
+        guard let root = gitStatus?.root else {
+            statusMessage = "Git root is not available."
+            return
+        }
+
+        let targetURL = URL(fileURLWithPath: root).appendingPathComponent(path)
+        guard FileManager.default.fileExists(atPath: targetURL.path) else {
+            revealGitFile(path: path)
+            return
+        }
+
+        NSWorkspace.shared.open(targetURL)
+        statusMessage = "Opened \(path)."
     }
 
     func refreshValidationPermissions(for taskID: ForgeTask.ID?) {
@@ -402,6 +578,120 @@ final class WorkspaceModel: ObservableObject {
         statusMessage = "Runtime status page opened."
     }
 
+    private func launchRuntimeNodeProcess(at runtimeDirectory: URL) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = [
+            "node",
+            "--disable-warning=ExperimentalWarning",
+            "dist/server.js"
+        ]
+        process.currentDirectoryURL = runtimeDirectory
+
+        var environment = ProcessInfo.processInfo.environment
+        environment["FORGE_RUNTIME_PORT"] = "17373"
+        process.environment = environment
+
+        if let nullDevice = FileHandle(forWritingAtPath: "/dev/null") {
+            process.standardOutput = nullDevice
+            process.standardError = nullDevice
+        }
+
+        process.terminationHandler = { [weak self] process in
+            let pid = process.processIdentifier
+            let status = process.terminationStatus
+            Task { @MainActor [weak self] in
+                self?.handleRuntimeProcessTermination(pid: pid, status: status)
+            }
+        }
+
+        try process.run()
+        runtimeProcess = process
+        runtimeProcessID = process.processIdentifier
+        runtimeProcessState = .running
+        runtimeProcessMessage = "Runtime process \(process.processIdentifier) is running from \(runtimeDirectory.path)."
+        statusMessage = "Runtime process started."
+    }
+
+    private func handleRuntimeProcessTermination(pid: Int32, status: Int32) {
+        guard runtimeProcessID == pid else {
+            return
+        }
+
+        runtimeProcess = nil
+        runtimeProcessID = nil
+
+        if runtimeProcessState == .stopping {
+            runtimeProcessState = .stopped
+            runtimeProcessMessage = "Runtime process \(pid) stopped."
+            statusMessage = runtimeProcessMessage
+            runtimeHealth = nil
+            runtimeState = .disconnected
+            runtimeLastCheckedAt = Date()
+            runtimeLastError = "App-managed runtime process stopped."
+        } else if status == 0 {
+            runtimeProcessState = .stopped
+            runtimeProcessMessage = "Runtime process \(pid) exited normally."
+            statusMessage = runtimeProcessMessage
+            refreshRuntimeHealthAfterDelay()
+        } else {
+            runtimeProcessState = .failed
+            runtimeProcessMessage = "Runtime process \(pid) exited with status \(status)."
+            statusMessage = runtimeProcessMessage
+            refreshRuntimeHealthAfterDelay()
+        }
+    }
+
+    private func refreshRuntimeHealthAfterDelay() {
+        Task {
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            refreshRuntimeHealth()
+        }
+    }
+
+    private func resolveRuntimeDirectory() -> URL? {
+        let currentDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+        let bundleParent = Bundle.main.bundleURL.deletingLastPathComponent()
+        let bundledRepositoryRoot = bundleParent.deletingLastPathComponent()
+
+        let candidateRoots = [
+            currentDirectory,
+            bundledRepositoryRoot,
+            bundleParent
+        ]
+
+        for root in candidateRoots {
+            let runtimeDirectory = root.appendingPathComponent("runtime", isDirectory: true)
+            let packageFile = runtimeDirectory.appendingPathComponent("package.json")
+            if FileManager.default.fileExists(atPath: packageFile.path) {
+                return runtimeDirectory
+            }
+        }
+
+        return nil
+    }
+
+    private nonisolated static func buildRuntime(at runtimeDirectory: URL) async throws {
+        try await Task.detached(priority: .userInitiated) {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.arguments = ["npm", "run", "build"]
+            process.currentDirectoryURL = runtimeDirectory
+
+            if let nullDevice = FileHandle(forWritingAtPath: "/dev/null") {
+                process.standardOutput = nullDevice
+                process.standardError = nullDevice
+            }
+
+            try process.run()
+            process.waitUntilExit()
+
+            guard process.terminationStatus == 0 else {
+                throw RuntimeProcessError.buildFailed(process.terminationStatus)
+            }
+        }.value
+    }
+
     func runtimeDiagnosticsText() -> String {
         let health = runtimeHealth
         let providerConfiguration = modelProviderSettingsEnvelope?.configuration ?? health?.modelProviderConfiguration
@@ -416,6 +706,12 @@ final class WorkspaceModel: ObservableObject {
             "Expected service: \(Self.expectedRuntimeService)",
             "Expected version: \(Self.expectedRuntimeVersion)",
             "Runtime state: \(runtimeState.rawValue)",
+            "Runtime process state: \(runtimeProcessState.rawValue)",
+            "Runtime process message: \(runtimeProcessMessage)",
+            "Runtime process id: \(runtimeProcessID.map(String.init) ?? "None")",
+            "Runtime process directory: \(runtimeProcessDirectory ?? "Unknown")",
+            "Git status: \(gitStatus?.summary ?? "Unavailable")",
+            "Git status error: \(gitStatusLastError ?? "None")",
             "Status message: \(statusMessage)",
             "Last checked: \(lastChecked)",
             "Last error: \(runtimeLastError ?? "None")",
@@ -507,6 +803,7 @@ final class WorkspaceModel: ObservableObject {
 
         do {
             try await refreshTasks()
+            await refreshGitStatusSnapshot()
             await refreshValidationPermissionSnapshotIfPossible(for: selectedTaskID)
         } catch {
             statusMessage = "Refresh after event failed: \(error.localizedDescription)"
@@ -531,6 +828,16 @@ final class WorkspaceModel: ObservableObject {
 
     private func refreshModelProviderSettingsSnapshot() async throws {
         modelProviderSettingsEnvelope = try await runtime.modelProviderSettings()
+    }
+
+    private func refreshGitStatusSnapshot() async {
+        do {
+            gitStatus = try await runtime.gitStatus()
+            gitStatusLastError = gitStatus?.error
+        } catch {
+            gitStatus = nil
+            gitStatusLastError = error.localizedDescription
+        }
     }
 
     private func refreshValidationPermissionSnapshotIfPossible(for taskID: ForgeTask.ID?) async {
@@ -603,4 +910,15 @@ final class WorkspaceModel: ObservableObject {
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter
     }()
+}
+
+private enum RuntimeProcessError: LocalizedError {
+    case buildFailed(Int32)
+
+    var errorDescription: String? {
+        switch self {
+        case .buildFailed(let status):
+            return "Runtime build failed with exit status \(status)."
+        }
+    }
 }
