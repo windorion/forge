@@ -265,11 +265,14 @@ uses temporary SQLite and provider settings paths, creates and cleans unique
 Markdown fixtures under `docs/`, and verifies create task, file-reference
 messages, plan revision, plan approval, edit proposal generation, validation,
 apply, post-apply validation, restart recovery, and both append/replace
-restricted edit operations. It also verifies read-only git status, bounded git
-diff, branch-preview, stale-head branch rejection, branch-publish-preview,
-stale-head branch publish rejection, commit-preview, stale-head commit
-rejection, push-preview, and stale-head push rejection endpoints, plus the
-read-only PR handoff preview, against temporary fixtures. It also starts a
+restricted edit operations. It verifies the runtime status page, health
+diagnostics, persistence metadata, and model-provider settings GET/POST paths,
+including fake-key handling and confirmation that API keys are not persisted.
+It also verifies read-only git status, bounded git diff, branch-preview,
+stale-head branch rejection, branch-publish-preview, stale-head branch publish
+rejection, commit-preview, stale-head commit rejection, push-preview, and
+stale-head push rejection endpoints, plus the read-only PR handoff preview,
+against temporary fixtures. It also starts a
 mock OpenAI Responses server to verify the model-guided context loop path
 before an OpenAI-backed plan
 revision, a richer edit proposal with append/create apply, and a blocked

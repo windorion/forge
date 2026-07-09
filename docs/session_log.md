@@ -2256,3 +2256,41 @@ Next:
   stale remote refs, fork remotes, and isolated success-path tests.
 - Broaden app-facing regression coverage for runtime state, diagnostics, and
   provider settings paths.
+
+### 2026-07-09 21:49:28 CEST +0200
+
+Conversation summary:
+
+- User asked to commit local code and continue toward finishing V0. The
+  previous branch review/publish workflow was committed, then the session
+  closed two V0 polish gaps around app-facing regression coverage and the demo
+  script.
+
+Done:
+
+- Committed the branch review and publish workflow as
+  `8596ba5 Add branch review and publish workflow`.
+- Extended `npm run smoke:core` to cover the runtime home/status page, health
+  diagnostics, persistence metadata, model-provider settings GET/POST,
+  OpenAI missing-key/ready/clear-key states, and verification that API keys are
+  never persisted to the temporary settings file.
+- Fixed the smoke isolation boundary so persisted local provider settings do
+  not override the later mock OpenAI provider runtime segment.
+- Added a short local V0 demo script to `docs/development.md`.
+- Updated README, runtime README, project status, and TODO to reflect the new
+  V0 coverage and demo path.
+- Verified `npm run smoke:core`, `npm run check`, and `git diff --check`.
+
+Not done:
+
+- Did not run a live-provider smoke with a real OpenAI API key.
+- Did not further harden large-diff UI, packaged app runtime lifecycle,
+  remote auth failure handling, fork remotes, or branch protection paths.
+- Did not create, publish, update, close, or comment on pull requests.
+
+Next:
+
+- Commit the V0 smoke/demo-script follow-up.
+- If continuing V0 hardening, target either packaged runtime failure
+  diagnostics or larger git/diff review behavior.
+- After V0 hardening, move to approved GitHub draft PR creation for alpha.

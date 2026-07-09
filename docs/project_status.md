@@ -90,10 +90,13 @@ Implemented:
 - Core runtime smoke regression command covering create task, file-reference
   messages, plan revision, plan approval, edit proposal generation,
   validation, apply, built-in post-apply validation, append/replace operations,
-  restricted docs create-file apply, SQLite restart recovery, a mock OpenAI
-  model-guided context loop, blocked-to-repaired proposal handling, and bounded
-  blocked preview-only proposal handling, plus failed project validation repair
-  brief generation and follow-up repair proposal generation.
+  restricted docs create-file apply, SQLite restart recovery, runtime health
+  diagnostics, model-provider settings GET/POST, fake-key handling without
+  secret persistence, a mock OpenAI model-guided context loop,
+  blocked-to-repaired proposal handling, and bounded blocked preview-only
+  proposal handling, plus failed project validation repair brief generation
+  and follow-up repair proposal generation.
+- A short local V0 demo script in `docs/development.md`.
 - App-visible runtime state and diagnostics for unchecked/checking/running,
   disconnected, wrong version, provider configuration issues, SSE stream state,
   expected endpoint, database/task count, and copy/open diagnostics actions.
@@ -107,7 +110,7 @@ These percentages are product-readiness estimates, not calendar estimates.
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| V0 local demo | 96-98% | A local demo can show task creation, context inspection, planning, review, restricted edits, validation, repair proposal review, git status/diff visibility, branch review, branch publish/upstream setup, commit preparation preview, explicit local commit and push actions, PR handoff preview, core runtime regression coverage, runtime diagnostics, and first-pass runtime lifecycle controls. |
+| V0 local demo | 97-99% | A local demo can show task creation, context inspection, planning, review, restricted edits, validation, repair proposal review, git status/diff visibility, branch review, branch publish/upstream setup, commit preparation preview, explicit local commit and push actions, PR handoff preview, core runtime/app-facing regression coverage, runtime diagnostics, provider settings coverage, and first-pass runtime lifecycle controls. |
 | Useful developer alpha | 56-66% | A developer can use Forge on small real tasks with model-backed planning/editing, visible diffs, branch review, branch publish/upstream setup, commit preparation, local commits, guarded push, PR handoff preview, runtime lifecycle controls, and reliable rollback. |
 | Commercial beta | 25-30% | A paid user can install it, connect providers, trust permissions, use git workflows, and recover from failures. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
@@ -152,9 +155,8 @@ Remaining V0 gaps:
   richer test-plan evidence
 - harden branch review for protected default branches, dirty-worktree edge
   cases, and isolated success-path tests
-- provider settings smoke test with a live key supplied intentionally
-- broadened regression coverage for app-facing runtime state and provider
-  settings paths
+- optional live-provider smoke with a user-supplied OpenAI key outside
+  committed tests
 - small UI polish pass around task states and review panels
 
 ## Alpha Finish Line

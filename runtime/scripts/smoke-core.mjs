@@ -40,6 +40,7 @@ try {
   await createSmokeFiles();
 
   runtime = await startRuntime();
+  await assertRuntimeDiagnosticsAndSettings();
   await assertGitReadOnlyEndpoints();
   const appendTask = await runAppendFlow();
 
@@ -51,6 +52,7 @@ try {
 
   await stopRuntime(runtime);
   runtime = undefined;
+  await rm(settingsPath, { force: true });
 
   mockOpenAI = await startMockOpenAI();
   runtime = await startRuntime({
@@ -461,6 +463,135 @@ async function createTask(body) {
   const task = await post("/tasks", body);
   assert(task.id, "Create task response did not include an id.");
   return task;
+}
+
+async function assertRuntimeDiagnosticsAndSettings() {
+  const home = await getText("/");
+  assert(home.includes("Forge Runtime is running"), "Runtime home page did not render the status page.");
+  assert(
+    home.includes("GET /settings/model-provider"),
+    "Runtime home page did not link the model provider settings endpoint."
+  );
+  assert(
+    home.includes("GET /git/branch-publish-preview"),
+    "Runtime home page did not link the branch publish preview endpoint."
+  );
+
+  const initialHealth = await get("/health");
+  assert(initialHealth.ok === true, "Runtime health did not report ok.");
+  assert(initialHealth.service === "forge-runtime", `Unexpected runtime service ${initialHealth.service}.`);
+  assert(initialHealth.version === "0.1.0", `Unexpected runtime version ${initialHealth.version}.`);
+  assert(typeof initialHealth.uptimeSeconds === "number", "Runtime health did not include uptime seconds.");
+  assert(
+    initialHealth.persistence?.databasePath === dbPath,
+    `Runtime health did not expose the temporary database path ${dbPath}.`
+  );
+  assert(typeof initialHealth.persistence?.taskCount === "number", "Runtime health did not include task count.");
+  assert(initialHealth.modelProvider?.id === "local", "Initial runtime model provider should be local.");
+  assert(
+    initialHealth.modelProviderConfiguration?.status === "Ready",
+    "Initial runtime model provider configuration should be ready."
+  );
+  assert(
+    initialHealth.modelProviderConfiguration?.sendsRemoteContext === false,
+    "Local provider health should report that no remote context is sent."
+  );
+
+  const initialSettings = await get("/settings/model-provider");
+  assert(initialSettings.configuration?.provider?.id === "local", "Initial settings provider should be local.");
+  assert(initialSettings.configuration?.status === "Ready", "Initial settings provider should be ready.");
+  assert(
+    initialSettings.editableSettings?.settingsPath === settingsPath,
+    `Settings endpoint did not expose the temporary settings path ${settingsPath}.`
+  );
+  assert(
+    initialSettings.editableSettings?.hasOpenAIAPIKey === false,
+    "Initial settings should not report an OpenAI API key."
+  );
+
+  const missingKeySettings = await post("/settings/model-provider", {
+    providerID: "openai",
+    modelName: "settings-smoke-openai",
+    openAIBaseURL: "http://127.0.0.1:9/v1/",
+    openAITimeoutMs: 12_345,
+    openAIMaxOutputTokens: 777,
+    clearOpenAIAPIKey: true
+  });
+  assert(missingKeySettings.configuration?.provider?.id === "openai", "Settings did not switch to OpenAI.");
+  assert(
+    missingKeySettings.configuration?.status === "NeedsConfiguration",
+    "OpenAI settings without an API key should need configuration."
+  );
+  assert(
+    missingKeySettings.configuration?.sendsRemoteContext === true,
+    "OpenAI settings should disclose that remote context may be sent."
+  );
+  assert(
+    missingKeySettings.editableSettings?.openAIBaseURL === "http://127.0.0.1:9/v1",
+    "OpenAI base URL was not normalized in editable settings."
+  );
+  assert(
+    missingKeySettings.editableSettings?.hasOpenAIAPIKey === false,
+    "OpenAI settings without a key should report hasOpenAIAPIKey false."
+  );
+
+  const persistedMissingKey = await readPersistedModelProviderSettings();
+  assert(persistedMissingKey.providerID === "openai", "Persisted settings did not retain providerID openai.");
+  assert(persistedMissingKey.modelName === "settings-smoke-openai", "Persisted settings did not retain modelName.");
+  assert(persistedMissingKey.openAIBaseURL === "http://127.0.0.1:9/v1", "Persisted settings did not normalize base URL.");
+  assert(!("openAIAPIKey" in persistedMissingKey), "Persisted settings must not include an OpenAI API key.");
+
+  const configuredSettings = await post("/settings/model-provider", {
+    openAIAPIKey: "sk-forge-settings-smoke"
+  });
+  assert(
+    configuredSettings.configuration?.status === "Ready",
+    "OpenAI settings with an in-memory API key should be ready."
+  );
+  assert(
+    configuredSettings.editableSettings?.hasOpenAIAPIKey === true,
+    "OpenAI settings with a key should report hasOpenAIAPIKey true."
+  );
+
+  const persistedConfiguredRaw = await readFile(settingsPath, "utf8");
+  assert(
+    !persistedConfiguredRaw.includes("sk-forge-settings-smoke"),
+    "Persisted settings leaked the smoke OpenAI API key."
+  );
+
+  const clearedSettings = await post("/settings/model-provider", {
+    clearOpenAIAPIKey: true
+  });
+  assert(
+    clearedSettings.configuration?.status === "NeedsConfiguration",
+    "Clearing the OpenAI key should return provider configuration to NeedsConfiguration."
+  );
+  assert(
+    clearedSettings.editableSettings?.hasOpenAIAPIKey === false,
+    "Clearing the OpenAI key should report hasOpenAIAPIKey false."
+  );
+
+  const restoredSettings = await post("/settings/model-provider", {
+    providerID: "local",
+    modelName: "settings-smoke-local",
+    openAIBaseURL: null,
+    openAITimeoutMs: null,
+    openAIMaxOutputTokens: null,
+    clearOpenAIAPIKey: true
+  });
+  assert(restoredSettings.configuration?.provider?.id === "local", "Settings did not restore local provider.");
+  assert(restoredSettings.configuration?.status === "Ready", "Restored local provider should be ready.");
+  assert(
+    restoredSettings.configuration?.sendsRemoteContext === false,
+    "Restored local provider should report no remote context."
+  );
+
+  const restoredHealth = await get("/health");
+  assert(restoredHealth.modelProvider?.id === "local", "Health did not reflect restored local provider.");
+  assert(
+    restoredHealth.modelProviderConfiguration?.status === "Ready",
+    "Health did not reflect restored ready provider configuration."
+  );
 }
 
 async function assertGitReadOnlyEndpoints() {
@@ -1075,6 +1206,17 @@ async function postExpectError(path, body) {
   return requestExpectError("POST", path, body);
 }
 
+async function getText(path) {
+  const response = await fetch(`${baseURL}${path}`);
+  const text = await response.text();
+
+  if (!response.ok) {
+    throw new Error(`GET ${path} failed with ${response.status}: ${text.slice(0, 1200)}`);
+  }
+
+  return text;
+}
+
 async function request(method, path, body) {
   const response = await fetch(`${baseURL}${path}`, {
     method,
@@ -1104,6 +1246,11 @@ async function requestExpectError(method, path, body) {
   }
 
   return { status: response.status, text };
+}
+
+async function readPersistedModelProviderSettings() {
+  const raw = await readFile(settingsPath, "utf8");
+  return JSON.parse(raw);
 }
 
 function assertProposal(task, expectedPath, expectedOperation) {

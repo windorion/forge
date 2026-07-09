@@ -287,6 +287,27 @@ run button. The runtime provides the task-specific permission state through
 active provider status, editable provider settings, loaded workspace
 validation config path, and any config issues.
 
+## V0 Demo Script
+
+Use this path for a local V0 walkthrough:
+
+1. Start the macOS app with `./script/build_and_run.sh`.
+2. Use the toolbar or Settings window to start/check the local runtime.
+3. Confirm the sidebar runtime badge is running and Settings shows provider,
+   database, task count, event stream, and runtime process diagnostics.
+4. In Settings, keep the local provider or switch to OpenAI only with an
+   intentional API key; verify the remote-context summary before saving.
+5. Create a task from the sidebar composer and mention a repo-local docs file.
+6. Send the task message, generate a plan revision, and approve the plan.
+7. Generate an edit proposal, inspect the Review panel, and apply only after
+   the proposal validation is ready.
+8. Watch post-apply validation pass and review any repair brief if validation
+   fails.
+9. In Working Tree, inspect git status and a changed-file diff.
+10. Prepare Branch, Publish, Commit, Push, and PR Handoff reviews as relevant;
+    approve only the local/remote git actions you intend to run.
+11. Run `cd runtime && npm run smoke:core` before treating the demo as clean.
+
 ## Core Runtime Smoke
 
 ```bash
@@ -310,6 +331,10 @@ It covers:
 - built-in post-apply validation
 - SQLite restart recovery
 - both `AppendText` and exact `ReplaceText`
+- runtime home page, health diagnostics, persistence metadata, and model
+  provider settings GET/POST paths
+- provider settings key handling with a fake OpenAI key, including verification
+  that the API key is never persisted to the settings file
 - read-only git status and bounded git diff endpoints
 - mock OpenAI plan-context loop before a plan revision
 - read-only branch, branch-publish, commit, push, and PR handoff preview

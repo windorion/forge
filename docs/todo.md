@@ -12,8 +12,6 @@ what to do next without rereading the whole project history.
 
 ## P0: Finish V0
 
-- Broaden automated regression coverage from the runtime core to app-facing
-  runtime state, diagnostics, and provider settings paths.
 - Harden the macOS git/diff review panel for larger diffs, binary files, and
   packaged app workflows.
 - Harden local commit review for failed git identity/signing/hooks, mixed
@@ -29,9 +27,8 @@ what to do next without rereading the whole project history.
   cases, and isolated success-path tests.
 - Harden app-managed runtime start/stop for packaged app locations, stale
   process handling, and user-facing launch failures.
-- Run a provider settings smoke test with an intentionally supplied OpenAI API
-  key, without committing secrets.
-- Add a short V0 demo script in `docs/development.md`.
+- Optionally run a live-provider smoke with a user-supplied OpenAI API key,
+  without committing secrets.
 
 ## P1: Real Agent Behavior
 
@@ -95,6 +92,12 @@ what to do next without rereading the whole project history.
 
 ## Done Recently
 
+- Broadened `npm run smoke:core` from runtime task flows into app-facing
+  runtime contracts: status page links, health diagnostics, persistence
+  metadata, model-provider settings GET/POST, OpenAI missing-key/ready/clear
+  states, and verification that API keys are never persisted to the settings
+  file.
+- Added a short local V0 demo script to `docs/development.md`.
 - Added a bounded OpenAI model-guided context loop before plan revisions: the
   provider can ask for up to three read/search rounds, while the runtime
   validates and executes only logged read-only repo tools with stop conditions.

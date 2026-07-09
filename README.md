@@ -83,7 +83,9 @@ Implemented today:
 - Core runtime smoke regression for the main task lifecycle, restricted
   append/replace/create edits, post-apply validation, restart recovery, and a
   mock OpenAI model-guided context/repair loop plus validation failure
-  diagnosis.
+  diagnosis. The smoke also covers runtime health diagnostics and provider
+  settings GET/POST without persisting API keys.
+- Short local V0 demo script in `docs/development.md`.
 - App-visible runtime state and diagnostics for endpoint, version, provider
   configuration, SSE stream, and copy/open diagnostics actions.
 
@@ -102,7 +104,7 @@ Product-readiness estimate:
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| V0 local demo | 96-98% | The local task-to-review demo is mostly implemented, has core runtime regression coverage, repair review UI, git status/diff visibility, branch review, branch publish/upstream setup, commit preparation preview, explicit local commit and push actions, PR handoff preview, and app-visible runtime lifecycle controls. |
+| V0 local demo | 97-99% | The local task-to-review demo is mostly implemented, has core runtime/app-facing regression coverage, repair review UI, git status/diff visibility, branch review, branch publish/upstream setup, commit preparation preview, explicit local commit and push actions, PR handoff preview, provider settings coverage, and app-visible runtime lifecycle controls. |
 | Useful developer alpha | 56-66% | Needs real model-backed work, richer patching, actual PR publication, and recovery. |
 | Commercial beta | 25-30% | Needs packaging, onboarding, runtime management, trust polish, and integrations. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, git, memory, MCP/GitHub, and product polish. |
