@@ -277,6 +277,7 @@ struct GitCommitPreview: Codable, Hashable {
     var generatedAt: String
     var readiness: String
     var summary: String
+    var expectedHead: String?
     var suggestedTitle: String
     var suggestedBody: [String]
     var includedFiles: [GitFileChange]
@@ -285,6 +286,77 @@ struct GitCommitPreview: Codable, Hashable {
     var validationCommands: [String]
     var riskNotes: [String]
     var blockers: [String]
+    var operationBoundary: String
+}
+
+struct GitCreateCommitRequest: Codable, Hashable {
+    var taskID: String?
+    var expectedHead: String
+    var title: String
+    var body: [String]
+    var paths: [String]
+    var confirmation: String
+}
+
+struct GitCreateCommitResult: Codable, Hashable {
+    var generatedAt: String
+    var commitHash: String
+    var shortHash: String
+    var branch: String?
+    var summary: String
+    var messageTitle: String
+    var messageBody: [String]
+    var committedFiles: [GitFileChange]
+    var relatedTask: GitCommitRelatedTask?
+    var operationBoundary: String
+}
+
+struct GitCommitToPush: Identifiable, Codable, Hashable {
+    var id: String { hash }
+    var hash: String
+    var shortHash: String
+    var title: String
+    var authorDate: String?
+}
+
+struct GitPushPreview: Codable, Hashable {
+    var generatedAt: String
+    var readiness: String
+    var summary: String
+    var expectedHead: String?
+    var branch: String?
+    var upstream: String?
+    var remote: String?
+    var remoteBranch: String?
+    var ahead: Int?
+    var behind: Int?
+    var isDirty: Bool
+    var commitsToPush: [GitCommitToPush]
+    var changedFiles: [GitFileChange]
+    var relatedTask: GitCommitRelatedTask?
+    var riskNotes: [String]
+    var blockers: [String]
+    var operationBoundary: String
+}
+
+struct GitPushRequest: Codable, Hashable {
+    var taskID: String?
+    var expectedHead: String
+    var expectedBranch: String
+    var expectedUpstream: String
+    var confirmation: String
+}
+
+struct GitPushResult: Codable, Hashable {
+    var generatedAt: String
+    var branch: String
+    var upstream: String
+    var remote: String
+    var remoteBranch: String
+    var pushedCommits: [GitCommitToPush]
+    var summary: String
+    var outputSummary: String
+    var relatedTask: GitCommitRelatedTask?
     var operationBoundary: String
 }
 

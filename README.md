@@ -34,7 +34,7 @@ auditable boundaries.
 
 ## Current Status
 
-Last updated: 2026-07-08
+Last updated: 2026-07-09
 
 Implemented today:
 
@@ -61,6 +61,10 @@ Implemented today:
 - Read-only commit preparation artifacts with suggested commit message,
   included files, validation suggestions, blockers, and risk notes surfaced in
   the macOS Review UI.
+- Explicit local git commit action from the commit review card, guarded by a
+  confirmation dialog, expected-HEAD check, path validation, and no push.
+- Push preparation preview and explicit current-branch push action guarded by
+  expected-HEAD/branch/upstream checks, blockers, and a no-force-push boundary.
 - SQLite task persistence.
 - Validation presets and runtime-derived command permission state.
 - Local deterministic model provider and optional OpenAI Responses provider.
@@ -78,7 +82,7 @@ Not finished yet:
 
 - Real autonomous model-backed tool loop.
 - General patch engine and richer diff review.
-- Actual staging, commit, push, and PR workflow.
+- PR workflow.
 - Durable repository index with symbols and semantic search.
 - Hardened app-managed runtime lifecycle for packaged distribution.
 - Packaged, signed, notarized, auto-updating Mac distribution.
@@ -89,8 +93,8 @@ Product-readiness estimate:
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| V0 local demo | 91-94% | The local task-to-review demo is mostly implemented, has core runtime regression coverage, repair review UI, git status/diff visibility, commit preparation preview, and app-visible runtime lifecycle controls. |
-| Useful developer alpha | 46-56% | Needs real model-backed work, richer patching, actual commit/PR actions, and recovery. |
+| V0 local demo | 93-96% | The local task-to-review demo is mostly implemented, has core runtime regression coverage, repair review UI, git status/diff visibility, commit preparation preview, explicit local commit and push actions, and app-visible runtime lifecycle controls. |
+| Useful developer alpha | 50-60% | Needs real model-backed work, richer patching, PR handoff, and recovery. |
 | Commercial beta | 25-30% | Needs packaging, onboarding, runtime management, trust polish, and integrations. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, git, memory, MCP/GitHub, and product polish. |
 
@@ -105,7 +109,7 @@ Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
 - harden git/diff and edit proposal review for larger real changes
 - harden app-managed runtime start/stop
 - make real provider-backed planning and proposal generation usable
-- add approved staging/commit/PR action surfaces
+- add approved PR handoff surfaces
 - build a durable repository index
 
 ## Core Principles

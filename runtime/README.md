@@ -10,6 +10,9 @@ This first slice is intentionally small:
 - `GET /git/status`
 - `GET /git/diff?path=<repo-relative-path>`
 - `GET /git/commit-preview`
+- `POST /git/commit`
+- `GET /git/push-preview`
+- `POST /git/push`
 - `GET /validation-presets`
 - `GET /settings/model-provider`
 - `POST /settings/model-provider`
@@ -104,6 +107,19 @@ context, and latest task validation state into a review artifact with a
 suggested commit message, included files, validation commands to consider,
 risk notes, blockers, and an explicit non-mutating operation boundary. It does
 not stage, commit, push, or mutate the repository.
+`POST /git/commit` is the first high-risk git action. It requires explicit
+confirmation, the expected HEAD from the reviewed preview, a commit message,
+and selected repo-relative paths. The runtime rechecks current git status,
+rejects unmerged files and staged files outside the reviewed selection,
+preflights git author identity, stages selected paths, creates one local
+commit, and records a linked task event when possible. It does not push.
+`GET /git/push-preview` summarizes the current branch, upstream, ahead/behind
+state, commits to push, uncommitted local changes, blockers, and risk notes.
+`POST /git/push` is a high-risk action that requires explicit confirmation
+plus the expected HEAD, branch, and upstream from the preview. The runtime
+blocks detached/no-upstream/behind/no-ahead/unmerged states and runs a
+non-force push to the configured upstream branch. It does not force push,
+merge, reset, delete branches, or create a PR.
 
 Validation presets:
 
@@ -221,7 +237,8 @@ Markdown fixtures under `docs/`, and verifies create task, file-reference
 messages, plan revision, plan approval, edit proposal generation, validation,
 apply, post-apply validation, restart recovery, and both append/replace
 restricted edit operations. It also verifies read-only git status, bounded git
-diff, and commit-preview endpoints against temporary fixtures. It also starts
+diff, commit-preview, stale-head commit rejection, push-preview, and
+stale-head push rejection endpoints against temporary fixtures. It also starts
 a mock OpenAI Responses server to verify the model-guided context loop path
 before an OpenAI-backed plan
 revision, a richer edit proposal with append/create apply, and a blocked
@@ -238,6 +255,13 @@ curl http://127.0.0.1:17373/health
 curl http://127.0.0.1:17373/git/status
 curl "http://127.0.0.1:17373/git/diff?path=README.md"
 curl "http://127.0.0.1:17373/git/commit-preview"
+curl -X POST http://127.0.0.1:17373/git/commit \
+  -H 'Content-Type: application/json' \
+  -d '{"expectedHead":"<head-from-preview>","title":"Update Forge workspace","body":["Reviewed in Forge."],"paths":["README.md"],"confirmation":"CreateLocalCommit"}'
+curl "http://127.0.0.1:17373/git/push-preview"
+curl -X POST http://127.0.0.1:17373/git/push \
+  -H 'Content-Type: application/json' \
+  -d '{"expectedHead":"<head-from-preview>","expectedBranch":"main","expectedUpstream":"origin/main","confirmation":"PushCurrentBranch"}'
 curl http://127.0.0.1:17373/settings/model-provider
 curl -X POST http://127.0.0.1:17373/settings/model-provider \
   -H 'Content-Type: application/json' \

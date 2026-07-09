@@ -483,6 +483,7 @@ async function assertGitReadOnlyEndpoints() {
     commitPreview.includedFiles.some((change) => change.path === appendSmokePath),
     `Git commit preview did not include the untracked smoke fixture ${appendSmokePath}.`
   );
+  assert(commitPreview.expectedHead, "Git commit preview did not include the expected head.");
   assert(commitPreview.suggestedTitle, "Git commit preview did not include a suggested title.");
   assert(
     commitPreview.validationCommands.includes("git diff --check"),
@@ -495,6 +496,39 @@ async function assertGitReadOnlyEndpoints() {
   assert(
     commitPreview.readiness === "Ready" || commitPreview.readiness === "NeedsReview",
     `Git commit preview should not be blocked for the smoke fixture: ${commitPreview.readiness}.`
+  );
+
+  const blockedCommit = await postExpectError("/git/commit", {
+    expectedHead: "not-current-head",
+    title: commitPreview.suggestedTitle,
+    body: commitPreview.suggestedBody,
+    paths: [appendSmokePath],
+    confirmation: "CreateLocalCommit"
+  });
+  assert(blockedCommit.status === 409, `Expected stale-head commit attempt to return 409, got ${blockedCommit.status}.`);
+  assert(
+    blockedCommit.text.includes("Git HEAD changed since commit review"),
+    "Stale-head commit attempt did not fail before staging."
+  );
+
+  const pushPreview = await get("/git/push-preview");
+  assert(pushPreview.expectedHead, "Git push preview did not include the expected head.");
+  assert(Array.isArray(pushPreview.commitsToPush), "Git push preview did not include commitsToPush.");
+  assert(
+    pushPreview.operationBoundary.includes("has not pushed"),
+    "Git push preview did not state the non-mutating operation boundary."
+  );
+
+  const blockedPush = await postExpectError("/git/push", {
+    expectedHead: "not-current-head",
+    expectedBranch: pushPreview.branch ?? "main",
+    expectedUpstream: pushPreview.upstream ?? "origin/main",
+    confirmation: "PushCurrentBranch"
+  });
+  assert(blockedPush.status === 409, `Expected stale-head push attempt to return 409, got ${blockedPush.status}.`);
+  assert(
+    blockedPush.text.includes("Git HEAD changed since push review"),
+    "Stale-head push attempt did not fail before network push."
   );
 }
 
@@ -977,6 +1011,10 @@ async function post(path, body) {
   return request("POST", path, body);
 }
 
+async function postExpectError(path, body) {
+  return requestExpectError("POST", path, body);
+}
+
 async function request(method, path, body) {
   const response = await fetch(`${baseURL}${path}`, {
     method,
@@ -991,6 +1029,21 @@ async function request(method, path, body) {
   }
 
   return parsed;
+}
+
+async function requestExpectError(method, path, body) {
+  const response = await fetch(`${baseURL}${path}`, {
+    method,
+    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body)
+  });
+  const text = await response.text();
+
+  if (response.ok) {
+    throw new Error(`${method} ${path} unexpectedly succeeded: ${text.slice(0, 1200)}`);
+  }
+
+  return { status: response.status, text };
 }
 
 function assertProposal(task, expectedPath, expectedOperation) {

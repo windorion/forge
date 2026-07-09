@@ -215,6 +215,21 @@ validation commands to consider, risk notes, and blockers. This endpoint must
 remain read-only; actual stage, commit, push, or PR publication are separate
 high-risk actions that require explicit approval.
 
+The first high-risk git action is `POST /git/commit`. It can create one local
+commit only after the app sends explicit confirmation from the reviewed commit
+card. The runtime rechecks expected HEAD, validates selected paths against the
+current status, rejects unmerged files and staged files outside the reviewed
+selection, preflights git author identity, stages selected paths, creates the
+commit, and records a linked task event when possible. It does not push.
+
+The next high-risk git action is `POST /git/push`. It is paired with
+`GET /git/push-preview`, which shows branch/upstream state, ahead/behind
+counts, commits to push, dirty working-tree state, blockers, and risk notes.
+The push action requires explicit confirmation plus expected HEAD, branch, and
+upstream from the preview. The runtime blocks detached/no-upstream/behind/
+no-ahead/unmerged states and uses a non-force push to the configured upstream.
+It does not create a PR.
+
 ### Validation Runner
 
 Runs controlled post-apply validation and records command-level results. The

@@ -140,7 +140,18 @@ the file or reveal it in Finder. The same section can prepare a read-only
 Commit Review through `GET /git/commit-preview?taskID=<task-id>`, showing a
 suggested commit message, included files, validation suggestions, blockers,
 risk notes, and the explicit boundary that Forge has not staged, committed, or
-pushed anything.
+pushed anything. From that reviewed card, the user can explicitly create one
+local commit through `POST /git/commit`. The runtime rechecks the expected
+HEAD, validates the selected paths, rejects unmerged files and staged files
+outside the reviewed selection, preflights git identity, stages the selected
+paths, creates the local commit, records a task event when linked, and still
+does not push. A separate Push Review through `GET /git/push-preview` shows
+branch, upstream, ahead/behind counts, commits to push, uncommitted local
+changes, blockers, and risk notes. From that reviewed card, the user can
+explicitly push the current branch through `POST /git/push`; the runtime
+rechecks expected HEAD, branch, and upstream, blocks detached/no-upstream/
+behind/no-ahead/unmerged states, and performs a non-force push to the
+configured upstream. It does not create a PR.
 
 Use the sidebar composer to create a custom task. The app connects to
 `GET /events` and refreshes tasks as runtime events arrive.

@@ -3,7 +3,7 @@
 Document role: maintain the active backlog, priority order, and next concrete
 engineering tasks for Forge.
 
-Last updated: 2026-07-08
+Last updated: 2026-07-09
 
 ## Rule
 
@@ -16,8 +16,10 @@ what to do next without rereading the whole project history.
   runtime state, diagnostics, and provider settings paths.
 - Harden the macOS git/diff review panel for larger diffs, binary files, and
   packaged app workflows.
-- Harden commit preparation review for mixed staged/unstaged states, large
-  change sets, and validation readiness.
+- Harden local commit review for failed git identity/signing/hooks, mixed
+  staged/unstaged states, large change sets, and validation readiness.
+- Harden push review for remote auth failures, non-fast-forward rejections,
+  branch protection, and disconnected networks.
 - Harden app-managed runtime start/stop for packaged app locations, stale
   process handling, and user-facing launch failures.
 - Run a provider settings smoke test with an intentionally supplied OpenAI API
@@ -42,7 +44,7 @@ what to do next without rereading the whole project history.
 
 - Improve the first-pass native side-by-side diff view with file filtering and
   better large-diff navigation.
-- Add explicit approved staging and commit actions after commit preparation.
+- Add explicit PR handoff actions after local commits and push.
 - Add branch awareness.
 - Add PR handoff planning, likely through GitHub integration later.
 
@@ -114,6 +116,15 @@ what to do next without rereading the whole project history.
   included files, validation suggestions, blockers, risk notes, and a macOS
   Review commit card. The preview does not stage, commit, push, or mutate the
   repository.
+- Added explicit local commit creation from the Commit Review card. The runtime
+  rechecks HEAD, validates selected paths, rejects unmerged files and staged
+  files outside the reviewed selection, preflights git identity, stages the
+  selected paths, creates one local commit, records a task event when linked,
+  and does not push.
+- Added push preparation preview and explicit current-branch push action from
+  the Review panel. The runtime rechecks expected HEAD, branch, and upstream,
+  blocks detached/no-upstream/behind/no-ahead/unmerged states, pushes without
+  force, records a task event when linked, and does not create a PR.
 - Extended `npm run smoke:core` with a mock OpenAI Responses server that
   verifies the model-guided context loop, append/create apply,
   blocked-to-repaired proposal flow, failed validation repair briefs,

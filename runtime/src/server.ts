@@ -26,9 +26,15 @@ import type {
   EditProposalValidation,
   FileChangeValidation,
   ForgeTask,
+  GitCreateCommitRequest,
+  GitCreateCommitResult,
   GitCommitPreview,
+  GitCommitToPush,
   GitFileChange,
   GitFileDiff,
+  GitPushPreview,
+  GitPushRequest,
+  GitPushResult,
   GitStatusSnapshot,
   ModelProviderRuntimeSettings,
   ModelProviderSettingsUpdateRequest,
@@ -380,6 +386,23 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "POST" && url.pathname === "/git/commit") {
+      const input = await readJson<GitCreateCommitRequest>(request);
+      writeJson(response, 201, await createGitCommit(input));
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/git/push-preview") {
+      writeJson(response, 200, await getGitPushPreview(url.searchParams.get("taskID")));
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/git/push") {
+      const input = await readJson<GitPushRequest>(request);
+      writeJson(response, 200, await pushGitBranch(input));
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === "/validation-presets") {
       const registry = await loadValidationPresetRegistry();
       writeJson(response, 200, {
@@ -655,6 +678,7 @@ async function getGitCommitPreview(rawTaskID: string | null): Promise<GitCommitP
       generatedAt,
       readiness: "Blocked",
       summary: "Commit preparation is blocked because git status is unavailable.",
+      expectedHead: undefined,
       suggestedTitle: "Update workspace",
       suggestedBody: [],
       includedFiles: [],
@@ -683,6 +707,7 @@ async function getGitCommitPreview(rawTaskID: string | null): Promise<GitCommitP
     generatedAt,
     readiness,
     summary: commitPreviewSummary(status, includedFiles, readiness),
+    expectedHead: status.head,
     suggestedTitle,
     suggestedBody: buildSuggestedCommitBody(status, task, includedFiles, validationSummary),
     includedFiles,
@@ -699,6 +724,530 @@ async function getGitCommitPreview(rawTaskID: string | null): Promise<GitCommitP
     blockers,
     operationBoundary
   };
+}
+
+async function createGitCommit(input: GitCreateCommitRequest): Promise<GitCreateCommitResult> {
+  const request = normalizeGitCreateCommitRequest(input);
+  const status = await getGitStatusSnapshot();
+  const generatedAt = new Date().toISOString();
+
+  if (!status.isRepository || !status.root) {
+    throw new HttpError(409, status.error ?? "Workspace is not inside a git repository.");
+  }
+
+  if (!status.isDirty || status.changedFiles.length === 0) {
+    throw new HttpError(409, "Working tree is clean; there are no file changes to commit.");
+  }
+
+  if (!status.head || status.head !== request.expectedHead) {
+    throw new HttpError(409, `Git HEAD changed since commit review. Expected ${request.expectedHead}, current ${status.head ?? "unknown"}.`);
+  }
+
+  const changedByPath = new Map(status.changedFiles.map((change) => [change.path, change]));
+  const selectedChanges = request.paths.map((filePath) => {
+    const change = changedByPath.get(filePath);
+    if (!change) {
+      throw new HttpError(409, `Selected commit path is no longer changed: ${filePath}`);
+    }
+    return change;
+  });
+
+  const unmerged = selectedChanges.filter((change) => change.status === "Unmerged");
+  if (unmerged.length > 0) {
+    throw new HttpError(409, `Resolve unmerged file(s) before committing: ${unmerged.map((change) => change.path).join(", ")}`);
+  }
+
+  const stagedOutsideSelection = status.changedFiles.filter((change) => change.staged && !request.paths.includes(change.path));
+  if (stagedOutsideSelection.length > 0) {
+    throw new HttpError(
+      409,
+      `Existing staged file(s) are outside this commit review: ${stagedOutsideSelection.map((change) => change.path).join(", ")}`
+    );
+  }
+
+  const identityResult = await runGitCommand(["var", "GIT_AUTHOR_IDENT"], status.root, 8_000);
+  if (identityResult.exitCode !== 0) {
+    throw new HttpError(409, identityResult.output.trim() || "Git author identity is not configured.");
+  }
+
+  const addResult = await runGitCommand(["add", "--", ...request.paths], status.root, 64_000);
+  if (addResult.exitCode !== 0) {
+    throw new HttpError(409, addResult.output.trim() || "git add failed.");
+  }
+
+  const stagedStatus = await getGitStatusSnapshot();
+  if (!stagedStatus.isRepository || !stagedStatus.root) {
+    throw new HttpError(409, stagedStatus.error ?? "Git status could not be read after staging.");
+  }
+
+  const stagedSelectedChanges = stagedStatus.changedFiles.filter((change) => request.paths.includes(change.path) && change.staged);
+  if (stagedSelectedChanges.length === 0) {
+    throw new HttpError(409, "No selected changes were staged for commit.");
+  }
+
+  const commitArgs = ["commit", "-m", request.title];
+  for (const line of request.body) {
+    commitArgs.push("-m", line);
+  }
+
+  const commitResult = await runGitCommand(commitArgs, status.root, 96_000);
+  if (commitResult.exitCode !== 0) {
+    throw new HttpError(409, commitResult.output.trim() || "git commit failed.");
+  }
+
+  const hashResult = await runGitCommand(["rev-parse", "HEAD"], status.root);
+  if (hashResult.exitCode !== 0) {
+    throw new HttpError(409, hashResult.output.trim() || "Commit was created, but HEAD could not be read.");
+  }
+
+  const commitHash = hashResult.output.trim();
+  const shortHash = commitHash.slice(0, 7);
+  const relatedTask = recordGitCommitOnTask(request.taskID, shortHash, request.title, commitHash);
+
+  return {
+    generatedAt,
+    commitHash,
+    shortHash,
+    branch: status.branch,
+    summary: `Created local commit ${shortHash} on ${status.branch ?? "current checkout"}.`,
+    messageTitle: request.title,
+    messageBody: request.body,
+    committedFiles: selectedChanges,
+    relatedTask,
+    operationBoundary: "Local git commit created. Forge did not push, merge, delete branches, reset, or publish anything."
+  };
+}
+
+function normalizeGitCreateCommitRequest(input: GitCreateCommitRequest): Required<GitCreateCommitRequest> {
+  if (!isRecord(input)) {
+    throw new HttpError(400, "Git commit request must be an object.");
+  }
+
+  if (input.confirmation !== "CreateLocalCommit") {
+    throw new HttpError(400, "Git commit requires explicit confirmation: CreateLocalCommit.");
+  }
+
+  const expectedHead = stringFieldFromUnknown(input.expectedHead, "expectedHead", 4, 64);
+  const title = normalizeCommitMessageTitle(input.title);
+  const body = normalizeCommitMessageBody(input.body);
+  const paths = normalizeGitCommitPaths(input.paths);
+  const taskID = typeof input.taskID === "string" ? input.taskID.trim() : "";
+
+  return {
+    taskID,
+    expectedHead,
+    title,
+    body,
+    paths,
+    confirmation: "CreateLocalCommit"
+  };
+}
+
+function normalizeCommitMessageTitle(title: unknown): string {
+  const normalized = stringFieldFromUnknown(title, "title", 3, 120)
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (normalized.includes("\n") || normalized.includes("\r")) {
+    throw new HttpError(400, "Commit title must be a single line.");
+  }
+
+  return normalized;
+}
+
+function normalizeCommitMessageBody(body: unknown): string[] {
+  if (body === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(body)) {
+    throw new HttpError(400, "Commit body must be an array of strings.");
+  }
+
+  return body
+    .slice(0, 20)
+    .map((line, index) => stringFieldFromUnknown(line, `body[${index}]`, 0, 220).trim())
+    .filter(Boolean);
+}
+
+function normalizeGitCommitPaths(paths: unknown): string[] {
+  if (!Array.isArray(paths)) {
+    throw new HttpError(400, "Commit paths must be an array.");
+  }
+
+  const normalized = [...new Set(paths.map((filePath, index) =>
+    normalizeGitDiffPath(stringFieldFromUnknown(filePath, `paths[${index}]`, 1, 500))
+  ))];
+
+  if (normalized.length === 0) {
+    throw new HttpError(400, "At least one commit path is required.");
+  }
+
+  if (normalized.length > 100) {
+    throw new HttpError(413, "Too many commit paths.");
+  }
+
+  return normalized;
+}
+
+function recordGitCommitOnTask(
+  taskID: string,
+  shortHash: string,
+  title: string,
+  commitHash: string
+): GitCreateCommitResult["relatedTask"] {
+  if (!taskID) {
+    return undefined;
+  }
+
+  const task = tasks.get(taskID);
+  if (!task) {
+    return undefined;
+  }
+
+  const updatedTask = {
+    ...task,
+    updatedAt: new Date().toISOString(),
+    approvals: [
+      ...task.approvals,
+      {
+        id: randomUUID(),
+        action: "Create Git Commit" as ApprovalRecord["action"],
+        decision: "Approved" as const,
+        summary: `Created local git commit ${shortHash}: ${title}`,
+        decidedAt: new Date().toISOString(),
+        targetID: commitHash
+      }
+    ],
+    events: [
+      ...task.events,
+      {
+        type: "git.commit.created",
+        message: `Created local git commit ${shortHash}: ${title}`,
+        createdAt: new Date().toISOString()
+      }
+    ]
+  };
+
+  tasks.set(task.id, updatedTask);
+  taskStore.saveTask(updatedTask);
+  emit("git.commit.created", { taskID: task.id, commitHash, shortHash, task: updatedTask });
+
+  return {
+    id: updatedTask.id,
+    title: updatedTask.title,
+    status: updatedTask.status,
+    currentPhase: updatedTask.currentPhase,
+    summary: updatedTask.reviewSummary ?? updatedTask.objective
+  };
+}
+
+async function getGitPushPreview(rawTaskID: string | null): Promise<GitPushPreview> {
+  const status = await getGitStatusSnapshot();
+  const generatedAt = new Date().toISOString();
+  const task = rawTaskID ? tasks.get(rawTaskID) : undefined;
+  const taskMissing = Boolean(rawTaskID && !task);
+  const operationBoundary = "Review artifact only. Forge has not pushed, force-pushed, merged, or published anything.";
+
+  if (!status.isRepository || !status.root) {
+    return {
+      generatedAt,
+      readiness: "Blocked",
+      summary: "Push preparation is blocked because git status is unavailable.",
+      expectedHead: status.head,
+      branch: status.branch,
+      upstream: status.upstream,
+      ahead: status.ahead,
+      behind: status.behind,
+      isDirty: status.isDirty,
+      commitsToPush: [],
+      changedFiles: [],
+      relatedTask: undefined,
+      riskNotes: taskMissing ? [`Task ${rawTaskID} was not found.`] : [],
+      blockers: [status.error ?? "Workspace is not inside a git repository."],
+      operationBoundary
+    };
+  }
+
+  const upstreamParts = parseGitUpstream(status.upstream);
+  const commitsToPush = upstreamParts && (status.ahead ?? 0) > 0
+    ? await collectGitCommitsToPush(status.root, status.upstream)
+    : [];
+  const blockers = gitPushBlockers(status, upstreamParts);
+  const riskNotes = gitPushRiskNotes(status, task, taskMissing, commitsToPush);
+  const readiness: GitPushPreview["readiness"] = blockers.length > 0
+    ? "Blocked"
+    : riskNotes.length > 0
+      ? "NeedsReview"
+      : "Ready";
+
+  return {
+    generatedAt,
+    readiness,
+    summary: gitPushPreviewSummary(status, commitsToPush, readiness),
+    expectedHead: status.head,
+    branch: status.branch,
+    upstream: status.upstream,
+    remote: upstreamParts?.remote,
+    remoteBranch: upstreamParts?.remoteBranch,
+    ahead: status.ahead,
+    behind: status.behind,
+    isDirty: status.isDirty,
+    commitsToPush,
+    changedFiles: status.changedFiles,
+    relatedTask: task ? {
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      currentPhase: task.currentPhase,
+      summary: task.reviewSummary ?? task.objective
+    } : undefined,
+    riskNotes,
+    blockers,
+    operationBoundary
+  };
+}
+
+async function pushGitBranch(input: GitPushRequest): Promise<GitPushResult> {
+  const request = normalizeGitPushRequest(input);
+  const preview = await getGitPushPreview(request.taskID || null);
+  const generatedAt = new Date().toISOString();
+
+  if (!preview.expectedHead || preview.expectedHead !== request.expectedHead) {
+    throw new HttpError(409, `Git HEAD changed since push review. Expected ${request.expectedHead}, current ${preview.expectedHead ?? "unknown"}.`);
+  }
+
+  if (!preview.branch || preview.branch !== request.expectedBranch) {
+    throw new HttpError(409, `Git branch changed since push review. Expected ${request.expectedBranch}, current ${preview.branch ?? "unknown"}.`);
+  }
+
+  if (!preview.upstream || preview.upstream !== request.expectedUpstream) {
+    throw new HttpError(409, `Git upstream changed since push review. Expected ${request.expectedUpstream}, current ${preview.upstream ?? "none"}.`);
+  }
+
+  if (preview.blockers.length > 0) {
+    throw new HttpError(409, `Push is blocked: ${preview.blockers.join(" ")}`);
+  }
+
+  if (!preview.remote || !preview.remoteBranch) {
+    throw new HttpError(409, "Push requires a configured upstream remote and branch.");
+  }
+
+  const status = await getGitStatusSnapshot();
+  if (!status.isRepository || !status.root) {
+    throw new HttpError(409, status.error ?? "Workspace is not inside a git repository.");
+  }
+
+  const pushResult = await runGitCommand(
+    ["push", preview.remote, `HEAD:${preview.remoteBranch}`],
+    status.root,
+    96_000
+  );
+  if (pushResult.exitCode !== 0) {
+    throw new HttpError(409, pushResult.output.trim() || "git push failed.");
+  }
+
+  const relatedTask = recordGitPushOnTask(request.taskID, preview.branch, preview.upstream, preview.commitsToPush);
+
+  return {
+    generatedAt,
+    branch: preview.branch,
+    upstream: preview.upstream,
+    remote: preview.remote,
+    remoteBranch: preview.remoteBranch,
+    pushedCommits: preview.commitsToPush,
+    summary: `Pushed ${preview.commitsToPush.length} commit(s) from ${preview.branch} to ${preview.upstream}.`,
+    outputSummary: summarizeGitCommandOutput(pushResult.output),
+    relatedTask,
+    operationBoundary: "Pushed current branch to its upstream. Forge did not force push, merge, reset, delete branches, or publish a PR."
+  };
+}
+
+function normalizeGitPushRequest(input: GitPushRequest): Required<GitPushRequest> {
+  if (!isRecord(input)) {
+    throw new HttpError(400, "Git push request must be an object.");
+  }
+
+  if (input.confirmation !== "PushCurrentBranch") {
+    throw new HttpError(400, "Git push requires explicit confirmation: PushCurrentBranch.");
+  }
+
+  return {
+    taskID: typeof input.taskID === "string" ? input.taskID.trim() : "",
+    expectedHead: normalizeSingleLineField(input.expectedHead, "expectedHead", 4, 64),
+    expectedBranch: normalizeSingleLineField(input.expectedBranch, "expectedBranch", 1, 200),
+    expectedUpstream: normalizeSingleLineField(input.expectedUpstream, "expectedUpstream", 3, 300),
+    confirmation: "PushCurrentBranch"
+  };
+}
+
+function parseGitUpstream(upstream: string | undefined): { remote: string; remoteBranch: string } | undefined {
+  const separatorIndex = upstream?.indexOf("/") ?? -1;
+  if (!upstream || separatorIndex <= 0 || separatorIndex === upstream.length - 1) {
+    return undefined;
+  }
+
+  return {
+    remote: upstream.slice(0, separatorIndex),
+    remoteBranch: upstream.slice(separatorIndex + 1)
+  };
+}
+
+async function collectGitCommitsToPush(gitRoot: string, upstream: string | undefined): Promise<GitCommitToPush[]> {
+  if (!upstream) {
+    return [];
+  }
+
+  const result = await runGitCommand([
+    "log",
+    "--max-count=20",
+    "--format=%H%x1f%h%x1f%ad%x1f%s",
+    "--date=iso-strict",
+    `${upstream}..HEAD`
+  ], gitRoot, 64_000);
+  if (result.exitCode !== 0) {
+    return [];
+  }
+
+  return result.output
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => {
+      const [hash, shortHash, authorDate, ...titleParts] = line.split("\x1f");
+      return {
+        hash,
+        shortHash,
+        authorDate,
+        title: titleParts.join("\x1f") || "(no commit title)"
+      };
+    })
+    .filter((commit) => commit.hash && commit.shortHash);
+}
+
+function gitPushBlockers(
+  status: GitStatusSnapshot,
+  upstreamParts: { remote: string; remoteBranch: string } | undefined
+): string[] {
+  const blockers: string[] = [];
+
+  if (!status.branch || status.branch.startsWith("HEAD")) {
+    blockers.push("Current checkout is detached; push requires a named branch.");
+  }
+
+  if (!upstreamParts) {
+    blockers.push("Current branch does not have an upstream remote branch.");
+  }
+
+  if ((status.behind ?? 0) > 0) {
+    blockers.push(`Current branch is behind upstream by ${status.behind} commit(s).`);
+  }
+
+  if ((status.ahead ?? 0) <= 0) {
+    blockers.push("There are no local commits ahead of upstream to push.");
+  }
+
+  const unmerged = status.changedFiles.filter((change) => change.status === "Unmerged");
+  if (unmerged.length > 0) {
+    blockers.push(`Resolve ${unmerged.length} unmerged file(s) before pushing.`);
+  }
+
+  return blockers;
+}
+
+function gitPushRiskNotes(
+  status: GitStatusSnapshot,
+  task: ForgeTask | undefined,
+  taskMissing: boolean,
+  commitsToPush: GitCommitToPush[]
+): string[] {
+  const notes: string[] = [];
+
+  if (taskMissing) {
+    notes.push("The requested task was not found, so this preview is based on branch state only.");
+  }
+
+  if (!task) {
+    notes.push("No task context is linked to this push preview.");
+  }
+
+  if (status.isDirty) {
+    notes.push(`${status.changedFiles.length} uncommitted file(s) will remain local after the push.`);
+  }
+
+  if (commitsToPush.length >= 20 && (status.ahead ?? 0) > commitsToPush.length) {
+    notes.push(`Only the first ${commitsToPush.length} commit(s) are shown; ${status.ahead} commit(s) are ahead.`);
+  }
+
+  return notes;
+}
+
+function gitPushPreviewSummary(
+  status: GitStatusSnapshot,
+  commitsToPush: GitCommitToPush[],
+  readiness: GitPushPreview["readiness"]
+): string {
+  if (readiness === "Blocked") {
+    return `Push preparation is blocked on ${status.branch ?? "current checkout"}.`;
+  }
+
+  return `${commitsToPush.length} commit(s) ready to push from ${status.branch ?? "current checkout"} to ${status.upstream ?? "upstream"}.`;
+}
+
+function recordGitPushOnTask(
+  taskID: string,
+  branch: string,
+  upstream: string,
+  commits: GitCommitToPush[]
+): GitPushResult["relatedTask"] {
+  if (!taskID) {
+    return undefined;
+  }
+
+  const task = tasks.get(taskID);
+  if (!task) {
+    return undefined;
+  }
+
+  const now = new Date().toISOString();
+  const updatedTask = {
+    ...task,
+    updatedAt: now,
+    approvals: [
+      ...task.approvals,
+      {
+        id: randomUUID(),
+        action: "Push Git Branch" as ApprovalRecord["action"],
+        decision: "Approved" as const,
+        summary: `Pushed ${commits.length} commit(s) from ${branch} to ${upstream}`,
+        decidedAt: now,
+        targetID: upstream
+      }
+    ],
+    events: [
+      ...task.events,
+      {
+        type: "git.push.completed",
+        message: `Pushed ${commits.length} commit(s) from ${branch} to ${upstream}`,
+        createdAt: now
+      }
+    ]
+  };
+
+  tasks.set(task.id, updatedTask);
+  taskStore.saveTask(updatedTask);
+  emit("git.push.completed", { taskID: task.id, branch, upstream, commits, task: updatedTask });
+
+  return {
+    id: updatedTask.id,
+    title: updatedTask.title,
+    status: updatedTask.status,
+    currentPhase: updatedTask.currentPhase,
+    summary: updatedTask.reviewSummary ?? updatedTask.objective
+  };
+}
+
+function summarizeGitCommandOutput(output: string): string {
+  return output.replace(/\s+/g, " ").trim().slice(0, 800) || "git command completed.";
 }
 
 function commitPreviewBlockers(status: GitStatusSnapshot, files: GitFileChange[]): string[] {
@@ -1322,6 +1871,31 @@ function optionalTrimmedString(value: unknown, fieldName: string, maxLength: num
   }
 
   return trimmed || undefined;
+}
+
+function stringFieldFromUnknown(value: unknown, fieldName: string, minLength: number, maxLength: number): string {
+  if (typeof value !== "string") {
+    throw new HttpError(400, `${fieldName} must be a string.`);
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length < minLength) {
+    throw new HttpError(400, `${fieldName} is too short.`);
+  }
+
+  if (trimmed.length > maxLength) {
+    throw new HttpError(413, `${fieldName} is too large.`);
+  }
+
+  return trimmed;
+}
+
+function normalizeSingleLineField(value: unknown, fieldName: string, minLength: number, maxLength: number): string {
+  const trimmed = stringFieldFromUnknown(value, fieldName, minLength, maxLength);
+  if (trimmed.includes("\n") || trimmed.includes("\r")) {
+    throw new HttpError(400, `${fieldName} must be a single line.`);
+  }
+  return trimmed;
 }
 
 function optionalURLString(value: unknown, fieldName: string): string | undefined {
@@ -4350,6 +4924,9 @@ function renderRuntimeHome(): string {
       <li><a href="/git/status">GET /git/status</a></li>
       <li><code>GET /git/diff?path=README.md</code></li>
       <li><a href="/git/commit-preview">GET /git/commit-preview</a></li>
+      <li><code>POST /git/commit</code></li>
+      <li><a href="/git/push-preview">GET /git/push-preview</a></li>
+      <li><code>POST /git/push</code></li>
       <li><a href="/validation-presets">GET /validation-presets</a></li>
       <li><a href="/settings/model-provider">GET /settings/model-provider</a></li>
       <li><code>POST /settings/model-provider</code></li>

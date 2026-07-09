@@ -2023,3 +2023,93 @@ Next:
   and PR handoff.
 - Continue hardening git/diff review for large and mixed staged/unstaged
   working trees.
+
+### 2026-07-08 22:36:22 CEST +0200
+
+Conversation summary:
+
+- User asked to continue the next step. The work continued from commit
+  preparation into an explicitly approved local git commit action.
+
+Done:
+
+- Added runtime `POST /git/commit` with explicit confirmation, expected-HEAD
+  drift protection, selected-path validation, unmerged-file rejection, staged
+  outside-selection rejection, git author identity preflight, selected-path
+  staging, local commit creation, and optional task event recording.
+- Added TypeScript request/result types and extended smoke coverage to verify
+  stale-head commit attempts are rejected before staging or committing.
+- Added macOS app request/result models, runtime client method, workspace
+  action state, commit result caching, and commit creation from the Review
+  panel's Commit Review card.
+- Added a macOS confirmation dialog that explains Forge will stage listed
+  files and create one local commit, but will not push, merge, reset, delete
+  branches, or publish anything.
+- Updated README, runtime README, project status, TODO, development, runtime
+  architecture, git workflow, security permissions, and V0 scope docs.
+- Verified `npm run check`, `npm run build`, `swift build`,
+  `npm run smoke:core`, and `git diff --check`.
+- Confirmed no persistent runtime service was listening on the default
+  `127.0.0.1:17373` port after smoke finished.
+
+Not done:
+
+- Did not add push, PR publication, branch creation, unstaging, discard,
+  reset, rollback, binary diff viewing, or large-diff navigation.
+- Did not run an integration test that creates an actual commit in an isolated
+  temporary repository; current smoke verifies the safety rejection path to
+  avoid mutating this checkout's git history.
+- Did not adapt the shipped UI design handoff into the SwiftUI visual system.
+
+Next:
+
+- Add branch awareness and task-scoped branch suggestions before push/PR.
+- Add explicit approved push preview and push action after local commits.
+- Add an isolated temporary-repository integration test for successful local
+  commit creation.
+
+### 2026-07-09 20:58:47 CEST +0200
+
+Conversation summary:
+
+- User asked to stop local services, commit all code to the remote repository,
+  and continue with another long task. The work first confirmed the default
+  runtime service was not running, then extended the git workflow from local
+  commits into push preparation and explicit push.
+
+Done:
+
+- Confirmed no persistent Forge runtime service was listening on
+  `127.0.0.1:17373`.
+- Added runtime `GET /git/push-preview` with branch/upstream, ahead/behind,
+  commits-to-push, dirty working-tree state, blockers, risk notes, and a
+  non-mutating operation boundary.
+- Added runtime `POST /git/push` with explicit confirmation, expected HEAD,
+  branch, and upstream drift checks, blockers for detached/no-upstream/behind/
+  no-ahead/unmerged states, non-force push to the configured upstream, and
+  optional task event recording.
+- Added TypeScript push preview/request/result types and smoke coverage for
+  push-preview plus stale-head push rejection before any network push.
+- Added macOS app push models, runtime client calls, workspace state/actions,
+  Push Review card, confirmation dialog, and push result display in the Review
+  panel.
+- Updated README, runtime README, project status, TODO, development, runtime
+  architecture, git workflow, security permissions, and V0 scope docs.
+- Verified `npm run check`, `npm run build`, `swift build`,
+  `npm run smoke:core`, and `git diff --check`.
+
+Not done:
+
+- Did not add PR creation/publication, branch creation, branch suggestions,
+  unstaging/discard/reset, rollback, binary diff viewing, or large-diff
+  navigation.
+- Did not run a real network push through the runtime; smoke verifies the
+  safety rejection path and this repository push is handled by git directly
+  after commit.
+- Did not adapt the shipped UI design handoff into the SwiftUI visual system.
+
+Next:
+
+- Commit and push this work to `origin/main`.
+- Add branch awareness and task-scoped branch suggestions.
+- Add PR handoff preview artifacts before any actual PR creation.

@@ -39,8 +39,14 @@ final class WorkspaceModel: ObservableObject {
     @Published private var refreshingGitStatus = false
     @Published private var loadingGitDiffPaths = Set<String>()
     @Published private var loadingGitCommitPreviewTaskIDs = Set<ForgeTask.ID>()
+    @Published private var creatingGitCommitTaskIDs = Set<ForgeTask.ID>()
+    @Published private var loadingGitPushPreviewTaskIDs = Set<ForgeTask.ID>()
+    @Published private var pushingGitBranchTaskIDs = Set<ForgeTask.ID>()
     @Published private var gitFileDiffs: [String: GitFileDiff] = [:]
     @Published private var gitCommitPreviews: [ForgeTask.ID: GitCommitPreview] = [:]
+    @Published private var gitCommitResults: [ForgeTask.ID: GitCreateCommitResult] = [:]
+    @Published private var gitPushPreviews: [ForgeTask.ID: GitPushPreview] = [:]
+    @Published private var gitPushResults: [ForgeTask.ID: GitPushResult] = [:]
     @Published private var updatingModelProviderSettings = false
 
     private let runtime = RuntimeClient()
@@ -556,6 +562,122 @@ final class WorkspaceModel: ObservableObject {
         loadingGitCommitPreviewTaskIDs.contains(taskID)
     }
 
+    func createGitCommit(for task: ForgeTask, preview: GitCommitPreview) {
+        guard let expectedHead = preview.expectedHead else {
+            statusMessage = "Commit review is missing the expected git head."
+            return
+        }
+
+        let paths = preview.includedFiles.map(\.path)
+        guard !paths.isEmpty else {
+            statusMessage = "Commit review has no files to commit."
+            return
+        }
+
+        creatingGitCommitTaskIDs.insert(task.id)
+
+        Task {
+            do {
+                let taskID = task.id == ForgeTask.sample.id ? nil : task.id
+                let request = GitCreateCommitRequest(
+                    taskID: taskID,
+                    expectedHead: expectedHead,
+                    title: preview.suggestedTitle,
+                    body: preview.suggestedBody,
+                    paths: paths,
+                    confirmation: "CreateLocalCommit"
+                )
+                let result = try await runtime.createGitCommit(request)
+                gitCommitResults[task.id] = result
+                gitCommitPreviews.removeValue(forKey: task.id)
+                statusMessage = result.summary
+                try await refreshTasks()
+                await refreshGitStatusSnapshot()
+                startEventStream()
+            } catch {
+                statusMessage = "Create commit failed: \(error.localizedDescription)"
+            }
+
+            creatingGitCommitTaskIDs.remove(task.id)
+        }
+    }
+
+    func gitCommitResult(for taskID: ForgeTask.ID) -> GitCreateCommitResult? {
+        gitCommitResults[taskID]
+    }
+
+    func isCreatingGitCommit(taskID: ForgeTask.ID) -> Bool {
+        creatingGitCommitTaskIDs.contains(taskID)
+    }
+
+    func prepareGitPushReview(for task: ForgeTask) {
+        loadingGitPushPreviewTaskIDs.insert(task.id)
+
+        Task {
+            do {
+                let taskID = task.id == ForgeTask.sample.id ? nil : task.id
+                gitPushPreviews[task.id] = try await runtime.gitPushPreview(taskID: taskID)
+                gitStatusLastError = nil
+            } catch {
+                gitStatusLastError = "Prepare push review failed: \(error.localizedDescription)"
+            }
+
+            loadingGitPushPreviewTaskIDs.remove(task.id)
+        }
+    }
+
+    func gitPushPreview(for taskID: ForgeTask.ID) -> GitPushPreview? {
+        gitPushPreviews[taskID]
+    }
+
+    func isPreparingGitPushReview(taskID: ForgeTask.ID) -> Bool {
+        loadingGitPushPreviewTaskIDs.contains(taskID)
+    }
+
+    func pushGitBranch(for task: ForgeTask, preview: GitPushPreview) {
+        guard let expectedHead = preview.expectedHead,
+              let expectedBranch = preview.branch,
+              let expectedUpstream = preview.upstream
+        else {
+            statusMessage = "Push review is missing branch, upstream, or expected git head."
+            return
+        }
+
+        pushingGitBranchTaskIDs.insert(task.id)
+
+        Task {
+            do {
+                let taskID = task.id == ForgeTask.sample.id ? nil : task.id
+                let request = GitPushRequest(
+                    taskID: taskID,
+                    expectedHead: expectedHead,
+                    expectedBranch: expectedBranch,
+                    expectedUpstream: expectedUpstream,
+                    confirmation: "PushCurrentBranch"
+                )
+                let result = try await runtime.pushGitBranch(request)
+                gitPushResults[task.id] = result
+                gitPushPreviews.removeValue(forKey: task.id)
+                statusMessage = result.summary
+                try await refreshTasks()
+                await refreshGitStatusSnapshot()
+                startEventStream()
+            } catch {
+                statusMessage = "Push failed: \(error.localizedDescription)"
+            }
+
+            pushingGitBranchTaskIDs.remove(task.id)
+        }
+    }
+
+    func gitPushResult(for taskID: ForgeTask.ID) -> GitPushResult? {
+        gitPushResults[taskID]
+    }
+
+    func isPushingGitBranch(taskID: ForgeTask.ID) -> Bool {
+        pushingGitBranchTaskIDs.contains(taskID)
+    }
+
     func revealGitFile(path: String) {
         guard let root = gitStatus?.root else {
             statusMessage = "Git root is not available."
@@ -861,6 +983,7 @@ final class WorkspaceModel: ObservableObject {
             gitStatus = try await runtime.gitStatus()
             gitStatusLastError = gitStatus?.error
             gitCommitPreviews.removeAll()
+            gitPushPreviews.removeAll()
         } catch {
             gitStatus = nil
             gitStatusLastError = error.localizedDescription

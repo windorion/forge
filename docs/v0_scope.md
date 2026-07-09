@@ -69,7 +69,8 @@ The product should show:
 - approved runtime validation preset
 - workspace validation preset config
 - command permission request surface
-- read-only git status, diff, and commit preparation review surfaces
+- git status, diff, commit preparation review, explicit local commit, and
+  explicit current-branch push surfaces
 - app-visible runtime state and diagnostics
 - copy/open runtime diagnostics actions
 - no automatic file changes
@@ -80,7 +81,7 @@ The product should show:
 - autonomous file edits
 - arbitrary command execution
 - general test runner orchestration
-- actual git staging, commit, push, or PR publication
+- PR publication
 - full repository index
 - Tree-sitter parsing
 - provider ecosystem beyond local deterministic and optional OpenAI
@@ -146,6 +147,12 @@ V0 is complete when:
 - The app can prepare a read-only commit review artifact with suggested commit
   message, included files, validation suggestions, blockers, risk notes, and
   an explicit non-mutating operation boundary.
+- The app can explicitly create a local git commit from that review artifact
+  after confirmation, while the runtime rechecks HEAD, selected paths, and
+  safety blockers before staging and committing. It does not push.
+- The app can prepare a push review and explicitly push the current branch to
+  its configured upstream after confirmation, while the runtime rechecks HEAD,
+  branch, upstream, and safety blockers. It does not force push or create a PR.
 
 ## V0 Next After Completion
 

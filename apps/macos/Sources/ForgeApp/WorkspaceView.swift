@@ -1648,9 +1648,27 @@ private struct GitWorkingTreeCard: View {
                 GitCommitPreviewCard(
                     task: task,
                     preview: workspace.gitCommitPreview(for: task.id),
+                    result: workspace.gitCommitResult(for: task.id),
                     isLoading: workspace.isPreparingGitCommitReview(taskID: task.id),
+                    isCreatingCommit: workspace.isCreatingGitCommit(taskID: task.id),
                     prepare: {
                         workspace.prepareGitCommitReview(for: task)
+                    },
+                    createCommit: { preview in
+                        workspace.createGitCommit(for: task, preview: preview)
+                    }
+                )
+
+                GitPushPreviewCard(
+                    preview: workspace.gitPushPreview(for: task.id),
+                    result: workspace.gitPushResult(for: task.id),
+                    isLoading: workspace.isPreparingGitPushReview(taskID: task.id),
+                    isPushing: workspace.isPushingGitBranch(taskID: task.id),
+                    prepare: {
+                        workspace.prepareGitPushReview(for: task)
+                    },
+                    push: { preview in
+                        workspace.pushGitBranch(for: task, preview: preview)
                     }
                 )
             } else {
@@ -1734,8 +1752,13 @@ private struct GitWorkingTreeCard: View {
 private struct GitCommitPreviewCard: View {
     var task: ForgeTask
     var preview: GitCommitPreview?
+    var result: GitCreateCommitResult?
     var isLoading: Bool
+    var isCreatingCommit: Bool
     var prepare: () -> Void
+    var createCommit: (GitCommitPreview) -> Void
+
+    @State private var showCommitConfirmation = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1744,6 +1767,17 @@ private struct GitCommitPreviewCard: View {
                     .font(.subheadline.weight(.semibold))
 
                 Spacer()
+
+                if let preview {
+                    Button {
+                        showCommitConfirmation = true
+                    } label: {
+                        Label(isCreatingCommit ? "Committing" : "Commit", systemImage: "checkmark.seal")
+                    }
+                    .labelStyle(.iconOnly)
+                    .disabled(!canCreateCommit(preview))
+                    .help("Create local commit")
+                }
 
                 Button {
                     prepare()
@@ -1864,6 +1898,28 @@ private struct GitCommitPreviewCard: View {
                 Label(preview.operationBoundary, systemImage: "lock.shield")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
+
+                Button {
+                    showCommitConfirmation = true
+                } label: {
+                    Label(createCommitButtonTitle(preview), systemImage: "checkmark.seal")
+                        .frame(maxWidth: .infinity)
+                }
+                .disabled(!canCreateCommit(preview))
+                .confirmationDialog(
+                    "Create local git commit?",
+                    isPresented: $showCommitConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button("Create Local Commit") {
+                        createCommit(preview)
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Forge will stage the listed files and create one local commit. It will not push, merge, reset, delete branches, or publish anything.")
+                }
+            } else if let result {
+                CommitResultView(result: result)
             } else {
                 Label(isLoading ? "Preparing commit review..." : "Commit review has not been prepared.", systemImage: isLoading ? "hourglass" : "doc.text.magnifyingglass")
                     .font(.caption)
@@ -1896,6 +1952,26 @@ private struct GitCommitPreviewCard: View {
             return .orange
         }
     }
+
+    private func canCreateCommit(_ preview: GitCommitPreview) -> Bool {
+        !isCreatingCommit &&
+            !isLoading &&
+            preview.expectedHead != nil &&
+            preview.blockers.isEmpty &&
+            !preview.includedFiles.isEmpty
+    }
+
+    private func createCommitButtonTitle(_ preview: GitCommitPreview) -> String {
+        if isCreatingCommit {
+            return "Creating Commit"
+        }
+
+        if preview.blockers.isEmpty {
+            return "Create Local Commit"
+        }
+
+        return "Commit Blocked"
+    }
 }
 
 private struct CommitPreviewNoteList: View {
@@ -1918,6 +1994,272 @@ private struct CommitPreviewNoteList: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct CommitResultView: View {
+    var result: GitCreateCommitResult
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Label(result.summary, systemImage: "checkmark.seal")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.green)
+
+            Text(result.messageTitle)
+                .font(.caption.monospaced().weight(.semibold))
+                .textSelection(.enabled)
+
+            HStack(spacing: 8) {
+                Text(result.shortHash)
+                    .font(.caption2.monospaced())
+                    .textSelection(.enabled)
+
+                if let branch = result.branch {
+                    Text(branch)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Text("\(result.committedFiles.count) files")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Label(result.operationBoundary, systemImage: "lock.shield")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+private struct GitPushPreviewCard: View {
+    var preview: GitPushPreview?
+    var result: GitPushResult?
+    var isLoading: Bool
+    var isPushing: Bool
+    var prepare: () -> Void
+    var push: (GitPushPreview) -> Void
+
+    @State private var showPushConfirmation = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Label("Push Review", systemImage: "arrow.up.circle")
+                    .font(.subheadline.weight(.semibold))
+
+                Spacer()
+
+                if let preview {
+                    Button {
+                        showPushConfirmation = true
+                    } label: {
+                        Label(isPushing ? "Pushing" : "Push", systemImage: "paperplane")
+                    }
+                    .labelStyle(.iconOnly)
+                    .disabled(!canPush(preview))
+                    .help("Push current branch")
+                }
+
+                Button {
+                    prepare()
+                } label: {
+                    Label(isLoading ? "Preparing" : "Prepare", systemImage: "arrow.triangle.branch")
+                }
+                .labelStyle(.iconOnly)
+                .disabled(isLoading || isPushing)
+                .help("Prepare push review")
+            }
+
+            if let preview {
+                HStack(spacing: 8) {
+                    Label(preview.readiness, systemImage: readinessImage(for: preview))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(readinessColor(for: preview))
+
+                    Spacer(minLength: 8)
+
+                    Text(preview.generatedAt)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+
+                Text(preview.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 8) {
+                    Label(preview.branch ?? "Detached", systemImage: "arrow.triangle.branch")
+                    Label(preview.upstream ?? "No upstream", systemImage: "network")
+                    Spacer()
+                    Text("ahead \(preview.ahead ?? 0) / behind \(preview.behind ?? 0)")
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+                if !preview.blockers.isEmpty {
+                    CommitPreviewNoteList(
+                        title: "Blockers",
+                        systemImage: "xmark.octagon",
+                        notes: preview.blockers,
+                        color: .red
+                    )
+                }
+
+                if !preview.riskNotes.isEmpty {
+                    CommitPreviewNoteList(
+                        title: "Risk Notes",
+                        systemImage: "exclamationmark.triangle",
+                        notes: preview.riskNotes,
+                        color: .orange
+                    )
+                }
+
+                if !preview.commitsToPush.isEmpty {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("Commits To Push")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        ForEach(preview.commitsToPush.prefix(8)) { commit in
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text(commit.shortHash)
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(.secondary)
+                                Text(commit.title)
+                                    .font(.caption2)
+                                    .lineLimit(1)
+                                Spacer(minLength: 6)
+                            }
+                        }
+
+                        if preview.commitsToPush.count > 8 {
+                            Text("\(preview.commitsToPush.count - 8) more commit(s) not shown.")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                }
+
+                Label(preview.operationBoundary, systemImage: "lock.shield")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+
+                Button {
+                    showPushConfirmation = true
+                } label: {
+                    Label(pushButtonTitle(preview), systemImage: "paperplane")
+                        .frame(maxWidth: .infinity)
+                }
+                .disabled(!canPush(preview))
+                .confirmationDialog(
+                    "Push current branch?",
+                    isPresented: $showPushConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button("Push Current Branch") {
+                        push(preview)
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Forge will push the listed local commits to the configured upstream. It will not force push, merge, reset, delete branches, or create a PR.")
+                }
+            } else if let result {
+                PushResultView(result: result)
+            } else {
+                Label(isLoading ? "Preparing push review..." : "Push review has not been prepared.", systemImage: isLoading ? "hourglass" : "arrow.up.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(8)
+        .background(.quaternary)
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+    }
+
+    private func canPush(_ preview: GitPushPreview) -> Bool {
+        !isPushing &&
+            !isLoading &&
+            preview.expectedHead != nil &&
+            preview.branch != nil &&
+            preview.upstream != nil &&
+            preview.blockers.isEmpty &&
+            !preview.commitsToPush.isEmpty
+    }
+
+    private func pushButtonTitle(_ preview: GitPushPreview) -> String {
+        if isPushing {
+            return "Pushing Branch"
+        }
+
+        return preview.blockers.isEmpty ? "Push Current Branch" : "Push Blocked"
+    }
+
+    private func readinessImage(for preview: GitPushPreview) -> String {
+        switch preview.readiness {
+        case "Ready":
+            return "checkmark.circle"
+        case "Blocked":
+            return "xmark.octagon"
+        default:
+            return "exclamationmark.triangle"
+        }
+    }
+
+    private func readinessColor(for preview: GitPushPreview) -> Color {
+        switch preview.readiness {
+        case "Ready":
+            return .green
+        case "Blocked":
+            return .red
+        default:
+            return .orange
+        }
+    }
+}
+
+private struct PushResultView: View {
+    var result: GitPushResult
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Label(result.summary, systemImage: "paperplane")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.green)
+
+            HStack(spacing: 8) {
+                Text(result.branch)
+                    .font(.caption2.monospaced())
+                Text(result.upstream)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("\(result.pushedCommits.count) commits")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(result.outputSummary)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+
+            Label(result.operationBoundary, systemImage: "lock.shield")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 }
 

@@ -26,7 +26,9 @@ export interface ApprovalRecord {
     | "Approve Plan"
     | "Apply Edit Proposal"
     | "Reject Edit Proposal"
-    | "Approve Validation Preset";
+    | "Approve Validation Preset"
+    | "Create Git Commit"
+    | "Push Git Branch";
   decision: "Approved" | "Rejected";
   summary: string;
   decidedAt: string;
@@ -367,6 +369,7 @@ export interface GitCommitPreview {
   generatedAt: string;
   readiness: "Ready" | "NeedsReview" | "Blocked";
   summary: string;
+  expectedHead?: string;
   suggestedTitle: string;
   suggestedBody: string[];
   includedFiles: GitFileChange[];
@@ -375,6 +378,76 @@ export interface GitCommitPreview {
   validationCommands: string[];
   riskNotes: string[];
   blockers: string[];
+  operationBoundary: string;
+}
+
+export interface GitCreateCommitRequest {
+  taskID?: string;
+  expectedHead: string;
+  title: string;
+  body?: string[];
+  paths: string[];
+  confirmation: "CreateLocalCommit";
+}
+
+export interface GitCreateCommitResult {
+  generatedAt: string;
+  commitHash: string;
+  shortHash: string;
+  branch?: string;
+  summary: string;
+  messageTitle: string;
+  messageBody: string[];
+  committedFiles: GitFileChange[];
+  relatedTask?: GitCommitRelatedTask;
+  operationBoundary: string;
+}
+
+export interface GitCommitToPush {
+  hash: string;
+  shortHash: string;
+  title: string;
+  authorDate?: string;
+}
+
+export interface GitPushPreview {
+  generatedAt: string;
+  readiness: "Ready" | "NeedsReview" | "Blocked";
+  summary: string;
+  expectedHead?: string;
+  branch?: string;
+  upstream?: string;
+  remote?: string;
+  remoteBranch?: string;
+  ahead?: number;
+  behind?: number;
+  isDirty: boolean;
+  commitsToPush: GitCommitToPush[];
+  changedFiles: GitFileChange[];
+  relatedTask?: GitCommitRelatedTask;
+  riskNotes: string[];
+  blockers: string[];
+  operationBoundary: string;
+}
+
+export interface GitPushRequest {
+  taskID?: string;
+  expectedHead: string;
+  expectedBranch: string;
+  expectedUpstream: string;
+  confirmation: "PushCurrentBranch";
+}
+
+export interface GitPushResult {
+  generatedAt: string;
+  branch: string;
+  upstream: string;
+  remote: string;
+  remoteBranch: string;
+  pushedCommits: GitCommitToPush[];
+  summary: string;
+  outputSummary: string;
+  relatedTask?: GitCommitRelatedTask;
   operationBoundary: string;
 }
 

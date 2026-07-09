@@ -80,6 +80,21 @@ Examples:
 
 Requires explicit approval.
 
+Current local commit implementation is high risk and requires explicit user
+confirmation from the macOS Review panel. The runtime then rechecks the
+expected HEAD from the commit preview, validates selected repo-relative paths,
+rejects unmerged files, rejects staged files outside the reviewed selection,
+preflights git author identity, stages only the selected files, and creates
+one local commit. It does not push, merge, reset, delete branches, or publish
+anything externally.
+
+Current push implementation is also high risk and requires explicit user
+confirmation from the macOS Review panel. The runtime rechecks expected HEAD,
+branch, and upstream from the push preview, blocks detached/no-upstream/
+behind/no-ahead/unmerged states, and uses a non-force push to the configured
+upstream branch. It does not force push, merge, reset, delete branches, or
+create a PR.
+
 ## Approval Dialogs
 
 Approval requests should show:

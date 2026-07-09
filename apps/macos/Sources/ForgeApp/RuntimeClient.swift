@@ -72,6 +72,54 @@ struct RuntimeClient {
         return try JSONDecoder().decode(GitCommitPreview.self, from: data)
     }
 
+    func createGitCommit(_ requestBody: GitCreateCommitRequest) async throws -> GitCreateCommitResult {
+        let url = baseURL
+            .appending(path: "git")
+            .appending(path: "commit")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(requestBody)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response)
+        return try JSONDecoder().decode(GitCreateCommitResult.self, from: data)
+    }
+
+    func gitPushPreview(taskID: ForgeTask.ID?) async throws -> GitPushPreview {
+        let url = baseURL
+            .appending(path: "git")
+            .appending(path: "push-preview")
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        if let taskID {
+            components?.queryItems = [
+                URLQueryItem(name: "taskID", value: taskID)
+            ]
+        }
+
+        guard let requestURL = components?.url else {
+            throw RuntimeClientError.invalidResponse
+        }
+
+        let (data, response) = try await URLSession.shared.data(from: requestURL)
+        try validate(response)
+        return try JSONDecoder().decode(GitPushPreview.self, from: data)
+    }
+
+    func pushGitBranch(_ requestBody: GitPushRequest) async throws -> GitPushResult {
+        let url = baseURL
+            .appending(path: "git")
+            .appending(path: "push")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(requestBody)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response)
+        return try JSONDecoder().decode(GitPushResult.self, from: data)
+    }
+
     func modelProviderSettings() async throws -> ModelProviderSettingsEnvelope {
         let url = baseURL
             .appending(path: "settings")

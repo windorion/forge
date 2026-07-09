@@ -87,8 +87,15 @@ Current implementation:
 - The preview can include blockers such as clean working tree or unmerged
   files, plus risk notes such as unstaged/untracked changes or failed/missing
   task validation.
-- Forge does not yet stage files, create the commit, or link a created commit
-  back to the task.
+- Forge can create one local commit from the reviewed preview after explicit
+  confirmation in the macOS Review panel.
+- The runtime rechecks the expected HEAD, validates selected repo-relative
+  paths against current git status, rejects unmerged files, rejects staged
+  files outside the reviewed selection, preflights git author identity, stages
+  only selected paths, creates the local commit, and records a task event when
+  a task is linked.
+- Forge does not push from the commit action; push is a separate explicit
+  review action.
 
 ## Push Workflow
 
@@ -101,6 +108,17 @@ Before push, Forge should show:
 - commits to push
 - uncommitted changes
 - possible risk notes
+
+Current implementation:
+
+- Forge can prepare a push preview with branch, upstream, ahead/behind counts,
+  commits to push, uncommitted local changes, blockers, and risk notes.
+- Forge can push the current branch to its configured upstream after explicit
+  confirmation in the macOS Review panel.
+- The runtime rechecks expected HEAD, branch, and upstream from the reviewed
+  preview, blocks detached/no-upstream/behind/no-ahead/unmerged states, and
+  runs a non-force `git push <remote> HEAD:<remote-branch>`.
+- Forge does not force push, merge, reset, delete branches, or create a PR.
 
 ## Branch Workflow
 
