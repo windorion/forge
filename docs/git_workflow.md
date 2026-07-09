@@ -131,6 +131,12 @@ Branch name examples:
 
 Branch creation may be automatic only if the user has allowed it in settings.
 
+Current implementation:
+
+- PR handoff preview can suggest a `forge/<task-slug>` branch name when the
+  current checkout is detached or still on the default base branch.
+- Forge does not yet create or switch branches.
+
 ## Pull Request Handoff
 
 Forge can prepare:
@@ -143,6 +149,19 @@ Forge can prepare:
 - linked task
 
 Creating or publishing the PR should require user approval.
+
+Current implementation:
+
+- Forge exposes a read-only PR handoff preview from the macOS Review panel.
+- The runtime resolves a default base branch when possible, compares current
+  branch work against that base, and shows the head branch, upstream, suggested
+  branch name, PR title, draft body, test plan, commits, changed files,
+  blockers, and risk notes.
+- The preview blocks when the user is still on the default base branch, has no
+  upstream, has unpushed commits, is behind upstream, is detached, has
+  unmerged files, or has no commits between base and HEAD.
+- Forge does not create, publish, update, close, or comment on pull requests
+  yet.
 
 ## Safety Rules
 

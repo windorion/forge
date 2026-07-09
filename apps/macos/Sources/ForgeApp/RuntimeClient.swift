@@ -120,6 +120,26 @@ struct RuntimeClient {
         return try JSONDecoder().decode(GitPushResult.self, from: data)
     }
 
+    func gitPullRequestPreview(taskID: ForgeTask.ID?) async throws -> GitPullRequestPreview {
+        let url = baseURL
+            .appending(path: "git")
+            .appending(path: "pr-preview")
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        if let taskID {
+            components?.queryItems = [
+                URLQueryItem(name: "taskID", value: taskID)
+            ]
+        }
+
+        guard let requestURL = components?.url else {
+            throw RuntimeClientError.invalidResponse
+        }
+
+        let (data, response) = try await URLSession.shared.data(from: requestURL)
+        try validate(response)
+        return try JSONDecoder().decode(GitPullRequestPreview.self, from: data)
+    }
+
     func modelProviderSettings() async throws -> ModelProviderSettingsEnvelope {
         let url = baseURL
             .appending(path: "settings")

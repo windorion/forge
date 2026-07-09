@@ -451,6 +451,27 @@ export interface GitPushResult {
   operationBoundary: string;
 }
 
+export interface GitPullRequestPreview {
+  generatedAt: string;
+  readiness: "Ready" | "NeedsReview" | "Blocked";
+  summary: string;
+  baseBranch: string;
+  headBranch?: string;
+  upstream?: string;
+  remote?: string;
+  remoteBranch?: string;
+  suggestedBranchName: string;
+  title: string;
+  body: string[];
+  testPlan: string[];
+  commits: GitCommitToPush[];
+  changedFiles: GitFileChange[];
+  relatedTask?: GitCommitRelatedTask;
+  riskNotes: string[];
+  blockers: string[];
+  operationBoundary: string;
+}
+
 export interface ContextFile {
   path: string;
   summary: string;

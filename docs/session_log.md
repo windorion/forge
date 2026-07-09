@@ -2113,3 +2113,49 @@ Next:
 - Commit and push this work to `origin/main`.
 - Add branch awareness and task-scoped branch suggestions.
 - Add PR handoff preview artifacts before any actual PR creation.
+
+### 2026-07-09 21:11:42 CEST +0200
+
+Conversation summary:
+
+- User asked to commit all code to the remote repository and continue the next
+  long task. The previous push workflow work was already committed and pushed;
+  this session continued with a read-only PR handoff preview so Forge can move
+  from local commit/push toward an approved PR workflow without crossing the
+  external publication boundary.
+
+Done:
+
+- Added runtime `GET /git/pr-preview` as a read-only PR handoff artifact with
+  default-base detection, base/head/upstream state, suggested branch name, PR
+  title, draft body, test plan, commits, changed files, blockers, risk notes,
+  and an explicit no-publication boundary.
+- Added branch and PR blockers for detached checkout, current branch matching
+  the default base branch, missing upstream, unpushed commits, behind-upstream
+  state, unmerged files, missing base ref, and no commits between base and
+  HEAD.
+- Added macOS app model/client support, workspace loading state, preview cache,
+  and a PR Handoff card in the Review panel Working Tree section.
+- Extended `npm run smoke:core` to verify the PR preview endpoint returns
+  title, suggested branch name, body, test plan, readiness, and non-mutating
+  boundary.
+- Updated README, runtime README, project status, TODO, development, runtime
+  architecture, git workflow, security permissions, and V0 scope docs.
+- Verified `npm run check`, `npm run build`, `swift build`,
+  `npm run smoke:core`, and `git diff --check`.
+- Confirmed no persistent Forge runtime service was listening on
+  `127.0.0.1:17373`.
+
+Not done:
+
+- Did not create, publish, update, close, or comment on pull requests.
+- Did not add branch creation/switching, GitHub integration, fork remote
+  handling, or approved PR publication.
+- Did not adapt the shipped UI design handoff into the SwiftUI visual system.
+
+Next:
+
+- Commit and push this PR handoff preview work to `origin/main`.
+- Add explicit branch creation/switching review before PR publication.
+- Add approved GitHub PR creation as a separate high-risk action after the
+  preview artifact is stable.

@@ -530,6 +530,20 @@ async function assertGitReadOnlyEndpoints() {
     blockedPush.text.includes("Git HEAD changed since push review"),
     "Stale-head push attempt did not fail before network push."
   );
+
+  const pullRequestPreview = await get("/git/pr-preview");
+  assert(pullRequestPreview.title, "Git PR preview did not include a suggested title.");
+  assert(pullRequestPreview.suggestedBranchName, "Git PR preview did not include a suggested branch name.");
+  assert(Array.isArray(pullRequestPreview.body), "Git PR preview did not include a draft body.");
+  assert(Array.isArray(pullRequestPreview.testPlan), "Git PR preview did not include a test plan.");
+  assert(
+    pullRequestPreview.operationBoundary.includes("has not created"),
+    "Git PR preview did not state the non-mutating operation boundary."
+  );
+  assert(
+    pullRequestPreview.readiness === "Blocked" || pullRequestPreview.readiness === "NeedsReview" || pullRequestPreview.readiness === "Ready",
+    `Git PR preview returned an unknown readiness value: ${pullRequestPreview.readiness}.`
+  );
 }
 
 async function createSmokeFiles() {

@@ -62,6 +62,11 @@ Implemented:
   values to match the reviewed preview, blocks detached/no-upstream/behind/no
   ahead/unmerged states, pushes with no force, and records a linked task event
   when possible.
+- Read-only PR handoff preview from the macOS Review UI. The runtime resolves
+  a default base branch when possible, compares current branch work against
+  that base, suggests a branch name, PR title, draft body, test plan, commits,
+  changed files, blockers, and risk notes, and explicitly does not create or
+  publish a PR.
 - Built-in and allowlisted project validation presets.
 - Runtime-derived command permission state in the app.
 - Runtime model-provider abstraction.
@@ -89,8 +94,8 @@ These percentages are product-readiness estimates, not calendar estimates.
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| V0 local demo | 93-96% | A local demo can show task creation, context inspection, planning, review, restricted edits, validation, repair proposal review, git status/diff visibility, commit preparation preview, explicit local commit and push actions, core runtime regression coverage, runtime diagnostics, and first-pass runtime lifecycle controls. |
-| Useful developer alpha | 50-60% | A developer can use Forge on small real tasks with model-backed planning/editing, visible diffs, commit preparation, local commits and guarded push, runtime lifecycle controls, and reliable rollback. |
+| V0 local demo | 94-97% | A local demo can show task creation, context inspection, planning, review, restricted edits, validation, repair proposal review, git status/diff visibility, commit preparation preview, explicit local commit and push actions, PR handoff preview, core runtime regression coverage, runtime diagnostics, and first-pass runtime lifecycle controls. |
+| Useful developer alpha | 52-62% | A developer can use Forge on small real tasks with model-backed planning/editing, visible diffs, commit preparation, local commits, guarded push, PR handoff preview, runtime lifecycle controls, and reliable rollback. |
 | Commercial beta | 25-30% | A paid user can install it, connect providers, trust permissions, use git workflows, and recover from failures. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
 
@@ -127,6 +132,8 @@ Remaining V0 gaps:
   staged/unstaged states, and larger changes
 - harden push review for remote auth failures, non-fast-forward rejections,
   branch protection, and disconnected networks
+- harden PR handoff preview for unusual default branches, fork remotes, and
+  richer test-plan evidence
 - provider settings smoke test with a live key supplied intentionally
 - broadened regression coverage for app-facing runtime state and provider
   settings paths

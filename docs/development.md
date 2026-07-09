@@ -151,7 +151,11 @@ changes, blockers, and risk notes. From that reviewed card, the user can
 explicitly push the current branch through `POST /git/push`; the runtime
 rechecks expected HEAD, branch, and upstream, blocks detached/no-upstream/
 behind/no-ahead/unmerged states, and performs a non-force push to the
-configured upstream. It does not create a PR.
+configured upstream. It does not create a PR. A read-only PR Handoff through
+`GET /git/pr-preview` shows the default base branch, current head branch,
+upstream, suggested branch name, PR title, draft body, test plan, commits,
+changed files, blockers, and risk notes. That preview does not create,
+publish, update, close, or comment on any pull request.
 
 Use the sidebar composer to create a custom task. The app connects to
 `GET /events` and refreshes tasks as runtime events arrive.
@@ -292,6 +296,8 @@ It covers:
 - both `AppendText` and exact `ReplaceText`
 - read-only git status and bounded git diff endpoints
 - mock OpenAI plan-context loop before a plan revision
+- read-only commit, push, and PR handoff preview endpoints plus stale-head
+  rejection checks for high-risk git actions
 - mock OpenAI richer edit proposal with append/create apply and blocked
   preview-only artifact coverage
 - mock OpenAI blocked-to-repaired edit proposal flow

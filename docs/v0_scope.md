@@ -71,6 +71,7 @@ The product should show:
 - command permission request surface
 - git status, diff, commit preparation review, explicit local commit, and
   explicit current-branch push surfaces
+- read-only PR handoff preview with title/body/test-plan suggestions
 - app-visible runtime state and diagnostics
 - copy/open runtime diagnostics actions
 - no automatic file changes
@@ -82,6 +83,7 @@ The product should show:
 - arbitrary command execution
 - general test runner orchestration
 - PR publication
+- branch creation/switching
 - full repository index
 - Tree-sitter parsing
 - provider ecosystem beyond local deterministic and optional OpenAI
@@ -153,6 +155,9 @@ V0 is complete when:
 - The app can prepare a push review and explicitly push the current branch to
   its configured upstream after confirmation, while the runtime rechecks HEAD,
   branch, upstream, and safety blockers. It does not force push or create a PR.
+- The app can prepare a read-only PR handoff preview with base/head branch
+  awareness, suggested branch name, title, body, test plan, commits, changed
+  files, blockers, risk notes, and an explicit no-publication boundary.
 
 ## V0 Next After Completion
 

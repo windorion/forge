@@ -13,6 +13,7 @@ This first slice is intentionally small:
 - `POST /git/commit`
 - `GET /git/push-preview`
 - `POST /git/push`
+- `GET /git/pr-preview`
 - `GET /validation-presets`
 - `GET /settings/model-provider`
 - `POST /settings/model-provider`
@@ -120,6 +121,11 @@ plus the expected HEAD, branch, and upstream from the preview. The runtime
 blocks detached/no-upstream/behind/no-ahead/unmerged states and runs a
 non-force push to the configured upstream branch. It does not force push,
 merge, reset, delete branches, or create a PR.
+`GET /git/pr-preview` is a read-only PR handoff artifact. It resolves the
+default base branch when possible, compares current branch work against that
+base, and returns head/base/upstream state, a suggested branch name, PR title,
+draft body, test plan, commits, changed files, blockers, and risk notes. It
+does not create, publish, update, close, or comment on pull requests.
 
 Validation presets:
 
@@ -238,9 +244,9 @@ messages, plan revision, plan approval, edit proposal generation, validation,
 apply, post-apply validation, restart recovery, and both append/replace
 restricted edit operations. It also verifies read-only git status, bounded git
 diff, commit-preview, stale-head commit rejection, push-preview, and
-stale-head push rejection endpoints against temporary fixtures. It also starts
-a mock OpenAI Responses server to verify the model-guided context loop path
-before an OpenAI-backed plan
+stale-head push rejection endpoints, plus the read-only PR handoff preview,
+against temporary fixtures. It also starts a mock OpenAI Responses server to
+verify the model-guided context loop path before an OpenAI-backed plan
 revision, a richer edit proposal with append/create apply, and a blocked
 preview-only artifact. It also verifies a blocked-to-repaired proposal path and
 bounded stop behavior for proposals that remain preview-only. The smoke also
@@ -255,6 +261,7 @@ curl http://127.0.0.1:17373/health
 curl http://127.0.0.1:17373/git/status
 curl "http://127.0.0.1:17373/git/diff?path=README.md"
 curl "http://127.0.0.1:17373/git/commit-preview"
+curl "http://127.0.0.1:17373/git/pr-preview"
 curl -X POST http://127.0.0.1:17373/git/commit \
   -H 'Content-Type: application/json' \
   -d '{"expectedHead":"<head-from-preview>","title":"Update Forge workspace","body":["Reviewed in Forge."],"paths":["README.md"],"confirmation":"CreateLocalCommit"}'

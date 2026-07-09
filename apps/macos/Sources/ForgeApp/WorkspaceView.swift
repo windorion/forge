@@ -1671,6 +1671,14 @@ private struct GitWorkingTreeCard: View {
                         workspace.pushGitBranch(for: task, preview: preview)
                     }
                 )
+
+                GitPullRequestPreviewCard(
+                    preview: workspace.gitPullRequestPreview(for: task.id),
+                    isLoading: workspace.isPreparingGitPullRequestReview(taskID: task.id),
+                    prepare: {
+                        workspace.prepareGitPullRequestReview(for: task)
+                    }
+                )
             } else {
                 VStack(alignment: .leading, spacing: 6) {
                     Label("Git status unavailable.", systemImage: "exclamationmark.triangle")
@@ -2260,6 +2268,223 @@ private struct PushResultView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.background)
         .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+private struct GitPullRequestPreviewCard: View {
+    var preview: GitPullRequestPreview?
+    var isLoading: Bool
+    var prepare: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Label("PR Handoff", systemImage: "arrow.triangle.pull")
+                    .font(.subheadline.weight(.semibold))
+
+                Spacer()
+
+                Button {
+                    prepare()
+                } label: {
+                    Label(isLoading ? "Preparing" : "Prepare", systemImage: "doc.text.magnifyingglass")
+                }
+                .labelStyle(.iconOnly)
+                .disabled(isLoading)
+                .help("Prepare PR handoff review")
+            }
+
+            if let preview {
+                HStack(spacing: 8) {
+                    Label(preview.readiness, systemImage: readinessImage(for: preview))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(readinessColor(for: preview))
+
+                    Spacer(minLength: 8)
+
+                    Text(preview.generatedAt)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+
+                Text(preview.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 8) {
+                    Label(preview.headBranch ?? "Detached", systemImage: "arrow.triangle.branch")
+                    Label(preview.baseBranch, systemImage: "target")
+                    Spacer()
+                    Text(preview.upstream ?? "No upstream")
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Suggested PR")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    Text(preview.title)
+                        .font(.caption.monospaced().weight(.semibold))
+                        .textSelection(.enabled)
+
+                    Label(preview.suggestedBranchName, systemImage: "arrow.triangle.branch")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.background)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+
+                if !preview.blockers.isEmpty {
+                    CommitPreviewNoteList(
+                        title: "Blockers",
+                        systemImage: "xmark.octagon",
+                        notes: preview.blockers,
+                        color: .red
+                    )
+                }
+
+                if !preview.riskNotes.isEmpty {
+                    CommitPreviewNoteList(
+                        title: "Risk Notes",
+                        systemImage: "exclamationmark.triangle",
+                        notes: preview.riskNotes,
+                        color: .orange
+                    )
+                }
+
+                if !preview.testPlan.isEmpty {
+                    CommitPreviewNoteList(
+                        title: "Test Plan",
+                        systemImage: "checkmark.shield",
+                        notes: preview.testPlan,
+                        color: .secondary
+                    )
+                }
+
+                if !preview.commits.isEmpty {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("Commits")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        ForEach(preview.commits.prefix(8)) { commit in
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text(commit.shortHash)
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(.secondary)
+                                Text(commit.title)
+                                    .font(.caption2)
+                                    .lineLimit(1)
+                                Spacer(minLength: 6)
+                            }
+                        }
+
+                        if preview.commits.count > 8 {
+                            Text("\(preview.commits.count - 8) more commit(s) not shown.")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                }
+
+                if !preview.changedFiles.isEmpty {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("Files")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        ForEach(preview.changedFiles.prefix(8)) { file in
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text(file.status)
+                                    .font(.caption2.weight(.medium))
+                                    .frame(width: 64, alignment: .leading)
+                                    .foregroundStyle(.secondary)
+
+                                Text(file.path)
+                                    .font(.caption2.monospaced())
+                                    .lineLimit(1)
+
+                                Spacer(minLength: 6)
+
+                                if let additions = file.additions, let deletions = file.deletions {
+                                    Text("+\(additions) -\(deletions)")
+                                        .font(.caption2.monospaced())
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
+                        }
+
+                        if preview.changedFiles.count > 8 {
+                            Text("\(preview.changedFiles.count - 8) more file(s) not shown.")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Draft Body")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    ForEach(Array(preview.body.prefix(18).enumerated()), id: \.offset) { _, line in
+                        Text(line.isEmpty ? " " : line)
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+
+                    if preview.body.count > 18 {
+                        Text("\(preview.body.count - 18) more line(s) not shown.")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.background)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+
+                Label(preview.operationBoundary, systemImage: "lock.shield")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            } else {
+                Label(isLoading ? "Preparing PR handoff..." : "PR handoff has not been prepared.", systemImage: isLoading ? "hourglass" : "arrow.triangle.pull")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(8)
+        .background(.quaternary)
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+    }
+
+    private func readinessImage(for preview: GitPullRequestPreview) -> String {
+        switch preview.readiness {
+        case "Ready":
+            return "checkmark.circle"
+        case "Blocked":
+            return "xmark.octagon"
+        default:
+            return "exclamationmark.triangle"
+        }
+    }
+
+    private func readinessColor(for preview: GitPullRequestPreview) -> Color {
+        switch preview.readiness {
+        case "Ready":
+            return .green
+        case "Blocked":
+            return .red
+        default:
+            return .orange
+        }
     }
 }
 

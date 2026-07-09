@@ -20,6 +20,8 @@ what to do next without rereading the whole project history.
   staged/unstaged states, large change sets, and validation readiness.
 - Harden push review for remote auth failures, non-fast-forward rejections,
   branch protection, and disconnected networks.
+- Harden PR handoff preview for non-main default branches, fork remotes, and
+  richer validation/test-plan evidence.
 - Harden app-managed runtime start/stop for packaged app locations, stale
   process handling, and user-facing launch failures.
 - Run a provider settings smoke test with an intentionally supplied OpenAI API
@@ -44,9 +46,10 @@ what to do next without rereading the whole project history.
 
 - Improve the first-pass native side-by-side diff view with file filtering and
   better large-diff navigation.
-- Add explicit PR handoff actions after local commits and push.
-- Add branch awareness.
-- Add PR handoff planning, likely through GitHub integration later.
+- Add branch creation/switching with explicit review and safety blockers.
+- Add approved PR creation/publication after the read-only PR handoff preview.
+- Add GitHub integration for PR metadata, draft PR creation, and remote
+  branch/fork awareness.
 
 ## P3: Repository Understanding
 
@@ -125,6 +128,10 @@ what to do next without rereading the whole project history.
   the Review panel. The runtime rechecks expected HEAD, branch, and upstream,
   blocks detached/no-upstream/behind/no-ahead/unmerged states, pushes without
   force, records a task event when linked, and does not create a PR.
+- Added read-only PR handoff preview in the Review panel. The runtime resolves
+  the base branch when possible, compares current branch work against that
+  base, suggests branch name, PR title/body, test plan, commits, changed
+  files, blockers, and risk notes, and does not create or publish a PR.
 - Extended `npm run smoke:core` with a mock OpenAI Responses server that
   verifies the model-guided context loop, append/create apply,
   blocked-to-repaired proposal flow, failed validation repair briefs,

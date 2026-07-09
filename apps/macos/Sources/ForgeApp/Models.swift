@@ -360,6 +360,27 @@ struct GitPushResult: Codable, Hashable {
     var operationBoundary: String
 }
 
+struct GitPullRequestPreview: Codable, Hashable {
+    var generatedAt: String
+    var readiness: String
+    var summary: String
+    var baseBranch: String
+    var headBranch: String?
+    var upstream: String?
+    var remote: String?
+    var remoteBranch: String?
+    var suggestedBranchName: String
+    var title: String
+    var body: [String]
+    var testPlan: [String]
+    var commits: [GitCommitToPush]
+    var changedFiles: [GitFileChange]
+    var relatedTask: GitCommitRelatedTask?
+    var riskNotes: [String]
+    var blockers: [String]
+    var operationBoundary: String
+}
+
 struct ContextFile: Identifiable, Codable, Hashable {
     var id: String { path }
     var path: String

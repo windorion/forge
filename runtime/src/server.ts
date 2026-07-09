@@ -32,6 +32,7 @@ import type {
   GitCommitToPush,
   GitFileChange,
   GitFileDiff,
+  GitPullRequestPreview,
   GitPushPreview,
   GitPushRequest,
   GitPushResult,
@@ -400,6 +401,11 @@ const server = createServer(async (request, response) => {
     if (request.method === "POST" && url.pathname === "/git/push") {
       const input = await readJson<GitPushRequest>(request);
       writeJson(response, 200, await pushGitBranch(input));
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/git/pr-preview") {
+      writeJson(response, 200, await getGitPullRequestPreview(url.searchParams.get("taskID")));
       return;
     }
 
@@ -1098,12 +1104,16 @@ async function collectGitCommitsToPush(gitRoot: string, upstream: string | undef
     return [];
   }
 
+  return collectGitCommitsInRange(gitRoot, `${upstream}..HEAD`);
+}
+
+async function collectGitCommitsInRange(gitRoot: string, range: string): Promise<GitCommitToPush[]> {
   const result = await runGitCommand([
     "log",
     "--max-count=20",
     "--format=%H%x1f%h%x1f%ad%x1f%s",
     "--date=iso-strict",
-    `${upstream}..HEAD`
+    range
   ], gitRoot, 64_000);
   if (result.exitCode !== 0) {
     return [];
@@ -1248,6 +1258,452 @@ function recordGitPushOnTask(
 
 function summarizeGitCommandOutput(output: string): string {
   return output.replace(/\s+/g, " ").trim().slice(0, 800) || "git command completed.";
+}
+
+async function getGitPullRequestPreview(rawTaskID: string | null): Promise<GitPullRequestPreview> {
+  const status = await getGitStatusSnapshot();
+  const generatedAt = new Date().toISOString();
+  const task = rawTaskID ? tasks.get(rawTaskID) : undefined;
+  const taskMissing = Boolean(rawTaskID && !task);
+  const operationBoundary = "Review artifact only. Forge has not created, published, pushed, or modified a pull request.";
+  const fallbackBaseBranch = "main";
+
+  if (!status.isRepository || !status.root) {
+    const riskNotes = taskMissing ? [`Task ${rawTaskID} was not found.`] : [];
+    return {
+      generatedAt,
+      readiness: "Blocked",
+      summary: "PR handoff is blocked because git status is unavailable.",
+      baseBranch: fallbackBaseBranch,
+      headBranch: status.branch,
+      upstream: status.upstream,
+      suggestedBranchName: suggestPullRequestBranchName(task, status.branch, fallbackBaseBranch),
+      title: suggestPullRequestTitle(task, []),
+      body: [],
+      testPlan: pullRequestTestPlan(task, []),
+      commits: [],
+      changedFiles: [],
+      relatedTask: undefined,
+      riskNotes,
+      blockers: [status.error ?? "Workspace is not inside a git repository."],
+      operationBoundary
+    };
+  }
+
+  const upstreamParts = parseGitUpstream(status.upstream);
+  const remote = upstreamParts?.remote ?? await getFirstGitRemote(status.root);
+  const baseBranch = await getGitDefaultBaseBranch(status.root, remote ?? "origin");
+  const baseRef = remote
+    ? await resolveGitBaseRef(status.root, remote, baseBranch)
+    : await resolveGitBaseRef(status.root, "origin", baseBranch);
+  const rangeFiles = baseRef ? await collectGitChangedFilesInRange(status.root, `${baseRef}...HEAD`) : [];
+  const changedFiles = mergeGitFileChanges(rangeFiles, status.changedFiles);
+  const commits = baseRef ? await collectGitCommitsInRange(status.root, `${baseRef}..HEAD`) : [];
+  const blockers = gitPullRequestBlockers(status, baseBranch, upstreamParts, commits, baseRef);
+  const riskNotes = gitPullRequestRiskNotes(status, task, taskMissing, commits);
+  const readiness: GitPullRequestPreview["readiness"] = blockers.length > 0
+    ? "Blocked"
+    : riskNotes.length > 0
+      ? "NeedsReview"
+      : "Ready";
+  const suggestedBranchName = suggestPullRequestBranchName(task, status.branch, baseBranch);
+  const title = suggestPullRequestTitle(task, commits);
+
+  return {
+    generatedAt,
+    readiness,
+    summary: gitPullRequestPreviewSummary(status, baseBranch, commits, readiness),
+    baseBranch,
+    headBranch: status.branch,
+    upstream: status.upstream,
+    remote: upstreamParts?.remote ?? remote,
+    remoteBranch: upstreamParts?.remoteBranch,
+    suggestedBranchName,
+    title,
+    body: buildPullRequestBody(status, baseBranch, title, task, commits, changedFiles, blockers, riskNotes),
+    testPlan: pullRequestTestPlan(task, changedFiles),
+    commits,
+    changedFiles,
+    relatedTask: task ? {
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      currentPhase: task.currentPhase,
+      summary: task.reviewSummary ?? task.objective
+    } : undefined,
+    riskNotes,
+    blockers,
+    operationBoundary
+  };
+}
+
+async function getFirstGitRemote(gitRoot: string): Promise<string | undefined> {
+  const result = await runGitCommand(["remote"], gitRoot, 8_000);
+  if (result.exitCode !== 0) {
+    return undefined;
+  }
+
+  return result.output
+    .split(/\r?\n/)
+    .map((remote) => remote.trim())
+    .find(Boolean);
+}
+
+async function getGitDefaultBaseBranch(gitRoot: string, remote: string): Promise<string> {
+  const remoteHead = await runGitCommand([
+    "symbolic-ref",
+    "--quiet",
+    "--short",
+    `refs/remotes/${remote}/HEAD`
+  ], gitRoot, 8_000);
+  const remoteHeadBranch = remoteHead.output.trim();
+  if (remoteHead.exitCode === 0 && remoteHeadBranch.startsWith(`${remote}/`)) {
+    return remoteHeadBranch.slice(remote.length + 1);
+  }
+
+  for (const candidate of ["main", "master", "trunk"]) {
+    const remoteCandidate = await runGitCommand([
+      "rev-parse",
+      "--verify",
+      "--quiet",
+      `refs/remotes/${remote}/${candidate}`
+    ], gitRoot, 8_000);
+    if (remoteCandidate.exitCode === 0) {
+      return candidate;
+    }
+
+    const localCandidate = await runGitCommand([
+      "rev-parse",
+      "--verify",
+      "--quiet",
+      `refs/heads/${candidate}`
+    ], gitRoot, 8_000);
+    if (localCandidate.exitCode === 0) {
+      return candidate;
+    }
+  }
+
+  return "main";
+}
+
+async function resolveGitBaseRef(gitRoot: string, remote: string, baseBranch: string): Promise<string | undefined> {
+  const remoteRef = `${remote}/${baseBranch}`;
+  const remoteResult = await runGitCommand([
+    "rev-parse",
+    "--verify",
+    "--quiet",
+    `refs/remotes/${remoteRef}`
+  ], gitRoot, 8_000);
+  if (remoteResult.exitCode === 0) {
+    return remoteRef;
+  }
+
+  const localResult = await runGitCommand([
+    "rev-parse",
+    "--verify",
+    "--quiet",
+    `refs/heads/${baseBranch}`
+  ], gitRoot, 8_000);
+  if (localResult.exitCode === 0) {
+    return baseBranch;
+  }
+
+  return undefined;
+}
+
+async function collectGitChangedFilesInRange(gitRoot: string, range: string): Promise<GitFileChange[]> {
+  const [nameStatusResult, numstatResult] = await Promise.all([
+    runGitCommand(["diff", "--name-status", "--find-renames", range, "--"], gitRoot, 64_000),
+    runGitCommand(["diff", "--numstat", range, "--"], gitRoot, 64_000)
+  ]);
+  if (nameStatusResult.exitCode !== 0) {
+    return [];
+  }
+
+  const stats = parseGitRangeNumstat(numstatResult.exitCode === 0 ? numstatResult.output : "");
+  return nameStatusResult.output
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => gitFileChangeFromNameStatus(line, stats))
+    .filter((change): change is GitFileChange => Boolean(change))
+    .filter(isSafeGitChange);
+}
+
+function parseGitRangeNumstat(output: string): Map<string, { additions?: number; deletions?: number }> {
+  const stats = new Map<string, { additions?: number; deletions?: number }>();
+  for (const line of output.split(/\r?\n/)) {
+    if (!line.trim()) {
+      continue;
+    }
+
+    const [additionsText, deletionsText, ...pathParts] = line.split("\t");
+    const filePath = pathParts.at(-1);
+    if (!filePath) {
+      continue;
+    }
+
+    stats.set(filePath, {
+      additions: parseGitNumstatValue(additionsText),
+      deletions: parseGitNumstatValue(deletionsText)
+    });
+  }
+
+  return stats;
+}
+
+function gitFileChangeFromNameStatus(
+  line: string,
+  stats: Map<string, { additions?: number; deletions?: number }>
+): GitFileChange | undefined {
+  const [statusCode, ...pathParts] = line.split("\t");
+  if (!statusCode || pathParts.length === 0) {
+    return undefined;
+  }
+
+  const statusLetter = statusCode[0] ?? "M";
+  const oldPath = statusLetter === "R" || statusLetter === "C" ? pathParts[0] : undefined;
+  const filePath = oldPath ? pathParts[1] : pathParts[0];
+  if (!filePath) {
+    return undefined;
+  }
+
+  const status = statusLetter === "A"
+    ? "Added"
+    : statusLetter === "D"
+      ? "Deleted"
+      : statusLetter === "R"
+        ? "Renamed"
+        : statusLetter === "C"
+          ? "Copied"
+          : "Modified";
+  const lineStats = stats.get(filePath);
+
+  return {
+    path: filePath,
+    oldPath,
+    status,
+    indexStatus: statusLetter,
+    worktreeStatus: " ",
+    staged: false,
+    unstaged: false,
+    untracked: false,
+    additions: lineStats?.additions,
+    deletions: lineStats?.deletions
+  };
+}
+
+function mergeGitFileChanges(primary: GitFileChange[], secondary: GitFileChange[]): GitFileChange[] {
+  const merged = new Map<string, GitFileChange>();
+  for (const change of [...primary, ...secondary]) {
+    merged.set(change.path, change);
+  }
+
+  return [...merged.values()].sort((first, second) =>
+    first.path.localeCompare(second.path, undefined, { numeric: true })
+  );
+}
+
+function gitPullRequestBlockers(
+  status: GitStatusSnapshot,
+  baseBranch: string,
+  upstreamParts: { remote: string; remoteBranch: string } | undefined,
+  commits: GitCommitToPush[],
+  baseRef: string | undefined
+): string[] {
+  const blockers: string[] = [];
+
+  if (!status.branch || status.branch.startsWith("HEAD")) {
+    blockers.push("Current checkout is detached; PR handoff requires a named branch.");
+  } else if (status.branch === baseBranch) {
+    blockers.push(`Current branch is the default base branch (${baseBranch}); create or switch to a task branch before PR handoff.`);
+  }
+
+  if (!baseRef) {
+    blockers.push(`Default base branch ${baseBranch} could not be resolved locally.`);
+  }
+
+  if (!upstreamParts) {
+    blockers.push("Current branch has no upstream remote branch; push the branch before PR handoff.");
+  }
+
+  if ((status.ahead ?? 0) > 0) {
+    blockers.push(`Current branch still has ${status.ahead} unpushed commit(s); push before PR handoff.`);
+  }
+
+  if ((status.behind ?? 0) > 0) {
+    blockers.push(`Current branch is behind upstream by ${status.behind} commit(s); update before PR handoff.`);
+  }
+
+  const unmerged = status.changedFiles.filter((change) => change.status === "Unmerged");
+  if (unmerged.length > 0) {
+    blockers.push(`Resolve ${unmerged.length} unmerged file(s) before PR handoff.`);
+  }
+
+  if (commits.length === 0) {
+    blockers.push("No commits were found between the base branch and HEAD for a PR.");
+  }
+
+  return blockers;
+}
+
+function gitPullRequestRiskNotes(
+  status: GitStatusSnapshot,
+  task: ForgeTask | undefined,
+  taskMissing: boolean,
+  commits: GitCommitToPush[]
+): string[] {
+  const notes: string[] = [];
+
+  if (taskMissing) {
+    notes.push("The requested task was not found, so this preview is based on branch state only.");
+  }
+
+  if (!task) {
+    notes.push("No task context is linked to this PR preview.");
+  }
+
+  if (status.isDirty) {
+    notes.push(`${status.changedFiles.length} uncommitted file(s) are not part of the pushed branch yet.`);
+  }
+
+  const latestRun = task?.validationRuns.at(-1);
+  if (!latestRun) {
+    notes.push("No Forge validation run is linked to this PR preview.");
+  } else if (latestRun.status !== "Passed") {
+    notes.push(`Latest Forge validation is ${latestRun.status}: ${latestRun.summary}`);
+  }
+
+  if (commits.length >= 20) {
+    notes.push("Only the first 20 commits are shown in this PR preview.");
+  }
+
+  return notes;
+}
+
+function gitPullRequestPreviewSummary(
+  status: GitStatusSnapshot,
+  baseBranch: string,
+  commits: GitCommitToPush[],
+  readiness: GitPullRequestPreview["readiness"]
+): string {
+  if (readiness === "Blocked") {
+    return `PR handoff is blocked for ${status.branch ?? "current checkout"} into ${baseBranch}.`;
+  }
+
+  return `${commits.length} commit(s) are ready for PR handoff from ${status.branch ?? "current checkout"} into ${baseBranch}.`;
+}
+
+function suggestPullRequestBranchName(
+  task: ForgeTask | undefined,
+  currentBranch: string | undefined,
+  baseBranch: string
+): string {
+  if (currentBranch && !currentBranch.startsWith("HEAD") && currentBranch !== baseBranch) {
+    return currentBranch;
+  }
+
+  const source = task?.title ?? task?.objective ?? "forge task";
+  return `forge/${slugText(source, "task")}`;
+}
+
+function suggestPullRequestTitle(task: ForgeTask | undefined, commits: GitCommitToPush[]): string {
+  if (task?.title) {
+    return normalizeCommitTitle(task.title);
+  }
+
+  if (commits[0]?.title) {
+    return normalizeCommitTitle(commits[0].title);
+  }
+
+  return "Update Forge workspace";
+}
+
+function slugText(value: string, fallback: string): string {
+  const slug = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 56)
+    .replace(/-+$/g, "");
+
+  return slug || fallback;
+}
+
+function buildPullRequestBody(
+  status: GitStatusSnapshot,
+  baseBranch: string,
+  title: string,
+  task: ForgeTask | undefined,
+  commits: GitCommitToPush[],
+  changedFiles: GitFileChange[],
+  blockers: string[],
+  riskNotes: string[]
+): string[] {
+  const lines = [
+    "## Summary",
+    `- ${task?.reviewSummary ?? task?.objective ?? title}`,
+    "",
+    "## Branch",
+    `- Head: ${status.branch ?? "detached"}`,
+    `- Base: ${baseBranch}`,
+    `- Upstream: ${status.upstream ?? "not configured"}`
+  ];
+
+  if (task) {
+    lines.push("", "## Linked Task", `- ${task.title} (${task.id})`, `- Status: ${task.status} / ${task.currentPhase}`);
+  }
+
+  if (commits.length > 0) {
+    lines.push("", "## Commits");
+    for (const commit of commits.slice(0, 10)) {
+      lines.push(`- ${commit.shortHash} ${commit.title}`);
+    }
+    if (commits.length > 10) {
+      lines.push(`- ${commits.length - 10} more commit(s)`);
+    }
+  }
+
+  if (changedFiles.length > 0) {
+    lines.push("", "## Changed Files");
+    for (const file of changedFiles.slice(0, 12)) {
+      lines.push(`- ${commitFileSummary(file)}`);
+    }
+    if (changedFiles.length > 12) {
+      lines.push(`- ${changedFiles.length - 12} more file(s)`);
+    }
+  }
+
+  if (blockers.length > 0) {
+    lines.push("", "## Blockers", ...blockers.map((blocker) => `- ${blocker}`));
+  }
+
+  if (riskNotes.length > 0) {
+    lines.push("", "## Risk Notes", ...riskNotes.map((note) => `- ${note}`));
+  }
+
+  return lines;
+}
+
+function pullRequestTestPlan(task: ForgeTask | undefined, changedFiles: GitFileChange[]): string[] {
+  const latestRun = task?.validationRuns.at(-1);
+  const plan: string[] = [];
+
+  if (latestRun) {
+    plan.push(`${latestRun.presetName}: ${latestRun.status} - ${latestRun.summary}`);
+    plan.push(...latestRun.commands.slice(0, 5).map((command) =>
+      `${command.command}: ${command.status}${command.exitCode === undefined ? "" : ` (${command.exitCode})`}`
+    ));
+  } else {
+    plan.push("No Forge validation run is linked yet.");
+  }
+
+  for (const command of suggestedCommitValidationCommands(changedFiles)) {
+    if (!plan.some((line) => line.includes(command))) {
+      plan.push(`Suggested: ${command}`);
+    }
+  }
+
+  return plan.slice(0, 8);
 }
 
 function commitPreviewBlockers(status: GitStatusSnapshot, files: GitFileChange[]): string[] {
@@ -4927,6 +5383,7 @@ function renderRuntimeHome(): string {
       <li><code>POST /git/commit</code></li>
       <li><a href="/git/push-preview">GET /git/push-preview</a></li>
       <li><code>POST /git/push</code></li>
+      <li><a href="/git/pr-preview">GET /git/pr-preview</a></li>
       <li><a href="/validation-presets">GET /validation-presets</a></li>
       <li><a href="/settings/model-provider">GET /settings/model-provider</a></li>
       <li><code>POST /settings/model-provider</code></li>

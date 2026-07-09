@@ -42,11 +42,13 @@ final class WorkspaceModel: ObservableObject {
     @Published private var creatingGitCommitTaskIDs = Set<ForgeTask.ID>()
     @Published private var loadingGitPushPreviewTaskIDs = Set<ForgeTask.ID>()
     @Published private var pushingGitBranchTaskIDs = Set<ForgeTask.ID>()
+    @Published private var loadingGitPullRequestPreviewTaskIDs = Set<ForgeTask.ID>()
     @Published private var gitFileDiffs: [String: GitFileDiff] = [:]
     @Published private var gitCommitPreviews: [ForgeTask.ID: GitCommitPreview] = [:]
     @Published private var gitCommitResults: [ForgeTask.ID: GitCreateCommitResult] = [:]
     @Published private var gitPushPreviews: [ForgeTask.ID: GitPushPreview] = [:]
     @Published private var gitPushResults: [ForgeTask.ID: GitPushResult] = [:]
+    @Published private var gitPullRequestPreviews: [ForgeTask.ID: GitPullRequestPreview] = [:]
     @Published private var updatingModelProviderSettings = false
 
     private let runtime = RuntimeClient()
@@ -678,6 +680,30 @@ final class WorkspaceModel: ObservableObject {
         pushingGitBranchTaskIDs.contains(taskID)
     }
 
+    func prepareGitPullRequestReview(for task: ForgeTask) {
+        loadingGitPullRequestPreviewTaskIDs.insert(task.id)
+
+        Task {
+            do {
+                let taskID = task.id == ForgeTask.sample.id ? nil : task.id
+                gitPullRequestPreviews[task.id] = try await runtime.gitPullRequestPreview(taskID: taskID)
+                gitStatusLastError = nil
+            } catch {
+                gitStatusLastError = "Prepare PR review failed: \(error.localizedDescription)"
+            }
+
+            loadingGitPullRequestPreviewTaskIDs.remove(task.id)
+        }
+    }
+
+    func gitPullRequestPreview(for taskID: ForgeTask.ID) -> GitPullRequestPreview? {
+        gitPullRequestPreviews[taskID]
+    }
+
+    func isPreparingGitPullRequestReview(taskID: ForgeTask.ID) -> Bool {
+        loadingGitPullRequestPreviewTaskIDs.contains(taskID)
+    }
+
     func revealGitFile(path: String) {
         guard let root = gitStatus?.root else {
             statusMessage = "Git root is not available."
@@ -984,6 +1010,7 @@ final class WorkspaceModel: ObservableObject {
             gitStatusLastError = gitStatus?.error
             gitCommitPreviews.removeAll()
             gitPushPreviews.removeAll()
+            gitPullRequestPreviews.removeAll()
         } catch {
             gitStatus = nil
             gitStatusLastError = error.localizedDescription

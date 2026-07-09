@@ -230,6 +230,13 @@ upstream from the preview. The runtime blocks detached/no-upstream/behind/
 no-ahead/unmerged states and uses a non-force push to the configured upstream.
 It does not create a PR.
 
+The PR handoff slice is still read-only. `GET /git/pr-preview` derives a
+review artifact from branch state, default-base detection, optional task
+context, commit summaries, changed files, latest validation state, blockers,
+and risk notes. It can suggest a branch name, PR title, draft body, and test
+plan, but it does not call GitHub, publish a PR, change branches, push, or
+mutate repository state.
+
 ### Validation Runner
 
 Runs controlled post-apply validation and records command-level results. The
