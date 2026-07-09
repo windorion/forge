@@ -136,8 +136,24 @@ endpoints. It refreshes `GET /git/status`, highlights files related to the
 selected task, shows staged/unstaged/untracked state plus line stats when git
 provides them, and can load a bounded side-by-side diff from
 `GET /git/diff?path=<repo-relative-path>`. File actions are read-only: open
-the file or reveal it in Finder. The same section can prepare a read-only
-Commit Review through `GET /git/commit-preview?taskID=<task-id>`, showing a
+the file or reveal it in Finder. The same section can prepare a Branch Review
+through `GET /git/branch-preview`, showing current branch, target branch,
+create/switch mode, blockers, and risk notes. From that reviewed card, the
+user can explicitly create a new local branch or switch to an existing clean
+local branch through `POST /git/branch`; the runtime rechecks expected HEAD
+and current branch, validates the branch name, blocks unmerged files, blocks
+dirty switches, and does not push or publish a PR.
+The same section can prepare a Branch Publish Review through
+`GET /git/branch-publish-preview`, showing the current branch, configured
+remote, remote branch, default base branch, commits to publish, local changes
+that will remain local, blockers, and risk notes. From that reviewed card, the
+user can explicitly publish the current branch and set upstream through
+`POST /git/branch-publish`; the runtime rechecks expected HEAD, branch,
+remote, and remote branch, blocks detached/default-base/already-upstream/
+no-commit/unmerged/remote-collision states, and performs a non-force
+`git push --set-upstream`. It does not create a PR.
+The same section can prepare a read-only Commit Review through
+`GET /git/commit-preview?taskID=<task-id>`, showing a
 suggested commit message, included files, validation suggestions, blockers,
 risk notes, and the explicit boundary that Forge has not staged, committed, or
 pushed anything. From that reviewed card, the user can explicitly create one
@@ -296,8 +312,8 @@ It covers:
 - both `AppendText` and exact `ReplaceText`
 - read-only git status and bounded git diff endpoints
 - mock OpenAI plan-context loop before a plan revision
-- read-only commit, push, and PR handoff preview endpoints plus stale-head
-  rejection checks for high-risk git actions
+- read-only branch, branch-publish, commit, push, and PR handoff preview
+  endpoints plus stale-head rejection checks for high-risk git actions
 - mock OpenAI richer edit proposal with append/create apply and blocked
   preview-only artifact coverage
 - mock OpenAI blocked-to-repaired edit proposal flow

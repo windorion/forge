@@ -63,7 +63,7 @@ Current implementation:
 
 Current limitations:
 
-- no staging, unstaging, discard, checkout, reset, or actual commit actions
+- no staging, unstaging, discard, checkout/reset, or binary diff actions
 - no binary diff viewer
 - no full-file diff navigation or filtering beyond the first review list
 - large diffs are truncated by the runtime
@@ -135,7 +135,48 @@ Current implementation:
 
 - PR handoff preview can suggest a `forge/<task-slug>` branch name when the
   current checkout is detached or still on the default base branch.
-- Forge does not yet create or switch branches.
+- Forge can prepare a branch review artifact with current branch, expected
+  HEAD, default base branch, target branch, create/switch mode, dirty state,
+  blockers, and risk notes.
+- Forge can create a new local branch or switch to an existing local branch
+  after explicit confirmation in the macOS Review panel.
+- The runtime validates the target branch name, rechecks expected HEAD and
+  current branch from the reviewed preview, blocks unmerged files, and blocks
+  switching to existing branches while the working tree is dirty.
+- Creating a new branch may carry current uncommitted changes forward into the
+  new branch; the preview calls this out as a risk note.
+- Forge does not set upstream tracking, push the branch, delete branches,
+  checkout files, reset, or publish a PR from the branch action.
+
+## Branch Publish Workflow
+
+Branch publish is the first-push step after a local task branch exists.
+
+Before publishing a branch, Forge should show:
+
+- current branch
+- remote
+- remote branch
+- default base branch
+- commits that will become visible remotely
+- uncommitted local changes that will remain local
+- blockers and risk notes
+
+Current implementation:
+
+- Forge can prepare a branch publish preview with configured remote detection,
+  default-base comparison, commits to publish, uncommitted local changes,
+  blockers, and risk notes.
+- Forge can publish the current local branch and set upstream after explicit
+  confirmation in the macOS Review panel.
+- The runtime rechecks expected HEAD, current branch, remote, and remote branch
+  from the reviewed preview, blocks detached/default-base/already-upstream/
+  no-commit/unmerged states, blocks remote branch collisions, and runs a
+  non-force `git push --set-upstream <remote> HEAD:<branch>`.
+- Publishing to a differently named remote branch is intentionally blocked in
+  the first implementation.
+- Forge does not force push, merge, reset, delete branches, or create a PR from
+  the branch publish action.
 
 ## Pull Request Handoff
 

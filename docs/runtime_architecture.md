@@ -215,14 +215,35 @@ validation commands to consider, risk notes, and blockers. This endpoint must
 remain read-only; actual stage, commit, push, or PR publication are separate
 high-risk actions that require explicit approval.
 
-The first high-risk git action is `POST /git/commit`. It can create one local
+Branch review is the first branch-management slice. `GET /git/branch-preview`
+suggests or validates a target branch, detects whether Forge would create a
+new local branch or switch to an existing local branch, and returns current
+branch, expected HEAD, base branch, dirty state, blockers, and risk notes.
+`POST /git/branch` is a high-risk action. It requires explicit confirmation
+plus expected HEAD and current branch from the preview, validates the target
+branch name, blocks unmerged files, blocks switching existing branches while
+the working tree is dirty, and then runs local `git switch --create <branch>`
+or `git switch <branch>`. It does not set upstream tracking, push, reset,
+delete branches, or publish a PR.
+
+Branch publish is the remote tracking slice after local branch creation.
+`GET /git/branch-publish-preview` summarizes the current branch, configured
+remote, remote branch, default-base comparison, commits to publish, dirty
+working-tree state, blockers, and risk notes. `POST /git/branch-publish` is a
+high-risk action. It requires explicit confirmation plus expected HEAD,
+branch, remote, and remote branch from the preview. The runtime blocks
+detached/default-base/already-upstream/no-commit/unmerged states, blocks
+remote branch collisions, and runs a non-force
+`git push --set-upstream <remote> HEAD:<branch>`. It does not create a PR.
+
+The local commit action is `POST /git/commit`. It can create one local
 commit only after the app sends explicit confirmation from the reviewed commit
 card. The runtime rechecks expected HEAD, validates selected paths against the
 current status, rejects unmerged files and staged files outside the reviewed
 selection, preflights git author identity, stages selected paths, creates the
 commit, and records a linked task event when possible. It does not push.
 
-The next high-risk git action is `POST /git/push`. It is paired with
+The upstream push action is `POST /git/push`. It is paired with
 `GET /git/push-preview`, which shows branch/upstream state, ahead/behind
 counts, commits to push, dirty working-tree state, blockers, and risk notes.
 The push action requires explicit confirmation plus expected HEAD, branch, and

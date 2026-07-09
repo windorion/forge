@@ -69,6 +69,8 @@ The product should show:
 - approved runtime validation preset
 - workspace validation preset config
 - command permission request surface
+- branch preparation review plus explicit local branch create/switch actions
+- branch publish review plus explicit first-push/upstream setup
 - git status, diff, commit preparation review, explicit local commit, and
   explicit current-branch push surfaces
 - read-only PR handoff preview with title/body/test-plan suggestions
@@ -83,7 +85,7 @@ The product should show:
 - arbitrary command execution
 - general test runner orchestration
 - PR publication
-- branch creation/switching
+- branch deletion or history rewriting
 - full repository index
 - Tree-sitter parsing
 - provider ecosystem beyond local deterministic and optional OpenAI
@@ -146,6 +148,13 @@ V0 is complete when:
   connection targets rather than kill targets.
 - The app can show read-only git working tree status and bounded per-file diff
   previews in the Review panel, with open/reveal actions for changed files.
+- The app can prepare a branch review, then explicitly create a new local
+  branch or switch to an existing clean local branch after confirmation. The
+  runtime rechecks HEAD/current branch and blocks unsafe branch changes.
+- The app can prepare a branch publish review, then explicitly publish the
+  current local branch and set upstream after confirmation. The runtime
+  rechecks HEAD/branch/remote/remote branch, blocks unsafe first-push states,
+  and does not force push or create a PR.
 - The app can prepare a read-only commit review artifact with suggested commit
   message, included files, validation suggestions, blockers, risk notes, and
   an explicit non-mutating operation boundary.

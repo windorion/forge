@@ -498,6 +498,52 @@ async function assertGitReadOnlyEndpoints() {
     `Git commit preview should not be blocked for the smoke fixture: ${commitPreview.readiness}.`
   );
 
+  const branchPreview = await get("/git/branch-preview");
+  assert(branchPreview.expectedHead, "Git branch preview did not include the expected head.");
+  assert(branchPreview.currentBranch, "Git branch preview did not include the current branch.");
+  assert(branchPreview.targetBranch, "Git branch preview did not include a target branch.");
+  assert(
+    branchPreview.operationBoundary.includes("has not created"),
+    "Git branch preview did not state the non-mutating operation boundary."
+  );
+
+  const blockedBranch = await postExpectError("/git/branch", {
+    expectedHead: "not-current-head",
+    expectedCurrentBranch: branchPreview.currentBranch,
+    targetBranch: branchPreview.targetBranch,
+    mode: branchPreview.mode === "SwitchBranch" ? "SwitchBranch" : "CreateBranch",
+    confirmation: branchPreview.mode === "SwitchBranch" ? "SwitchBranch" : "CreateBranch"
+  });
+  assert(blockedBranch.status === 409, `Expected stale-head branch attempt to return 409, got ${blockedBranch.status}.`);
+  assert(
+    blockedBranch.text.includes("Git HEAD changed since branch review"),
+    "Stale-head branch attempt did not fail before git switch."
+  );
+
+  const branchPublishPreview = await get("/git/branch-publish-preview");
+  assert(branchPublishPreview.expectedHead, "Git branch publish preview did not include the expected head.");
+  assert(Array.isArray(branchPublishPreview.commitsToPublish), "Git branch publish preview did not include commitsToPublish.");
+  assert(
+    branchPublishPreview.operationBoundary.includes("has not pushed"),
+    "Git branch publish preview did not state the non-mutating operation boundary."
+  );
+
+  const blockedBranchPublish = await postExpectError("/git/branch-publish", {
+    expectedHead: "not-current-head",
+    expectedBranch: branchPublishPreview.branch ?? "main",
+    remote: branchPublishPreview.remote ?? "origin",
+    remoteBranch: branchPublishPreview.remoteBranch ?? branchPublishPreview.branch ?? "main",
+    confirmation: "PublishCurrentBranch"
+  });
+  assert(
+    blockedBranchPublish.status === 409,
+    `Expected stale-head branch publish attempt to return 409, got ${blockedBranchPublish.status}.`
+  );
+  assert(
+    blockedBranchPublish.text.includes("Git HEAD changed since branch publish review"),
+    "Stale-head branch publish attempt did not fail before network push."
+  );
+
   const blockedCommit = await postExpectError("/git/commit", {
     expectedHead: "not-current-head",
     title: commitPreview.suggestedTitle,

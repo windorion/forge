@@ -33,6 +33,12 @@ Examples:
 - inspect bounded git diffs for repo-relative changed files
 - prepare a read-only commit review artifact from git status, optional task
   context, and latest task validation state
+- prepare a read-only branch review artifact from current branch status,
+  suggested task branch, target branch validation, dirty state, blockers, and
+  risk notes
+- prepare a read-only branch publish review artifact from current branch
+  status, configured remotes, default-base comparison, commit summaries,
+  uncommitted local changes, blockers, and risk notes
 - prepare a read-only PR handoff artifact from branch status, default-base
   detection, commit summaries, changed files, optional task context, and latest
   task validation state
@@ -46,6 +52,10 @@ and block `.git` and `.forge` internals. The commit-preview endpoint only
 summarizes the working tree, task context, validation state, and suggested
 next checks. The PR-preview endpoint only summarizes branch/base/upstream
 state, draft PR metadata, commits, changed files, validation evidence, blockers,
+and risk notes. The branch-preview endpoint only summarizes target branch
+validation, create/switch mode, dirty state, blockers, and risk notes. The
+branch-publish-preview endpoint only summarizes current branch, remote, remote
+branch, default-base comparison, commits to publish, local changes, blockers,
 and risk notes. These endpoints must not stage, unstage, commit, checkout,
 reset, clean, push, create pull requests, call external hosting APIs, or
 otherwise mutate the repository.
@@ -93,6 +103,23 @@ rejects unmerged files, rejects staged files outside the reviewed selection,
 preflights git author identity, stages only the selected files, and creates
 one local commit. It does not push, merge, reset, delete branches, or publish
 anything externally.
+
+Current branch create/switch implementation is high risk and requires explicit
+user confirmation from the macOS Review panel. The runtime rechecks expected
+HEAD and current branch from the branch preview, validates the target branch
+name, blocks unmerged files, blocks switching to existing branches when the
+working tree is dirty, and then runs either local branch creation or local
+branch switching. It does not set upstream tracking, push, merge, reset, delete
+branches, or publish anything externally.
+
+Current branch publish implementation is high risk and requires explicit user
+confirmation from the macOS Review panel. The runtime rechecks expected HEAD,
+current branch, remote, and remote branch from the branch publish preview,
+blocks detached/default-base/already-upstream/no-commit/unmerged states,
+blocks remote branch collisions, and uses a non-force
+`git push --set-upstream <remote> HEAD:<branch>` to publish the current branch
+and set upstream. It does not force push, merge, reset, delete branches, or
+create a PR.
 
 Current push implementation is also high risk and requires explicit user
 confirmation from the macOS Review panel. The runtime rechecks expected HEAD,

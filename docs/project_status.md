@@ -52,6 +52,19 @@ Implemented:
 - Read-only commit preparation preview from the runtime, surfaced in the macOS
   Review UI with suggested commit message, included files, validation
   suggestions, blockers, risk notes, and a non-mutating operation boundary.
+- Branch preparation preview and explicit local branch create/switch actions
+  from the macOS Review UI. The runtime validates the target branch name,
+  detects whether it will create or switch, requires expected HEAD and current
+  branch values from the reviewed preview, blocks unmerged files, blocks
+  switching existing branches with dirty working trees, and records a linked
+  task event when possible.
+- Branch publish preview and explicit first-push/upstream setup from the macOS
+  Review UI. The runtime chooses or validates a configured remote, compares
+  current branch work against the default base branch, lists commits to
+  publish, blocks default-base/detached/already-upstream/no-commit/unmerged
+  states, blocks remote branch collisions, rechecks expected HEAD, branch,
+  remote, and remote branch values, then runs a non-force
+  `git push --set-upstream <remote> HEAD:<branch>` when approved.
 - Explicit local git commit action from the macOS Review UI. The runtime
   requires a fresh expected-HEAD value, explicit confirmation, selected paths
   from the current working tree, no unmerged files, and no staged files outside
@@ -94,8 +107,8 @@ These percentages are product-readiness estimates, not calendar estimates.
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| V0 local demo | 94-97% | A local demo can show task creation, context inspection, planning, review, restricted edits, validation, repair proposal review, git status/diff visibility, commit preparation preview, explicit local commit and push actions, PR handoff preview, core runtime regression coverage, runtime diagnostics, and first-pass runtime lifecycle controls. |
-| Useful developer alpha | 52-62% | A developer can use Forge on small real tasks with model-backed planning/editing, visible diffs, commit preparation, local commits, guarded push, PR handoff preview, runtime lifecycle controls, and reliable rollback. |
+| V0 local demo | 96-98% | A local demo can show task creation, context inspection, planning, review, restricted edits, validation, repair proposal review, git status/diff visibility, branch review, branch publish/upstream setup, commit preparation preview, explicit local commit and push actions, PR handoff preview, core runtime regression coverage, runtime diagnostics, and first-pass runtime lifecycle controls. |
+| Useful developer alpha | 56-66% | A developer can use Forge on small real tasks with model-backed planning/editing, visible diffs, branch review, branch publish/upstream setup, commit preparation, local commits, guarded push, PR handoff preview, runtime lifecycle controls, and reliable rollback. |
 | Commercial beta | 25-30% | A paid user can install it, connect providers, trust permissions, use git workflows, and recover from failures. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
 
@@ -110,7 +123,7 @@ The hardest remaining work is not the app shell. The hardest remaining work is:
 - reliable repository understanding beyond bounded file scans
 - safe but useful patch generation and diff review
 - app-managed runtime lifecycle
-- git workflow from dirty tree to approved PR
+- git workflow from dirty tree to approved published PR
 - robust command execution and failure recovery
 - native macOS distribution, signing, notarization, and updates
 - trust polish: permissions, audit trail, secret handling, and clear user
@@ -132,8 +145,13 @@ Remaining V0 gaps:
   staged/unstaged states, and larger changes
 - harden push review for remote auth failures, non-fast-forward rejections,
   branch protection, and disconnected networks
+- harden branch publish/upstream setup for remote auth failures, protected
+  branch names, stale remote refs, fork remotes, and isolated success-path
+  tests
 - harden PR handoff preview for unusual default branches, fork remotes, and
   richer test-plan evidence
+- harden branch review for protected default branches, dirty-worktree edge
+  cases, and isolated success-path tests
 - provider settings smoke test with a live key supplied intentionally
 - broadened regression coverage for app-facing runtime state and provider
   settings paths
@@ -151,6 +169,7 @@ Alpha requires:
 - side-by-side diff review
 - git status, changed-file inspection, commit preparation preview, and local
   commit creation in the app
+- branch publish/upstream setup and guarded current-branch push in the app
 - task recovery after runtime restart and common failures
 - a clean onboarding path for choosing a repo and provider
 

@@ -2159,3 +2159,100 @@ Next:
 - Add explicit branch creation/switching review before PR publication.
 - Add approved GitHub PR creation as a separate high-risk action after the
   preview artifact is stable.
+
+### 2026-07-09 21:22:43 CEST +0200
+
+Conversation summary:
+
+- User asked to continue the next long task. The session advanced the git
+  workflow gap before PR publication by adding branch preparation and explicit
+  local branch create/switch review.
+
+Done:
+
+- Added runtime `GET /git/branch-preview` with current branch, expected HEAD,
+  default base branch, target branch, create/switch mode, dirty state,
+  blockers, risk notes, related task metadata, and a non-mutating operation
+  boundary.
+- Added runtime `POST /git/branch` with explicit confirmation, expected HEAD
+  and current-branch drift checks, target branch validation, unmerged-file
+  blocking, dirty-worktree blocking for switching existing branches, local
+  branch creation/switching, optional task approval/event recording, and no
+  push or PR publication.
+- Added TypeScript branch preview/request/result types and extended approval
+  records for create/switch branch actions.
+- Added macOS app branch models, runtime client calls, workspace state/actions,
+  Branch Review card, optional target branch input, confirmation dialog, and
+  branch result display in the Working Tree review surface.
+- Extended `npm run smoke:core` with branch-preview assertions and stale-head
+  branch rejection before any git switch.
+- Updated README, runtime README, project status, TODO, development, runtime
+  architecture, git workflow, security permissions, and V0 scope docs.
+- Verified `npm run check`, `npm run build`, `swift build`,
+  `npm run smoke:core`, and `git diff --check`.
+- Confirmed no persistent Forge runtime service was listening on
+  `127.0.0.1:17373`.
+
+Not done:
+
+- Did not set upstream tracking, push newly created branches, delete branches,
+  reset history, or publish PRs.
+- Did not add a success-path branch integration test in an isolated temporary
+  git repository; smoke verifies the safety rejection path inside this checkout.
+- Did not adapt the shipped UI design handoff into the SwiftUI visual system.
+
+Next:
+
+- Add branch publish/upstream setup after local branch creation.
+- Add approved GitHub draft PR creation from the PR handoff preview.
+- Add isolated temporary-repository integration tests for successful local
+  branch creation/switching.
+
+### 2026-07-09 21:35:55 CEST +0200
+
+Conversation summary:
+
+- User asked to continue the next long task. The session extended the git
+  workflow from local branch creation into branch publish/upstream setup,
+  keeping the action behind a review artifact and explicit confirmation.
+
+Done:
+
+- Added runtime `GET /git/branch-publish-preview` with current branch,
+  configured remote, remote branch, default base branch, commits to publish,
+  changed files that remain local, blockers, risk notes, related task metadata,
+  and a non-mutating operation boundary.
+- Added runtime `POST /git/branch-publish` with explicit confirmation,
+  expected HEAD/branch/remote/remote-branch drift checks, default-base,
+  detached, already-upstream, no-commit, unmerged-file, and remote-branch
+  collision blockers, non-force `git push --set-upstream`, and optional task
+  approval/event recording.
+- Added TypeScript branch publish preview/request/result types and extended
+  approval records for publish branch actions.
+- Added macOS app branch publish models, runtime client calls, workspace
+  state/actions, Publish Review card, remote/remote-branch inputs,
+  confirmation dialog, commit list, blockers/risk notes, and publish result
+  display in the Working Tree review surface.
+- Extended `npm run smoke:core` with branch-publish-preview assertions and
+  stale-head branch publish rejection before any network push.
+- Updated README, runtime README, project status, TODO, development, runtime
+  architecture, git workflow, security permissions, and V0 scope docs.
+- Verified `npm run check`, `npm run build`, `swift build`,
+  `npm run smoke:core`, and `git diff --check`.
+- Confirmed no persistent Forge runtime service was listening on
+  `127.0.0.1:17373`.
+
+Not done:
+
+- Did not create, publish, update, close, or comment on pull requests.
+- Did not add GitHub integration, fork remote support, branch protection
+  awareness, or isolated success-path branch publish tests.
+- Did not adapt the shipped UI design handoff into the SwiftUI visual system.
+
+Next:
+
+- Add approved GitHub draft PR creation from the PR handoff preview.
+- Harden branch publish for remote auth failures, protected branch names,
+  stale remote refs, fork remotes, and isolated success-path tests.
+- Broaden app-facing regression coverage for runtime state, diagnostics, and
+  provider settings paths.

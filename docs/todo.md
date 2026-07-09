@@ -20,8 +20,13 @@ what to do next without rereading the whole project history.
   staged/unstaged states, large change sets, and validation readiness.
 - Harden push review for remote auth failures, non-fast-forward rejections,
   branch protection, and disconnected networks.
+- Harden branch publish/upstream setup for remote auth failures, protected
+  branch names, stale remote refs, fork remotes, and isolated success-path
+  tests.
 - Harden PR handoff preview for non-main default branches, fork remotes, and
   richer validation/test-plan evidence.
+- Harden branch review for protected default branches, dirty-worktree edge
+  cases, and isolated success-path tests.
 - Harden app-managed runtime start/stop for packaged app locations, stale
   process handling, and user-facing launch failures.
 - Run a provider settings smoke test with an intentionally supplied OpenAI API
@@ -46,7 +51,6 @@ what to do next without rereading the whole project history.
 
 - Improve the first-pass native side-by-side diff view with file filtering and
   better large-diff navigation.
-- Add branch creation/switching with explicit review and safety blockers.
 - Add approved PR creation/publication after the read-only PR handoff preview.
 - Add GitHub integration for PR metadata, draft PR creation, and remote
   branch/fork awareness.
@@ -132,6 +136,17 @@ what to do next without rereading the whole project history.
   the base branch when possible, compares current branch work against that
   base, suggests branch name, PR title/body, test plan, commits, changed
   files, blockers, and risk notes, and does not create or publish a PR.
+- Added branch preparation preview and explicit local branch create/switch
+  actions from the Review panel. The runtime validates target branch names,
+  rechecks expected HEAD and current branch, creates new local branches,
+  switches to clean existing local branches, blocks unmerged files and dirty
+  switches, records task events when linked, and does not push or publish a PR.
+- Added branch publish preview and explicit first-push/upstream setup from the
+  Review panel. The runtime validates configured remotes, lists commits against
+  the default base branch, blocks default-base/detached/already-upstream/
+  no-commit/unmerged/remote-collision states, rechecks expected HEAD, branch,
+  remote, and remote branch, pushes with `--set-upstream` without force, and
+  records task events when linked.
 - Extended `npm run smoke:core` with a mock OpenAI Responses server that
   verifies the model-guided context loop, append/create apply,
   blocked-to-repaired proposal flow, failed validation repair briefs,

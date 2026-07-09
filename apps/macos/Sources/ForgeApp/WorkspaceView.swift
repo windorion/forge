@@ -1645,6 +1645,36 @@ private struct GitWorkingTreeCard: View {
                     )
                 }
 
+                GitBranchPreviewCard(
+                    preview: workspace.gitBranchPreview(for: task.id),
+                    result: workspace.gitBranchResult(for: task.id),
+                    isLoading: workspace.isPreparingGitBranchReview(taskID: task.id),
+                    isChangingBranch: workspace.isChangingGitBranch(taskID: task.id),
+                    prepare: { targetBranch in
+                        workspace.prepareGitBranchReview(for: task, targetBranch: targetBranch)
+                    },
+                    changeBranch: { preview in
+                        workspace.createOrSwitchGitBranch(for: task, preview: preview)
+                    }
+                )
+
+                GitBranchPublishPreviewCard(
+                    preview: workspace.gitBranchPublishPreview(for: task.id),
+                    result: workspace.gitBranchPublishResult(for: task.id),
+                    isLoading: workspace.isPreparingGitBranchPublishReview(taskID: task.id),
+                    isPublishing: workspace.isPublishingGitBranch(taskID: task.id),
+                    prepare: { remote, remoteBranch in
+                        workspace.prepareGitBranchPublishReview(
+                            for: task,
+                            remote: remote,
+                            remoteBranch: remoteBranch
+                        )
+                    },
+                    publish: { preview in
+                        workspace.publishGitBranch(for: task, preview: preview)
+                    }
+                )
+
                 GitCommitPreviewCard(
                     task: task,
                     preview: workspace.gitCommitPreview(for: task.id),
@@ -1979,6 +2009,577 @@ private struct GitCommitPreviewCard: View {
         }
 
         return "Commit Blocked"
+    }
+}
+
+private struct GitBranchPreviewCard: View {
+    var preview: GitBranchPreview?
+    var result: GitBranchResult?
+    var isLoading: Bool
+    var isChangingBranch: Bool
+    var prepare: (String?) -> Void
+    var changeBranch: (GitBranchPreview) -> Void
+
+    @State private var targetBranch = ""
+    @State private var showBranchConfirmation = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Label("Branch Review", systemImage: "arrow.triangle.branch")
+                    .font(.subheadline.weight(.semibold))
+
+                Spacer()
+
+                if let preview {
+                    Button {
+                        showBranchConfirmation = true
+                    } label: {
+                        Label(actionButtonTitle(preview), systemImage: actionImage(for: preview))
+                    }
+                    .labelStyle(.iconOnly)
+                    .disabled(!canChangeBranch(preview))
+                    .help(actionHelp(for: preview))
+                }
+
+                Button {
+                    prepare(preparedTargetBranch)
+                } label: {
+                    Label(isLoading ? "Preparing" : "Prepare", systemImage: "doc.text.magnifyingglass")
+                }
+                .labelStyle(.iconOnly)
+                .disabled(isLoading || isChangingBranch)
+                .help("Prepare branch review")
+            }
+
+            HStack(spacing: 6) {
+                TextField("forge/task-branch", text: $targetBranch)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.caption)
+                Button {
+                    prepare(preparedTargetBranch)
+                } label: {
+                    Label("Review", systemImage: "arrow.clockwise")
+                }
+                .labelStyle(.iconOnly)
+                .disabled(isLoading || isChangingBranch)
+                .help("Review target branch")
+            }
+
+            if let preview {
+                HStack(spacing: 8) {
+                    Label(preview.readiness, systemImage: readinessImage(for: preview))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(readinessColor(for: preview))
+
+                    Spacer(minLength: 8)
+
+                    Text(preview.generatedAt)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+
+                Text(preview.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 8) {
+                    Label(preview.currentBranch ?? "Detached", systemImage: "arrow.triangle.branch")
+                    Label(preview.targetBranch, systemImage: preview.branchExists ? "folder" : "plus.circle")
+                    Spacer()
+                    Text(preview.mode)
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+                if let relatedTask = preview.relatedTask {
+                    Label("\(relatedTask.title) / \(relatedTask.status) / \(relatedTask.currentPhase)", systemImage: "target")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                if !preview.blockers.isEmpty {
+                    CommitPreviewNoteList(
+                        title: "Blockers",
+                        systemImage: "xmark.octagon",
+                        notes: preview.blockers,
+                        color: .red
+                    )
+                }
+
+                if !preview.riskNotes.isEmpty {
+                    CommitPreviewNoteList(
+                        title: "Risk Notes",
+                        systemImage: "exclamationmark.triangle",
+                        notes: preview.riskNotes,
+                        color: .orange
+                    )
+                }
+
+                if preview.isDirty && !preview.changedFiles.isEmpty {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("Working Tree")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        ForEach(preview.changedFiles.prefix(6)) { file in
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text(file.status)
+                                    .font(.caption2.weight(.medium))
+                                    .frame(width: 64, alignment: .leading)
+                                    .foregroundStyle(.secondary)
+                                Text(file.path)
+                                    .font(.caption2.monospaced())
+                                    .lineLimit(1)
+                                Spacer(minLength: 6)
+                            }
+                        }
+
+                        if preview.changedFiles.count > 6 {
+                            Text("\(preview.changedFiles.count - 6) more file(s) not shown.")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                }
+
+                Label(preview.operationBoundary, systemImage: "lock.shield")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+
+                Button {
+                    showBranchConfirmation = true
+                } label: {
+                    Label(actionButtonTitle(preview), systemImage: actionImage(for: preview))
+                        .frame(maxWidth: .infinity)
+                }
+                .disabled(!canChangeBranch(preview))
+                .confirmationDialog(
+                    confirmationTitle(for: preview),
+                    isPresented: $showBranchConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button(confirmationButtonTitle(for: preview)) {
+                        changeBranch(preview)
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text(confirmationMessage(for: preview))
+                }
+            } else if let result {
+                BranchResultView(result: result)
+            } else {
+                Label(isLoading ? "Preparing branch review..." : "Branch review has not been prepared.", systemImage: isLoading ? "hourglass" : "arrow.triangle.branch")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(8)
+        .background(.quaternary)
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+    }
+
+    private var preparedTargetBranch: String? {
+        let trimmed = targetBranch.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func canChangeBranch(_ preview: GitBranchPreview) -> Bool {
+        !isChangingBranch &&
+            !isLoading &&
+            preview.expectedHead != nil &&
+            preview.currentBranch != nil &&
+            preview.blockers.isEmpty &&
+            (preview.mode == "CreateBranch" || preview.mode == "SwitchBranch")
+    }
+
+    private func actionButtonTitle(_ preview: GitBranchPreview) -> String {
+        if isChangingBranch {
+            return "Changing Branch"
+        }
+
+        switch preview.mode {
+        case "CreateBranch":
+            return preview.blockers.isEmpty ? "Create Branch" : "Branch Blocked"
+        case "SwitchBranch":
+            return preview.blockers.isEmpty ? "Switch Branch" : "Branch Blocked"
+        default:
+            return "No Branch Action"
+        }
+    }
+
+    private func actionImage(for preview: GitBranchPreview) -> String {
+        preview.mode == "SwitchBranch" ? "arrow.left.arrow.right" : "plus.circle"
+    }
+
+    private func actionHelp(for preview: GitBranchPreview) -> String {
+        preview.mode == "SwitchBranch" ? "Switch to branch" : "Create branch"
+    }
+
+    private func confirmationTitle(for preview: GitBranchPreview) -> String {
+        preview.mode == "SwitchBranch" ? "Switch git branch?" : "Create git branch?"
+    }
+
+    private func confirmationButtonTitle(for preview: GitBranchPreview) -> String {
+        preview.mode == "SwitchBranch" ? "Switch Branch" : "Create Branch"
+    }
+
+    private func confirmationMessage(for preview: GitBranchPreview) -> String {
+        if preview.mode == "SwitchBranch" {
+            return "Forge will switch to the existing local branch \(preview.targetBranch). It will not commit, push, reset, delete branches, or publish a PR."
+        }
+
+        return "Forge will create and switch to \(preview.targetBranch) from the current HEAD. It will not commit, push, reset, delete branches, or publish a PR."
+    }
+
+    private func readinessImage(for preview: GitBranchPreview) -> String {
+        switch preview.readiness {
+        case "Ready":
+            return "checkmark.circle"
+        case "Blocked":
+            return "xmark.octagon"
+        default:
+            return "exclamationmark.triangle"
+        }
+    }
+
+    private func readinessColor(for preview: GitBranchPreview) -> Color {
+        switch preview.readiness {
+        case "Ready":
+            return .green
+        case "Blocked":
+            return .red
+        default:
+            return .orange
+        }
+    }
+}
+
+private struct BranchResultView: View {
+    var result: GitBranchResult
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Label(result.summary, systemImage: result.mode == "SwitchBranch" ? "arrow.left.arrow.right" : "plus.circle")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.green)
+
+            HStack(spacing: 8) {
+                if let previousBranch = result.previousBranch {
+                    Text(previousBranch)
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+
+                Text(result.branch)
+                    .font(.caption2.monospaced().weight(.semibold))
+                    .textSelection(.enabled)
+
+                Spacer()
+
+                Text(result.mode)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(result.outputSummary)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+
+            Label(result.operationBoundary, systemImage: "lock.shield")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+private struct GitBranchPublishPreviewCard: View {
+    var preview: GitBranchPublishPreview?
+    var result: GitBranchPublishResult?
+    var isLoading: Bool
+    var isPublishing: Bool
+    var prepare: (String?, String?) -> Void
+    var publish: (GitBranchPublishPreview) -> Void
+
+    @State private var remote = ""
+    @State private var remoteBranch = ""
+    @State private var showPublishConfirmation = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Label("Publish Review", systemImage: "arrow.up.right.circle")
+                    .font(.subheadline.weight(.semibold))
+
+                Spacer()
+
+                if let preview {
+                    Button {
+                        showPublishConfirmation = true
+                    } label: {
+                        Label(publishButtonTitle(preview), systemImage: "paperplane")
+                    }
+                    .labelStyle(.iconOnly)
+                    .disabled(!canPublish(preview))
+                    .help("Publish branch and set upstream")
+                }
+
+                Button {
+                    prepare(preparedRemote, preparedRemoteBranch)
+                } label: {
+                    Label(isLoading ? "Preparing" : "Prepare", systemImage: "network")
+                }
+                .labelStyle(.iconOnly)
+                .disabled(isLoading || isPublishing)
+                .help("Prepare branch publish review")
+            }
+
+            HStack(spacing: 6) {
+                TextField("origin", text: $remote)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.caption)
+                TextField("remote branch", text: $remoteBranch)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.caption)
+                Button {
+                    prepare(preparedRemote, preparedRemoteBranch)
+                } label: {
+                    Label("Review", systemImage: "arrow.clockwise")
+                }
+                .labelStyle(.iconOnly)
+                .disabled(isLoading || isPublishing)
+                .help("Review branch publish target")
+            }
+
+            if let preview {
+                HStack(spacing: 8) {
+                    Label(preview.readiness, systemImage: readinessImage(for: preview))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(readinessColor(for: preview))
+
+                    Spacer(minLength: 8)
+
+                    Text(preview.generatedAt)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+
+                Text(preview.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 8) {
+                    Label(preview.branch ?? "Detached", systemImage: "arrow.triangle.branch")
+                    Label(preview.remote ?? "No remote", systemImage: "network")
+                    Label(preview.remoteBranch ?? "No remote branch", systemImage: "arrow.up.right")
+                    Spacer()
+                    Text(preview.upstream ?? "no upstream")
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+                if let relatedTask = preview.relatedTask {
+                    Label("\(relatedTask.title) / \(relatedTask.status) / \(relatedTask.currentPhase)", systemImage: "target")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                if !preview.blockers.isEmpty {
+                    CommitPreviewNoteList(
+                        title: "Blockers",
+                        systemImage: "xmark.octagon",
+                        notes: preview.blockers,
+                        color: .red
+                    )
+                }
+
+                if !preview.riskNotes.isEmpty {
+                    CommitPreviewNoteList(
+                        title: "Risk Notes",
+                        systemImage: "exclamationmark.triangle",
+                        notes: preview.riskNotes,
+                        color: .orange
+                    )
+                }
+
+                if !preview.commitsToPublish.isEmpty {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("Commits To Publish")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        ForEach(preview.commitsToPublish.prefix(8)) { commit in
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text(commit.shortHash)
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(.secondary)
+                                Text(commit.title)
+                                    .font(.caption2)
+                                    .lineLimit(1)
+                                Spacer(minLength: 6)
+                            }
+                        }
+
+                        if preview.commitsToPublish.count > 8 {
+                            Text("\(preview.commitsToPublish.count - 8) more commit(s) not shown.")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                }
+
+                if preview.isDirty && !preview.changedFiles.isEmpty {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("Local Changes Not Published")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        ForEach(preview.changedFiles.prefix(5)) { file in
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text(file.status)
+                                    .font(.caption2.weight(.medium))
+                                    .frame(width: 64, alignment: .leading)
+                                    .foregroundStyle(.secondary)
+                                Text(file.path)
+                                    .font(.caption2.monospaced())
+                                    .lineLimit(1)
+                                Spacer(minLength: 6)
+                            }
+                        }
+                    }
+                }
+
+                Label(preview.operationBoundary, systemImage: "lock.shield")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+
+                Button {
+                    showPublishConfirmation = true
+                } label: {
+                    Label(publishButtonTitle(preview), systemImage: "paperplane")
+                        .frame(maxWidth: .infinity)
+                }
+                .disabled(!canPublish(preview))
+                .confirmationDialog(
+                    "Publish current branch?",
+                    isPresented: $showPublishConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button("Publish Current Branch") {
+                        publish(preview)
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Forge will push the listed commits and set upstream for this branch. It will not force push, merge, reset, delete branches, or create a PR.")
+                }
+            } else if let result {
+                BranchPublishResultView(result: result)
+            } else {
+                Label(isLoading ? "Preparing branch publish review..." : "Branch publish review has not been prepared.", systemImage: isLoading ? "hourglass" : "arrow.up.right.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(8)
+        .background(.quaternary)
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+    }
+
+    private var preparedRemote: String? {
+        let trimmed = remote.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private var preparedRemoteBranch: String? {
+        let trimmed = remoteBranch.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func canPublish(_ preview: GitBranchPublishPreview) -> Bool {
+        !isPublishing &&
+            !isLoading &&
+            preview.expectedHead != nil &&
+            preview.branch != nil &&
+            preview.remote != nil &&
+            preview.remoteBranch != nil &&
+            preview.blockers.isEmpty &&
+            !preview.commitsToPublish.isEmpty
+    }
+
+    private func publishButtonTitle(_ preview: GitBranchPublishPreview) -> String {
+        if isPublishing {
+            return "Publishing Branch"
+        }
+
+        return preview.blockers.isEmpty ? "Publish Branch" : "Publish Blocked"
+    }
+
+    private func readinessImage(for preview: GitBranchPublishPreview) -> String {
+        switch preview.readiness {
+        case "Ready":
+            return "checkmark.circle"
+        case "Blocked":
+            return "xmark.octagon"
+        default:
+            return "exclamationmark.triangle"
+        }
+    }
+
+    private func readinessColor(for preview: GitBranchPublishPreview) -> Color {
+        switch preview.readiness {
+        case "Ready":
+            return .green
+        case "Blocked":
+            return .red
+        default:
+            return .orange
+        }
+    }
+}
+
+private struct BranchPublishResultView: View {
+    var result: GitBranchPublishResult
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Label(result.summary, systemImage: "paperplane")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.green)
+
+            HStack(spacing: 8) {
+                Text(result.branch)
+                    .font(.caption2.monospaced())
+                Text(result.upstream)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("\(result.pushedCommits.count) commits")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(result.outputSummary)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+
+            Label(result.operationBoundary, systemImage: "lock.shield")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 }
 

@@ -86,6 +86,91 @@ struct RuntimeClient {
         return try JSONDecoder().decode(GitCreateCommitResult.self, from: data)
     }
 
+    func gitBranchPreview(taskID: ForgeTask.ID?, targetBranch: String? = nil) async throws -> GitBranchPreview {
+        let url = baseURL
+            .appending(path: "git")
+            .appending(path: "branch-preview")
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        var queryItems: [URLQueryItem] = []
+        if let taskID {
+            queryItems.append(URLQueryItem(name: "taskID", value: taskID))
+        }
+        if let targetBranch, !targetBranch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            queryItems.append(URLQueryItem(name: "targetBranch", value: targetBranch))
+        }
+        if !queryItems.isEmpty {
+            components?.queryItems = queryItems
+        }
+
+        guard let requestURL = components?.url else {
+            throw RuntimeClientError.invalidResponse
+        }
+
+        let (data, response) = try await URLSession.shared.data(from: requestURL)
+        try validate(response)
+        return try JSONDecoder().decode(GitBranchPreview.self, from: data)
+    }
+
+    func createOrSwitchGitBranch(_ requestBody: GitBranchRequest) async throws -> GitBranchResult {
+        let url = baseURL
+            .appending(path: "git")
+            .appending(path: "branch")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(requestBody)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response)
+        return try JSONDecoder().decode(GitBranchResult.self, from: data)
+    }
+
+    func gitBranchPublishPreview(
+        taskID: ForgeTask.ID?,
+        remote: String? = nil,
+        remoteBranch: String? = nil
+    ) async throws -> GitBranchPublishPreview {
+        let url = baseURL
+            .appending(path: "git")
+            .appending(path: "branch-publish-preview")
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        var queryItems: [URLQueryItem] = []
+        if let taskID {
+            queryItems.append(URLQueryItem(name: "taskID", value: taskID))
+        }
+        if let remote, !remote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            queryItems.append(URLQueryItem(name: "remote", value: remote))
+        }
+        if let remoteBranch, !remoteBranch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            queryItems.append(URLQueryItem(name: "remoteBranch", value: remoteBranch))
+        }
+        if !queryItems.isEmpty {
+            components?.queryItems = queryItems
+        }
+
+        guard let requestURL = components?.url else {
+            throw RuntimeClientError.invalidResponse
+        }
+
+        let (data, response) = try await URLSession.shared.data(from: requestURL)
+        try validate(response)
+        return try JSONDecoder().decode(GitBranchPublishPreview.self, from: data)
+    }
+
+    func publishGitBranch(_ requestBody: GitBranchPublishRequest) async throws -> GitBranchPublishResult {
+        let url = baseURL
+            .appending(path: "git")
+            .appending(path: "branch-publish")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(requestBody)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response)
+        return try JSONDecoder().decode(GitBranchPublishResult.self, from: data)
+    }
+
     func gitPushPreview(taskID: ForgeTask.ID?) async throws -> GitPushPreview {
         let url = baseURL
             .appending(path: "git")

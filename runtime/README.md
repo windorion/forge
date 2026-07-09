@@ -9,6 +9,10 @@ This first slice is intentionally small:
 - `GET /tasks`
 - `GET /git/status`
 - `GET /git/diff?path=<repo-relative-path>`
+- `GET /git/branch-preview`
+- `POST /git/branch`
+- `GET /git/branch-publish-preview`
+- `POST /git/branch-publish`
 - `GET /git/commit-preview`
 - `POST /git/commit`
 - `GET /git/push-preview`
@@ -103,6 +107,25 @@ staged/unstaged/untracked flags, and available line-count stats. `GET /git/diff`
 returns a bounded per-file diff for a repo-relative path from that status
 snapshot. Diff reads are low-risk and run through `git` without a shell; paths
 must stay repo-relative and `.git`/`.forge` internals are blocked.
+`GET /git/branch-preview` prepares a branch review artifact with current
+branch, expected HEAD, default base branch, target branch, create/switch mode,
+dirty state, blockers, and risk notes.
+`POST /git/branch` is a high-risk local branch action. It requires explicit
+confirmation plus the expected HEAD and current branch from the preview,
+validates the target branch name, creates a new local branch or switches to an
+existing clean local branch, blocks unmerged files and dirty switches, and
+records a linked task event when possible. It does not set upstream tracking,
+push, merge, reset, delete branches, or create a PR.
+`GET /git/branch-publish-preview` prepares a first-push review artifact with
+current branch, configured remote, remote branch, default base branch, commits
+to publish, local changes that will remain local, blockers, and risk notes.
+`POST /git/branch-publish` is a high-risk branch publish action. It requires
+explicit confirmation plus the expected HEAD, branch, remote, and remote branch
+from the preview. The runtime blocks detached/default-base/already-upstream/
+no-commit/unmerged states, blocks remote branch collisions, runs a non-force
+`git push --set-upstream <remote> HEAD:<branch>`, and records a linked task
+event when possible. It does not force push, merge, reset, delete branches, or
+create a PR.
 `GET /git/commit-preview` turns the current working tree, optional task
 context, and latest task validation state into a review artifact with a
 suggested commit message, included files, validation commands to consider,
@@ -243,10 +266,12 @@ Markdown fixtures under `docs/`, and verifies create task, file-reference
 messages, plan revision, plan approval, edit proposal generation, validation,
 apply, post-apply validation, restart recovery, and both append/replace
 restricted edit operations. It also verifies read-only git status, bounded git
-diff, commit-preview, stale-head commit rejection, push-preview, and
-stale-head push rejection endpoints, plus the read-only PR handoff preview,
-against temporary fixtures. It also starts a mock OpenAI Responses server to
-verify the model-guided context loop path before an OpenAI-backed plan
+diff, branch-preview, stale-head branch rejection, branch-publish-preview,
+stale-head branch publish rejection, commit-preview, stale-head commit
+rejection, push-preview, and stale-head push rejection endpoints, plus the
+read-only PR handoff preview, against temporary fixtures. It also starts a
+mock OpenAI Responses server to verify the model-guided context loop path
+before an OpenAI-backed plan
 revision, a richer edit proposal with append/create apply, and a blocked
 preview-only artifact. It also verifies a blocked-to-repaired proposal path and
 bounded stop behavior for proposals that remain preview-only. The smoke also
@@ -260,6 +285,14 @@ cleaning the temporary file.
 curl http://127.0.0.1:17373/health
 curl http://127.0.0.1:17373/git/status
 curl "http://127.0.0.1:17373/git/diff?path=README.md"
+curl "http://127.0.0.1:17373/git/branch-preview"
+curl -X POST http://127.0.0.1:17373/git/branch \
+  -H 'Content-Type: application/json' \
+  -d '{"expectedHead":"<head-from-preview>","expectedCurrentBranch":"main","targetBranch":"forge/demo-task","mode":"CreateBranch","confirmation":"CreateBranch"}'
+curl "http://127.0.0.1:17373/git/branch-publish-preview"
+curl -X POST http://127.0.0.1:17373/git/branch-publish \
+  -H 'Content-Type: application/json' \
+  -d '{"expectedHead":"<head-from-preview>","expectedBranch":"forge/demo-task","remote":"origin","remoteBranch":"forge/demo-task","confirmation":"PublishCurrentBranch"}'
 curl "http://127.0.0.1:17373/git/commit-preview"
 curl "http://127.0.0.1:17373/git/pr-preview"
 curl -X POST http://127.0.0.1:17373/git/commit \

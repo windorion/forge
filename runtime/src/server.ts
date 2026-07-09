@@ -26,6 +26,12 @@ import type {
   EditProposalValidation,
   FileChangeValidation,
   ForgeTask,
+  GitBranchPublishPreview,
+  GitBranchPublishRequest,
+  GitBranchPublishResult,
+  GitBranchPreview,
+  GitBranchRequest,
+  GitBranchResult,
   GitCreateCommitRequest,
   GitCreateCommitResult,
   GitCommitPreview,
@@ -387,6 +393,35 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/git/branch-preview") {
+      writeJson(response, 200, await getGitBranchPreview(
+        url.searchParams.get("taskID"),
+        url.searchParams.get("targetBranch")
+      ));
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/git/branch") {
+      const input = await readJson<GitBranchRequest>(request);
+      writeJson(response, 200, await createOrSwitchGitBranch(input));
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/git/branch-publish-preview") {
+      writeJson(response, 200, await getGitBranchPublishPreview(
+        url.searchParams.get("taskID"),
+        url.searchParams.get("remote"),
+        url.searchParams.get("remoteBranch")
+      ));
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/git/branch-publish") {
+      const input = await readJson<GitBranchPublishRequest>(request);
+      writeJson(response, 200, await publishGitBranch(input));
+      return;
+    }
+
     if (request.method === "POST" && url.pathname === "/git/commit") {
       const input = await readJson<GitCreateCommitRequest>(request);
       writeJson(response, 201, await createGitCommit(input));
@@ -669,6 +704,711 @@ async function getGitFileDiff(rawPath: string | null): Promise<GitFileDiff> {
     summary: bounded.text.trim()
       ? `Diff for ${change.path}${bounded.truncated ? " was truncated." : "."}`
       : `No textual diff is available for ${change.path}.`
+  };
+}
+
+async function getGitBranchPreview(
+  rawTaskID: string | null,
+  rawTargetBranch: string | null
+): Promise<GitBranchPreview> {
+  const status = await getGitStatusSnapshot();
+  const generatedAt = new Date().toISOString();
+  const task = rawTaskID ? tasks.get(rawTaskID) : undefined;
+  const taskMissing = Boolean(rawTaskID && !task);
+  const operationBoundary = "Review artifact only. Forge has not created, switched, deleted, pushed, or reset branches.";
+  const fallbackBaseBranch = "main";
+  const fallbackTargetBranch = normalizeGitBranchTarget(rawTargetBranch, suggestPullRequestBranchName(task, status.branch, fallbackBaseBranch));
+
+  if (!status.isRepository || !status.root) {
+    return {
+      generatedAt,
+      readiness: "Blocked",
+      summary: "Branch preparation is blocked because git status is unavailable.",
+      expectedHead: status.head,
+      currentBranch: status.branch,
+      baseBranch: fallbackBaseBranch,
+      targetBranch: fallbackTargetBranch,
+      mode: "CreateBranch",
+      branchExists: false,
+      isDirty: status.isDirty,
+      changedFiles: [],
+      relatedTask: undefined,
+      riskNotes: taskMissing ? [`Task ${rawTaskID} was not found.`] : [],
+      blockers: [status.error ?? "Workspace is not inside a git repository."],
+      operationBoundary
+    };
+  }
+
+  const upstreamParts = parseGitUpstream(status.upstream);
+  const remote = upstreamParts?.remote ?? await getFirstGitRemote(status.root);
+  const baseBranch = await getGitDefaultBaseBranch(status.root, remote ?? "origin");
+  const targetBranch = normalizeGitBranchTarget(rawTargetBranch, suggestPullRequestBranchName(task, status.branch, baseBranch));
+  const branchNameIssue = await gitBranchNameIssue(status.root, targetBranch);
+  const branchExists = branchNameIssue ? false : await localGitBranchExists(status.root, targetBranch);
+  const remoteBranchExists = branchNameIssue || !remote ? false : await remoteGitBranchExists(status.root, remote, targetBranch);
+  const mode = status.branch === targetBranch
+    ? "AlreadyOnBranch"
+    : branchExists
+      ? "SwitchBranch"
+      : "CreateBranch";
+  const blockers = gitBranchPreviewBlockers(status, targetBranch, mode, branchNameIssue);
+  const riskNotes = gitBranchRiskNotes(status, task, taskMissing, mode, remoteBranchExists, remote);
+  const readiness: GitBranchPreview["readiness"] = blockers.length > 0
+    ? "Blocked"
+    : riskNotes.length > 0
+      ? "NeedsReview"
+      : "Ready";
+
+  return {
+    generatedAt,
+    readiness,
+    summary: gitBranchPreviewSummary(status, targetBranch, mode, readiness),
+    expectedHead: status.head,
+    currentBranch: status.branch,
+    baseBranch,
+    targetBranch,
+    mode,
+    branchExists,
+    isDirty: status.isDirty,
+    changedFiles: status.changedFiles,
+    relatedTask: task ? {
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      currentPhase: task.currentPhase,
+      summary: task.reviewSummary ?? task.objective
+    } : undefined,
+    riskNotes,
+    blockers,
+    operationBoundary
+  };
+}
+
+async function createOrSwitchGitBranch(input: GitBranchRequest): Promise<GitBranchResult> {
+  const request = normalizeGitBranchRequest(input);
+  const preview = await getGitBranchPreview(request.taskID || null, request.targetBranch);
+  const generatedAt = new Date().toISOString();
+
+  if (!preview.expectedHead || preview.expectedHead !== request.expectedHead) {
+    throw new HttpError(409, `Git HEAD changed since branch review. Expected ${request.expectedHead}, current ${preview.expectedHead ?? "unknown"}.`);
+  }
+
+  if (!preview.currentBranch || preview.currentBranch !== request.expectedCurrentBranch) {
+    throw new HttpError(409, `Git branch changed since branch review. Expected ${request.expectedCurrentBranch}, current ${preview.currentBranch ?? "unknown"}.`);
+  }
+
+  if (preview.targetBranch !== request.targetBranch) {
+    throw new HttpError(409, `Target branch changed since branch review. Expected ${request.targetBranch}, current ${preview.targetBranch}.`);
+  }
+
+  if (preview.mode !== request.mode) {
+    throw new HttpError(409, `Branch action changed since review. Expected ${request.mode}, current ${preview.mode}.`);
+  }
+
+  if (preview.blockers.length > 0) {
+    throw new HttpError(409, `Branch action is blocked: ${preview.blockers.join(" ")}`);
+  }
+
+  const status = await getGitStatusSnapshot();
+  if (!status.isRepository || !status.root) {
+    throw new HttpError(409, status.error ?? "Workspace is not inside a git repository.");
+  }
+
+  const args = request.mode === "CreateBranch"
+    ? ["switch", "--create", request.targetBranch]
+    : ["switch", request.targetBranch];
+  const branchResult = await runGitCommand(args, status.root, 96_000);
+  if (branchResult.exitCode !== 0) {
+    throw new HttpError(409, branchResult.output.trim() || "git branch action failed.");
+  }
+
+  const relatedTask = recordGitBranchOnTask(request.taskID, request.mode, preview.currentBranch, request.targetBranch);
+  const actionLabel = request.mode === "CreateBranch" ? "Created" : "Switched to";
+
+  return {
+    generatedAt,
+    previousBranch: preview.currentBranch,
+    branch: request.targetBranch,
+    mode: request.mode,
+    summary: `${actionLabel} branch ${request.targetBranch}.`,
+    outputSummary: summarizeGitCommandOutput(branchResult.output),
+    relatedTask,
+    operationBoundary: "Branch action completed. Forge did not commit, push, merge, reset, delete branches, or publish a PR."
+  };
+}
+
+function normalizeGitBranchRequest(input: GitBranchRequest): Required<GitBranchRequest> {
+  if (!isRecord(input)) {
+    throw new HttpError(400, "Git branch request must be an object.");
+  }
+
+  if (input.mode !== "CreateBranch" && input.mode !== "SwitchBranch") {
+    throw new HttpError(400, "Git branch mode must be CreateBranch or SwitchBranch.");
+  }
+
+  if (input.confirmation !== input.mode) {
+    throw new HttpError(400, `Git branch action requires explicit confirmation: ${input.mode}.`);
+  }
+
+  return {
+    taskID: typeof input.taskID === "string" ? input.taskID.trim() : "",
+    expectedHead: normalizeSingleLineField(input.expectedHead, "expectedHead", 4, 64),
+    expectedCurrentBranch: normalizeSingleLineField(input.expectedCurrentBranch, "expectedCurrentBranch", 1, 200),
+    targetBranch: normalizeGitBranchTarget(input.targetBranch, ""),
+    mode: input.mode,
+    confirmation: input.confirmation
+  };
+}
+
+function normalizeGitBranchTarget(rawTargetBranch: unknown, fallback: string): string {
+  const source = typeof rawTargetBranch === "string" && rawTargetBranch.trim()
+    ? rawTargetBranch
+    : fallback;
+  const targetBranch = normalizeSingleLineField(source, "targetBranch", 1, 120)
+    .replace(/\\/g, "/")
+    .replace(/\/+/g, "/")
+    .replace(/^\/+|\/+$/g, "");
+
+  if (!targetBranch) {
+    throw new HttpError(400, "targetBranch is required.");
+  }
+
+  if (targetBranch.startsWith("-")) {
+    throw new HttpError(400, "targetBranch must not start with a dash.");
+  }
+
+  return targetBranch;
+}
+
+async function gitBranchNameIssue(gitRoot: string, targetBranch: string): Promise<string | undefined> {
+  const result = await runGitCommand(["check-ref-format", "--branch", targetBranch], gitRoot, 8_000);
+  if (result.exitCode === 0) {
+    return undefined;
+  }
+
+  return result.output.trim() || `Invalid git branch name: ${targetBranch}`;
+}
+
+async function localGitBranchExists(gitRoot: string, targetBranch: string): Promise<boolean> {
+  const result = await runGitCommand([
+    "show-ref",
+    "--verify",
+    "--quiet",
+    `refs/heads/${targetBranch}`
+  ], gitRoot, 8_000);
+  return result.exitCode === 0;
+}
+
+async function remoteGitBranchExists(gitRoot: string, remote: string, targetBranch: string): Promise<boolean> {
+  const result = await runGitCommand([
+    "show-ref",
+    "--verify",
+    "--quiet",
+    `refs/remotes/${remote}/${targetBranch}`
+  ], gitRoot, 8_000);
+  return result.exitCode === 0;
+}
+
+function gitBranchPreviewBlockers(
+  status: GitStatusSnapshot,
+  targetBranch: string,
+  mode: GitBranchPreview["mode"],
+  branchNameIssue: string | undefined
+): string[] {
+  const blockers: string[] = [];
+
+  if (branchNameIssue) {
+    blockers.push(branchNameIssue);
+  }
+
+  if (!status.head) {
+    blockers.push("Current HEAD could not be read.");
+  }
+
+  const unmerged = status.changedFiles.filter((change) => change.status === "Unmerged");
+  if (unmerged.length > 0) {
+    blockers.push(`Resolve ${unmerged.length} unmerged file(s) before changing branches.`);
+  }
+
+  if (mode === "SwitchBranch" && status.isDirty) {
+    blockers.push("Switching to an existing branch is blocked while the working tree has uncommitted changes.");
+  }
+
+  if (mode === "AlreadyOnBranch") {
+    blockers.push(`Already on branch ${targetBranch}; no branch action is needed.`);
+  }
+
+  return blockers;
+}
+
+function gitBranchRiskNotes(
+  status: GitStatusSnapshot,
+  task: ForgeTask | undefined,
+  taskMissing: boolean,
+  mode: GitBranchPreview["mode"],
+  remoteBranchExists: boolean,
+  remote: string | undefined
+): string[] {
+  const notes: string[] = [];
+
+  if (taskMissing) {
+    notes.push("The requested task was not found, so this branch preview is based on repository state only.");
+  }
+
+  if (!task) {
+    notes.push("No task context is linked to this branch preview.");
+  }
+
+  if (mode === "CreateBranch" && status.isDirty) {
+    notes.push(`${status.changedFiles.length} uncommitted file(s) will remain in the working tree after branch creation.`);
+  }
+
+  if (mode === "CreateBranch" && remoteBranchExists) {
+    notes.push(`A remote branch with this name already exists on ${remote}; this action creates a local branch only and does not set upstream.`);
+  }
+
+  if (mode === "SwitchBranch") {
+    notes.push("Switching branches can change the visible working tree; Forge blocks this when local changes are present.");
+  }
+
+  return notes;
+}
+
+function gitBranchPreviewSummary(
+  status: GitStatusSnapshot,
+  targetBranch: string,
+  mode: GitBranchPreview["mode"],
+  readiness: GitBranchPreview["readiness"]
+): string {
+  if (readiness === "Blocked") {
+    return `Branch preparation is blocked for ${targetBranch}.`;
+  }
+
+  if (mode === "SwitchBranch") {
+    return `Ready to switch from ${status.branch ?? "current checkout"} to existing branch ${targetBranch}.`;
+  }
+
+  if (mode === "AlreadyOnBranch") {
+    return `Already on ${targetBranch}.`;
+  }
+
+  return `Ready to create branch ${targetBranch} from ${status.branch ?? "current checkout"}.`;
+}
+
+function recordGitBranchOnTask(
+  taskID: string,
+  mode: GitBranchResult["mode"],
+  previousBranch: string | undefined,
+  branch: string
+): GitBranchResult["relatedTask"] {
+  if (!taskID) {
+    return undefined;
+  }
+
+  const task = tasks.get(taskID);
+  if (!task) {
+    return undefined;
+  }
+
+  const now = new Date().toISOString();
+  const action = mode === "CreateBranch" ? "Create Git Branch" : "Switch Git Branch";
+  const summary = mode === "CreateBranch"
+    ? `Created git branch ${branch}`
+    : `Switched git branch from ${previousBranch ?? "unknown"} to ${branch}`;
+  const updatedTask = {
+    ...task,
+    updatedAt: now,
+    approvals: [
+      ...task.approvals,
+      {
+        id: randomUUID(),
+        action: action as ApprovalRecord["action"],
+        decision: "Approved" as const,
+        summary,
+        decidedAt: now,
+        targetID: branch
+      }
+    ],
+    events: [
+      ...task.events,
+      {
+        type: mode === "CreateBranch" ? "git.branch.created" : "git.branch.switched",
+        message: summary,
+        createdAt: now
+      }
+    ]
+  };
+
+  tasks.set(task.id, updatedTask);
+  taskStore.saveTask(updatedTask);
+  emit(mode === "CreateBranch" ? "git.branch.created" : "git.branch.switched", {
+    taskID: task.id,
+    previousBranch,
+    branch,
+    task: updatedTask
+  });
+
+  return {
+    id: updatedTask.id,
+    title: updatedTask.title,
+    status: updatedTask.status,
+    currentPhase: updatedTask.currentPhase,
+    summary: updatedTask.reviewSummary ?? updatedTask.objective
+  };
+}
+
+async function getGitBranchPublishPreview(
+  rawTaskID: string | null,
+  rawRemote: string | null,
+  rawRemoteBranch: string | null
+): Promise<GitBranchPublishPreview> {
+  const status = await getGitStatusSnapshot();
+  const generatedAt = new Date().toISOString();
+  const task = rawTaskID ? tasks.get(rawTaskID) : undefined;
+  const taskMissing = Boolean(rawTaskID && !task);
+  const operationBoundary = "Review artifact only. Forge has not pushed, set upstream, force-pushed, or published a PR.";
+  const fallbackBaseBranch = "main";
+
+  if (!status.isRepository || !status.root) {
+    return {
+      generatedAt,
+      readiness: "Blocked",
+      summary: "Branch publish is blocked because git status is unavailable.",
+      expectedHead: status.head,
+      branch: status.branch,
+      baseBranch: fallbackBaseBranch,
+      upstream: status.upstream,
+      isDirty: status.isDirty,
+      commitsToPublish: [],
+      changedFiles: [],
+      relatedTask: undefined,
+      riskNotes: taskMissing ? [`Task ${rawTaskID} was not found.`] : [],
+      blockers: [status.error ?? "Workspace is not inside a git repository."],
+      operationBoundary
+    };
+  }
+
+  const remotes = await listGitRemotes(status.root);
+  const requestedRemote = normalizeOptionalGitRemoteName(rawRemote);
+  const remote = requestedRemote ?? remotes[0];
+  const baseBranch = await getGitDefaultBaseBranch(status.root, remote ?? "origin");
+  const remoteBranch = normalizeGitBranchTarget(rawRemoteBranch, status.branch ?? suggestPullRequestBranchName(task, status.branch, baseBranch));
+  const baseRef = remote
+    ? await resolveGitBaseRef(status.root, remote, baseBranch)
+    : await resolveGitBaseRef(status.root, "origin", baseBranch);
+  const commitsToPublish = baseRef ? await collectGitCommitsInRange(status.root, `${baseRef}..HEAD`) : [];
+  const remoteBranchExists = remote ? await remoteGitBranchExists(status.root, remote, remoteBranch) : false;
+  const blockers = gitBranchPublishBlockers(
+    status,
+    baseBranch,
+    remote,
+    remotes,
+    requestedRemote,
+    remoteBranch,
+    remoteBranchExists,
+    commitsToPublish,
+    baseRef
+  );
+  const riskNotes = gitBranchPublishRiskNotes(status, task, taskMissing, baseRef, commitsToPublish);
+  const readiness: GitBranchPublishPreview["readiness"] = blockers.length > 0
+    ? "Blocked"
+    : riskNotes.length > 0
+      ? "NeedsReview"
+      : "Ready";
+
+  return {
+    generatedAt,
+    readiness,
+    summary: gitBranchPublishPreviewSummary(status, remote, remoteBranch, commitsToPublish, readiness),
+    expectedHead: status.head,
+    branch: status.branch,
+    baseBranch,
+    remote,
+    remoteBranch,
+    upstream: status.upstream,
+    isDirty: status.isDirty,
+    commitsToPublish,
+    changedFiles: status.changedFiles,
+    relatedTask: task ? {
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      currentPhase: task.currentPhase,
+      summary: task.reviewSummary ?? task.objective
+    } : undefined,
+    riskNotes,
+    blockers,
+    operationBoundary
+  };
+}
+
+async function publishGitBranch(input: GitBranchPublishRequest): Promise<GitBranchPublishResult> {
+  const request = normalizeGitBranchPublishRequest(input);
+  const preview = await getGitBranchPublishPreview(request.taskID || null, request.remote, request.remoteBranch);
+  const generatedAt = new Date().toISOString();
+
+  if (!preview.expectedHead || preview.expectedHead !== request.expectedHead) {
+    throw new HttpError(409, `Git HEAD changed since branch publish review. Expected ${request.expectedHead}, current ${preview.expectedHead ?? "unknown"}.`);
+  }
+
+  if (!preview.branch || preview.branch !== request.expectedBranch) {
+    throw new HttpError(409, `Git branch changed since branch publish review. Expected ${request.expectedBranch}, current ${preview.branch ?? "unknown"}.`);
+  }
+
+  if (!preview.remote || preview.remote !== request.remote) {
+    throw new HttpError(409, `Git remote changed since branch publish review. Expected ${request.remote}, current ${preview.remote ?? "none"}.`);
+  }
+
+  if (!preview.remoteBranch || preview.remoteBranch !== request.remoteBranch) {
+    throw new HttpError(409, `Remote branch changed since branch publish review. Expected ${request.remoteBranch}, current ${preview.remoteBranch ?? "none"}.`);
+  }
+
+  if (preview.blockers.length > 0) {
+    throw new HttpError(409, `Branch publish is blocked: ${preview.blockers.join(" ")}`);
+  }
+
+  const status = await getGitStatusSnapshot();
+  if (!status.isRepository || !status.root) {
+    throw new HttpError(409, status.error ?? "Workspace is not inside a git repository.");
+  }
+
+  const pushResult = await runGitCommand([
+    "push",
+    "--set-upstream",
+    request.remote,
+    `HEAD:${request.remoteBranch}`
+  ], status.root, 96_000);
+  if (pushResult.exitCode !== 0) {
+    throw new HttpError(409, pushResult.output.trim() || "git branch publish failed.");
+  }
+
+  const upstream = `${request.remote}/${request.remoteBranch}`;
+  const relatedTask = recordGitBranchPublishOnTask(
+    request.taskID,
+    request.expectedBranch,
+    upstream,
+    preview.commitsToPublish
+  );
+
+  return {
+    generatedAt,
+    branch: request.expectedBranch,
+    remote: request.remote,
+    remoteBranch: request.remoteBranch,
+    upstream,
+    pushedCommits: preview.commitsToPublish,
+    summary: `Published ${request.expectedBranch} to ${upstream} and set upstream.`,
+    outputSummary: summarizeGitCommandOutput(pushResult.output),
+    relatedTask,
+    operationBoundary: "Published current branch and set upstream. Forge did not force push, merge, reset, delete branches, or publish a PR."
+  };
+}
+
+function normalizeGitBranchPublishRequest(input: GitBranchPublishRequest): Required<GitBranchPublishRequest> {
+  if (!isRecord(input)) {
+    throw new HttpError(400, "Git branch publish request must be an object.");
+  }
+
+  if (input.confirmation !== "PublishCurrentBranch") {
+    throw new HttpError(400, "Git branch publish requires explicit confirmation: PublishCurrentBranch.");
+  }
+
+  return {
+    taskID: typeof input.taskID === "string" ? input.taskID.trim() : "",
+    expectedHead: normalizeSingleLineField(input.expectedHead, "expectedHead", 4, 64),
+    expectedBranch: normalizeSingleLineField(input.expectedBranch, "expectedBranch", 1, 200),
+    remote: normalizeGitRemoteName(input.remote),
+    remoteBranch: normalizeGitBranchTarget(input.remoteBranch, ""),
+    confirmation: "PublishCurrentBranch"
+  };
+}
+
+async function listGitRemotes(gitRoot: string): Promise<string[]> {
+  const result = await runGitCommand(["remote"], gitRoot, 8_000);
+  if (result.exitCode !== 0) {
+    return [];
+  }
+
+  return result.output
+    .split(/\r?\n/)
+    .map((remote) => remote.trim())
+    .filter(Boolean);
+}
+
+function normalizeGitRemoteName(rawRemote: unknown): string {
+  const remote = normalizeSingleLineField(rawRemote, "remote", 1, 120);
+  if (remote.startsWith("-") || remote.includes("/") || remote.includes("\\")) {
+    throw new HttpError(400, "remote must be an existing simple git remote name.");
+  }
+
+  return remote;
+}
+
+function normalizeOptionalGitRemoteName(rawRemote: unknown): string | undefined {
+  if (rawRemote === undefined || rawRemote === null || rawRemote === "") {
+    return undefined;
+  }
+
+  return normalizeGitRemoteName(rawRemote);
+}
+
+function gitBranchPublishBlockers(
+  status: GitStatusSnapshot,
+  baseBranch: string,
+  remote: string | undefined,
+  remotes: string[],
+  requestedRemote: string | undefined,
+  remoteBranch: string,
+  remoteBranchExists: boolean,
+  commitsToPublish: GitCommitToPush[],
+  baseRef: string | undefined
+): string[] {
+  const blockers: string[] = [];
+
+  if (!status.branch || status.branch.startsWith("HEAD")) {
+    blockers.push("Current checkout is detached; branch publish requires a named branch.");
+  } else if (status.branch === baseBranch) {
+    blockers.push(`Current branch is the default base branch (${baseBranch}); create or switch to a task branch before publishing.`);
+  }
+
+  if (!status.head) {
+    blockers.push("Current HEAD could not be read.");
+  }
+
+  if (!remote) {
+    blockers.push("No git remote is configured for branch publish.");
+  } else if (!remotes.includes(remote)) {
+    blockers.push(`Git remote is not configured: ${remote}.`);
+  }
+
+  if (requestedRemote && !remotes.includes(requestedRemote)) {
+    blockers.push(`Requested git remote is not configured: ${requestedRemote}.`);
+  }
+
+  if (status.upstream) {
+    blockers.push(`Current branch already has upstream ${status.upstream}; use Push Review instead.`);
+  }
+
+  const unmerged = status.changedFiles.filter((change) => change.status === "Unmerged");
+  if (unmerged.length > 0) {
+    blockers.push(`Resolve ${unmerged.length} unmerged file(s) before publishing the branch.`);
+  }
+
+  if (remoteBranch !== status.branch) {
+    blockers.push("Publishing to a differently named remote branch is not supported yet.");
+  }
+
+  if (remoteBranchExists) {
+    blockers.push(`Remote branch already exists: ${remote}/${remoteBranch}.`);
+  }
+
+  if (!baseRef) {
+    blockers.push(`Default base branch ${baseBranch} could not be resolved locally.`);
+  }
+
+  if (commitsToPublish.length === 0) {
+    blockers.push("No commits were found between the base branch and HEAD to publish.");
+  }
+
+  return blockers;
+}
+
+function gitBranchPublishRiskNotes(
+  status: GitStatusSnapshot,
+  task: ForgeTask | undefined,
+  taskMissing: boolean,
+  baseRef: string | undefined,
+  commitsToPublish: GitCommitToPush[]
+): string[] {
+  const notes: string[] = [];
+
+  if (taskMissing) {
+    notes.push("The requested task was not found, so this branch publish preview is based on repository state only.");
+  }
+
+  if (!task) {
+    notes.push("No task context is linked to this branch publish preview.");
+  }
+
+  if (status.isDirty) {
+    notes.push(`${status.changedFiles.length} uncommitted file(s) will remain local and will not be included in this publish.`);
+  }
+
+  if (!baseRef) {
+    notes.push("Forge could not compare this branch against the default base branch.");
+  }
+
+  if (commitsToPublish.length >= 20) {
+    notes.push("Only the first 20 commits are shown in this branch publish preview.");
+  }
+
+  return notes;
+}
+
+function gitBranchPublishPreviewSummary(
+  status: GitStatusSnapshot,
+  remote: string | undefined,
+  remoteBranch: string,
+  commitsToPublish: GitCommitToPush[],
+  readiness: GitBranchPublishPreview["readiness"]
+): string {
+  if (readiness === "Blocked") {
+    return `Branch publish is blocked for ${status.branch ?? "current checkout"}.`;
+  }
+
+  return `${commitsToPublish.length} commit(s) ready to publish from ${status.branch ?? "current checkout"} to ${remote ?? "remote"}/${remoteBranch}.`;
+}
+
+function recordGitBranchPublishOnTask(
+  taskID: string,
+  branch: string,
+  upstream: string,
+  commits: GitCommitToPush[]
+): GitBranchPublishResult["relatedTask"] {
+  if (!taskID) {
+    return undefined;
+  }
+
+  const task = tasks.get(taskID);
+  if (!task) {
+    return undefined;
+  }
+
+  const now = new Date().toISOString();
+  const updatedTask = {
+    ...task,
+    updatedAt: now,
+    approvals: [
+      ...task.approvals,
+      {
+        id: randomUUID(),
+        action: "Publish Git Branch" as ApprovalRecord["action"],
+        decision: "Approved" as const,
+        summary: `Published ${commits.length} commit(s) from ${branch} to ${upstream}`,
+        decidedAt: now,
+        targetID: upstream
+      }
+    ],
+    events: [
+      ...task.events,
+      {
+        type: "git.branch.published",
+        message: `Published ${commits.length} commit(s) from ${branch} to ${upstream}`,
+        createdAt: now
+      }
+    ]
+  };
+
+  tasks.set(task.id, updatedTask);
+  taskStore.saveTask(updatedTask);
+  emit("git.branch.published", { taskID: task.id, branch, upstream, commits, task: updatedTask });
+
+  return {
+    id: updatedTask.id,
+    title: updatedTask.title,
+    status: updatedTask.status,
+    currentPhase: updatedTask.currentPhase,
+    summary: updatedTask.reviewSummary ?? updatedTask.objective
   };
 }
 
@@ -5379,6 +6119,10 @@ function renderRuntimeHome(): string {
       <li><a href="/tasks">GET /tasks</a></li>
       <li><a href="/git/status">GET /git/status</a></li>
       <li><code>GET /git/diff?path=README.md</code></li>
+      <li><a href="/git/branch-preview">GET /git/branch-preview</a></li>
+      <li><code>POST /git/branch</code></li>
+      <li><a href="/git/branch-publish-preview">GET /git/branch-publish-preview</a></li>
+      <li><code>POST /git/branch-publish</code></li>
       <li><a href="/git/commit-preview">GET /git/commit-preview</a></li>
       <li><code>POST /git/commit</code></li>
       <li><a href="/git/push-preview">GET /git/push-preview</a></li>

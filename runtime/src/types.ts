@@ -28,7 +28,10 @@ export interface ApprovalRecord {
     | "Reject Edit Proposal"
     | "Approve Validation Preset"
     | "Create Git Commit"
-    | "Push Git Branch";
+    | "Push Git Branch"
+    | "Create Git Branch"
+    | "Switch Git Branch"
+    | "Publish Git Branch";
   decision: "Approved" | "Rejected";
   summary: string;
   decidedAt: string;
@@ -444,6 +447,85 @@ export interface GitPushResult {
   upstream: string;
   remote: string;
   remoteBranch: string;
+  pushedCommits: GitCommitToPush[];
+  summary: string;
+  outputSummary: string;
+  relatedTask?: GitCommitRelatedTask;
+  operationBoundary: string;
+}
+
+export interface GitBranchPreview {
+  generatedAt: string;
+  readiness: "Ready" | "NeedsReview" | "Blocked";
+  summary: string;
+  expectedHead?: string;
+  currentBranch?: string;
+  baseBranch: string;
+  targetBranch: string;
+  mode: "CreateBranch" | "SwitchBranch" | "AlreadyOnBranch";
+  branchExists: boolean;
+  isDirty: boolean;
+  changedFiles: GitFileChange[];
+  relatedTask?: GitCommitRelatedTask;
+  riskNotes: string[];
+  blockers: string[];
+  operationBoundary: string;
+}
+
+export interface GitBranchRequest {
+  taskID?: string;
+  expectedHead: string;
+  expectedCurrentBranch: string;
+  targetBranch: string;
+  mode: "CreateBranch" | "SwitchBranch";
+  confirmation: "CreateBranch" | "SwitchBranch";
+}
+
+export interface GitBranchResult {
+  generatedAt: string;
+  previousBranch?: string;
+  branch: string;
+  mode: "CreateBranch" | "SwitchBranch";
+  summary: string;
+  outputSummary: string;
+  relatedTask?: GitCommitRelatedTask;
+  operationBoundary: string;
+}
+
+export interface GitBranchPublishPreview {
+  generatedAt: string;
+  readiness: "Ready" | "NeedsReview" | "Blocked";
+  summary: string;
+  expectedHead?: string;
+  branch?: string;
+  baseBranch: string;
+  remote?: string;
+  remoteBranch?: string;
+  upstream?: string;
+  isDirty: boolean;
+  commitsToPublish: GitCommitToPush[];
+  changedFiles: GitFileChange[];
+  relatedTask?: GitCommitRelatedTask;
+  riskNotes: string[];
+  blockers: string[];
+  operationBoundary: string;
+}
+
+export interface GitBranchPublishRequest {
+  taskID?: string;
+  expectedHead: string;
+  expectedBranch: string;
+  remote: string;
+  remoteBranch: string;
+  confirmation: "PublishCurrentBranch";
+}
+
+export interface GitBranchPublishResult {
+  generatedAt: string;
+  branch: string;
+  remote: string;
+  remoteBranch: string;
+  upstream: string;
   pushedCommits: GitCommitToPush[];
   summary: string;
   outputSummary: string;

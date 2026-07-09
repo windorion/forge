@@ -360,6 +360,85 @@ struct GitPushResult: Codable, Hashable {
     var operationBoundary: String
 }
 
+struct GitBranchPreview: Codable, Hashable {
+    var generatedAt: String
+    var readiness: String
+    var summary: String
+    var expectedHead: String?
+    var currentBranch: String?
+    var baseBranch: String
+    var targetBranch: String
+    var mode: String
+    var branchExists: Bool
+    var isDirty: Bool
+    var changedFiles: [GitFileChange]
+    var relatedTask: GitCommitRelatedTask?
+    var riskNotes: [String]
+    var blockers: [String]
+    var operationBoundary: String
+}
+
+struct GitBranchRequest: Codable, Hashable {
+    var taskID: String?
+    var expectedHead: String
+    var expectedCurrentBranch: String
+    var targetBranch: String
+    var mode: String
+    var confirmation: String
+}
+
+struct GitBranchResult: Codable, Hashable {
+    var generatedAt: String
+    var previousBranch: String?
+    var branch: String
+    var mode: String
+    var summary: String
+    var outputSummary: String
+    var relatedTask: GitCommitRelatedTask?
+    var operationBoundary: String
+}
+
+struct GitBranchPublishPreview: Codable, Hashable {
+    var generatedAt: String
+    var readiness: String
+    var summary: String
+    var expectedHead: String?
+    var branch: String?
+    var baseBranch: String
+    var remote: String?
+    var remoteBranch: String?
+    var upstream: String?
+    var isDirty: Bool
+    var commitsToPublish: [GitCommitToPush]
+    var changedFiles: [GitFileChange]
+    var relatedTask: GitCommitRelatedTask?
+    var riskNotes: [String]
+    var blockers: [String]
+    var operationBoundary: String
+}
+
+struct GitBranchPublishRequest: Codable, Hashable {
+    var taskID: String?
+    var expectedHead: String
+    var expectedBranch: String
+    var remote: String
+    var remoteBranch: String
+    var confirmation: String
+}
+
+struct GitBranchPublishResult: Codable, Hashable {
+    var generatedAt: String
+    var branch: String
+    var remote: String
+    var remoteBranch: String
+    var upstream: String
+    var pushedCommits: [GitCommitToPush]
+    var summary: String
+    var outputSummary: String
+    var relatedTask: GitCommitRelatedTask?
+    var operationBoundary: String
+}
+
 struct GitPullRequestPreview: Codable, Hashable {
     var generatedAt: String
     var readiness: String

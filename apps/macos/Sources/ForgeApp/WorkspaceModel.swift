@@ -38,12 +38,20 @@ final class WorkspaceModel: ObservableObject {
     @Published private var approvingValidationPresetTaskIDs = Set<String>()
     @Published private var refreshingGitStatus = false
     @Published private var loadingGitDiffPaths = Set<String>()
+    @Published private var loadingGitBranchPreviewTaskIDs = Set<ForgeTask.ID>()
+    @Published private var changingGitBranchTaskIDs = Set<ForgeTask.ID>()
+    @Published private var loadingGitBranchPublishPreviewTaskIDs = Set<ForgeTask.ID>()
+    @Published private var publishingGitBranchTaskIDs = Set<ForgeTask.ID>()
     @Published private var loadingGitCommitPreviewTaskIDs = Set<ForgeTask.ID>()
     @Published private var creatingGitCommitTaskIDs = Set<ForgeTask.ID>()
     @Published private var loadingGitPushPreviewTaskIDs = Set<ForgeTask.ID>()
     @Published private var pushingGitBranchTaskIDs = Set<ForgeTask.ID>()
     @Published private var loadingGitPullRequestPreviewTaskIDs = Set<ForgeTask.ID>()
     @Published private var gitFileDiffs: [String: GitFileDiff] = [:]
+    @Published private var gitBranchPreviews: [ForgeTask.ID: GitBranchPreview] = [:]
+    @Published private var gitBranchResults: [ForgeTask.ID: GitBranchResult] = [:]
+    @Published private var gitBranchPublishPreviews: [ForgeTask.ID: GitBranchPublishPreview] = [:]
+    @Published private var gitBranchPublishResults: [ForgeTask.ID: GitBranchPublishResult] = [:]
     @Published private var gitCommitPreviews: [ForgeTask.ID: GitCommitPreview] = [:]
     @Published private var gitCommitResults: [ForgeTask.ID: GitCreateCommitResult] = [:]
     @Published private var gitPushPreviews: [ForgeTask.ID: GitPushPreview] = [:]
@@ -540,6 +548,158 @@ final class WorkspaceModel: ObservableObject {
         loadingGitDiffPaths.contains(path)
     }
 
+    func prepareGitBranchReview(for task: ForgeTask, targetBranch: String? = nil) {
+        loadingGitBranchPreviewTaskIDs.insert(task.id)
+
+        Task {
+            do {
+                let taskID = task.id == ForgeTask.sample.id ? nil : task.id
+                gitBranchPreviews[task.id] = try await runtime.gitBranchPreview(taskID: taskID, targetBranch: targetBranch)
+                gitStatusLastError = nil
+            } catch {
+                gitStatusLastError = "Prepare branch review failed: \(error.localizedDescription)"
+            }
+
+            loadingGitBranchPreviewTaskIDs.remove(task.id)
+        }
+    }
+
+    func gitBranchPreview(for taskID: ForgeTask.ID) -> GitBranchPreview? {
+        gitBranchPreviews[taskID]
+    }
+
+    func isPreparingGitBranchReview(taskID: ForgeTask.ID) -> Bool {
+        loadingGitBranchPreviewTaskIDs.contains(taskID)
+    }
+
+    func createOrSwitchGitBranch(for task: ForgeTask, preview: GitBranchPreview) {
+        guard let expectedHead = preview.expectedHead,
+              let expectedCurrentBranch = preview.currentBranch
+        else {
+            statusMessage = "Branch review is missing branch or expected git head."
+            return
+        }
+
+        changingGitBranchTaskIDs.insert(task.id)
+
+        Task {
+            do {
+                let taskID = task.id == ForgeTask.sample.id ? nil : task.id
+                let request = GitBranchRequest(
+                    taskID: taskID,
+                    expectedHead: expectedHead,
+                    expectedCurrentBranch: expectedCurrentBranch,
+                    targetBranch: preview.targetBranch,
+                    mode: preview.mode,
+                    confirmation: preview.mode
+                )
+                let result = try await runtime.createOrSwitchGitBranch(request)
+                gitBranchResults[task.id] = result
+                gitBranchPreviews.removeValue(forKey: task.id)
+                gitBranchPublishPreviews.removeValue(forKey: task.id)
+                gitCommitPreviews.removeValue(forKey: task.id)
+                gitPushPreviews.removeValue(forKey: task.id)
+                gitPullRequestPreviews.removeValue(forKey: task.id)
+                statusMessage = result.summary
+                try await refreshTasks()
+                await refreshGitStatusSnapshot()
+                startEventStream()
+            } catch {
+                statusMessage = "Branch action failed: \(error.localizedDescription)"
+            }
+
+            changingGitBranchTaskIDs.remove(task.id)
+        }
+    }
+
+    func gitBranchResult(for taskID: ForgeTask.ID) -> GitBranchResult? {
+        gitBranchResults[taskID]
+    }
+
+    func isChangingGitBranch(taskID: ForgeTask.ID) -> Bool {
+        changingGitBranchTaskIDs.contains(taskID)
+    }
+
+    func prepareGitBranchPublishReview(
+        for task: ForgeTask,
+        remote: String? = nil,
+        remoteBranch: String? = nil
+    ) {
+        loadingGitBranchPublishPreviewTaskIDs.insert(task.id)
+
+        Task {
+            do {
+                let taskID = task.id == ForgeTask.sample.id ? nil : task.id
+                gitBranchPublishPreviews[task.id] = try await runtime.gitBranchPublishPreview(
+                    taskID: taskID,
+                    remote: remote,
+                    remoteBranch: remoteBranch
+                )
+                gitStatusLastError = nil
+            } catch {
+                gitStatusLastError = "Prepare branch publish review failed: \(error.localizedDescription)"
+            }
+
+            loadingGitBranchPublishPreviewTaskIDs.remove(task.id)
+        }
+    }
+
+    func gitBranchPublishPreview(for taskID: ForgeTask.ID) -> GitBranchPublishPreview? {
+        gitBranchPublishPreviews[taskID]
+    }
+
+    func isPreparingGitBranchPublishReview(taskID: ForgeTask.ID) -> Bool {
+        loadingGitBranchPublishPreviewTaskIDs.contains(taskID)
+    }
+
+    func publishGitBranch(for task: ForgeTask, preview: GitBranchPublishPreview) {
+        guard let expectedHead = preview.expectedHead,
+              let expectedBranch = preview.branch,
+              let remote = preview.remote,
+              let remoteBranch = preview.remoteBranch
+        else {
+            statusMessage = "Branch publish review is missing branch, remote, or expected git head."
+            return
+        }
+
+        publishingGitBranchTaskIDs.insert(task.id)
+
+        Task {
+            do {
+                let taskID = task.id == ForgeTask.sample.id ? nil : task.id
+                let request = GitBranchPublishRequest(
+                    taskID: taskID,
+                    expectedHead: expectedHead,
+                    expectedBranch: expectedBranch,
+                    remote: remote,
+                    remoteBranch: remoteBranch,
+                    confirmation: "PublishCurrentBranch"
+                )
+                let result = try await runtime.publishGitBranch(request)
+                gitBranchPublishResults[task.id] = result
+                gitBranchPublishPreviews.removeValue(forKey: task.id)
+                gitPushPreviews.removeValue(forKey: task.id)
+                gitPullRequestPreviews.removeValue(forKey: task.id)
+                statusMessage = result.summary
+                try await refreshTasks()
+                await refreshGitStatusSnapshot()
+                startEventStream()
+            } catch {
+                statusMessage = "Branch publish failed: \(error.localizedDescription)"
+            }
+
+            publishingGitBranchTaskIDs.remove(task.id)
+        }
+    }
+
+    func gitBranchPublishResult(for taskID: ForgeTask.ID) -> GitBranchPublishResult? {
+        gitBranchPublishResults[taskID]
+    }
+
+    func isPublishingGitBranch(taskID: ForgeTask.ID) -> Bool {
+        publishingGitBranchTaskIDs.contains(taskID)
+    }
+
     func prepareGitCommitReview(for task: ForgeTask) {
         loadingGitCommitPreviewTaskIDs.insert(task.id)
 
@@ -1008,6 +1168,8 @@ final class WorkspaceModel: ObservableObject {
         do {
             gitStatus = try await runtime.gitStatus()
             gitStatusLastError = gitStatus?.error
+            gitBranchPreviews.removeAll()
+            gitBranchPublishPreviews.removeAll()
             gitCommitPreviews.removeAll()
             gitPushPreviews.removeAll()
             gitPullRequestPreviews.removeAll()
