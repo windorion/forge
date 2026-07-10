@@ -147,12 +147,17 @@ Current implementation:
   current checkout is detached or still on the default base branch.
 - Forge can prepare a branch review artifact with current branch, expected
   HEAD, default base branch, target branch, create/switch mode, dirty state,
-  blockers, and risk notes.
+  structured preflight metadata, blockers, and risk notes.
+- The preflight summarizes target branch validity, whether the current branch
+  is the default base branch or detached, whether dirty local changes are
+  allowed or blocked for the selected action, existing local/remote branch
+  state, and overall action readiness.
 - Forge can create a new local branch or switch to an existing local branch
   after explicit confirmation in the macOS Review panel.
 - The runtime validates the target branch name, rechecks expected HEAD and
-  current branch from the reviewed preview, blocks unmerged files, and blocks
-  switching to existing branches while the working tree is dirty.
+  current branch from the reviewed preview, blocks targeting the default base
+  branch, blocks unmerged files, and blocks switching to existing branches
+  while the working tree is dirty.
 - Creating a new branch may carry current uncommitted changes forward into the
   new branch; the preview calls this out as a risk note.
 - Forge does not set upstream tracking, push the branch, delete branches,

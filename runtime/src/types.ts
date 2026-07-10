@@ -480,6 +480,7 @@ export interface GitBranchPreview {
   generatedAt: string;
   readiness: "Ready" | "NeedsReview" | "Blocked";
   summary: string;
+  preflight?: GitBranchPreflight;
   expectedHead?: string;
   currentBranch?: string;
   baseBranch: string;
@@ -492,6 +493,19 @@ export interface GitBranchPreview {
   riskNotes: string[];
   blockers: string[];
   operationBoundary: string;
+}
+
+export interface GitBranchPreflight {
+  targetStatus: "Valid" | "Invalid" | "DefaultBranch" | "CurrentBranch";
+  targetSummary: string;
+  currentBranchStatus: "Ready" | "Detached" | "DefaultBranch" | "Unknown";
+  currentBranchSummary: string;
+  worktreeStatus: "Clean" | "DirtyAllowed" | "DirtyBlocked";
+  worktreeSummary: string;
+  existingBranchStatus: "NewLocal" | "ExistingLocal" | "CurrentBranch" | "RemoteCollision" | "Invalid";
+  existingBranchSummary: string;
+  actionReadiness: "Ready" | "NeedsReview" | "Blocked";
+  actionReadinessSummary: string;
 }
 
 export interface GitBranchRequest {

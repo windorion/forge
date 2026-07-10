@@ -2099,6 +2099,10 @@ private struct GitBranchPreviewCard: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 
+                if let preflight = preview.preflight {
+                    BranchPreflightCard(preflight: preflight)
+                }
+
                 if let relatedTask = preview.relatedTask {
                     Label("\(relatedTask.title) / \(relatedTask.status) / \(relatedTask.currentPhase)", systemImage: "target")
                         .font(.caption)
@@ -2256,6 +2260,105 @@ private struct GitBranchPreviewCard: View {
         case "Ready":
             return .green
         case "Blocked":
+            return .red
+        default:
+            return .orange
+        }
+    }
+}
+
+private struct BranchPreflightCard: View {
+    var preflight: GitBranchPreflight
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Label("Preflight", systemImage: "checklist")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            Text(preflight.actionReadinessSummary)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+
+            VStack(alignment: .leading, spacing: 5) {
+                BranchPreflightStatusRow(
+                    title: "Target",
+                    status: preflight.targetStatus,
+                    summary: preflight.targetSummary
+                )
+                BranchPreflightStatusRow(
+                    title: "Current",
+                    status: preflight.currentBranchStatus,
+                    summary: preflight.currentBranchSummary
+                )
+                BranchPreflightStatusRow(
+                    title: "Worktree",
+                    status: preflight.worktreeStatus,
+                    summary: preflight.worktreeSummary
+                )
+                BranchPreflightStatusRow(
+                    title: "Existing",
+                    status: preflight.existingBranchStatus,
+                    summary: preflight.existingBranchSummary
+                )
+                BranchPreflightStatusRow(
+                    title: "Action",
+                    status: preflight.actionReadiness,
+                    summary: preflight.actionReadinessSummary
+                )
+            }
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+private struct BranchPreflightStatusRow: View {
+    var title: String
+    var status: String
+    var summary: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Label(status, systemImage: statusImage(for: status))
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(statusColor(for: status))
+                .frame(width: 108, alignment: .leading)
+
+            Text(title)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 62, alignment: .leading)
+
+            Text(summary)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .textSelection(.enabled)
+
+            Spacer(minLength: 4)
+        }
+    }
+
+    private func statusImage(for status: String) -> String {
+        switch status {
+        case "Valid", "Ready", "Clean", "NewLocal":
+            return "checkmark.circle"
+        case "Invalid", "DefaultBranch", "CurrentBranch", "Detached", "Unknown", "DirtyBlocked", "Blocked":
+            return "xmark.octagon"
+        default:
+            return "exclamationmark.triangle"
+        }
+    }
+
+    private func statusColor(for status: String) -> Color {
+        switch status {
+        case "Valid", "Ready", "Clean", "NewLocal":
+            return .green
+        case "Invalid", "DefaultBranch", "CurrentBranch", "Detached", "Unknown", "DirtyBlocked", "Blocked":
             return .red
         default:
             return .orange

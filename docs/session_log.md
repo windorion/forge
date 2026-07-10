@@ -2442,3 +2442,40 @@ Next:
 - Commit the PR handoff preflight hardening.
 - Continue V0 hardening with branch review edge cases, push/branch-publish
   remote failures, or packaged runtime path resolution.
+
+### 2026-07-10 22:00:40 CEST +0200
+
+Conversation summary:
+
+- User asked to continue the next long task. The session hardened Branch Review
+  for V0 with structured preflight metadata, default-base target blocking, and
+  an isolated smoke success path.
+
+Done:
+
+- Added `GitBranchPreflight` metadata to `GET /git/branch-preview`, including
+  target validity, current/default branch state, dirty-worktree handling,
+  existing local/remote branch state, and action readiness.
+- Blocked branch actions when the requested target branch is the default base
+  branch.
+- Rendered Branch Review preflight metadata in the macOS Review panel.
+- Extended `npm run smoke:core` to assert branch preflight fields, verify stale
+  HEAD blocking, create a temporary local branch, confirm Forge switched to it,
+  switch back to the original branch, and delete the temporary branch.
+- Updated README, project status, TODO, development, runtime architecture, V0
+  scope, git workflow, and security permissions docs.
+- Verified `npm run check`, `swift build`, `npm run smoke:core`,
+  `git diff --check`, no residual `forge/forge-core-smoke-*` branch, and no
+  service listening on `127.0.0.1:17373`.
+
+Not done:
+
+- Did not harden branch publish or push against real remote auth,
+  non-fast-forward, branch protection, or disconnected-network failures.
+- Did not push local commits to origin.
+
+Next:
+
+- Commit the branch review preflight hardening.
+- Continue V0 hardening with branch publish/push remote failure handling,
+  packaged runtime path resolution, or git/diff review navigation polish.

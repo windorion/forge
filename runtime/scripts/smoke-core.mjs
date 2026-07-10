@@ -22,6 +22,7 @@ const createSmokePath = `docs/${smokeID}-openai-created.md`;
 const binarySmokePath = `docs/${smokeID}-binary.bin`;
 const largeDiffSmokePath = `docs/${smokeID}-large-diff.txt`;
 const brokenTypeScriptSmokePath = `runtime/src/${smokeID}-broken.ts`;
+const branchSmokeName = `forge/${smokeID}-branch`;
 
 const smokeFiles = [
   {
@@ -43,7 +44,7 @@ try {
 
   runtime = await startRuntime();
   await assertRuntimeDiagnosticsAndSettings();
-  await assertGitReadOnlyEndpoints();
+  await assertGitReviewEndpoints();
   const appendTask = await runAppendFlow();
 
   await stopRuntime(runtime);
@@ -596,7 +597,7 @@ async function assertRuntimeDiagnosticsAndSettings() {
   );
 }
 
-async function assertGitReadOnlyEndpoints() {
+async function assertGitReviewEndpoints() {
   const status = await get("/git/status");
   assert(status.isRepository === true, `Git status did not detect the repository: ${JSON.stringify(status)}`);
   assert(typeof status.summary === "string" && status.summary.length > 0, "Git status did not include a summary.");
@@ -674,6 +675,27 @@ async function assertGitReadOnlyEndpoints() {
   assert(branchPreview.expectedHead, "Git branch preview did not include the expected head.");
   assert(branchPreview.currentBranch, "Git branch preview did not include the current branch.");
   assert(branchPreview.targetBranch, "Git branch preview did not include a target branch.");
+  assert(branchPreview.preflight, "Git branch preview did not include preflight metadata.");
+  assert(
+    ["Valid", "Invalid", "DefaultBranch", "CurrentBranch"].includes(branchPreview.preflight.targetStatus),
+    `Git branch preflight returned an unknown target status: ${branchPreview.preflight.targetStatus}.`
+  );
+  assert(
+    ["Ready", "Detached", "DefaultBranch", "Unknown"].includes(branchPreview.preflight.currentBranchStatus),
+    `Git branch preflight returned an unknown current branch status: ${branchPreview.preflight.currentBranchStatus}.`
+  );
+  assert(
+    ["Clean", "DirtyAllowed", "DirtyBlocked"].includes(branchPreview.preflight.worktreeStatus),
+    `Git branch preflight returned an unknown worktree status: ${branchPreview.preflight.worktreeStatus}.`
+  );
+  assert(
+    ["NewLocal", "ExistingLocal", "CurrentBranch", "RemoteCollision", "Invalid"].includes(branchPreview.preflight.existingBranchStatus),
+    `Git branch preflight returned an unknown existing branch status: ${branchPreview.preflight.existingBranchStatus}.`
+  );
+  assert(
+    ["Ready", "NeedsReview", "Blocked"].includes(branchPreview.preflight.actionReadiness),
+    `Git branch preflight returned an unknown action readiness: ${branchPreview.preflight.actionReadiness}.`
+  );
   assert(
     branchPreview.operationBoundary.includes("has not created"),
     "Git branch preview did not state the non-mutating operation boundary."
@@ -691,6 +713,8 @@ async function assertGitReadOnlyEndpoints() {
     blockedBranch.text.includes("Git HEAD changed since branch review"),
     "Stale-head branch attempt did not fail before git switch."
   );
+
+  await assertGitBranchSuccessPath(branchPreview.currentBranch);
 
   const branchPublishPreview = await get("/git/branch-publish-preview");
   assert(branchPublishPreview.expectedHead, "Git branch publish preview did not include the expected head.");
@@ -787,6 +811,46 @@ async function assertGitReadOnlyEndpoints() {
     pullRequestPreview.readiness === "Blocked" || pullRequestPreview.readiness === "NeedsReview" || pullRequestPreview.readiness === "Ready",
     `Git PR preview returned an unknown readiness value: ${pullRequestPreview.readiness}.`
   );
+}
+
+async function assertGitBranchSuccessPath(originalBranch) {
+  const preview = await get(`/git/branch-preview?targetBranch=${encodeURIComponent(branchSmokeName)}`);
+  assert(preview.expectedHead, "Git branch success preview did not include expected head.");
+  assert(preview.currentBranch === originalBranch, "Git branch success preview did not start from the original branch.");
+  assert(preview.targetBranch === branchSmokeName, "Git branch success preview returned the wrong target branch.");
+  assert(preview.mode === "CreateBranch", `Git branch success preview expected CreateBranch, got ${preview.mode}.`);
+  assert(preview.blockers.length === 0, `Git branch success preview was blocked: ${preview.blockers.join(" ")}`);
+  assert(preview.preflight?.targetStatus === "Valid", "Git branch success preflight did not validate the target branch.");
+  assert(preview.preflight?.existingBranchStatus === "NewLocal", "Git branch success preflight did not classify a new local branch.");
+
+  try {
+    const result = await post("/git/branch", {
+      expectedHead: preview.expectedHead,
+      expectedCurrentBranch: preview.currentBranch,
+      targetBranch: preview.targetBranch,
+      mode: "CreateBranch",
+      confirmation: "CreateBranch"
+    });
+
+    assert(result.branch === branchSmokeName, `Git branch action created unexpected branch ${result.branch}.`);
+    assert(result.mode === "CreateBranch", `Git branch action returned unexpected mode ${result.mode}.`);
+    assert(
+      result.operationBoundary.includes("did not commit") && result.operationBoundary.includes("push"),
+      "Git branch action did not state the non-publishing operation boundary."
+    );
+
+    const current = await runGit(["branch", "--show-current"]);
+    assert(current.output.trim() === branchSmokeName, "Git branch action did not switch to the new branch.");
+  } finally {
+    const current = await runGit(["branch", "--show-current"], { allowFailure: true });
+    if (current.output.trim() === branchSmokeName && originalBranch) {
+      await runGit(["switch", originalBranch], { allowFailure: true });
+    }
+    await runGit(["branch", "-D", branchSmokeName], { allowFailure: true });
+  }
+
+  const restored = await runGit(["branch", "--show-current"]);
+  assert(restored.output.trim() === originalBranch, "Git branch success cleanup did not restore the original branch.");
 }
 
 async function createSmokeFiles() {
@@ -1279,6 +1343,32 @@ async function post(path, body) {
 
 async function postExpectError(path, body) {
   return requestExpectError("POST", path, body);
+}
+
+async function runGit(args, options = {}) {
+  const child = spawn("git", args, {
+    cwd: repoRoot,
+    shell: false
+  });
+  let output = "";
+  child.stdout.on("data", (chunk) => {
+    output += chunk.toString("utf8");
+  });
+  child.stderr.on("data", (chunk) => {
+    output += chunk.toString("utf8");
+  });
+
+  const exitCode = await new Promise((resolveExit) => {
+    child.on("exit", (code) => resolveExit(code ?? 1));
+    child.on("error", () => resolveExit(1));
+  });
+
+  const result = { exitCode, output };
+  if (exitCode !== 0 && !options.allowFailure) {
+    throw new Error(`git ${args.join(" ")} failed with ${exitCode}: ${output.slice(0, 1200)}`);
+  }
+
+  return result;
 }
 
 async function getText(path) {

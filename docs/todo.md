@@ -20,8 +20,6 @@ what to do next without rereading the whole project history.
 - Harden branch publish/upstream setup for remote auth failures, protected
   branch names, stale remote refs, fork remotes, and isolated success-path
   tests.
-- Harden branch review for protected default branches, dirty-worktree edge
-  cases, and isolated success-path tests.
 - Polish app-managed runtime start/stop for packaged app locations and
   distribution-specific path resolution.
 - Optionally run a live-provider smoke with a user-supplied OpenAI API key,
@@ -160,6 +158,13 @@ what to do next without rereading the whole project history.
   rechecks expected HEAD and current branch, creates new local branches,
   switches to clean existing local branches, blocks unmerged files and dirty
   switches, records task events when linked, and does not push or publish a PR.
+- Hardened branch review with structured preflight metadata and smoke coverage.
+  Branch previews now summarize target branch validity, current branch/default
+  branch status, dirty-worktree handling, existing local/remote branch state,
+  and action readiness; default-base branch targets are blocked, the macOS
+  Review panel renders the preflight card, and `npm run smoke:core` exercises a
+  real temporary branch create/switch/cleanup success path plus stale-HEAD
+  blocking.
 - Added branch publish preview and explicit first-push/upstream setup from the
   Review panel. The runtime validates configured remotes, lists commits against
   the default base branch, blocks default-base/detached/already-upstream/

@@ -218,13 +218,16 @@ high-risk actions that require explicit approval.
 Branch review is the first branch-management slice. `GET /git/branch-preview`
 suggests or validates a target branch, detects whether Forge would create a
 new local branch or switch to an existing local branch, and returns current
-branch, expected HEAD, base branch, dirty state, blockers, and risk notes.
+branch, expected HEAD, base branch, dirty state, structured preflight
+metadata, blockers, and risk notes. The preflight summarizes target branch
+validity, current/default branch state, dirty-worktree handling,
+existing-local or remote-collision state, and action readiness.
 `POST /git/branch` is a high-risk action. It requires explicit confirmation
 plus expected HEAD and current branch from the preview, validates the target
-branch name, blocks unmerged files, blocks switching existing branches while
-the working tree is dirty, and then runs local `git switch --create <branch>`
-or `git switch <branch>`. It does not set upstream tracking, push, reset,
-delete branches, or publish a PR.
+branch name, blocks default-base branch targets, blocks unmerged files, blocks
+switching existing branches while the working tree is dirty, and then runs
+local `git switch --create <branch>` or `git switch <branch>`. It does not set
+upstream tracking, push, reset, delete branches, or publish a PR.
 
 Branch publish is the remote tracking slice after local branch creation.
 `GET /git/branch-publish-preview` summarizes the current branch, configured

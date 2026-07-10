@@ -386,6 +386,7 @@ struct GitBranchPreview: Codable, Hashable {
     var generatedAt: String
     var readiness: String
     var summary: String
+    var preflight: GitBranchPreflight?
     var expectedHead: String?
     var currentBranch: String?
     var baseBranch: String
@@ -398,6 +399,19 @@ struct GitBranchPreview: Codable, Hashable {
     var riskNotes: [String]
     var blockers: [String]
     var operationBoundary: String
+}
+
+struct GitBranchPreflight: Codable, Hashable {
+    var targetStatus: String
+    var targetSummary: String
+    var currentBranchStatus: String
+    var currentBranchSummary: String
+    var worktreeStatus: String
+    var worktreeSummary: String
+    var existingBranchStatus: String
+    var existingBranchSummary: String
+    var actionReadiness: String
+    var actionReadinessSummary: String
 }
 
 struct GitBranchRequest: Codable, Hashable {

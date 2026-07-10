@@ -63,7 +63,8 @@ Implemented today:
   included files, validation suggestions, preflight metadata, blockers, and
   risk notes surfaced in the macOS Review UI.
 - Branch preparation preview plus explicit local branch create/switch actions
-  guarded by expected-HEAD/current-branch checks, target branch validation, and
+  with structured preflight metadata, guarded by expected-HEAD/current-branch
+  checks, default-branch target blockers, target branch validation, and
   dirty-worktree blockers for switching existing branches.
 - Branch publish preview plus explicit first-push/upstream setup for task
   branches, guarded by expected-HEAD/branch/remote checks, remote-branch

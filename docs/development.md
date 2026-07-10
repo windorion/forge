@@ -144,11 +144,14 @@ unavailable reason, byte/line counts, and app preview limits so binary or
 oversized files are shown as explicit messages instead of broken textual
 diffs. The same section can prepare a Branch Review
 through `GET /git/branch-preview`, showing current branch, target branch,
-create/switch mode, blockers, and risk notes. From that reviewed card, the
-user can explicitly create a new local branch or switch to an existing clean
-local branch through `POST /git/branch`; the runtime rechecks expected HEAD
-and current branch, validates the branch name, blocks unmerged files, blocks
-dirty switches, and does not push or publish a PR.
+create/switch mode, structured preflight metadata, blockers, and risk notes.
+The preflight card summarizes target branch validity, current branch/default
+branch status, dirty-worktree handling, existing local/remote branch state, and
+action readiness. From that reviewed card, the user can explicitly create a
+new local branch or switch to an existing clean local branch through
+`POST /git/branch`; the runtime rechecks expected HEAD and current branch,
+validates the branch name, blocks default-base branch targets, blocks unmerged
+files, blocks dirty switches, and does not push or publish a PR.
 The same section can prepare a Branch Publish Review through
 `GET /git/branch-publish-preview`, showing the current branch, configured
 remote, remote branch, default base branch, commits to publish, local changes

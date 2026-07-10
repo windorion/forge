@@ -60,10 +60,12 @@ Implemented:
   state, hook-risk disclosure, and the commit path limit.
 - Branch preparation preview and explicit local branch create/switch actions
   from the macOS Review UI. The runtime validates the target branch name,
-  detects whether it will create or switch, requires expected HEAD and current
-  branch values from the reviewed preview, blocks unmerged files, blocks
-  switching existing branches with dirty working trees, and records a linked
-  task event when possible.
+  detects whether it will create or switch, exposes structured preflight
+  metadata for target/current/worktree/existing/action readiness, requires
+  expected HEAD and current branch values from the reviewed preview, blocks
+  default-base branch targets, blocks unmerged files, blocks switching existing
+  branches with dirty working trees, and records a linked task event when
+  possible.
 - Branch publish preview and explicit first-push/upstream setup from the macOS
   Review UI. The runtime chooses or validates a configured remote, compares
   current branch work against the default base branch, lists commits to
@@ -164,8 +166,6 @@ Remaining V0 gaps:
   tests
 - add approved PR publication/GitHub integration on top of the read-only PR
   handoff preflight
-- harden branch review for protected default branches, dirty-worktree edge
-  cases, and isolated success-path tests
 - optional live-provider smoke with a user-supplied OpenAI key outside
   committed tests
 - small UI polish pass around task states and review panels

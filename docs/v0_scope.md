@@ -151,7 +151,8 @@ V0 is complete when:
   previews in the Review panel, with open/reveal actions for changed files.
 - The app can prepare a branch review, then explicitly create a new local
   branch or switch to an existing clean local branch after confirmation. The
-  runtime rechecks HEAD/current branch and blocks unsafe branch changes.
+  runtime shows structured branch preflight, rechecks HEAD/current branch, and
+  blocks unsafe branch changes.
 - The app can prepare a branch publish review, then explicitly publish the
   current local branch and set upstream after confirmation. The runtime
   rechecks HEAD/branch/remote/remote branch, blocks unsafe first-push states,

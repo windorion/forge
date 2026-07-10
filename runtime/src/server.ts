@@ -737,10 +737,12 @@ async function getGitBranchPreview(
   const fallbackTargetBranch = normalizeGitBranchTarget(rawTargetBranch, suggestPullRequestBranchName(task, status.branch, fallbackBaseBranch));
 
   if (!status.isRepository || !status.root) {
+    const preflight = unavailableGitBranchPreflight(status, fallbackBaseBranch, fallbackTargetBranch);
     return {
       generatedAt,
       readiness: "Blocked",
       summary: "Branch preparation is blocked because git status is unavailable.",
+      preflight,
       expectedHead: status.head,
       currentBranch: status.branch,
       baseBranch: fallbackBaseBranch,
@@ -768,7 +770,18 @@ async function getGitBranchPreview(
     : branchExists
       ? "SwitchBranch"
       : "CreateBranch";
-  const blockers = gitBranchPreviewBlockers(status, targetBranch, mode, branchNameIssue);
+  const blockers = gitBranchPreviewBlockers(status, targetBranch, baseBranch, mode, branchNameIssue);
+  const preflight = gitBranchPreflight(
+    status,
+    targetBranch,
+    baseBranch,
+    mode,
+    branchNameIssue,
+    branchExists,
+    remoteBranchExists,
+    remote,
+    blockers
+  );
   const riskNotes = gitBranchRiskNotes(status, task, taskMissing, mode, remoteBranchExists, remote);
   const readiness: GitBranchPreview["readiness"] = blockers.length > 0
     ? "Blocked"
@@ -780,6 +793,7 @@ async function getGitBranchPreview(
     generatedAt,
     readiness,
     summary: gitBranchPreviewSummary(status, targetBranch, mode, readiness),
+    preflight,
     expectedHead: status.head,
     currentBranch: status.branch,
     baseBranch,
@@ -926,9 +940,223 @@ async function remoteGitBranchExists(gitRoot: string, remote: string, targetBran
   return result.exitCode === 0;
 }
 
+function unavailableGitBranchPreflight(
+  status: GitStatusSnapshot,
+  baseBranch: string,
+  targetBranch: string
+): NonNullable<GitBranchPreview["preflight"]> {
+  return {
+    targetStatus: targetBranch === baseBranch ? "DefaultBranch" : "Valid",
+    targetSummary: "Target branch could not be fully inspected because git status is unavailable.",
+    currentBranchStatus: status.branch && !status.branch.startsWith("HEAD") ? "Ready" : "Unknown",
+    currentBranchSummary: status.branch
+      ? `Current checkout reports ${status.branch}.`
+      : "Current branch could not be resolved.",
+    worktreeStatus: status.isDirty ? "DirtyBlocked" : "Clean",
+    worktreeSummary: status.isDirty
+      ? "Working tree state could not be safely inspected for branch changes."
+      : "Working tree did not report local changes.",
+    existingBranchStatus: "Invalid",
+    existingBranchSummary: "Existing local and remote branch state could not be inspected.",
+    actionReadiness: "Blocked",
+    actionReadinessSummary: "Resolve git repository access before creating or switching branches."
+  };
+}
+
+function gitBranchPreflight(
+  status: GitStatusSnapshot,
+  targetBranch: string,
+  baseBranch: string,
+  mode: GitBranchPreview["mode"],
+  branchNameIssue: string | undefined,
+  branchExists: boolean,
+  remoteBranchExists: boolean,
+  remote: string | undefined,
+  blockers: string[]
+): NonNullable<GitBranchPreview["preflight"]> {
+  const targetStatus = branchNameIssue
+    ? "Invalid"
+    : targetBranch === baseBranch
+      ? "DefaultBranch"
+      : mode === "AlreadyOnBranch"
+        ? "CurrentBranch"
+        : "Valid";
+  const currentBranchStatus = branchCurrentBranchStatus(status, baseBranch);
+  const worktreeStatus = branchWorktreeStatus(status, mode);
+  const existingBranchStatus = branchExistingBranchStatus(mode, branchNameIssue, branchExists, remoteBranchExists);
+  const actionReadiness: NonNullable<GitBranchPreview["preflight"]>["actionReadiness"] = blockers.length > 0
+    ? "Blocked"
+    : mode === "CreateBranch" && (status.isDirty || remoteBranchExists)
+      ? "NeedsReview"
+      : "Ready";
+
+  return {
+    targetStatus,
+    targetSummary: branchTargetSummary(targetBranch, baseBranch, targetStatus, branchNameIssue),
+    currentBranchStatus,
+    currentBranchSummary: branchCurrentBranchSummary(status, baseBranch, currentBranchStatus),
+    worktreeStatus,
+    worktreeSummary: branchWorktreeSummary(status, mode, worktreeStatus),
+    existingBranchStatus,
+    existingBranchSummary: branchExistingBranchSummary(targetBranch, remote, existingBranchStatus),
+    actionReadiness,
+    actionReadinessSummary: branchActionReadinessSummary(blockers, mode, actionReadiness)
+  };
+}
+
+function branchCurrentBranchStatus(
+  status: GitStatusSnapshot,
+  baseBranch: string
+): NonNullable<GitBranchPreview["preflight"]>["currentBranchStatus"] {
+  if (!status.branch) {
+    return "Unknown";
+  }
+
+  if (status.branch.startsWith("HEAD")) {
+    return "Detached";
+  }
+
+  if (status.branch === baseBranch) {
+    return "DefaultBranch";
+  }
+
+  return "Ready";
+}
+
+function branchCurrentBranchSummary(
+  status: GitStatusSnapshot,
+  baseBranch: string,
+  currentBranchStatus: NonNullable<GitBranchPreview["preflight"]>["currentBranchStatus"]
+): string {
+  switch (currentBranchStatus) {
+  case "DefaultBranch":
+    return `Current branch is the default base branch ${baseBranch}; creating a task branch is the expected next step.`;
+  case "Detached":
+    return "Current checkout is detached; branch creation can attach work to a named branch.";
+  case "Ready":
+    return `Current branch ${status.branch} is available as the source for this branch action.`;
+  default:
+    return "Current branch could not be resolved.";
+  }
+}
+
+function branchWorktreeStatus(
+  status: GitStatusSnapshot,
+  mode: GitBranchPreview["mode"]
+): NonNullable<GitBranchPreview["preflight"]>["worktreeStatus"] {
+  if (!status.isDirty) {
+    return "Clean";
+  }
+
+  return mode === "CreateBranch" ? "DirtyAllowed" : "DirtyBlocked";
+}
+
+function branchWorktreeSummary(
+  status: GitStatusSnapshot,
+  mode: GitBranchPreview["mode"],
+  worktreeStatus: NonNullable<GitBranchPreview["preflight"]>["worktreeStatus"]
+): string {
+  if (worktreeStatus === "Clean") {
+    return "Working tree is clean for this branch action.";
+  }
+
+  if (worktreeStatus === "DirtyAllowed") {
+    return `${status.changedFiles.length} local change(s) will carry onto the new branch.`;
+  }
+
+  if (mode === "AlreadyOnBranch") {
+    return "No branch switch is needed while local changes are present.";
+  }
+
+  return "Switching to an existing branch is blocked until local changes are committed, stashed, or otherwise resolved.";
+}
+
+function branchExistingBranchStatus(
+  mode: GitBranchPreview["mode"],
+  branchNameIssue: string | undefined,
+  branchExists: boolean,
+  remoteBranchExists: boolean
+): NonNullable<GitBranchPreview["preflight"]>["existingBranchStatus"] {
+  if (branchNameIssue) {
+    return "Invalid";
+  }
+
+  if (mode === "AlreadyOnBranch") {
+    return "CurrentBranch";
+  }
+
+  if (branchExists) {
+    return "ExistingLocal";
+  }
+
+  if (remoteBranchExists) {
+    return "RemoteCollision";
+  }
+
+  return "NewLocal";
+}
+
+function branchTargetSummary(
+  targetBranch: string,
+  baseBranch: string,
+  targetStatus: NonNullable<GitBranchPreview["preflight"]>["targetStatus"],
+  branchNameIssue: string | undefined
+): string {
+  switch (targetStatus) {
+  case "Invalid":
+    return branchNameIssue ?? `Target branch ${targetBranch} is not a valid git branch name.`;
+  case "DefaultBranch":
+    return `Target branch ${targetBranch} is the default base branch ${baseBranch}; choose a task branch instead.`;
+  case "CurrentBranch":
+    return `Target branch ${targetBranch} is already checked out.`;
+  default:
+    return `Target branch ${targetBranch} passed local branch-name validation.`;
+  }
+}
+
+function branchExistingBranchSummary(
+  targetBranch: string,
+  remote: string | undefined,
+  existingBranchStatus: NonNullable<GitBranchPreview["preflight"]>["existingBranchStatus"]
+): string {
+  switch (existingBranchStatus) {
+  case "ExistingLocal":
+    return `A local branch named ${targetBranch} already exists; this review is for switching.`;
+  case "CurrentBranch":
+    return `Already on local branch ${targetBranch}.`;
+  case "RemoteCollision":
+    return `A remote branch named ${targetBranch} exists on ${remote ?? "the configured remote"}; this action will not set upstream.`;
+  case "Invalid":
+    return "Existing branch state was not inspected because the target branch name is invalid.";
+  default:
+    return `No local branch named ${targetBranch} exists; this review is for creating it.`;
+  }
+}
+
+function branchActionReadinessSummary(
+  blockers: string[],
+  mode: GitBranchPreview["mode"],
+  actionReadiness: NonNullable<GitBranchPreview["preflight"]>["actionReadiness"]
+): string {
+  if (actionReadiness === "Blocked") {
+    return `Resolve ${blockers.length} blocker(s) before changing branches.`;
+  }
+
+  if (actionReadiness === "NeedsReview") {
+    return "Branch action can proceed after review, but local or remote branch context needs attention.";
+  }
+
+  if (mode === "SwitchBranch") {
+    return "Ready to switch to the existing local branch after explicit confirmation.";
+  }
+
+  return "Ready to create and switch to the new local branch after explicit confirmation.";
+}
+
 function gitBranchPreviewBlockers(
   status: GitStatusSnapshot,
   targetBranch: string,
+  baseBranch: string,
   mode: GitBranchPreview["mode"],
   branchNameIssue: string | undefined
 ): string[] {
@@ -936,6 +1164,10 @@ function gitBranchPreviewBlockers(
 
   if (branchNameIssue) {
     blockers.push(branchNameIssue);
+  }
+
+  if (targetBranch === baseBranch) {
+    blockers.push(`Target branch ${targetBranch} is the default base branch; choose a task branch before changing branches.`);
   }
 
   if (!status.head) {

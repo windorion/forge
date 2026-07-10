@@ -34,8 +34,8 @@ Examples:
 - prepare a read-only commit review artifact from git status, optional task
   context, and latest task validation state
 - prepare a read-only branch review artifact from current branch status,
-  suggested task branch, target branch validation, dirty state, blockers, and
-  risk notes
+  suggested task branch, target branch validation, dirty state, preflight
+  readiness, blockers, and risk notes
 - prepare a read-only branch publish review artifact from current branch
   status, configured remotes, default-base comparison, commit summaries,
   uncommitted local changes, blockers, and risk notes
@@ -55,8 +55,9 @@ staged/unstaged/untracked counts, line stats, large-change warnings, and hook
 risk disclosure. The PR-preview endpoint only summarizes branch/base/upstream
 state, draft PR metadata, commits, changed files, validation evidence,
 preflight readiness, blockers, and risk notes. The branch-preview endpoint
-only summarizes target branch validation, create/switch mode, dirty state,
-blockers, and risk notes. The
+only summarizes target branch validation, default-base target blocking,
+create/switch mode, dirty state, local/remote branch state, preflight
+readiness, blockers, and risk notes. The
 branch-publish-preview endpoint only summarizes current branch, remote, remote
 branch, default-base comparison, commits to publish, local changes, blockers,
 and risk notes. These endpoints must not stage, unstage, commit, checkout,
@@ -113,10 +114,11 @@ Forge surfaces the command output and still does not push or publish.
 Current branch create/switch implementation is high risk and requires explicit
 user confirmation from the macOS Review panel. The runtime rechecks expected
 HEAD and current branch from the branch preview, validates the target branch
-name, blocks unmerged files, blocks switching to existing branches when the
-working tree is dirty, and then runs either local branch creation or local
-branch switching. It does not set upstream tracking, push, merge, reset, delete
-branches, or publish anything externally.
+name, blocks default-base branch targets, blocks unmerged files, blocks
+switching to existing branches when the working tree is dirty, and then runs
+either local branch creation or local branch switching. It does not set
+upstream tracking, push, merge, reset, delete branches, or publish anything
+externally.
 
 Current branch publish implementation is high risk and requires explicit user
 confirmation from the macOS Review panel. The runtime rechecks expected HEAD,
