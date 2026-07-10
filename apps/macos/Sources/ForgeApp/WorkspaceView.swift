@@ -1854,6 +1854,10 @@ private struct GitCommitPreviewCard: View {
                         .lineLimit(2)
                 }
 
+                if let preflight = preview.preflight {
+                    CommitPreflightCard(preflight: preflight)
+                }
+
                 VStack(alignment: .leading, spacing: 5) {
                     Text("Suggested Message")
                         .font(.caption.weight(.semibold))
@@ -2299,6 +2303,98 @@ private struct BranchResultView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.background)
         .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+private struct CommitPreflightCard: View {
+    var preflight: GitCommitPreflight
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 8) {
+                Label(preflight.identityStatus, systemImage: identityImage)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(identityColor)
+
+                Spacer()
+
+                Text(preflight.validationState)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(validationColor)
+            }
+
+            Text(preflight.identitySummary)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+
+            HStack(spacing: 8) {
+                Label("\(preflight.stagedFileCount) staged", systemImage: "tray.full")
+                Label("\(preflight.unstagedFileCount) unstaged", systemImage: "tray")
+                Label("\(preflight.untrackedFileCount) untracked", systemImage: "plus.square")
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                Label("+\(preflight.totalAdditions)", systemImage: "plus")
+                Label("-\(preflight.totalDeletions)", systemImage: "minus")
+                if preflight.filesWithoutStats > 0 {
+                    Label("\(preflight.filesWithoutStats) no stats", systemImage: "questionmark.square")
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+
+            if preflight.largeChangeSet, let largeChangeSummary = preflight.largeChangeSummary {
+                Label(largeChangeSummary, systemImage: "exclamationmark.triangle")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+            }
+
+            Label(preflight.hookRiskSummary, systemImage: "curlybraces")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+
+    private var identityImage: String {
+        switch preflight.identityStatus {
+        case "Ready":
+            return "person.crop.circle.badge.checkmark"
+        case "Missing":
+            return "person.crop.circle.badge.exclamationmark"
+        default:
+            return "questionmark.circle"
+        }
+    }
+
+    private var identityColor: Color {
+        switch preflight.identityStatus {
+        case "Ready":
+            return .green
+        case "Missing":
+            return .red
+        default:
+            return .orange
+        }
+    }
+
+    private var validationColor: Color {
+        switch preflight.validationState {
+        case "Passed":
+            return .green
+        case "Failed":
+            return .red
+        case "Missing":
+            return .orange
+        default:
+            return .secondary
+        }
     }
 }
 

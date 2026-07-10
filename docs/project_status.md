@@ -54,7 +54,10 @@ Implemented:
   presented as explicit messages rather than broken side-by-side diffs.
 - Read-only commit preparation preview from the runtime, surfaced in the macOS
   Review UI with suggested commit message, included files, validation
-  suggestions, blockers, risk notes, and a non-mutating operation boundary.
+  suggestions, preflight metadata, blockers, risk notes, and a non-mutating
+  operation boundary. The preflight includes git author identity, staged/
+  unstaged/untracked counts, line stats, large-change warnings, validation
+  state, hook-risk disclosure, and the commit path limit.
 - Branch preparation preview and explicit local branch create/switch actions
   from the macOS Review UI. The runtime validates the target branch name,
   detects whether it will create or switch, requires expected HEAD and current
@@ -151,8 +154,7 @@ Remaining V0 gaps:
   distribution-specific path resolution
 - polish git/diff review navigation for larger multi-file changes and packaged
   app workflows
-- harden local commit review for failed git identity/signing/hooks, mixed
-  staged/unstaged states, and larger changes
+- polish local commit review for signing and project-specific hook edge cases
 - harden push review for remote auth failures, non-fast-forward rejections,
   branch protection, and disconnected networks
 - harden branch publish/upstream setup for remote auth failures, protected

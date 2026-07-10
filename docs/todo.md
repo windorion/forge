@@ -14,8 +14,7 @@ what to do next without rereading the whole project history.
 
 - Polish the macOS git/diff review panel for larger multi-file navigation and
   packaged app workflows.
-- Harden local commit review for failed git identity/signing/hooks, mixed
-  staged/unstaged states, large change sets, and validation readiness.
+- Polish local commit review for signing and project-specific hook edge cases.
 - Harden push review for remote auth failures, non-fast-forward rejections,
   branch protection, and disconnected networks.
 - Harden branch publish/upstream setup for remote auth failures, protected
@@ -107,6 +106,11 @@ what to do next without rereading the whole project history.
   build/launch output, lists checked runtime directory candidates, exposes
   launch commands in Settings and copied diagnostics, and reports slow stop
   attempts.
+- Hardened local commit review preflight. Commit previews now expose git
+  author identity status, staged/unstaged/untracked counts, line stats,
+  files-without-stats counts, large-change warnings, validation state,
+  hook-risk disclosure, and commit path limits before the user approves a
+  local commit.
 - Added a bounded OpenAI model-guided context loop before plan revisions: the
   provider can ask for up to three read/search rounds, while the runtime
   validates and executes only logged read-only repo tools with stop conditions.

@@ -93,6 +93,10 @@ Current implementation:
 - The preview can include blockers such as clean working tree or unmerged
   files, plus risk notes such as unstaged/untracked changes or failed/missing
   task validation.
+- The preview also includes commit preflight metadata: git author identity
+  status, staged/unstaged/untracked counts, total additions/deletions,
+  files-without-stats count, large-change warnings, validation state,
+  hook-risk disclosure, and the commit path limit.
 - Forge can create one local commit from the reviewed preview after explicit
   confirmation in the macOS Review panel.
 - The runtime rechecks the expected HEAD, validates selected repo-relative

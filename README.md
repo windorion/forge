@@ -60,8 +60,8 @@ Implemented today:
   Review UI, including open/reveal actions for changed files plus explicit
   binary/large-file diff handling.
 - Read-only commit preparation artifacts with suggested commit message,
-  included files, validation suggestions, blockers, and risk notes surfaced in
-  the macOS Review UI.
+  included files, validation suggestions, preflight metadata, blockers, and
+  risk notes surfaced in the macOS Review UI.
 - Branch preparation preview plus explicit local branch create/switch actions
   guarded by expected-HEAD/current-branch checks, target branch validation, and
   dirty-worktree blockers for switching existing branches.

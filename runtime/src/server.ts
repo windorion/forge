@@ -1455,10 +1455,11 @@ async function getGitCommitPreview(rawTaskID: string | null): Promise<GitCommitP
   }
 
   const includedFiles = status.changedFiles;
-  const blockers = commitPreviewBlockers(status, includedFiles);
   const validationSummary = commitValidationSummary(task);
+  const preflight = await collectGitCommitPreflight(status, includedFiles, validationSummary);
+  const blockers = commitPreviewBlockers(status, includedFiles, preflight);
   const validationCommands = suggestedCommitValidationCommands(includedFiles);
-  const riskNotes = commitPreviewRiskNotes(status, includedFiles, task, taskMissing, validationSummary);
+  const riskNotes = commitPreviewRiskNotes(status, includedFiles, task, taskMissing, validationSummary, preflight);
   const readiness: GitCommitPreview["readiness"] = blockers.length > 0
     ? "Blocked"
     : riskNotes.length > 0
@@ -1483,6 +1484,7 @@ async function getGitCommitPreview(rawTaskID: string | null): Promise<GitCommitP
     } : undefined,
     validationSummary,
     validationCommands,
+    preflight,
     riskNotes,
     blockers,
     operationBoundary
@@ -2463,7 +2465,11 @@ function pullRequestTestPlan(task: ForgeTask | undefined, changedFiles: GitFileC
   return plan.slice(0, 8);
 }
 
-function commitPreviewBlockers(status: GitStatusSnapshot, files: GitFileChange[]): string[] {
+function commitPreviewBlockers(
+  status: GitStatusSnapshot,
+  files: GitFileChange[],
+  preflight?: GitCommitPreview["preflight"]
+): string[] {
   const blockers: string[] = [];
 
   if (!status.isDirty || files.length === 0) {
@@ -2475,6 +2481,10 @@ function commitPreviewBlockers(status: GitStatusSnapshot, files: GitFileChange[]
     blockers.push(`Resolve ${unmergedFiles.length} unmerged file(s) before preparing a commit.`);
   }
 
+  if (preflight?.identityStatus === "Missing") {
+    blockers.push("Git author identity is not configured; set user.name and user.email before committing.");
+  }
+
   return blockers;
 }
 
@@ -2483,7 +2493,8 @@ function commitPreviewRiskNotes(
   files: GitFileChange[],
   task: ForgeTask | undefined,
   taskMissing: boolean,
-  validationSummary: string
+  validationSummary: string,
+  preflight?: GitCommitPreview["preflight"]
 ): string[] {
   const notes: string[] = [];
 
@@ -2509,6 +2520,14 @@ function commitPreviewRiskNotes(
     notes.push(`Current branch is behind upstream by ${status.behind} commit(s).`);
   }
 
+  if (preflight?.largeChangeSet && preflight.largeChangeSummary) {
+    notes.push(preflight.largeChangeSummary);
+  }
+
+  if ((preflight?.filesWithoutStats ?? 0) > 0) {
+    notes.push(`${preflight?.filesWithoutStats} file(s) do not have line-count stats; review binary or rename-only changes carefully.`);
+  }
+
   if (validationSummary.includes("Failed")) {
     notes.push("Latest task validation failed; repair or explicitly accept the risk before committing.");
   } else if (validationSummary.includes("No validation run")) {
@@ -2516,6 +2535,82 @@ function commitPreviewRiskNotes(
   }
 
   return notes;
+}
+
+async function collectGitCommitPreflight(
+  status: GitStatusSnapshot,
+  files: GitFileChange[],
+  validationSummary: string
+): Promise<GitCommitPreview["preflight"]> {
+  const identity = status.root
+    ? await getGitAuthorIdentitySummary(status.root)
+    : {
+        identityStatus: "Unknown" as const,
+        identitySummary: "Git author identity could not be inspected because the repository root is unavailable."
+      };
+  const stagedFileCount = files.filter((file) => file.staged).length;
+  const unstagedFileCount = files.filter((file) => file.unstaged).length;
+  const untrackedFileCount = files.filter((file) => file.untracked).length;
+  const totalAdditions = files.reduce((sum, file) => sum + (file.additions ?? 0), 0);
+  const totalDeletions = files.reduce((sum, file) => sum + (file.deletions ?? 0), 0);
+  const filesWithoutStats = files.filter((file) => file.additions === undefined || file.deletions === undefined).length;
+  const totalLineChanges = totalAdditions + totalDeletions;
+  const largeChangeReasons = [
+    files.length > 30 ? `${files.length} files` : undefined,
+    totalLineChanges > 1_000 ? `${totalLineChanges} line changes` : undefined
+  ].filter(Boolean);
+  const largeChangeSet = largeChangeReasons.length > 0;
+
+  return {
+    ...identity,
+    stagedFileCount,
+    unstagedFileCount,
+    untrackedFileCount,
+    totalAdditions,
+    totalDeletions,
+    filesWithoutStats,
+    largeChangeSet,
+    largeChangeSummary: largeChangeSet
+      ? `Large commit candidate: ${largeChangeReasons.join(", ")}. Consider splitting the commit or running targeted validation.`
+      : undefined,
+    validationState: commitValidationState(validationSummary),
+    hookRiskSummary: "Local git commit hooks may still run during commit; Forge will surface git commit output if a hook rejects the commit.",
+    pathLimit: 100
+  };
+}
+
+async function getGitAuthorIdentitySummary(
+  gitRoot: string
+): Promise<Pick<NonNullable<GitCommitPreview["preflight"]>, "identityStatus" | "identitySummary">> {
+  const identityResult = await runGitCommand(["var", "GIT_AUTHOR_IDENT"], gitRoot, 8_000);
+  if (identityResult.exitCode === 0) {
+    const identity = identityResult.output.trim().replace(/\s+\d+\s+[+-]\d{4}$/, "");
+    return {
+      identityStatus: "Ready",
+      identitySummary: identity ? `Git author identity is configured as ${identity}.` : "Git author identity is configured."
+    };
+  }
+
+  return {
+    identityStatus: "Missing",
+    identitySummary: identityResult.output.trim() || "Git author identity is not configured."
+  };
+}
+
+function commitValidationState(validationSummary: string): NonNullable<GitCommitPreview["preflight"]>["validationState"] {
+  if (validationSummary.includes("Passed")) {
+    return "Passed";
+  }
+
+  if (validationSummary.includes("Failed")) {
+    return "Failed";
+  }
+
+  if (validationSummary.includes("No validation run")) {
+    return "Missing";
+  }
+
+  return "Unknown";
 }
 
 function suggestedCommitValidationCommands(files: GitFileChange[]): string[] {

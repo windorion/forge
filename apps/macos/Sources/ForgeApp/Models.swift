@@ -289,9 +289,26 @@ struct GitCommitPreview: Codable, Hashable {
     var relatedTask: GitCommitRelatedTask?
     var validationSummary: String
     var validationCommands: [String]
+    var preflight: GitCommitPreflight?
     var riskNotes: [String]
     var blockers: [String]
     var operationBoundary: String
+}
+
+struct GitCommitPreflight: Codable, Hashable {
+    var identityStatus: String
+    var identitySummary: String
+    var stagedFileCount: Int
+    var unstagedFileCount: Int
+    var untrackedFileCount: Int
+    var totalAdditions: Int
+    var totalDeletions: Int
+    var filesWithoutStats: Int
+    var largeChangeSet: Bool
+    var largeChangeSummary: String?
+    var validationState: String
+    var hookRiskSummary: String
+    var pathLimit: Int
 }
 
 struct GitCreateCommitRequest: Codable, Hashable {

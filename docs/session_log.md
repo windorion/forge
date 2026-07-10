@@ -2367,3 +2367,42 @@ Next:
 - Commit the runtime lifecycle diagnostics follow-up.
 - Continue V0 hardening with local commit/push remote failure paths or
   packaged runtime path resolution once packaging layout is decided.
+
+### 2026-07-10 21:20:58 CEST +0200
+
+Conversation summary:
+
+- User asked to commit/push everything and continue the next long task. The
+  session pushed `main` to GitHub, then hardened local commit review preflight
+  for V0.
+
+Done:
+
+- Pushed `main` to `origin`, advancing the remote from `31634c5` to
+  `98facb0`.
+- Added commit preview preflight metadata for git author identity status,
+  staged/unstaged/untracked counts, total additions/deletions,
+  files-without-stats count, large-change warnings, validation state,
+  hook-risk disclosure, and commit path limit.
+- Made missing git author identity block commit preview before the user can
+  start a local commit.
+- Surfaced commit preflight in the macOS Commit Review card.
+- Extended `npm run smoke:core` to assert commit preflight metadata.
+- Updated README, runtime README, project status, TODO, development,
+  git workflow, and security permissions docs.
+- Verified `npm run check`, `swift build`, and `npm run smoke:core`.
+
+Not done:
+
+- Did not create a live signing/hook failure fixture or run a real hook
+  rejection test.
+- Did not harden remote git auth, non-fast-forward, fork remote, or branch
+  protection paths.
+- Did not push the new commit-preflight work after implementation; it remains
+  local until committed and pushed.
+
+Next:
+
+- Commit the commit-preflight hardening follow-up.
+- Continue V0 hardening with push/branch-publish remote failure handling or
+  PR handoff edge cases.

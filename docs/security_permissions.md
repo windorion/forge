@@ -49,8 +49,10 @@ Can run automatically after workspace access is granted.
 Current git review endpoints are low risk and read-only. They run `git status`
 and `git diff` without a shell, require repo-relative paths for per-file diffs,
 and block `.git` and `.forge` internals. The commit-preview endpoint only
-summarizes the working tree, task context, validation state, and suggested
-next checks. The PR-preview endpoint only summarizes branch/base/upstream
+summarizes the working tree, task context, validation state, suggested next
+checks, and commit preflight metadata such as git author identity status,
+staged/unstaged/untracked counts, line stats, large-change warnings, and hook
+risk disclosure. The PR-preview endpoint only summarizes branch/base/upstream
 state, draft PR metadata, commits, changed files, validation evidence, blockers,
 and risk notes. The branch-preview endpoint only summarizes target branch
 validation, create/switch mode, dirty state, blockers, and risk notes. The
@@ -103,6 +105,9 @@ rejects unmerged files, rejects staged files outside the reviewed selection,
 preflights git author identity, stages only the selected files, and creates
 one local commit. It does not push, merge, reset, delete branches, or publish
 anything externally.
+If git author identity is missing, the preview is blocked before the user can
+start the commit. Local git commit hooks may still reject the final commit;
+Forge surfaces the command output and still does not push or publish.
 
 Current branch create/switch implementation is high risk and requires explicit
 user confirmation from the macOS Review panel. The runtime rechecks expected

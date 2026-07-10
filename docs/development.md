@@ -160,14 +160,17 @@ no-commit/unmerged/remote-collision states, and performs a non-force
 `git push --set-upstream`. It does not create a PR.
 The same section can prepare a read-only Commit Review through
 `GET /git/commit-preview?taskID=<task-id>`, showing a
-suggested commit message, included files, validation suggestions, blockers,
-risk notes, and the explicit boundary that Forge has not staged, committed, or
-pushed anything. From that reviewed card, the user can explicitly create one
-local commit through `POST /git/commit`. The runtime rechecks the expected
-HEAD, validates the selected paths, rejects unmerged files and staged files
-outside the reviewed selection, preflights git identity, stages the selected
-paths, creates the local commit, records a task event when linked, and still
-does not push. A separate Push Review through `GET /git/push-preview` shows
+suggested commit message, included files, validation suggestions, preflight
+metadata, blockers, risk notes, and the explicit boundary that Forge has not
+staged, committed, or pushed anything. Commit preflight shows git author
+identity status, staged/unstaged/untracked counts, line stats, large-change
+warnings, validation state, hook-risk disclosure, and the commit path limit.
+From that reviewed card, the user can explicitly create one local commit
+through `POST /git/commit`. The runtime rechecks the expected HEAD, validates
+the selected paths, rejects unmerged files and staged files outside the
+reviewed selection, preflights git identity, stages the selected paths,
+creates the local commit, records a task event when linked, and still does not
+push. A separate Push Review through `GET /git/push-preview` shows
 branch, upstream, ahead/behind counts, commits to push, uncommitted local
 changes, blockers, and risk notes. From that reviewed card, the user can
 explicitly push the current branch through `POST /git/push`; the runtime
@@ -346,6 +349,8 @@ It covers:
 - mock OpenAI plan-context loop before a plan revision
 - read-only branch, branch-publish, commit, push, and PR handoff preview
   endpoints plus stale-head rejection checks for high-risk git actions
+- commit preview preflight metadata for author identity, staged/unstaged/
+  untracked counts, hook-risk disclosure, and files without line stats
 - mock OpenAI richer edit proposal with append/create apply and blocked
   preview-only artifact coverage
 - mock OpenAI blocked-to-repaired edit proposal flow

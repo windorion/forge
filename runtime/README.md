@@ -131,8 +131,11 @@ create a PR.
 `GET /git/commit-preview` turns the current working tree, optional task
 context, and latest task validation state into a review artifact with a
 suggested commit message, included files, validation commands to consider,
-risk notes, blockers, and an explicit non-mutating operation boundary. It does
-not stage, commit, push, or mutate the repository.
+risk notes, blockers, commit preflight metadata, and an explicit non-mutating
+operation boundary. The preflight includes git author identity status, staged/
+unstaged/untracked counts, line stats, large-change warnings, validation
+state, hook-risk disclosure, and the commit path limit. It does not stage,
+commit, push, or mutate the repository.
 `POST /git/commit` is the first high-risk git action. It requires explicit
 confirmation, the expected HEAD from the reviewed preview, a commit message,
 and selected repo-relative paths. The runtime rechecks current git status,
@@ -273,8 +276,9 @@ including fake-key handling and confirmation that API keys are not persisted.
 It also verifies read-only git status, bounded git diff metadata for text,
 binary, and oversized files, branch-preview, stale-head branch rejection,
 branch-publish-preview, stale-head branch publish rejection, commit-preview,
-stale-head commit rejection, push-preview, and stale-head push rejection
-endpoints, plus the read-only PR handoff preview, against temporary fixtures.
+commit preflight metadata, stale-head commit rejection, push-preview, and
+stale-head push rejection endpoints, plus the read-only PR handoff preview,
+against temporary fixtures.
 It also starts a
 mock OpenAI Responses server to verify the model-guided context loop path
 before an OpenAI-backed plan

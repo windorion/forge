@@ -384,9 +384,26 @@ export interface GitCommitPreview {
   relatedTask?: GitCommitRelatedTask;
   validationSummary: string;
   validationCommands: string[];
+  preflight?: GitCommitPreflight;
   riskNotes: string[];
   blockers: string[];
   operationBoundary: string;
+}
+
+export interface GitCommitPreflight {
+  identityStatus: "Ready" | "Missing" | "Unknown";
+  identitySummary: string;
+  stagedFileCount: number;
+  unstagedFileCount: number;
+  untrackedFileCount: number;
+  totalAdditions: number;
+  totalDeletions: number;
+  filesWithoutStats: number;
+  largeChangeSet: boolean;
+  largeChangeSummary?: string;
+  validationState: "Passed" | "Failed" | "Missing" | "Unknown";
+  hookRiskSummary: string;
+  pathLimit: number;
 }
 
 export interface GitCreateCommitRequest {

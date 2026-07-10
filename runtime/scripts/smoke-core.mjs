@@ -638,6 +638,25 @@ async function assertGitReadOnlyEndpoints() {
   );
   assert(commitPreview.expectedHead, "Git commit preview did not include the expected head.");
   assert(commitPreview.suggestedTitle, "Git commit preview did not include a suggested title.");
+  assert(commitPreview.preflight, "Git commit preview did not include preflight metadata.");
+  assert(
+    commitPreview.preflight.identityStatus === "Ready",
+    `Git commit preview expected ready author identity, got ${commitPreview.preflight.identityStatus}.`
+  );
+  assert(
+    commitPreview.preflight.stagedFileCount >= 0 &&
+      commitPreview.preflight.unstagedFileCount >= 0 &&
+      commitPreview.preflight.untrackedFileCount >= 0,
+    "Git commit preview did not include staged/unstaged/untracked preflight counts."
+  );
+  assert(
+    commitPreview.preflight.filesWithoutStats > 0,
+    "Git commit preview preflight should flag binary or untracked large files without line stats."
+  );
+  assert(
+    commitPreview.preflight.hookRiskSummary.includes("hooks"),
+    "Git commit preview preflight did not disclose hook risk."
+  );
   assert(
     commitPreview.validationCommands.includes("git diff --check"),
     "Git commit preview did not suggest git diff whitespace validation."
