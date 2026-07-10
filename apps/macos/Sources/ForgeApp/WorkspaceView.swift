@@ -3020,6 +3020,10 @@ private struct GitPullRequestPreviewCard: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 
+                if let preflight = preview.preflight {
+                    PullRequestPreflightCard(preflight: preflight)
+                }
+
                 VStack(alignment: .leading, spacing: 5) {
                     Text("Suggested PR")
                         .font(.caption.weight(.semibold))
@@ -3180,6 +3184,126 @@ private struct GitPullRequestPreviewCard: View {
         case "Ready":
             return .green
         case "Blocked":
+            return .red
+        default:
+            return .orange
+        }
+    }
+}
+
+private struct PullRequestPreflightCard: View {
+    var preflight: GitPullRequestPreflight
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Label("Preflight", systemImage: "checklist")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            Text(preflight.publishReadinessSummary)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+
+            VStack(alignment: .leading, spacing: 5) {
+                PullRequestPreflightStatusRow(
+                    title: "Base",
+                    status: preflight.baseRefStatus,
+                    summary: preflight.baseRefSummary
+                )
+                PullRequestPreflightStatusRow(
+                    title: "Head",
+                    status: preflight.headBranchStatus,
+                    summary: preflight.headBranchSummary
+                )
+                PullRequestPreflightStatusRow(
+                    title: "Upstream",
+                    status: preflight.upstreamStatus,
+                    summary: preflight.upstreamSummary
+                )
+                PullRequestPreflightStatusRow(
+                    title: "Remote",
+                    status: preflight.remoteStatus,
+                    summary: preflight.remoteSummary
+                )
+                PullRequestPreflightStatusRow(
+                    title: "Validation",
+                    status: preflight.validationState,
+                    summary: preflight.validationSummary
+                )
+            }
+
+            if !preflight.testEvidence.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Evidence")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    ForEach(Array(preflight.testEvidence.prefix(5).enumerated()), id: \.offset) { _, evidence in
+                        Text(evidence)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+
+                    if preflight.testEvidence.count > 5 {
+                        Text("\(preflight.testEvidence.count - 5) more evidence line(s) not shown.")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            }
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+private struct PullRequestPreflightStatusRow: View {
+    var title: String
+    var status: String
+    var summary: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Label(status, systemImage: statusImage(for: status))
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(statusColor(for: status))
+                .frame(width: 94, alignment: .leading)
+
+            Text(title)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 64, alignment: .leading)
+
+            Text(summary)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .textSelection(.enabled)
+
+            Spacer(minLength: 4)
+        }
+    }
+
+    private func statusImage(for status: String) -> String {
+        switch status {
+        case "Ready", "Resolved", "Passed":
+            return "checkmark.circle"
+        case "Missing", "Detached", "DefaultBranch", "Unpushed", "Behind", "Failed":
+            return "xmark.octagon"
+        default:
+            return "exclamationmark.triangle"
+        }
+    }
+
+    private func statusColor(for status: String) -> Color {
+        switch status {
+        case "Ready", "Resolved", "Passed":
+            return .green
+        case "Missing", "Detached", "DefaultBranch", "Unpushed", "Behind", "Failed":
             return .red
         default:
             return .orange

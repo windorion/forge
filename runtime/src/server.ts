@@ -2029,10 +2029,12 @@ async function getGitPullRequestPreview(rawTaskID: string | null): Promise<GitPu
 
   if (!status.isRepository || !status.root) {
     const riskNotes = taskMissing ? [`Task ${rawTaskID} was not found.`] : [];
+    const preflight = unavailableGitPullRequestPreflight(status, fallbackBaseBranch, task);
     return {
       generatedAt,
       readiness: "Blocked",
       summary: "PR handoff is blocked because git status is unavailable.",
+      preflight,
       baseBranch: fallbackBaseBranch,
       headBranch: status.branch,
       upstream: status.upstream,
@@ -2050,7 +2052,8 @@ async function getGitPullRequestPreview(rawTaskID: string | null): Promise<GitPu
   }
 
   const upstreamParts = parseGitUpstream(status.upstream);
-  const remote = upstreamParts?.remote ?? await getFirstGitRemote(status.root);
+  const remoteSummaries = await listGitRemoteSummaries(status.root);
+  const remote = upstreamParts?.remote ?? remoteSummaries[0]?.name ?? await getFirstGitRemote(status.root);
   const baseBranch = await getGitDefaultBaseBranch(status.root, remote ?? "origin");
   const baseRef = remote
     ? await resolveGitBaseRef(status.root, remote, baseBranch)
@@ -2059,7 +2062,18 @@ async function getGitPullRequestPreview(rawTaskID: string | null): Promise<GitPu
   const changedFiles = mergeGitFileChanges(rangeFiles, status.changedFiles);
   const commits = baseRef ? await collectGitCommitsInRange(status.root, `${baseRef}..HEAD`) : [];
   const blockers = gitPullRequestBlockers(status, baseBranch, upstreamParts, commits, baseRef);
-  const riskNotes = gitPullRequestRiskNotes(status, task, taskMissing, commits);
+  const preflight = gitPullRequestPreflight(
+    status,
+    baseBranch,
+    baseRef,
+    upstreamParts,
+    remote,
+    remoteSummaries,
+    task,
+    changedFiles,
+    blockers
+  );
+  const riskNotes = gitPullRequestRiskNotes(status, task, taskMissing, commits, preflight);
   const readiness: GitPullRequestPreview["readiness"] = blockers.length > 0
     ? "Blocked"
     : riskNotes.length > 0
@@ -2072,6 +2086,7 @@ async function getGitPullRequestPreview(rawTaskID: string | null): Promise<GitPu
     generatedAt,
     readiness,
     summary: gitPullRequestPreviewSummary(status, baseBranch, commits, readiness),
+    preflight,
     baseBranch,
     headBranch: status.branch,
     upstream: status.upstream,
@@ -2079,7 +2094,7 @@ async function getGitPullRequestPreview(rawTaskID: string | null): Promise<GitPu
     remoteBranch: upstreamParts?.remoteBranch,
     suggestedBranchName,
     title,
-    body: buildPullRequestBody(status, baseBranch, title, task, commits, changedFiles, blockers, riskNotes),
+    body: buildPullRequestBody(status, baseBranch, title, task, commits, changedFiles, blockers, riskNotes, preflight),
     testPlan: pullRequestTestPlan(task, changedFiles),
     commits,
     changedFiles,
@@ -2096,6 +2111,11 @@ async function getGitPullRequestPreview(rawTaskID: string | null): Promise<GitPu
   };
 }
 
+type GitRemoteSummary = {
+  name: string;
+  urlKind: "HTTPS" | "SSH" | "Local" | "Other" | "Unknown";
+};
+
 async function getFirstGitRemote(gitRoot: string): Promise<string | undefined> {
   const result = await runGitCommand(["remote"], gitRoot, 8_000);
   if (result.exitCode !== 0) {
@@ -2106,6 +2126,46 @@ async function getFirstGitRemote(gitRoot: string): Promise<string | undefined> {
     .split(/\r?\n/)
     .map((remote) => remote.trim())
     .find(Boolean);
+}
+
+async function listGitRemoteSummaries(gitRoot: string): Promise<GitRemoteSummary[]> {
+  const result = await runGitCommand(["remote"], gitRoot, 8_000);
+  if (result.exitCode !== 0) {
+    return [];
+  }
+
+  const remotes = result.output
+    .split(/\r?\n/)
+    .map((remote) => remote.trim())
+    .filter(Boolean);
+
+  return Promise.all(remotes.map(async (name) => {
+    const urlResult = await runGitCommand(["remote", "get-url", name], gitRoot, 8_000);
+    return {
+      name,
+      urlKind: summarizeRemoteURLKind(urlResult.exitCode === 0 ? urlResult.output.trim() : undefined)
+    };
+  }));
+}
+
+function summarizeRemoteURLKind(url: string | undefined): GitRemoteSummary["urlKind"] {
+  if (!url) {
+    return "Unknown";
+  }
+
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    return "HTTPS";
+  }
+
+  if (url.startsWith("ssh://") || /^[^@\s]+@[^:\s]+:.+/.test(url)) {
+    return "SSH";
+  }
+
+  if (url.startsWith("file://") || url.startsWith("/") || url.startsWith(".")) {
+    return "Local";
+  }
+
+  return "Other";
 }
 
 async function getGitDefaultBaseBranch(gitRoot: string, remote: string): Promise<string> {
@@ -2262,6 +2322,212 @@ function mergeGitFileChanges(primary: GitFileChange[], secondary: GitFileChange[
   );
 }
 
+function unavailableGitPullRequestPreflight(
+  status: GitStatusSnapshot,
+  baseBranch: string,
+  task: ForgeTask | undefined
+): NonNullable<GitPullRequestPreview["preflight"]> {
+  const validationSummary = commitValidationSummary(task);
+  return {
+    baseRefStatus: "Missing",
+    baseRefSummary: "Base branch could not be inspected because git status is unavailable.",
+    headBranchStatus: status.branch && !status.branch.startsWith("HEAD") ? "Ready" : "Detached",
+    headBranchSummary: status.branch
+      ? `Current checkout reports ${status.branch}.`
+      : "Current checkout could not be resolved to a branch.",
+    upstreamStatus: "Missing",
+    upstreamSummary: "No upstream remote branch could be inspected.",
+    remoteStatus: "Missing",
+    remoteSummary: "No git remote could be inspected.",
+    validationState: commitValidationState(validationSummary),
+    validationSummary,
+    testEvidence: pullRequestValidationEvidence(task),
+    publishReadinessSummary: `Resolve git repository access before preparing a PR into ${baseBranch}.`
+  };
+}
+
+function gitPullRequestPreflight(
+  status: GitStatusSnapshot,
+  baseBranch: string,
+  baseRef: string | undefined,
+  upstreamParts: { remote: string; remoteBranch: string } | undefined,
+  remote: string | undefined,
+  remoteSummaries: GitRemoteSummary[],
+  task: ForgeTask | undefined,
+  changedFiles: GitFileChange[],
+  blockers: string[]
+): NonNullable<GitPullRequestPreview["preflight"]> {
+  const validationSummary = commitValidationSummary(task);
+  const headBranchStatus = pullRequestHeadBranchStatus(status, baseBranch);
+  const upstreamStatus = pullRequestUpstreamStatus(status, upstreamParts);
+  const remoteState = pullRequestRemoteState(remote, remoteSummaries);
+  const validationState = commitValidationState(validationSummary);
+
+  return {
+    baseRefStatus: baseRef ? "Resolved" : "Missing",
+    baseRefSummary: baseRef
+      ? `Base comparison will use ${baseRef}.`
+      : `Default base branch ${baseBranch} could not be resolved locally.`,
+    headBranchStatus,
+    headBranchSummary: pullRequestHeadBranchSummary(status, baseBranch, headBranchStatus),
+    upstreamStatus,
+    upstreamSummary: pullRequestUpstreamSummary(status, upstreamParts, upstreamStatus),
+    remoteStatus: remoteState.status,
+    remoteSummary: remoteState.summary,
+    validationState,
+    validationSummary,
+    testEvidence: pullRequestValidationEvidence(task, changedFiles),
+    publishReadinessSummary: pullRequestPublishReadinessSummary(blockers, validationState, remoteState.status)
+  };
+}
+
+function pullRequestHeadBranchStatus(
+  status: GitStatusSnapshot,
+  baseBranch: string
+): NonNullable<GitPullRequestPreview["preflight"]>["headBranchStatus"] {
+  if (!status.branch || status.branch.startsWith("HEAD")) {
+    return "Detached";
+  }
+
+  if (status.branch === baseBranch) {
+    return "DefaultBranch";
+  }
+
+  return "Ready";
+}
+
+function pullRequestHeadBranchSummary(
+  status: GitStatusSnapshot,
+  baseBranch: string,
+  headBranchStatus: NonNullable<GitPullRequestPreview["preflight"]>["headBranchStatus"]
+): string {
+  if (headBranchStatus === "Detached") {
+    return "Current checkout is detached; switch to a task branch before PR publication.";
+  }
+
+  if (headBranchStatus === "DefaultBranch") {
+    return `Current branch is ${baseBranch}; create or switch to a task branch before PR publication.`;
+  }
+
+  return `Current branch ${status.branch} can be used as the PR head.`;
+}
+
+function pullRequestUpstreamStatus(
+  status: GitStatusSnapshot,
+  upstreamParts: { remote: string; remoteBranch: string } | undefined
+): NonNullable<GitPullRequestPreview["preflight"]>["upstreamStatus"] {
+  if (!upstreamParts) {
+    return "Missing";
+  }
+
+  if ((status.ahead ?? 0) > 0) {
+    return "Unpushed";
+  }
+
+  if ((status.behind ?? 0) > 0) {
+    return "Behind";
+  }
+
+  return "Ready";
+}
+
+function pullRequestUpstreamSummary(
+  status: GitStatusSnapshot,
+  upstreamParts: { remote: string; remoteBranch: string } | undefined,
+  upstreamStatus: NonNullable<GitPullRequestPreview["preflight"]>["upstreamStatus"]
+): string {
+  if (!upstreamParts) {
+    return "No upstream remote branch is configured for the current branch.";
+  }
+
+  if (upstreamStatus === "Unpushed") {
+    return `Push ${status.ahead ?? 0} local commit(s) to ${upstreamParts.remote}/${upstreamParts.remoteBranch} before PR publication.`;
+  }
+
+  if (upstreamStatus === "Behind") {
+    return `Update from ${upstreamParts.remote}/${upstreamParts.remoteBranch}; branch is behind by ${status.behind ?? 0} commit(s).`;
+  }
+
+  return `Current branch is synced with ${upstreamParts.remote}/${upstreamParts.remoteBranch}.`;
+}
+
+function pullRequestRemoteState(
+  remote: string | undefined,
+  remoteSummaries: GitRemoteSummary[]
+): {
+  status: NonNullable<GitPullRequestPreview["preflight"]>["remoteStatus"];
+  summary: string;
+} {
+  if (!remote) {
+    return {
+      status: "Missing",
+      summary: "No configured git remote was found for PR handoff."
+    };
+  }
+
+  const selectedRemote = remoteSummaries.find((candidate) => candidate.name === remote);
+  const remoteNames = remoteSummaries.map((candidate) => candidate.name).join(", ");
+
+  if (!selectedRemote) {
+    return {
+      status: "Unknown",
+      summary: `Selected remote ${remote} was not found in the local remote list.`
+    };
+  }
+
+  if (remoteSummaries.length > 1 || remote !== "origin") {
+    return {
+      status: "ForkLike",
+      summary: `Multiple or non-origin remotes are configured (${remoteNames}); verify the base repository before PR publication.`
+    };
+  }
+
+  return {
+    status: "Ready",
+    summary: `Remote ${remote} is configured (${selectedRemote.urlKind}).`
+  };
+}
+
+function pullRequestValidationEvidence(task: ForgeTask | undefined, changedFiles: GitFileChange[] = []): string[] {
+  if (!task) {
+    return ["No task context is linked, so Forge cannot attach task validation evidence."];
+  }
+
+  const runs = task.validationRuns.slice(-3);
+  if (runs.length === 0) {
+    return ["No Forge validation run is linked yet."];
+  }
+
+  const evidence = runs.map((run) => `${run.presetName}: ${run.status} - ${run.summary}`);
+  for (const command of suggestedCommitValidationCommands(changedFiles)) {
+    if (!evidence.some((line) => line.includes(command))) {
+      evidence.push(`Suggested: ${command}`);
+    }
+  }
+
+  return evidence.slice(0, 8);
+}
+
+function pullRequestPublishReadinessSummary(
+  blockers: string[],
+  validationState: NonNullable<GitPullRequestPreview["preflight"]>["validationState"],
+  remoteStatus: NonNullable<GitPullRequestPreview["preflight"]>["remoteStatus"]
+): string {
+  if (blockers.length > 0) {
+    return `Resolve ${blockers.length} blocker(s) before creating or publishing a PR.`;
+  }
+
+  if (validationState !== "Passed") {
+    return "Branch metadata is ready, but validation evidence needs review before publication.";
+  }
+
+  if (remoteStatus === "ForkLike" || remoteStatus === "Unknown") {
+    return "Branch metadata is ready, but the target base repository should be verified before publication.";
+  }
+
+  return "PR handoff is ready for a future approved publication step.";
+}
+
 function gitPullRequestBlockers(
   status: GitStatusSnapshot,
   baseBranch: string,
@@ -2309,7 +2575,8 @@ function gitPullRequestRiskNotes(
   status: GitStatusSnapshot,
   task: ForgeTask | undefined,
   taskMissing: boolean,
-  commits: GitCommitToPush[]
+  commits: GitCommitToPush[],
+  preflight?: NonNullable<GitPullRequestPreview["preflight"]>
 ): string[] {
   const notes: string[] = [];
 
@@ -2334,6 +2601,10 @@ function gitPullRequestRiskNotes(
 
   if (commits.length >= 20) {
     notes.push("Only the first 20 commits are shown in this PR preview.");
+  }
+
+  if (preflight?.remoteStatus === "ForkLike" || preflight?.remoteStatus === "Unknown") {
+    notes.push(preflight.remoteSummary);
   }
 
   return notes;
@@ -2396,7 +2667,8 @@ function buildPullRequestBody(
   commits: GitCommitToPush[],
   changedFiles: GitFileChange[],
   blockers: string[],
-  riskNotes: string[]
+  riskNotes: string[],
+  preflight?: NonNullable<GitPullRequestPreview["preflight"]>
 ): string[] {
   const lines = [
     "## Summary",
@@ -2407,6 +2679,18 @@ function buildPullRequestBody(
     `- Base: ${baseBranch}`,
     `- Upstream: ${status.upstream ?? "not configured"}`
   ];
+
+  if (preflight) {
+    lines.push(
+      "",
+      "## Preflight",
+      `- Base ref: ${preflight.baseRefStatus} - ${preflight.baseRefSummary}`,
+      `- Head branch: ${preflight.headBranchStatus} - ${preflight.headBranchSummary}`,
+      `- Upstream: ${preflight.upstreamStatus} - ${preflight.upstreamSummary}`,
+      `- Remote: ${preflight.remoteStatus} - ${preflight.remoteSummary}`,
+      `- Validation: ${preflight.validationState} - ${preflight.validationSummary}`
+    );
+  }
 
   if (task) {
     lines.push("", "## Linked Task", `- ${task.title} (${task.id})`, `- Status: ${task.status} / ${task.currentPhase}`);

@@ -84,8 +84,10 @@ Implemented:
 - Read-only PR handoff preview from the macOS Review UI. The runtime resolves
   a default base branch when possible, compares current branch work against
   that base, suggests a branch name, PR title, draft body, test plan, commits,
-  changed files, blockers, and risk notes, and explicitly does not create or
-  publish a PR.
+  changed files, structured preflight metadata, blockers, and risk notes, and
+  explicitly does not create or publish a PR. The preflight summarizes base ref
+  resolution, head/upstream readiness, fork-like or multi-remote risk,
+  validation state, test evidence, and publication readiness.
 - Built-in and allowlisted project validation presets.
 - Runtime-derived command permission state in the app.
 - Runtime model-provider abstraction.
@@ -120,8 +122,8 @@ These percentages are product-readiness estimates, not calendar estimates.
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| V0 local demo | 98-99% | A local demo can show task creation, context inspection, planning, review, restricted edits, validation, repair proposal review, git status/diff visibility, branch review, branch publish/upstream setup, commit preparation preview, explicit local commit and push actions, PR handoff preview, core runtime/app-facing regression coverage, runtime diagnostics, provider settings coverage, and hardened runtime lifecycle diagnostics. |
-| Useful developer alpha | 56-66% | A developer can use Forge on small real tasks with model-backed planning/editing, visible diffs, branch review, branch publish/upstream setup, commit preparation, local commits, guarded push, PR handoff preview, runtime lifecycle controls, and reliable rollback. |
+| V0 local demo | 98-99% | A local demo can show task creation, context inspection, planning, review, restricted edits, validation, repair proposal review, git status/diff visibility, branch review, branch publish/upstream setup, commit preparation preview, explicit local commit and push actions, PR handoff preview with preflight evidence, core runtime/app-facing regression coverage, runtime diagnostics, provider settings coverage, and hardened runtime lifecycle diagnostics. |
+| Useful developer alpha | 56-66% | A developer can use Forge on small real tasks with model-backed planning/editing, visible diffs, branch review, branch publish/upstream setup, commit preparation, local commits, guarded push, PR handoff preview with preflight evidence, runtime lifecycle controls, and reliable rollback. |
 | Commercial beta | 25-30% | A paid user can install it, connect providers, trust permissions, use git workflows, and recover from failures. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
 
@@ -160,8 +162,8 @@ Remaining V0 gaps:
 - harden branch publish/upstream setup for remote auth failures, protected
   branch names, stale remote refs, fork remotes, and isolated success-path
   tests
-- harden PR handoff preview for unusual default branches, fork remotes, and
-  richer test-plan evidence
+- add approved PR publication/GitHub integration on top of the read-only PR
+  handoff preflight
 - harden branch review for protected default branches, dirty-worktree edge
   cases, and isolated success-path tests
 - optional live-provider smoke with a user-supplied OpenAI key outside

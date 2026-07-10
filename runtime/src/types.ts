@@ -559,6 +559,7 @@ export interface GitPullRequestPreview {
   generatedAt: string;
   readiness: "Ready" | "NeedsReview" | "Blocked";
   summary: string;
+  preflight?: GitPullRequestPreflight;
   baseBranch: string;
   headBranch?: string;
   upstream?: string;
@@ -574,6 +575,21 @@ export interface GitPullRequestPreview {
   riskNotes: string[];
   blockers: string[];
   operationBoundary: string;
+}
+
+export interface GitPullRequestPreflight {
+  baseRefStatus: "Resolved" | "Missing";
+  baseRefSummary: string;
+  headBranchStatus: "Ready" | "Detached" | "DefaultBranch";
+  headBranchSummary: string;
+  upstreamStatus: "Ready" | "Missing" | "Unpushed" | "Behind";
+  upstreamSummary: string;
+  remoteStatus: "Ready" | "Missing" | "ForkLike" | "Unknown";
+  remoteSummary: string;
+  validationState: "Passed" | "Failed" | "Missing" | "Unknown";
+  validationSummary: string;
+  testEvidence: string[];
+  publishReadinessSummary: string;
 }
 
 export interface ContextFile {

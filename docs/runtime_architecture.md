@@ -254,9 +254,11 @@ It does not create a PR.
 The PR handoff slice is still read-only. `GET /git/pr-preview` derives a
 review artifact from branch state, default-base detection, optional task
 context, commit summaries, changed files, latest validation state, blockers,
-and risk notes. It can suggest a branch name, PR title, draft body, and test
-plan, but it does not call GitHub, publish a PR, change branches, push, or
-mutate repository state.
+structured preflight metadata, and risk notes. It can suggest a branch name,
+PR title, draft body, and test plan, while the preflight summarizes base ref
+resolution, head/upstream readiness, multi-remote or fork-like review risk,
+validation evidence, and publish readiness. It does not call GitHub, publish a
+PR, change branches, push, or mutate repository state.
 
 ### Validation Runner
 

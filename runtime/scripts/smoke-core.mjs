@@ -754,6 +754,31 @@ async function assertGitReadOnlyEndpoints() {
   assert(pullRequestPreview.suggestedBranchName, "Git PR preview did not include a suggested branch name.");
   assert(Array.isArray(pullRequestPreview.body), "Git PR preview did not include a draft body.");
   assert(Array.isArray(pullRequestPreview.testPlan), "Git PR preview did not include a test plan.");
+  assert(pullRequestPreview.preflight, "Git PR preview did not include preflight metadata.");
+  assert(
+    ["Resolved", "Missing"].includes(pullRequestPreview.preflight.baseRefStatus),
+    `Git PR preflight returned an unknown base ref status: ${pullRequestPreview.preflight.baseRefStatus}.`
+  );
+  assert(
+    ["Ready", "Detached", "DefaultBranch"].includes(pullRequestPreview.preflight.headBranchStatus),
+    `Git PR preflight returned an unknown head branch status: ${pullRequestPreview.preflight.headBranchStatus}.`
+  );
+  assert(
+    ["Ready", "Missing", "Unpushed", "Behind"].includes(pullRequestPreview.preflight.upstreamStatus),
+    `Git PR preflight returned an unknown upstream status: ${pullRequestPreview.preflight.upstreamStatus}.`
+  );
+  assert(
+    ["Ready", "Missing", "ForkLike", "Unknown"].includes(pullRequestPreview.preflight.remoteStatus),
+    `Git PR preflight returned an unknown remote status: ${pullRequestPreview.preflight.remoteStatus}.`
+  );
+  assert(
+    Array.isArray(pullRequestPreview.preflight.testEvidence),
+    "Git PR preflight did not include validation/test evidence."
+  );
+  assert(
+    pullRequestPreview.preflight.publishReadinessSummary,
+    "Git PR preflight did not include a publish readiness summary."
+  );
   assert(
     pullRequestPreview.operationBoundary.includes("has not created"),
     "Git PR preview did not state the non-mutating operation boundary."

@@ -73,8 +73,8 @@ Implemented today:
 - Push preparation preview and explicit current-branch push action guarded by
   expected-HEAD/branch/upstream checks, blockers, and a no-force-push boundary.
 - Read-only PR handoff preview with base/head branch awareness, suggested
-  branch name, PR title/body, test plan, commits, changed files, blockers,
-  risk notes, and a no-publication boundary.
+  branch name, PR title/body, test plan, commits, changed files, structured
+  preflight metadata, blockers, risk notes, and a no-publication boundary.
 - SQLite task persistence.
 - Validation presets and runtime-derived command permission state.
 - Local deterministic model provider and optional OpenAI Responses provider.
@@ -107,7 +107,7 @@ Product-readiness estimate:
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| V0 local demo | 98-99% | The local task-to-review demo is mostly implemented, has core runtime/app-facing regression coverage, repair review UI, git status/diff visibility, branch review, branch publish/upstream setup, commit preparation preview, explicit local commit and push actions, PR handoff preview, provider settings coverage, and hardened runtime lifecycle diagnostics. |
+| V0 local demo | 98-99% | The local task-to-review demo is mostly implemented, has core runtime/app-facing regression coverage, repair review UI, git status/diff visibility, branch review, branch publish/upstream setup, commit preparation preview, explicit local commit and push actions, PR handoff preview with preflight evidence, provider settings coverage, and hardened runtime lifecycle diagnostics. |
 | Useful developer alpha | 56-66% | Needs real model-backed work, richer patching, actual PR publication, and recovery. |
 | Commercial beta | 25-30% | Needs packaging, onboarding, runtime management, trust polish, and integrations. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, git, memory, MCP/GitHub, and product polish. |
@@ -123,7 +123,7 @@ Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
 - harden git/diff and edit proposal review for larger real changes
 - polish app-managed runtime start/stop for packaged app locations
 - make real provider-backed planning and proposal generation usable
-- harden PR handoff and add approved PR publication/GitHub integration later
+- add approved PR publication/GitHub integration after the read-only handoff
 - build a durable repository index
 
 ## Core Principles

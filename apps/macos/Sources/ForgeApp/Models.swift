@@ -465,6 +465,7 @@ struct GitPullRequestPreview: Codable, Hashable {
     var generatedAt: String
     var readiness: String
     var summary: String
+    var preflight: GitPullRequestPreflight?
     var baseBranch: String
     var headBranch: String?
     var upstream: String?
@@ -480,6 +481,21 @@ struct GitPullRequestPreview: Codable, Hashable {
     var riskNotes: [String]
     var blockers: [String]
     var operationBoundary: String
+}
+
+struct GitPullRequestPreflight: Codable, Hashable {
+    var baseRefStatus: String
+    var baseRefSummary: String
+    var headBranchStatus: String
+    var headBranchSummary: String
+    var upstreamStatus: String
+    var upstreamSummary: String
+    var remoteStatus: String
+    var remoteSummary: String
+    var validationState: String
+    var validationSummary: String
+    var testEvidence: [String]
+    var publishReadinessSummary: String
 }
 
 struct ContextFile: Identifiable, Codable, Hashable {

@@ -20,8 +20,6 @@ what to do next without rereading the whole project history.
 - Harden branch publish/upstream setup for remote auth failures, protected
   branch names, stale remote refs, fork remotes, and isolated success-path
   tests.
-- Harden PR handoff preview for non-main default branches, fork remotes, and
-  richer validation/test-plan evidence.
 - Harden branch review for protected default branches, dirty-worktree edge
   cases, and isolated success-path tests.
 - Polish app-managed runtime start/stop for packaged app locations and
@@ -47,7 +45,7 @@ what to do next without rereading the whole project history.
 
 - Improve the first-pass native side-by-side diff view with file filtering and
   better large-diff navigation.
-- Add approved PR creation/publication after the read-only PR handoff preview.
+- Add approved PR creation/publication after the read-only PR handoff preflight.
 - Add GitHub integration for PR metadata, draft PR creation, and remote
   branch/fork awareness.
 
@@ -152,6 +150,11 @@ what to do next without rereading the whole project history.
   the base branch when possible, compares current branch work against that
   base, suggests branch name, PR title/body, test plan, commits, changed
   files, blockers, and risk notes, and does not create or publish a PR.
+- Hardened PR handoff preview with structured preflight metadata. The runtime
+  now summarizes base ref resolution, head/upstream readiness, multi-remote or
+  fork-like review risk, validation state, test evidence, and publish
+  readiness; the macOS Review panel renders the preflight card and smoke tests
+  assert the API contract.
 - Added branch preparation preview and explicit local branch create/switch
   actions from the Review panel. The runtime validates target branch names,
   rechecks expected HEAD and current branch, creates new local branches,

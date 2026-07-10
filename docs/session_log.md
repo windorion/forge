@@ -2406,3 +2406,39 @@ Next:
 - Commit the commit-preflight hardening follow-up.
 - Continue V0 hardening with push/branch-publish remote failure handling or
   PR handoff edge cases.
+
+### 2026-07-10 21:48:30 CEST +0200
+
+Conversation summary:
+
+- User asked to continue the next step. The session hardened the read-only PR
+  handoff preview so it can explain publication readiness before any future
+  external PR creation flow.
+
+Done:
+
+- Added structured PR preflight metadata to `GET /git/pr-preview`, including
+  base ref resolution, head branch readiness, upstream push/sync state,
+  multi-remote or fork-like review risk, validation state, test evidence, and
+  publish-readiness summary.
+- Kept PR handoff read-only: no push, branch mutation, PR creation, GitHub API
+  call, or remote URL credential exposure.
+- Rendered the preflight metadata in the macOS PR Handoff review card.
+- Extended `npm run smoke:core` to assert the PR preflight API contract.
+- Updated README, project status, TODO, development, runtime architecture, V0
+  scope, git workflow, and security permissions docs.
+- Verified `npm run check`, `swift build`, `npm run smoke:core`,
+  `git diff --check`, and that no service was listening on
+  `127.0.0.1:17373`.
+
+Not done:
+
+- Did not create or publish pull requests.
+- Did not add GitHub API integration, branch protection detection, or live
+  remote auth failure fixtures.
+
+Next:
+
+- Commit the PR handoff preflight hardening.
+- Continue V0 hardening with branch review edge cases, push/branch-publish
+  remote failures, or packaged runtime path resolution.

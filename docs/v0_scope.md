@@ -73,7 +73,8 @@ The product should show:
 - branch publish review plus explicit first-push/upstream setup
 - git status, diff, commit preparation review, explicit local commit, and
   explicit current-branch push surfaces
-- read-only PR handoff preview with title/body/test-plan suggestions
+- read-only PR handoff preview with title/body/test-plan suggestions and
+  structured preflight evidence
 - app-visible runtime state and diagnostics
 - copy/open runtime diagnostics actions
 - no automatic file changes
@@ -166,7 +167,8 @@ V0 is complete when:
   branch, upstream, and safety blockers. It does not force push or create a PR.
 - The app can prepare a read-only PR handoff preview with base/head branch
   awareness, suggested branch name, title, body, test plan, commits, changed
-  files, blockers, risk notes, and an explicit no-publication boundary.
+  files, structured preflight metadata, blockers, risk notes, and an explicit
+  no-publication boundary.
 
 ## V0 Next After Completion
 

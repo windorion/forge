@@ -41,7 +41,7 @@ Examples:
   uncommitted local changes, blockers, and risk notes
 - prepare a read-only PR handoff artifact from branch status, default-base
   detection, commit summaries, changed files, optional task context, and latest
-  task validation state
+  task validation state plus preflight evidence
 - read project docs
 
 Can run automatically after workspace access is granted.
@@ -53,9 +53,10 @@ summarizes the working tree, task context, validation state, suggested next
 checks, and commit preflight metadata such as git author identity status,
 staged/unstaged/untracked counts, line stats, large-change warnings, and hook
 risk disclosure. The PR-preview endpoint only summarizes branch/base/upstream
-state, draft PR metadata, commits, changed files, validation evidence, blockers,
-and risk notes. The branch-preview endpoint only summarizes target branch
-validation, create/switch mode, dirty state, blockers, and risk notes. The
+state, draft PR metadata, commits, changed files, validation evidence,
+preflight readiness, blockers, and risk notes. The branch-preview endpoint
+only summarizes target branch validation, create/switch mode, dirty state,
+blockers, and risk notes. The
 branch-publish-preview endpoint only summarizes current branch, remote, remote
 branch, default-base comparison, commits to publish, local changes, blockers,
 and risk notes. These endpoints must not stage, unstage, commit, checkout,

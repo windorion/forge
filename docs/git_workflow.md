@@ -207,7 +207,10 @@ Current implementation:
 - The runtime resolves a default base branch when possible, compares current
   branch work against that base, and shows the head branch, upstream, suggested
   branch name, PR title, draft body, test plan, commits, changed files,
-  blockers, and risk notes.
+  structured preflight metadata, blockers, and risk notes.
+- The preflight summarizes base ref resolution, head branch readiness,
+  upstream push/sync state, multi-remote or fork-like review risk, latest
+  validation state, test evidence, and a publish-readiness summary.
 - The preview blocks when the user is still on the default base branch, has no
   upstream, has unpushed commits, is behind upstream, is detached, has
   unmerged files, or has no commits between base and HEAD.
