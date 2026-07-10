@@ -129,7 +129,10 @@ and event-stream state. It also provides actions to refresh health, open the
 runtime status page, copy a diagnostics bundle, and start/stop the app-managed
 runtime process. The Settings runtime tab shows the same state plus service,
 version, uptime, database path, task count, last checked time, last error, and
-the app-managed runtime process status, PID, and directory.
+the runtime process status, PID, directory, launch command, checked runtime
+directory candidates, and bounded build/launch output. If a runtime is already
+reachable but was not started by the app, Forge marks it as external and does
+not offer to stop that process.
 
 The Review panel also shows a `Working Tree` section backed by runtime git
 endpoints. It refreshes `GET /git/status`, highlights files related to the

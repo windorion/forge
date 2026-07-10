@@ -18,6 +18,9 @@ struct SettingsView: View {
                 runtimeProcessMessage: workspace.runtimeProcessMessage,
                 runtimeProcessID: workspace.runtimeProcessID,
                 runtimeProcessDirectory: workspace.runtimeProcessDirectory,
+                runtimeProcessCandidateDirectories: workspace.runtimeProcessCandidateDirectories,
+                runtimeProcessLastOutput: workspace.runtimeProcessLastOutput,
+                runtimeProcessLaunchCommand: workspace.runtimeProcessLaunchCommand,
                 canStartRuntimeProcess: workspace.canStartRuntimeProcess,
                 canStopRuntimeProcess: workspace.canStopRuntimeProcess,
                 startRuntimeProcess: workspace.startRuntimeProcess,
@@ -77,6 +80,9 @@ private struct RuntimeSettingsTab: View {
     var runtimeProcessMessage: String
     var runtimeProcessID: Int32?
     var runtimeProcessDirectory: String?
+    var runtimeProcessCandidateDirectories: [String]
+    var runtimeProcessLastOutput: String?
+    var runtimeProcessLaunchCommand: String?
     var canStartRuntimeProcess: Bool
     var canStopRuntimeProcess: Bool
     var startRuntimeProcess: () -> Void
@@ -106,6 +112,39 @@ private struct RuntimeSettingsTab: View {
                 }
                 if let runtimeProcessDirectory {
                     LabeledContent("Process Directory", value: runtimeProcessDirectory)
+                }
+                if let runtimeProcessLaunchCommand {
+                    LabeledContent("Launch Command", value: runtimeProcessLaunchCommand)
+                }
+
+                if !runtimeProcessCandidateDirectories.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Runtime Directory Candidates")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        ForEach(runtimeProcessCandidateDirectories, id: \.self) { candidate in
+                            Text(candidate)
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+
+                if let runtimeProcessLastOutput,
+                   !runtimeProcessLastOutput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Latest Launch Output")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        ScrollView {
+                            Text(runtimeProcessLastOutput)
+                                .font(.caption2.monospaced())
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .textSelection(.enabled)
+                        }
+                        .frame(minHeight: 72, maxHeight: 120)
+                    }
                 }
 
                 if let runtimeLastCheckedAt {

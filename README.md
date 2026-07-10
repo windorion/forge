@@ -34,7 +34,7 @@ auditable boundaries.
 
 ## Current Status
 
-Last updated: 2026-07-09
+Last updated: 2026-07-10
 
 Implemented today:
 
@@ -80,7 +80,9 @@ Implemented today:
 - Local deterministic model provider and optional OpenAI Responses provider.
 - Editable model-provider settings in macOS Settings with Keychain-backed OpenAI API key sync.
 - First-pass app-managed runtime start/stop from the macOS toolbar, sidebar
-  runtime badge, and Settings window.
+  runtime badge, and Settings window, including external-runtime detection,
+  runtime directory candidate diagnostics, launch command/output capture, and
+  stop timeout messaging.
 - Core runtime smoke regression for the main task lifecycle, restricted
   append/replace/create edits, post-apply validation, restart recovery, and a
   mock OpenAI model-guided context/repair loop plus validation failure
@@ -105,7 +107,7 @@ Product-readiness estimate:
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| V0 local demo | 97-99% | The local task-to-review demo is mostly implemented, has core runtime/app-facing regression coverage, repair review UI, git status/diff visibility, branch review, branch publish/upstream setup, commit preparation preview, explicit local commit and push actions, PR handoff preview, provider settings coverage, and app-visible runtime lifecycle controls. |
+| V0 local demo | 98-99% | The local task-to-review demo is mostly implemented, has core runtime/app-facing regression coverage, repair review UI, git status/diff visibility, branch review, branch publish/upstream setup, commit preparation preview, explicit local commit and push actions, PR handoff preview, provider settings coverage, and hardened runtime lifecycle diagnostics. |
 | Useful developer alpha | 56-66% | Needs real model-backed work, richer patching, actual PR publication, and recovery. |
 | Commercial beta | 25-30% | Needs packaging, onboarding, runtime management, trust polish, and integrations. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, git, memory, MCP/GitHub, and product polish. |
@@ -119,7 +121,7 @@ Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
 
 - broaden the V0 regression/demo path beyond the runtime core
 - harden git/diff and edit proposal review for larger real changes
-- harden app-managed runtime start/stop
+- polish app-managed runtime start/stop for packaged app locations
 - make real provider-backed planning and proposal generation usable
 - harden PR handoff and add approved PR publication/GitHub integration later
 - build a durable repository index

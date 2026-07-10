@@ -2331,3 +2331,39 @@ Next:
 - Commit the git/diff hardening follow-up.
 - Continue V0 hardening with packaged runtime failure diagnostics or remote git
   failure handling.
+
+### 2026-07-10 21:10:00 CEST +0200
+
+Conversation summary:
+
+- User asked to continue the next long task. The session first committed the
+  staged git/diff hardening checkpoint, then hardened app-managed runtime
+  lifecycle diagnostics for V0.
+
+Done:
+
+- Committed `96712ff Harden V0 git diff previews`.
+- Added an `External` runtime process state so the app distinguishes a
+  reachable terminal-launched runtime from an app-managed process and does not
+  offer to stop external runtimes.
+- Added runtime directory candidate diagnostics for app-managed startup.
+- Captured bounded `npm run build` and `node dist/server.js` output for
+  Settings and copied diagnostics.
+- Added launch command reporting, slow stop messaging, and richer start
+  failure messages.
+- Updated Settings Runtime tab with candidate paths and latest launch output.
+- Updated README, project status, TODO, development, and macOS native docs.
+- Verified `swift build`.
+
+Not done:
+
+- Did not launch the GUI app or package Forge into a distribution layout.
+- Did not add distribution-specific runtime path resolution after packaging.
+- Did not harden remote git auth, fork remotes, branch protection, or live
+  provider smoke with a real key.
+
+Next:
+
+- Commit the runtime lifecycle diagnostics follow-up.
+- Continue V0 hardening with local commit/push remote failure paths or
+  packaged runtime path resolution once packaging layout is decided.

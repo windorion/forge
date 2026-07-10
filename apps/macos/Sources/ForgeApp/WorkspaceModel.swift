@@ -5,6 +5,7 @@ import Foundation
 final class WorkspaceModel: ObservableObject {
     static let expectedRuntimeService = "forge-runtime"
     static let expectedRuntimeVersion = "0.1.0"
+    nonisolated private static let runtimeProcessOutputLimit = 12_000
 
     @Published var tasks: [ForgeTask] = [.sample]
     @Published var selectedTaskID: ForgeTask.ID? = ForgeTask.sample.id
@@ -25,6 +26,9 @@ final class WorkspaceModel: ObservableObject {
     @Published var runtimeProcessMessage = "Runtime process has not been started by the app."
     @Published var runtimeProcessID: Int32?
     @Published var runtimeProcessDirectory: String?
+    @Published var runtimeProcessCandidateDirectories: [String] = []
+    @Published var runtimeProcessLastOutput: String?
+    @Published var runtimeProcessLaunchCommand: String?
     @Published private var validationPermissionSnapshots: [ForgeTask.ID: [ValidationPresetPermission]] = [:]
     @Published private var sendingMessageTaskIDs = Set<ForgeTask.ID>()
     @Published private var generatingPlanRevisionTaskIDs = Set<ForgeTask.ID>()
@@ -73,7 +77,7 @@ final class WorkspaceModel: ObservableObject {
 
     var canStartRuntimeProcess: Bool {
         switch runtimeProcessState {
-        case .starting, .running, .stopping:
+        case .starting, .running, .external, .stopping:
             return false
         case .notStarted, .stopped, .failed:
             return true
@@ -98,9 +102,13 @@ final class WorkspaceModel: ObservableObject {
             return
         }
 
+        runtimeProcessCandidateDirectories = describeRuntimeDirectoryCandidates()
+        runtimeProcessLastOutput = nil
+        runtimeProcessLaunchCommand = nil
+
         guard let runtimeDirectory = resolveRuntimeDirectory() else {
             runtimeProcessState = .failed
-            runtimeProcessMessage = "Could not find the repository runtime directory."
+            runtimeProcessMessage = "Could not find the repository runtime directory. Checked \(runtimeProcessCandidateDirectories.count) candidate(s)."
             statusMessage = runtimeProcessMessage
             return
         }
@@ -112,12 +120,20 @@ final class WorkspaceModel: ObservableObject {
 
         Task {
             do {
-                try await Self.buildRuntime(at: runtimeDirectory)
+                if let health = try? await runtime.health(), health.ok {
+                    markRuntimeAsExternal(health)
+                    statusMessage = "Runtime already reachable; using external process."
+                    return
+                }
+
+                runtimeProcessLaunchCommand = "npm run build"
+                let buildOutput = try await Self.buildRuntime(at: runtimeDirectory)
+                runtimeProcessLastOutput = buildOutput
                 try launchRuntimeNodeProcess(at: runtimeDirectory)
                 refreshRuntimeHealthAfterDelay()
             } catch {
                 runtimeProcessState = .failed
-                runtimeProcessMessage = "Start failed: \(error.localizedDescription)"
+                runtimeProcessMessage = runtimeStartFailureMessage(error)
                 runtimeProcessID = nil
                 runtimeProcess = nil
                 statusMessage = runtimeProcessMessage
@@ -144,6 +160,7 @@ final class WorkspaceModel: ObservableObject {
         eventStreamState = .disconnected
         eventStreamStatus = "Event stream disconnected"
         process.terminate()
+        confirmRuntimeProcessStopped(pid: process.processIdentifier)
     }
 
     func refreshRuntimeHealth() {
@@ -157,6 +174,7 @@ final class WorkspaceModel: ObservableObject {
                 runtimeHealth = health
                 runtimeLastCheckedAt = Date()
                 runtimeState = classifyRuntimeState(health)
+                markRuntimeAsExternalIfNeeded(health)
                 try await refreshModelProviderSettingsSnapshot()
                 statusMessage = statusMessage(for: runtimeState)
                 try await refreshTasks()
@@ -172,6 +190,7 @@ final class WorkspaceModel: ObservableObject {
                 runtimeLastCheckedAt = Date()
                 runtimeLastError = error.localizedDescription
                 statusMessage = "Runtime disconnected"
+                markExternalRuntimeDisconnectedIfNeeded(error)
                 eventStreamState = .disconnected
                 eventStreamStatus = "Event stream disconnected"
                 eventStreamTask?.cancel()
@@ -186,6 +205,7 @@ final class WorkspaceModel: ObservableObject {
                 if let health = try? await runtime.health() {
                     runtimeHealth = health
                     runtimeState = classifyRuntimeState(health)
+                    markRuntimeAsExternalIfNeeded(health)
                     runtimeLastCheckedAt = Date()
                     runtimeLastError = nil
                 }
@@ -222,6 +242,7 @@ final class WorkspaceModel: ObservableObject {
                 if let health = try? await runtime.health() {
                     runtimeHealth = health
                     runtimeState = classifyRuntimeState(health)
+                    markRuntimeAsExternalIfNeeded(health)
                     runtimeLastCheckedAt = Date()
                     runtimeLastError = nil
                 }
@@ -912,6 +933,46 @@ final class WorkspaceModel: ObservableObject {
         statusMessage = "Runtime status page opened."
     }
 
+    private func markRuntimeAsExternalIfNeeded(_ health: RuntimeHealth) {
+        guard health.ok, runtimeProcess?.isRunning != true else {
+            return
+        }
+
+        markRuntimeAsExternal(health)
+    }
+
+    private func markRuntimeAsExternal(_ health: RuntimeHealth) {
+        runtimeProcess = nil
+        runtimeProcessID = nil
+        runtimeProcessState = .external
+        runtimeProcessDirectory = nil
+        runtimeProcessMessage = "Runtime is reachable at \(runtimeEndpoint) but was not started by this app."
+        runtimeProcessLaunchCommand = nil
+        runtimeLastError = nil
+        runtimeHealth = health
+        runtimeState = classifyRuntimeState(health)
+        runtimeLastCheckedAt = Date()
+    }
+
+    private func markExternalRuntimeDisconnectedIfNeeded(_ error: Error) {
+        guard runtimeProcessState == .external, runtimeProcess?.isRunning != true else {
+            return
+        }
+
+        runtimeProcessState = .notStarted
+        runtimeProcessMessage = "External runtime is no longer reachable: \(error.localizedDescription)"
+        runtimeProcessID = nil
+        runtimeProcessDirectory = nil
+    }
+
+    private func runtimeStartFailureMessage(_ error: Error) -> String {
+        var message = "Start failed: \(error.localizedDescription)"
+        if let output = runtimeProcessLastOutput, !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            message += " Latest output is available in Runtime Settings diagnostics."
+        }
+        return message
+    }
+
     private func launchRuntimeNodeProcess(at runtimeDirectory: URL) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
@@ -926,10 +987,12 @@ final class WorkspaceModel: ObservableObject {
         environment["FORGE_RUNTIME_PORT"] = "17373"
         process.environment = environment
 
-        if let nullDevice = FileHandle(forWritingAtPath: "/dev/null") {
-            process.standardOutput = nullDevice
-            process.standardError = nullDevice
-        }
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+        captureRuntimeOutput(from: outputPipe, label: "stdout")
+        captureRuntimeOutput(from: errorPipe, label: "stderr")
 
         process.terminationHandler = { [weak self] process in
             let pid = process.processIdentifier
@@ -943,8 +1006,34 @@ final class WorkspaceModel: ObservableObject {
         runtimeProcess = process
         runtimeProcessID = process.processIdentifier
         runtimeProcessState = .running
+        runtimeProcessLaunchCommand = "node --disable-warning=ExperimentalWarning dist/server.js"
         runtimeProcessMessage = "Runtime process \(process.processIdentifier) is running from \(runtimeDirectory.path)."
         statusMessage = "Runtime process started."
+    }
+
+    private func captureRuntimeOutput(from pipe: Pipe, label: String) {
+        pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let data = handle.availableData
+            guard !data.isEmpty else {
+                handle.readabilityHandler = nil
+                return
+            }
+
+            let text = String(decoding: data, as: UTF8.self)
+            Task { @MainActor [weak self] in
+                self?.appendRuntimeProcessOutput(text, label: label)
+            }
+        }
+    }
+
+    private func appendRuntimeProcessOutput(_ text: String, label: String) {
+        let stamped = "[\(label)] \(text)"
+        let combined = "\(runtimeProcessLastOutput ?? "")\(stamped)"
+        if combined.count > Self.runtimeProcessOutputLimit {
+            runtimeProcessLastOutput = String(combined.suffix(Self.runtimeProcessOutputLimit))
+        } else {
+            runtimeProcessLastOutput = combined
+        }
     }
 
     private func handleRuntimeProcessTermination(pid: Int32, status: Int32) {
@@ -983,7 +1072,34 @@ final class WorkspaceModel: ObservableObject {
         }
     }
 
+    private func confirmRuntimeProcessStopped(pid: Int32) {
+        Task {
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            guard runtimeProcessState == .stopping,
+                  runtimeProcessID == pid,
+                  runtimeProcess?.isRunning == true
+            else {
+                return
+            }
+
+            runtimeProcessMessage = "Runtime process \(pid) is still stopping after 2.5s. Check diagnostics if it does not exit."
+            statusMessage = runtimeProcessMessage
+            runtimeProcess?.terminate()
+        }
+    }
+
     private func resolveRuntimeDirectory() -> URL? {
+        for runtimeDirectory in runtimeDirectoryCandidateURLs() {
+            let packageFile = runtimeDirectory.appendingPathComponent("package.json")
+            if FileManager.default.fileExists(atPath: packageFile.path) {
+                return runtimeDirectory
+            }
+        }
+
+        return nil
+    }
+
+    private func runtimeDirectoryCandidateURLs() -> [URL] {
         let currentDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
         let bundleParent = Bundle.main.bundleURL.deletingLastPathComponent()
         let bundledRepositoryRoot = bundleParent.deletingLastPathComponent()
@@ -994,36 +1110,68 @@ final class WorkspaceModel: ObservableObject {
             bundleParent
         ]
 
-        for root in candidateRoots {
-            let runtimeDirectory = root.appendingPathComponent("runtime", isDirectory: true)
-            let packageFile = runtimeDirectory.appendingPathComponent("package.json")
-            if FileManager.default.fileExists(atPath: packageFile.path) {
-                return runtimeDirectory
-            }
+        return candidateRoots.map { root in
+            root.appendingPathComponent("runtime", isDirectory: true).standardizedFileURL
         }
-
-        return nil
     }
 
-    private nonisolated static func buildRuntime(at runtimeDirectory: URL) async throws {
+    private func describeRuntimeDirectoryCandidates() -> [String] {
+        runtimeDirectoryCandidateURLs().map { runtimeDirectory in
+            let packageFile = runtimeDirectory.appendingPathComponent("package.json")
+            let status = FileManager.default.fileExists(atPath: packageFile.path) ? "found package.json" : "missing package.json"
+            return "\(runtimeDirectory.path) (\(status))"
+        }
+    }
+
+    private nonisolated static func buildRuntime(at runtimeDirectory: URL) async throws -> String {
         try await Task.detached(priority: .userInitiated) {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
             process.arguments = ["npm", "run", "build"]
             process.currentDirectoryURL = runtimeDirectory
 
-            if let nullDevice = FileHandle(forWritingAtPath: "/dev/null") {
-                process.standardOutput = nullDevice
-                process.standardError = nullDevice
+            let outputPipe = Pipe()
+            let errorPipe = Pipe()
+            process.standardOutput = outputPipe
+            process.standardError = errorPipe
+
+            let stdoutTask = Task.detached {
+                outputPipe.fileHandleForReading.readDataToEndOfFile()
+            }
+            let stderrTask = Task.detached {
+                errorPipe.fileHandleForReading.readDataToEndOfFile()
             }
 
             try process.run()
             process.waitUntilExit()
 
+            let output = boundedProcessOutput(
+                stdout: await stdoutTask.value,
+                stderr: await stderrTask.value
+            )
+
             guard process.terminationStatus == 0 else {
-                throw RuntimeProcessError.buildFailed(process.terminationStatus)
+                throw RuntimeProcessError.buildFailed(process.terminationStatus, output)
             }
+
+            return output.isEmpty ? "npm run build completed without output." : output
         }.value
+    }
+
+    private nonisolated static func boundedProcessOutput(stdout: Data, stderr: Data) -> String {
+        let output = [
+            String(data: stdout, encoding: .utf8).map { "[stdout]\n\($0)" },
+            String(data: stderr, encoding: .utf8).map { "[stderr]\n\($0)" }
+        ]
+        .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+        .joined(separator: "\n\n")
+
+        if output.count > runtimeProcessOutputLimit {
+            return String(output.suffix(runtimeProcessOutputLimit))
+        }
+
+        return output
     }
 
     func runtimeDiagnosticsText() -> String {
@@ -1044,6 +1192,7 @@ final class WorkspaceModel: ObservableObject {
             "Runtime process message: \(runtimeProcessMessage)",
             "Runtime process id: \(runtimeProcessID.map(String.init) ?? "None")",
             "Runtime process directory: \(runtimeProcessDirectory ?? "Unknown")",
+            "Runtime launch command: \(runtimeProcessLaunchCommand ?? "None")",
             "Git status: \(gitStatus?.summary ?? "Unavailable")",
             "Git status error: \(gitStatusLastError ?? "None")",
             "Status message: \(statusMessage)",
@@ -1053,6 +1202,21 @@ final class WorkspaceModel: ObservableObject {
             "Event stream detail: \(eventStreamStatus)",
             "Diagnostics copied: \(copiedAt)"
         ]
+
+        if runtimeProcessCandidateDirectories.isEmpty {
+            lines.append("Runtime directory candidates: Not inspected")
+        } else {
+            lines.append("Runtime directory candidates:")
+            lines.append(contentsOf: runtimeProcessCandidateDirectories.map { "- \($0)" })
+        }
+
+        if let runtimeProcessLastOutput,
+           !runtimeProcessLastOutput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines.append("Runtime process output:")
+            lines.append(runtimeProcessLastOutput)
+        } else {
+            lines.append("Runtime process output: None")
+        }
 
         if let health {
             lines.append(contentsOf: [
@@ -1252,12 +1416,17 @@ final class WorkspaceModel: ObservableObject {
 }
 
 private enum RuntimeProcessError: LocalizedError {
-    case buildFailed(Int32)
+    case buildFailed(Int32, String)
 
     var errorDescription: String? {
         switch self {
-        case .buildFailed(let status):
-            return "Runtime build failed with exit status \(status)."
+        case .buildFailed(let status, let output):
+            let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                return "Runtime build failed with exit status \(status)."
+            }
+
+            return "Runtime build failed with exit status \(status). \(trimmed)"
         }
     }
 }

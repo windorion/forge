@@ -3,7 +3,7 @@
 Document role: maintain the active backlog, priority order, and next concrete
 engineering tasks for Forge.
 
-Last updated: 2026-07-09
+Last updated: 2026-07-10
 
 ## Rule
 
@@ -25,8 +25,8 @@ what to do next without rereading the whole project history.
   richer validation/test-plan evidence.
 - Harden branch review for protected default branches, dirty-worktree edge
   cases, and isolated success-path tests.
-- Harden app-managed runtime start/stop for packaged app locations, stale
-  process handling, and user-facing launch failures.
+- Polish app-managed runtime start/stop for packaged app locations and
+  distribution-specific path resolution.
 - Optionally run a live-provider smoke with a user-supplied OpenAI API key,
   without committing secrets.
 
@@ -102,6 +102,11 @@ what to do next without rereading the whole project history.
   responses now include display mode, unavailable reason, byte/line counts, and
   app preview limits; the macOS Review panel shows explicit messages instead
   of forcing binary/large files through the side-by-side renderer.
+- Hardened app-managed runtime lifecycle diagnostics. The macOS app now
+  distinguishes external runtimes from app-managed processes, captures bounded
+  build/launch output, lists checked runtime directory candidates, exposes
+  launch commands in Settings and copied diagnostics, and reports slow stop
+  attempts.
 - Added a bounded OpenAI model-guided context loop before plan revisions: the
   provider can ask for up to three read/search rounds, while the runtime
   validates and executes only logged read-only repo tools with stop conditions.

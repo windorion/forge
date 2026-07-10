@@ -635,6 +635,7 @@ enum RuntimeProcessState: String, Hashable {
     case notStarted = "Not Started"
     case starting = "Starting"
     case running = "Running"
+    case external = "External"
     case stopping = "Stopping"
     case stopped = "Stopped"
     case failed = "Failed"

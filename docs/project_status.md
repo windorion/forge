@@ -3,7 +3,7 @@
 Document role: record the current product state, objective completion estimate,
 major gaps, and what "finished" means at each product horizon.
 
-Last updated: 2026-07-09
+Last updated: 2026-07-10
 
 ## One-Line Status
 
@@ -106,6 +106,10 @@ Implemented:
 - First-pass app-managed runtime start/stop from the macOS toolbar, sidebar
   runtime badge, and Settings window. The app builds the runtime and launches
   the local Node process directly, then can stop only the process it started.
+- Runtime lifecycle diagnostics now distinguish external runtimes from
+  app-managed processes, capture bounded build/launch output, list runtime
+  directory candidates, expose launch commands in Settings/diagnostics, and
+  report slow stop attempts.
 
 ## Completion Estimate
 
@@ -113,7 +117,7 @@ These percentages are product-readiness estimates, not calendar estimates.
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| V0 local demo | 97-99% | A local demo can show task creation, context inspection, planning, review, restricted edits, validation, repair proposal review, git status/diff visibility, branch review, branch publish/upstream setup, commit preparation preview, explicit local commit and push actions, PR handoff preview, core runtime/app-facing regression coverage, runtime diagnostics, provider settings coverage, and first-pass runtime lifecycle controls. |
+| V0 local demo | 98-99% | A local demo can show task creation, context inspection, planning, review, restricted edits, validation, repair proposal review, git status/diff visibility, branch review, branch publish/upstream setup, commit preparation preview, explicit local commit and push actions, PR handoff preview, core runtime/app-facing regression coverage, runtime diagnostics, provider settings coverage, and hardened runtime lifecycle diagnostics. |
 | Useful developer alpha | 56-66% | A developer can use Forge on small real tasks with model-backed planning/editing, visible diffs, branch review, branch publish/upstream setup, commit preparation, local commits, guarded push, PR handoff preview, runtime lifecycle controls, and reliable rollback. |
 | Commercial beta | 25-30% | A paid user can install it, connect providers, trust permissions, use git workflows, and recover from failures. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
@@ -143,8 +147,8 @@ restricted change, and see validation results.
 
 Remaining V0 gaps:
 
-- harden app-managed runtime start/stop for packaged app locations and failure
-  diagnostics
+- polish app-managed runtime start/stop for packaged app locations and
+  distribution-specific path resolution
 - polish git/diff review navigation for larger multi-file changes and packaged
   app workflows
 - harden local commit review for failed git identity/signing/hooks, mixed

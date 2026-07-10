@@ -246,6 +246,8 @@ private struct RuntimeBadge: View {
             return "hourglass"
         case .running:
             return "play.circle.fill"
+        case .external:
+            return "network"
         case .stopping:
             return "stopwatch"
         case .stopped:

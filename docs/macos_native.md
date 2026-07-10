@@ -79,12 +79,17 @@ Current implementation:
 - the app builds `runtime` and launches `node dist/server.js` directly
 - stop only terminates the process that the app started, avoiding broad process
   killing
+- the app distinguishes an externally reachable runtime from an app-managed
+  runtime process and does not offer to stop external processes
+- Settings and copied diagnostics include runtime directory candidates, launch
+  command, bounded build/launch output, process state, PID, and runtime
+  directory
+- slow stop attempts are surfaced with a user-facing message
 
 Future hardening:
 
 - handle packaged app locations that no longer sit next to a checkout
-- expose launch output when build/start fails
-- detect stale externally launched processes more explicitly
+- add distribution-specific runtime path resolution after packaging decisions
 
 ### Finder Integration
 
