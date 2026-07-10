@@ -58,14 +58,20 @@ Current implementation:
 - the runtime exposes `GET /git/diff?path=<repo-relative-path>`
 - the endpoint returns a bounded textual diff for tracked files and a bounded
   synthetic diff for untracked text files
+- the endpoint reports display mode, unavailable reason, byte/line counts, and
+  app preview line limits so binary and oversized files are explicit review
+  messages rather than malformed text diffs
 - the macOS Review panel renders a compact side-by-side diff preview
+- the macOS Review panel shows metadata and message-style previews when a file
+  cannot be rendered as a side-by-side text diff
 - changed files can be opened or revealed in Finder from the Review panel
 
 Current limitations:
 
 - no staging, unstaging, discard, checkout/reset, or binary diff actions
-- no binary diff viewer
-- no full-file diff navigation or filtering beyond the first review list
+- no binary visual preview beyond clear metadata/message handling
+- no full-file diff navigation or advanced filtering beyond the first review
+  list
 - large diffs are truncated by the runtime
 
 ## Commit Workflow

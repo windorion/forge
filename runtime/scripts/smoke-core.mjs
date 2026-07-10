@@ -19,6 +19,8 @@ const baseURL = `http://127.0.0.1:${port}`;
 const appendSmokePath = `docs/${smokeID}-append.md`;
 const replaceSmokePath = `docs/${smokeID}-replace.md`;
 const createSmokePath = `docs/${smokeID}-openai-created.md`;
+const binarySmokePath = `docs/${smokeID}-binary.bin`;
+const largeDiffSmokePath = `docs/${smokeID}-large-diff.txt`;
 const brokenTypeScriptSmokePath = `runtime/src/${smokeID}-broken.ts`;
 
 const smokeFiles = [
@@ -608,6 +610,26 @@ async function assertGitReadOnlyEndpoints() {
   assert(diff.path === appendSmokePath, `Git diff returned unexpected path ${diff.path}.`);
   assert(diff.diff.includes("Forge Append Smoke"), "Git diff did not include the smoke fixture content.");
   assert(diff.truncated === false, "Git diff for the small smoke fixture should not be truncated.");
+  assert(diff.displayMode === "SideBySide", `Git diff expected SideBySide display mode, got ${diff.displayMode}.`);
+  assert(diff.unavailableReason === undefined, "Text git diff should not include an unavailable reason.");
+  assert(diff.appPreviewLineLimit === 260, "Git diff did not include the app preview line limit.");
+
+  const binaryDiff = await get(`/git/diff?path=${encodeURIComponent(binarySmokePath)}`);
+  assert(binaryDiff.path === binarySmokePath, `Binary git diff returned unexpected path ${binaryDiff.path}.`);
+  assert(binaryDiff.displayMode === "Message", "Binary git diff should use message display mode.");
+  assert(binaryDiff.unavailableReason === "Binary", `Binary git diff returned ${binaryDiff.unavailableReason}.`);
+  assert(binaryDiff.byteCount > 0, "Binary git diff did not include byte count metadata.");
+  assert(
+    binaryDiff.summary.includes("Binary diff preview is unavailable"),
+    "Binary git diff did not explain unavailable preview."
+  );
+
+  const largeDiff = await get(`/git/diff?path=${encodeURIComponent(largeDiffSmokePath)}`);
+  assert(largeDiff.path === largeDiffSmokePath, `Large git diff returned unexpected path ${largeDiff.path}.`);
+  assert(largeDiff.displayMode === "Message", "Large git diff should use message display mode.");
+  assert(largeDiff.unavailableReason === "TooLarge", `Large git diff returned ${largeDiff.unavailableReason}.`);
+  assert(largeDiff.byteCount > 48_000, "Large git diff did not include byte count over the runtime threshold.");
+  assert(largeDiff.lineCount > 0, "Large git diff did not include line count metadata.");
 
   const commitPreview = await get("/git/commit-preview");
   assert(
@@ -729,12 +751,21 @@ async function createSmokeFiles() {
     await mkdir(dirname(absolutePath), { recursive: true });
     await writeFile(absolutePath, file.initialContent, "utf8");
   }
+
+  await writeFile(join(repoRoot, binarySmokePath), Buffer.from([0, 1, 2, 3, 4, 5, 255]));
+  await writeFile(
+    join(repoRoot, largeDiffSmokePath),
+    Array.from({ length: 6_200 }, (_, index) => `Large diff smoke line ${index}`).join("\n"),
+    "utf8"
+  );
 }
 
 async function cleanupSmokeFiles() {
   for (const file of smokeFiles) {
     await rm(join(repoRoot, file.relativePath), { force: true });
   }
+  await rm(join(repoRoot, binarySmokePath), { force: true });
+  await rm(join(repoRoot, largeDiffSmokePath), { force: true });
   await rm(join(repoRoot, createSmokePath), { force: true });
   await rm(join(repoRoot, brokenTypeScriptSmokePath), { force: true });
 }

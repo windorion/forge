@@ -81,6 +81,7 @@ const modelGuidedContextMaxStoredFiles = 8;
 const editProposalRepairMaxAttempts = 2;
 const repositoryContextMaxFileBytes = 220_000;
 const gitDiffMaxBytes = 48_000;
+const gitDiffAppPreviewLineLimit = 260;
 const repositoryIgnoredDirectories = new Set([
   ".build",
   ".forge",
@@ -182,6 +183,14 @@ type InternalValidationCommand = Omit<ValidationCommandDefinition, "executionMod
 
 type InternalValidationPreset = Omit<ValidationPreset, "commands"> & {
   commands: InternalValidationCommand[];
+};
+
+type GitDiffBuildResult = {
+  text: string;
+  displayMode: NonNullable<GitFileDiff["displayMode"]>;
+  unavailableReason?: GitFileDiff["unavailableReason"];
+  byteCount?: number;
+  lineCount?: number;
 };
 
 interface WorkspacePresetConfigStatus {
@@ -689,10 +698,15 @@ async function getGitFileDiff(rawPath: string | null): Promise<GitFileDiff> {
   }
 
   const generatedAt = new Date().toISOString();
-  const diff = change.untracked
+  const diffResult = change.untracked
     ? await buildUntrackedFileDiff(status.root, change.path)
     : await buildTrackedFileDiff(status.root, change.path);
-  const bounded = truncateGitDiff(diff);
+  const bounded = truncateGitDiff(diffResult.text);
+  const displayMode: GitFileDiff["displayMode"] = diffResult.displayMode === "SideBySide" && bounded.text.trim()
+    ? "SideBySide"
+    : "Message";
+  const unavailableReason = diffResult.unavailableReason
+    ?? (bounded.text.trim() ? undefined : "NoTextualDiff");
 
   return {
     path: change.path,
@@ -701,9 +715,12 @@ async function getGitFileDiff(rawPath: string | null): Promise<GitFileDiff> {
     generatedAt,
     diff: bounded.text,
     truncated: bounded.truncated,
-    summary: bounded.text.trim()
-      ? `Diff for ${change.path}${bounded.truncated ? " was truncated." : "."}`
-      : `No textual diff is available for ${change.path}.`
+    displayMode,
+    unavailableReason,
+    byteCount: diffResult.byteCount,
+    lineCount: diffResult.lineCount,
+    appPreviewLineLimit: gitDiffAppPreviewLineLimit,
+    summary: summarizeGitFileDiff(change.path, displayMode, unavailableReason, bounded.truncated, diffResult)
   };
 }
 
@@ -2757,12 +2774,15 @@ function parseGitNumstatValue(value: string): number | undefined {
   return /^\d+$/.test(value) ? Number(value) : undefined;
 }
 
-async function buildTrackedFileDiff(gitRoot: string, relativePath: string): Promise<string> {
+async function buildTrackedFileDiff(gitRoot: string, relativePath: string): Promise<GitDiffBuildResult> {
   const [staged, unstaged] = await Promise.all([
     runGitCommand(["diff", "--cached", "--no-ext-diff", "--", relativePath], gitRoot, gitDiffMaxBytes + 8_000),
     runGitCommand(["diff", "--no-ext-diff", "--", relativePath], gitRoot, gitDiffMaxBytes + 8_000)
   ]);
   const parts: string[] = [];
+  const combinedOutput = `${staged.output}\n${unstaged.output}`;
+  const commandFailed = staged.exitCode !== 0 || unstaged.exitCode !== 0;
+  const binary = combinedOutput.includes("Binary files ") || combinedOutput.includes(" differ\n");
 
   if (staged.output.trim()) {
     parts.push("# Staged changes", staged.output.trimEnd());
@@ -2780,27 +2800,62 @@ async function buildTrackedFileDiff(gitRoot: string, relativePath: string): Prom
     parts.push(`# Unstaged diff failed with exit code ${unstaged.exitCode}.`);
   }
 
-  return parts.join("\n\n");
+  const text = parts.join("\n\n");
+  return {
+    text,
+    displayMode: binary || commandFailed || !text.trim() ? "Message" : "SideBySide",
+    unavailableReason: binary
+      ? "Binary"
+      : commandFailed
+        ? "CommandFailed"
+        : text.trim()
+          ? undefined
+          : "NoTextualDiff",
+    byteCount: Buffer.byteLength(text, "utf8"),
+    lineCount: text ? text.split(/\r?\n/).length : 0
+  };
 }
 
-async function buildUntrackedFileDiff(gitRoot: string, relativePath: string): Promise<string> {
+async function buildUntrackedFileDiff(gitRoot: string, relativePath: string): Promise<GitDiffBuildResult> {
   const absolutePath = path.resolve(gitRoot, relativePath);
   assertPathInside(gitRoot, absolutePath);
   const fileStat = await stat(absolutePath);
   if (!fileStat.isFile()) {
-    return `# Untracked path is not a regular file: ${relativePath}`;
+    return {
+      text: `# Untracked path is not a regular file: ${relativePath}`,
+      displayMode: "Message",
+      unavailableReason: "NotRegularFile",
+      byteCount: fileStat.size,
+      lineCount: 1
+    };
   }
 
   const content = await readFile(absolutePath);
   if (content.includes(0)) {
-    return `# Binary untracked file preview is unavailable: ${relativePath}`;
+    return {
+      text: `# Binary untracked file preview is unavailable: ${relativePath}`,
+      displayMode: "Message",
+      unavailableReason: "Binary",
+      byteCount: content.byteLength,
+      lineCount: 1
+    };
+  }
+
+  if (content.byteLength > gitDiffMaxBytes) {
+    return {
+      text: `# Untracked file is too large for an inline diff preview: ${relativePath}`,
+      displayMode: "Message",
+      unavailableReason: "TooLarge",
+      byteCount: content.byteLength,
+      lineCount: content.toString("utf8").split(/\r?\n/).length
+    };
   }
 
   const text = content.toString("utf8");
   const lines = text.split(/\r?\n/);
   const previewLines = lines.slice(0, 420).map((line) => `+${line}`);
   const truncated = lines.length > previewLines.length;
-  return [
+  const diffText = [
     `diff --git a/${relativePath} b/${relativePath}`,
     "new file mode 100644",
     "index 0000000..0000000",
@@ -2810,6 +2865,12 @@ async function buildUntrackedFileDiff(gitRoot: string, relativePath: string): Pr
     ...previewLines,
     truncated ? `# Diff preview truncated after ${previewLines.length} line(s).` : ""
   ].filter(Boolean).join("\n");
+  return {
+    text: diffText,
+    displayMode: "SideBySide",
+    byteCount: content.byteLength,
+    lineCount: lines.length
+  };
 }
 
 function truncateGitDiff(diff: string): { text: string; truncated: boolean } {
@@ -2822,6 +2883,35 @@ function truncateGitDiff(diff: string): { text: string; truncated: boolean } {
     text: `${buffer.toString("utf8")}\n\n# Forge truncated this diff preview at ${gitDiffMaxBytes} bytes.`,
     truncated: true
   };
+}
+
+function summarizeGitFileDiff(
+  relativePath: string,
+  displayMode: GitFileDiff["displayMode"],
+  unavailableReason: GitFileDiff["unavailableReason"],
+  truncated: boolean,
+  diffResult: GitDiffBuildResult
+): string {
+  if (displayMode === "SideBySide") {
+    return `Diff for ${relativePath}${truncated ? " was truncated." : "."}`;
+  }
+
+  switch (unavailableReason) {
+  case "Binary":
+    return `Binary diff preview is unavailable for ${relativePath}.`;
+  case "TooLarge":
+    return `Diff preview is unavailable because ${relativePath} is larger than ${gitDiffMaxBytes} bytes.`;
+  case "NotRegularFile":
+    return `Diff preview is unavailable because ${relativePath} is not a regular file.`;
+  case "CommandFailed":
+    return `Diff preview command failed for ${relativePath}.`;
+  case "NoTextualDiff":
+    return `No textual diff is available for ${relativePath}.`;
+  default:
+    return diffResult.text.trim()
+      ? `Diff preview for ${relativePath} is shown as a message.`
+      : `No textual diff is available for ${relativePath}.`;
+  }
 }
 
 function normalizeGitDiffPath(rawPath: string | null): string {

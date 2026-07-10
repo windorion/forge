@@ -12,7 +12,7 @@ what to do next without rereading the whole project history.
 
 ## P0: Finish V0
 
-- Harden the macOS git/diff review panel for larger diffs, binary files, and
+- Polish the macOS git/diff review panel for larger multi-file navigation and
   packaged app workflows.
 - Harden local commit review for failed git identity/signing/hooks, mixed
   staged/unstaged states, large change sets, and validation readiness.
@@ -98,6 +98,10 @@ what to do next without rereading the whole project history.
   states, and verification that API keys are never persisted to the settings
   file.
 - Added a short local V0 demo script to `docs/development.md`.
+- Hardened git diff review for binary and oversized files. Runtime diff
+  responses now include display mode, unavailable reason, byte/line counts, and
+  app preview limits; the macOS Review panel shows explicit messages instead
+  of forcing binary/large files through the side-by-side renderer.
 - Added a bounded OpenAI model-guided context loop before plan revisions: the
   provider can ask for up to three read/search rounds, while the runtime
   validates and executes only logged read-only repo tools with stop conditions.

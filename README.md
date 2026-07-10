@@ -57,7 +57,8 @@ Implemented today:
 - Follow-up repair edit proposals generated from validation repair briefs,
   surfaced in the macOS Review UI and still behind human review.
 - Read-only git status and bounded file diff inspection surfaced in the macOS
-  Review UI, including open/reveal actions for changed files.
+  Review UI, including open/reveal actions for changed files plus explicit
+  binary/large-file diff handling.
 - Read-only commit preparation artifacts with suggested commit message,
   included files, validation suggestions, blockers, and risk notes surfaced in
   the macOS Review UI.

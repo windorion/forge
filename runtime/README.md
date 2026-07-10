@@ -105,8 +105,10 @@ The runtime also exposes read-only git review endpoints. `GET /git/status`
 returns git root, branch, head, ahead/behind, dirty state, changed files,
 staged/unstaged/untracked flags, and available line-count stats. `GET /git/diff`
 returns a bounded per-file diff for a repo-relative path from that status
-snapshot. Diff reads are low-risk and run through `git` without a shell; paths
-must stay repo-relative and `.git`/`.forge` internals are blocked.
+snapshot. Diff responses include display mode, unavailable reason, byte/line
+counts, and the app preview line limit so binary and oversized files are
+represented clearly. Diff reads are low-risk and run through `git` without a
+shell; paths must stay repo-relative and `.git`/`.forge` internals are blocked.
 `GET /git/branch-preview` prepares a branch review artifact with current
 branch, expected HEAD, default base branch, target branch, create/switch mode,
 dirty state, blockers, and risk notes.
@@ -268,11 +270,12 @@ apply, post-apply validation, restart recovery, and both append/replace
 restricted edit operations. It verifies the runtime status page, health
 diagnostics, persistence metadata, and model-provider settings GET/POST paths,
 including fake-key handling and confirmation that API keys are not persisted.
-It also verifies read-only git status, bounded git diff, branch-preview,
-stale-head branch rejection, branch-publish-preview, stale-head branch publish
-rejection, commit-preview, stale-head commit rejection, push-preview, and
-stale-head push rejection endpoints, plus the read-only PR handoff preview,
-against temporary fixtures. It also starts a
+It also verifies read-only git status, bounded git diff metadata for text,
+binary, and oversized files, branch-preview, stale-head branch rejection,
+branch-publish-preview, stale-head branch publish rejection, commit-preview,
+stale-head commit rejection, push-preview, and stale-head push rejection
+endpoints, plus the read-only PR handoff preview, against temporary fixtures.
+It also starts a
 mock OpenAI Responses server to verify the model-guided context loop path
 before an OpenAI-backed plan
 revision, a richer edit proposal with append/create apply, and a blocked

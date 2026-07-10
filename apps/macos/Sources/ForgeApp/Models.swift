@@ -262,6 +262,11 @@ struct GitFileDiff: Codable, Hashable {
     var generatedAt: String
     var diff: String
     var truncated: Bool
+    var displayMode: String?
+    var unavailableReason: String?
+    var byteCount: Int?
+    var lineCount: Int?
+    var appPreviewLineLimit: Int?
     var summary: String
 }
 

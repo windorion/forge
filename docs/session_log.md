@@ -2294,3 +2294,40 @@ Next:
 - If continuing V0 hardening, target either packaged runtime failure
   diagnostics or larger git/diff review behavior.
 - After V0 hardening, move to approved GitHub draft PR creation for alpha.
+
+### 2026-07-09 21:54:38 CEST +0200
+
+Conversation summary:
+
+- Continued V0 hardening after the smoke/demo-script checkpoint by improving
+  git diff review behavior for binary and oversized files.
+
+Done:
+
+- Added runtime diff metadata fields: display mode, unavailable reason,
+  byte/line counts, and app preview line limit.
+- Changed tracked and untracked diff generation to return structured display
+  results instead of treating binary or oversized files as ordinary text diffs.
+- Added explicit binary, too-large, non-regular-file, command-failed, and
+  no-textual-diff summaries.
+- Updated the macOS Review diff card to render side-by-side only for textual
+  diffs and to show clear message-style previews with metadata for binary or
+  oversized files.
+- Extended `npm run smoke:core` with temporary text, binary, and oversized
+  diff fixtures and assertions for the new metadata.
+- Updated README, runtime README, project status, TODO, development, and git
+  workflow docs.
+- Verified `npm run check`, `swift build`, and `npm run smoke:core`.
+
+Not done:
+
+- Did not add advanced diff filtering, full-file diff navigation, or binary
+  visual previews.
+- Did not harden packaged runtime lifecycle or remote git auth/branch
+  protection paths.
+
+Next:
+
+- Commit the git/diff hardening follow-up.
+- Continue V0 hardening with packaged runtime failure diagnostics or remote git
+  failure handling.

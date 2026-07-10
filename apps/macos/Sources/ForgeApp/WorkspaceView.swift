@@ -3226,13 +3226,49 @@ private struct GitDiffCard: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
+                HStack(spacing: 8) {
+                    if let byteCount = diff.byteCount {
+                        Label("\(byteCount) bytes", systemImage: "doc")
+                    }
+                    if let lineCount = diff.lineCount {
+                        Label("\(lineCount) lines", systemImage: "text.alignleft")
+                    }
+                    if let unavailableReason = diff.unavailableReason {
+                        Label(unavailableReason, systemImage: "info.circle")
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+
                 if diff.truncated {
                     Label("Preview truncated by the runtime.", systemImage: "scissors")
                         .font(.caption2)
                         .foregroundStyle(.orange)
                 }
 
-                SideBySideDiffView(diffText: diff.diff)
+                if shouldRenderSideBySide(diff) {
+                    SideBySideDiffView(
+                        diffText: diff.diff,
+                        lineLimit: diff.appPreviewLineLimit ?? 260
+                    )
+                } else {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Label(diffUnavailableTitle(for: diff), systemImage: diffUnavailableImage(for: diff))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(diffUnavailableColor(for: diff))
+
+                        if !diff.diff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text(diff.diff)
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
+                    }
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.background)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
             } else {
                 Label(isLoading ? "Loading diff..." : "Select Load to inspect this file.", systemImage: isLoading ? "hourglass" : "doc.text.magnifyingglass")
                     .font(.caption)
@@ -3243,10 +3279,53 @@ private struct GitDiffCard: View {
         .background(.quaternary)
         .clipShape(RoundedRectangle(cornerRadius: 7))
     }
+
+    private func shouldRenderSideBySide(_ diff: GitFileDiff) -> Bool {
+        (diff.displayMode ?? "SideBySide") == "SideBySide" &&
+            !diff.diff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func diffUnavailableTitle(for diff: GitFileDiff) -> String {
+        switch diff.unavailableReason {
+        case "Binary":
+            return "Binary diff preview unavailable"
+        case "TooLarge":
+            return "File too large for inline diff"
+        case "NotRegularFile":
+            return "Path is not a regular file"
+        case "CommandFailed":
+            return "Diff command failed"
+        default:
+            return "Textual diff unavailable"
+        }
+    }
+
+    private func diffUnavailableImage(for diff: GitFileDiff) -> String {
+        switch diff.unavailableReason {
+        case "Binary":
+            return "doc.fill"
+        case "TooLarge":
+            return "doc.zipper"
+        case "CommandFailed":
+            return "exclamationmark.triangle"
+        default:
+            return "info.circle"
+        }
+    }
+
+    private func diffUnavailableColor(for diff: GitFileDiff) -> Color {
+        switch diff.unavailableReason {
+        case "CommandFailed":
+            return .orange
+        default:
+            return .secondary
+        }
+    }
 }
 
 private struct SideBySideDiffView: View {
     var diffText: String
+    var lineLimit: Int
 
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
@@ -3259,12 +3338,12 @@ private struct SideBySideDiffView: View {
             .font(.caption2.weight(.semibold))
             .foregroundStyle(.secondary)
 
-            ForEach(diffLines.prefix(260)) { line in
+            ForEach(diffLines.prefix(lineLimit)) { line in
                 DiffLineRow(line: line)
             }
 
-            if diffLines.count > 260 {
-                Text("\(diffLines.count - 260) more diff line(s) hidden in the app preview.")
+            if diffLines.count > lineLimit {
+                Text("\(diffLines.count - lineLimit) more diff line(s) hidden in the app preview.")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                     .padding(.top, 4)

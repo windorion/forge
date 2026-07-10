@@ -136,7 +136,10 @@ endpoints. It refreshes `GET /git/status`, highlights files related to the
 selected task, shows staged/unstaged/untracked state plus line stats when git
 provides them, and can load a bounded side-by-side diff from
 `GET /git/diff?path=<repo-relative-path>`. File actions are read-only: open
-the file or reveal it in Finder. The same section can prepare a Branch Review
+the file or reveal it in Finder. Diff responses include display mode,
+unavailable reason, byte/line counts, and app preview limits so binary or
+oversized files are shown as explicit messages instead of broken textual
+diffs. The same section can prepare a Branch Review
 through `GET /git/branch-preview`, showing current branch, target branch,
 create/switch mode, blockers, and risk notes. From that reviewed card, the
 user can explicitly create a new local branch or switch to an existing clean
@@ -335,7 +338,8 @@ It covers:
   provider settings GET/POST paths
 - provider settings key handling with a fake OpenAI key, including verification
   that the API key is never persisted to the settings file
-- read-only git status and bounded git diff endpoints
+- read-only git status and bounded git diff endpoints, including text,
+  binary, and oversized untracked file previews
 - mock OpenAI plan-context loop before a plan revision
 - read-only branch, branch-publish, commit, push, and PR handoff preview
   endpoints plus stale-head rejection checks for high-risk git actions

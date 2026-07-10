@@ -357,6 +357,11 @@ export interface GitFileDiff {
   generatedAt: string;
   diff: string;
   truncated: boolean;
+  displayMode?: "SideBySide" | "Message";
+  unavailableReason?: "Binary" | "TooLarge" | "NotRegularFile" | "NoTextualDiff" | "CommandFailed";
+  byteCount?: number;
+  lineCount?: number;
+  appPreviewLineLimit: number;
   summary: string;
 }
 

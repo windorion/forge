@@ -49,6 +49,9 @@ Implemented:
   follow-up repair proposals.
 - Read-only git status and bounded per-file diff inspection from the runtime,
   surfaced in the macOS Review UI with changed-file open/reveal actions.
+  Diff responses now include display-mode metadata, unavailable reasons,
+  byte/line counts, and app preview limits so binary and oversized files are
+  presented as explicit messages rather than broken side-by-side diffs.
 - Read-only commit preparation preview from the runtime, surfaced in the macOS
   Review UI with suggested commit message, included files, validation
   suggestions, blockers, risk notes, and a non-mutating operation boundary.
@@ -142,8 +145,8 @@ Remaining V0 gaps:
 
 - harden app-managed runtime start/stop for packaged app locations and failure
   diagnostics
-- harden the first-pass git/diff review UI for larger diffs and packaged app
-  workflows
+- polish git/diff review navigation for larger multi-file changes and packaged
+  app workflows
 - harden local commit review for failed git identity/signing/hooks, mixed
   staged/unstaged states, and larger changes
 - harden push review for remote auth failures, non-fast-forward rejections,
