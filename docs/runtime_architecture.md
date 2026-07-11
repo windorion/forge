@@ -232,12 +232,17 @@ upstream tracking, push, reset, delete branches, or publish a PR.
 Branch publish is the remote tracking slice after local branch creation.
 `GET /git/branch-publish-preview` summarizes the current branch, configured
 remote, remote branch, default-base comparison, commits to publish, dirty
-working-tree state, blockers, and risk notes. `POST /git/branch-publish` is a
-high-risk action. It requires explicit confirmation plus expected HEAD,
+working-tree state, structured preflight metadata, blockers, and risk notes.
+The preflight summarizes branch, remote, base, commit-range, worktree, action
+readiness, and classified remote failure risk. `POST /git/branch-publish` is
+a high-risk action. It requires explicit confirmation plus expected HEAD,
 branch, remote, and remote branch from the preview. The runtime blocks
 detached/default-base/already-upstream/no-commit/unmerged states, blocks
 remote branch collisions, and runs a non-force
-`git push --set-upstream <remote> HEAD:<branch>`. It does not create a PR.
+`git push --set-upstream <remote> HEAD:<branch>`. If git rejects the push, the
+runtime classifies common auth, non-fast-forward, protected-branch, network,
+remote-rejected, and unknown failures before surfacing output. It does not
+create a PR.
 
 The local commit action is `POST /git/commit`. It can create one local
 commit only after the app sends explicit confirmation from the reviewed commit
@@ -248,11 +253,15 @@ commit, and records a linked task event when possible. It does not push.
 
 The upstream push action is `POST /git/push`. It is paired with
 `GET /git/push-preview`, which shows branch/upstream state, ahead/behind
-counts, commits to push, dirty working-tree state, blockers, and risk notes.
-The push action requires explicit confirmation plus expected HEAD, branch, and
-upstream from the preview. The runtime blocks detached/no-upstream/behind/
-no-ahead/unmerged states and uses a non-force push to the configured upstream.
-It does not create a PR.
+counts, commits to push, dirty working-tree state, structured preflight
+metadata, blockers, and risk notes. The preflight summarizes branch, upstream,
+remote, commit-range, worktree, action readiness, and classified remote
+failure risk. The push action requires explicit confirmation plus expected
+HEAD, branch, and upstream from the preview. The runtime blocks detached/
+no-upstream/behind/no-ahead/unmerged states and uses a non-force push to the
+configured upstream. If git rejects the push, the runtime classifies common
+auth, non-fast-forward, protected-branch, network, remote-rejected, and
+unknown failures before surfacing output. It does not create a PR.
 
 The PR handoff slice is still read-only. `GET /git/pr-preview` derives a
 review artifact from branch state, default-base detection, optional task

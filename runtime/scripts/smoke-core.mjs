@@ -719,6 +719,35 @@ async function assertGitReviewEndpoints() {
   const branchPublishPreview = await get("/git/branch-publish-preview");
   assert(branchPublishPreview.expectedHead, "Git branch publish preview did not include the expected head.");
   assert(Array.isArray(branchPublishPreview.commitsToPublish), "Git branch publish preview did not include commitsToPublish.");
+  assert(branchPublishPreview.preflight, "Git branch publish preview did not include preflight metadata.");
+  assert(
+    ["Ready", "Detached", "DefaultBranch", "AlreadyTracking", "Missing"].includes(branchPublishPreview.preflight.branchStatus),
+    `Git branch publish preflight returned an unknown branch status: ${branchPublishPreview.preflight.branchStatus}.`
+  );
+  assert(
+    ["Ready", "Missing", "Unknown", "RemoteCollision"].includes(branchPublishPreview.preflight.remoteStatus),
+    `Git branch publish preflight returned an unknown remote status: ${branchPublishPreview.preflight.remoteStatus}.`
+  );
+  assert(
+    ["Resolved", "Missing"].includes(branchPublishPreview.preflight.baseStatus),
+    `Git branch publish preflight returned an unknown base status: ${branchPublishPreview.preflight.baseStatus}.`
+  );
+  assert(
+    ["Ready", "Empty", "Truncated"].includes(branchPublishPreview.preflight.commitStatus),
+    `Git branch publish preflight returned an unknown commit status: ${branchPublishPreview.preflight.commitStatus}.`
+  );
+  assert(
+    ["Clean", "Dirty"].includes(branchPublishPreview.preflight.worktreeStatus),
+    `Git branch publish preflight returned an unknown worktree status: ${branchPublishPreview.preflight.worktreeStatus}.`
+  );
+  assert(
+    ["Ready", "NeedsReview", "Blocked"].includes(branchPublishPreview.preflight.actionReadiness),
+    `Git branch publish preflight returned an unknown action readiness: ${branchPublishPreview.preflight.actionReadiness}.`
+  );
+  assert(
+    branchPublishPreview.preflight.failureRiskSummary.includes("classifies"),
+    "Git branch publish preflight did not disclose classified remote failure handling."
+  );
   assert(
     branchPublishPreview.operationBoundary.includes("has not pushed"),
     "Git branch publish preview did not state the non-mutating operation boundary."
@@ -756,6 +785,35 @@ async function assertGitReviewEndpoints() {
   const pushPreview = await get("/git/push-preview");
   assert(pushPreview.expectedHead, "Git push preview did not include the expected head.");
   assert(Array.isArray(pushPreview.commitsToPush), "Git push preview did not include commitsToPush.");
+  assert(pushPreview.preflight, "Git push preview did not include preflight metadata.");
+  assert(
+    ["Ready", "Detached", "Missing"].includes(pushPreview.preflight.branchStatus),
+    `Git push preflight returned an unknown branch status: ${pushPreview.preflight.branchStatus}.`
+  );
+  assert(
+    ["Ready", "Missing", "Unpushed", "Behind", "NoAhead"].includes(pushPreview.preflight.upstreamStatus),
+    `Git push preflight returned an unknown upstream status: ${pushPreview.preflight.upstreamStatus}.`
+  );
+  assert(
+    ["Ready", "Missing", "Unknown"].includes(pushPreview.preflight.remoteStatus),
+    `Git push preflight returned an unknown remote status: ${pushPreview.preflight.remoteStatus}.`
+  );
+  assert(
+    ["Ready", "Empty", "Truncated"].includes(pushPreview.preflight.commitStatus),
+    `Git push preflight returned an unknown commit status: ${pushPreview.preflight.commitStatus}.`
+  );
+  assert(
+    ["Clean", "Dirty"].includes(pushPreview.preflight.worktreeStatus),
+    `Git push preflight returned an unknown worktree status: ${pushPreview.preflight.worktreeStatus}.`
+  );
+  assert(
+    ["Ready", "NeedsReview", "Blocked"].includes(pushPreview.preflight.actionReadiness),
+    `Git push preflight returned an unknown action readiness: ${pushPreview.preflight.actionReadiness}.`
+  );
+  assert(
+    pushPreview.preflight.failureRiskSummary.includes("classifies"),
+    "Git push preflight did not disclose classified remote failure handling."
+  );
   assert(
     pushPreview.operationBoundary.includes("has not pushed"),
     "Git push preview did not state the non-mutating operation boundary."

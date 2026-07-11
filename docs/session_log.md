@@ -2479,3 +2479,46 @@ Next:
 - Commit the branch review preflight hardening.
 - Continue V0 hardening with branch publish/push remote failure handling,
   packaged runtime path resolution, or git/diff review navigation polish.
+
+### 2026-07-11 07:56:51 CEST +0200
+
+Conversation summary:
+
+- User asked to stop local services and continue another long task. The session
+  confirmed no runtime was listening on `127.0.0.1:17373`, then hardened push
+  and branch-publish review for V0.
+
+Done:
+
+- Added structured `GitPushPreflight` metadata to `GET /git/push-preview`,
+  covering branch, upstream, remote, commit range, worktree, action readiness,
+  and failure-risk summary.
+- Added structured `GitBranchPublishPreflight` metadata to
+  `GET /git/branch-publish-preview`, covering branch, remote, base ref, commit
+  range, worktree, action readiness, and failure-risk summary.
+- Added runtime classification for failed git push/publish output: auth/access,
+  non-fast-forward, protected-branch/remote policy, network, remote-rejected,
+  and unknown.
+- Updated the macOS Push Review and Publish Review cards to render preflight
+  metadata.
+- Updated `RuntimeClient` so HTTP errors include runtime response bodies, which
+  lets git failure explanations appear in the app instead of only HTTP status.
+- Extended `npm run smoke:core` to assert push and branch-publish preflight
+  contracts.
+- Updated README, project status, TODO, development, runtime architecture, V0
+  scope, git workflow, and security permissions docs.
+- Verified `npm run check`, `swift build`, `npm run smoke:core`,
+  `git diff --check`, no residual `forge/forge-core-smoke-*` branch, and no
+  service listening on `127.0.0.1:17373`.
+
+Not done:
+
+- Did not run against live remote auth failure, non-fast-forward, protected
+  branch, disconnected-network, stale remote ref, or fork remote fixtures.
+- Did not push this new local commit yet.
+
+Next:
+
+- Commit the push/branch-publish preflight hardening.
+- Continue with live remote fixtures, packaged runtime path resolution, or
+  git/diff review navigation polish.

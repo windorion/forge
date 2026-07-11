@@ -3,7 +3,7 @@
 Document role: maintain the active backlog, priority order, and next concrete
 engineering tasks for Forge.
 
-Last updated: 2026-07-10
+Last updated: 2026-07-11
 
 ## Rule
 
@@ -15,11 +15,9 @@ what to do next without rereading the whole project history.
 - Polish the macOS git/diff review panel for larger multi-file navigation and
   packaged app workflows.
 - Polish local commit review for signing and project-specific hook edge cases.
-- Harden push review for remote auth failures, non-fast-forward rejections,
-  branch protection, and disconnected networks.
-- Harden branch publish/upstream setup for remote auth failures, protected
-  branch names, stale remote refs, fork remotes, and isolated success-path
-  tests.
+- Add live remote fixtures for push/branch-publish auth failures,
+  non-fast-forward rejections, branch protection, disconnected networks, stale
+  remote refs, and fork remotes.
 - Polish app-managed runtime start/stop for packaged app locations and
   distribution-specific path resolution.
 - Optionally run a live-provider smoke with a user-supplied OpenAI API key,
@@ -171,6 +169,14 @@ what to do next without rereading the whole project history.
   no-commit/unmerged/remote-collision states, rechecks expected HEAD, branch,
   remote, and remote branch, pushes with `--set-upstream` without force, and
   records task events when linked.
+- Hardened push and branch publish review with structured preflight metadata
+  and classified git transport failure messages. Push previews now summarize
+  branch/upstream/remote/commit/worktree/action readiness; branch publish
+  previews summarize branch/remote/base/commit/worktree/action readiness; the
+  macOS Review panel renders both preflight cards; runtime push failures are
+  classified into common auth, non-fast-forward, protected-branch, network,
+  remote-rejected, or unknown summaries; and `npm run smoke:core` asserts both
+  API contracts.
 - Extended `npm run smoke:core` with a mock OpenAI Responses server that
   verifies the model-guided context loop, append/create apply,
   blocked-to-repaired proposal flow, failed validation repair briefs,

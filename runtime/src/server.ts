@@ -1319,10 +1319,12 @@ async function getGitBranchPublishPreview(
   const fallbackBaseBranch = "main";
 
   if (!status.isRepository || !status.root) {
+    const preflight = unavailableGitBranchPublishPreflight(status, fallbackBaseBranch);
     return {
       generatedAt,
       readiness: "Blocked",
       summary: "Branch publish is blocked because git status is unavailable.",
+      preflight,
       expectedHead: status.head,
       branch: status.branch,
       baseBranch: fallbackBaseBranch,
@@ -1358,6 +1360,18 @@ async function getGitBranchPublishPreview(
     commitsToPublish,
     baseRef
   );
+  const preflight = gitBranchPublishPreflight(
+    status,
+    baseBranch,
+    remote,
+    remotes,
+    requestedRemote,
+    remoteBranch,
+    remoteBranchExists,
+    commitsToPublish,
+    baseRef,
+    blockers
+  );
   const riskNotes = gitBranchPublishRiskNotes(status, task, taskMissing, baseRef, commitsToPublish);
   const readiness: GitBranchPublishPreview["readiness"] = blockers.length > 0
     ? "Blocked"
@@ -1369,6 +1383,7 @@ async function getGitBranchPublishPreview(
     generatedAt,
     readiness,
     summary: gitBranchPublishPreviewSummary(status, remote, remoteBranch, commitsToPublish, readiness),
+    preflight,
     expectedHead: status.head,
     branch: status.branch,
     baseBranch,
@@ -1428,7 +1443,7 @@ async function publishGitBranch(input: GitBranchPublishRequest): Promise<GitBran
     `HEAD:${request.remoteBranch}`
   ], status.root, 96_000);
   if (pushResult.exitCode !== 0) {
-    throw new HttpError(409, pushResult.output.trim() || "git branch publish failed.");
+    throw new HttpError(409, gitPushFailureMessage(pushResult.output, "Branch publish failed"));
   }
 
   const upstream = `${request.remote}/${request.remoteBranch}`;
@@ -1499,6 +1514,158 @@ function normalizeOptionalGitRemoteName(rawRemote: unknown): string | undefined 
   }
 
   return normalizeGitRemoteName(rawRemote);
+}
+
+function unavailableGitBranchPublishPreflight(
+  status: GitStatusSnapshot,
+  baseBranch: string
+): NonNullable<GitBranchPublishPreview["preflight"]> {
+  return {
+    branchStatus: status.branch && !status.branch.startsWith("HEAD")
+      ? status.branch === baseBranch ? "DefaultBranch" : "Ready"
+      : "Missing",
+    branchSummary: status.branch
+      ? `Current checkout reports ${status.branch}.`
+      : "Current branch could not be resolved.",
+    remoteStatus: "Missing",
+    remoteSummary: "No configured remote could be inspected for branch publish.",
+    baseStatus: "Missing",
+    baseSummary: "Default base branch could not be inspected.",
+    commitStatus: "Empty",
+    commitSummary: "No publish commit range could be inspected.",
+    worktreeStatus: status.isDirty ? "Dirty" : "Clean",
+    worktreeSummary: status.isDirty
+      ? "Local changes were reported but could not be inspected safely."
+      : "Working tree did not report local changes.",
+    actionReadiness: "Blocked",
+    actionReadinessSummary: "Resolve git repository access before publishing a branch.",
+    failureRiskSummary: "Publish failure details will be classified after an approved push attempt can run."
+  };
+}
+
+function gitBranchPublishPreflight(
+  status: GitStatusSnapshot,
+  baseBranch: string,
+  remote: string | undefined,
+  remotes: string[],
+  requestedRemote: string | undefined,
+  remoteBranch: string,
+  remoteBranchExists: boolean,
+  commitsToPublish: GitCommitToPush[],
+  baseRef: string | undefined,
+  blockers: string[]
+): NonNullable<GitBranchPublishPreview["preflight"]> {
+  const branchStatus = branchPublishBranchStatus(status, baseBranch);
+  const remoteStatus = branchPublishRemoteStatus(remote, remotes, requestedRemote, remoteBranchExists);
+  const commitStatus = gitCommitRangeStatus(commitsToPublish);
+  const worktreeStatus: NonNullable<GitBranchPublishPreview["preflight"]>["worktreeStatus"] = status.isDirty ? "Dirty" : "Clean";
+  const actionReadiness: NonNullable<GitBranchPublishPreview["preflight"]>["actionReadiness"] = blockers.length > 0
+    ? "Blocked"
+    : status.isDirty || commitStatus === "Truncated"
+      ? "NeedsReview"
+      : "Ready";
+
+  return {
+    branchStatus,
+    branchSummary: branchPublishBranchSummary(status, baseBranch, branchStatus),
+    remoteStatus,
+    remoteSummary: branchPublishRemoteSummary(remote, remotes, requestedRemote, remoteBranch, remoteStatus),
+    baseStatus: baseRef ? "Resolved" : "Missing",
+    baseSummary: baseRef
+      ? `Publish comparison will use ${baseRef}.`
+      : `Default base branch ${baseBranch} could not be resolved locally.`,
+    commitStatus,
+    commitSummary: gitCommitRangeSummary(commitsToPublish, "publish"),
+    worktreeStatus,
+    worktreeSummary: worktreeStatus === "Clean"
+      ? "Working tree is clean for branch publish."
+      : `${status.changedFiles.length} local change(s) will remain local and will not be published.`,
+    actionReadiness,
+    actionReadinessSummary: gitTransportActionReadinessSummary(blockers, actionReadiness, "publish this branch"),
+    failureRiskSummary: gitPushFailureRiskSummary(remote)
+  };
+}
+
+function branchPublishBranchStatus(
+  status: GitStatusSnapshot,
+  baseBranch: string
+): NonNullable<GitBranchPublishPreview["preflight"]>["branchStatus"] {
+  if (!status.branch) {
+    return "Missing";
+  }
+
+  if (status.branch.startsWith("HEAD")) {
+    return "Detached";
+  }
+
+  if (status.branch === baseBranch) {
+    return "DefaultBranch";
+  }
+
+  if (status.upstream) {
+    return "AlreadyTracking";
+  }
+
+  return "Ready";
+}
+
+function branchPublishBranchSummary(
+  status: GitStatusSnapshot,
+  baseBranch: string,
+  branchStatus: NonNullable<GitBranchPublishPreview["preflight"]>["branchStatus"]
+): string {
+  switch (branchStatus) {
+  case "Detached":
+    return "Current checkout is detached; branch publish requires a named local branch.";
+  case "DefaultBranch":
+    return `Current branch is the default base branch ${baseBranch}; publish a task branch instead.`;
+  case "AlreadyTracking":
+    return `Current branch already tracks ${status.upstream}; use Push Review instead.`;
+  case "Ready":
+    return `Current branch ${status.branch} is ready for first publish review.`;
+  default:
+    return "Current branch could not be resolved.";
+  }
+}
+
+function branchPublishRemoteStatus(
+  remote: string | undefined,
+  remotes: string[],
+  requestedRemote: string | undefined,
+  remoteBranchExists: boolean
+): NonNullable<GitBranchPublishPreview["preflight"]>["remoteStatus"] {
+  if (!remote) {
+    return "Missing";
+  }
+
+  if (!remotes.includes(remote) || (requestedRemote && !remotes.includes(requestedRemote))) {
+    return "Unknown";
+  }
+
+  if (remoteBranchExists) {
+    return "RemoteCollision";
+  }
+
+  return "Ready";
+}
+
+function branchPublishRemoteSummary(
+  remote: string | undefined,
+  remotes: string[],
+  requestedRemote: string | undefined,
+  remoteBranch: string,
+  remoteStatus: NonNullable<GitBranchPublishPreview["preflight"]>["remoteStatus"]
+): string {
+  switch (remoteStatus) {
+  case "Missing":
+    return "No git remote is configured for branch publish.";
+  case "Unknown":
+    return `Requested remote ${requestedRemote ?? remote ?? "unknown"} is not in the configured remote list (${remotes.join(", ") || "none"}).`;
+  case "RemoteCollision":
+    return `Remote branch already exists: ${remote}/${remoteBranch}.`;
+  default:
+    return `Remote ${remote} is configured and ${remoteBranch} is available for first publish.`;
+  }
 }
 
 function gitBranchPublishBlockers(
@@ -1947,10 +2114,12 @@ async function getGitPushPreview(rawTaskID: string | null): Promise<GitPushPrevi
   const operationBoundary = "Review artifact only. Forge has not pushed, force-pushed, merged, or published anything.";
 
   if (!status.isRepository || !status.root) {
+    const preflight = unavailableGitPushPreflight(status);
     return {
       generatedAt,
       readiness: "Blocked",
       summary: "Push preparation is blocked because git status is unavailable.",
+      preflight,
       expectedHead: status.head,
       branch: status.branch,
       upstream: status.upstream,
@@ -1967,10 +2136,12 @@ async function getGitPushPreview(rawTaskID: string | null): Promise<GitPushPrevi
   }
 
   const upstreamParts = parseGitUpstream(status.upstream);
+  const remotes = await listGitRemotes(status.root);
   const commitsToPush = upstreamParts && (status.ahead ?? 0) > 0
     ? await collectGitCommitsToPush(status.root, status.upstream)
     : [];
-  const blockers = gitPushBlockers(status, upstreamParts);
+  const blockers = gitPushBlockers(status, upstreamParts, remotes);
+  const preflight = gitPushPreflight(status, upstreamParts, remotes, commitsToPush, blockers);
   const riskNotes = gitPushRiskNotes(status, task, taskMissing, commitsToPush);
   const readiness: GitPushPreview["readiness"] = blockers.length > 0
     ? "Blocked"
@@ -1982,6 +2153,7 @@ async function getGitPushPreview(rawTaskID: string | null): Promise<GitPushPrevi
     generatedAt,
     readiness,
     summary: gitPushPreviewSummary(status, commitsToPush, readiness),
+    preflight,
     expectedHead: status.head,
     branch: status.branch,
     upstream: status.upstream,
@@ -2041,7 +2213,7 @@ async function pushGitBranch(input: GitPushRequest): Promise<GitPushResult> {
     96_000
   );
   if (pushResult.exitCode !== 0) {
-    throw new HttpError(409, pushResult.output.trim() || "git push failed.");
+    throw new HttpError(409, gitPushFailureMessage(pushResult.output, "Push failed"));
   }
 
   const relatedTask = recordGitPushOnTask(request.taskID, preview.branch, preview.upstream, preview.commitsToPush);
@@ -2125,9 +2297,201 @@ async function collectGitCommitsInRange(gitRoot: string, range: string): Promise
     .filter((commit) => commit.hash && commit.shortHash);
 }
 
-function gitPushBlockers(
+function unavailableGitPushPreflight(status: GitStatusSnapshot): NonNullable<GitPushPreview["preflight"]> {
+  return {
+    branchStatus: status.branch && !status.branch.startsWith("HEAD") ? "Ready" : "Missing",
+    branchSummary: status.branch
+      ? `Current checkout reports ${status.branch}.`
+      : "Current branch could not be resolved.",
+    upstreamStatus: "Missing",
+    upstreamSummary: "No upstream remote branch could be inspected.",
+    remoteStatus: "Missing",
+    remoteSummary: "No configured upstream remote could be inspected.",
+    commitStatus: "Empty",
+    commitSummary: "No push commit range could be inspected.",
+    worktreeStatus: status.isDirty ? "Dirty" : "Clean",
+    worktreeSummary: status.isDirty
+      ? "Local changes were reported but could not be inspected safely."
+      : "Working tree did not report local changes.",
+    actionReadiness: "Blocked",
+    actionReadinessSummary: "Resolve git repository access before pushing.",
+    failureRiskSummary: "Push failure details will be classified after an approved push attempt can run."
+  };
+}
+
+function gitPushPreflight(
+  status: GitStatusSnapshot,
+  upstreamParts: { remote: string; remoteBranch: string } | undefined,
+  remotes: string[],
+  commitsToPush: GitCommitToPush[],
+  blockers: string[]
+): NonNullable<GitPushPreview["preflight"]> {
+  const branchStatus = pushBranchStatus(status);
+  const upstreamStatus = pushUpstreamStatus(status, upstreamParts);
+  const remoteStatus = pushRemoteStatus(upstreamParts, remotes);
+  const commitStatus = gitCommitRangeStatus(commitsToPush);
+  const worktreeStatus: NonNullable<GitPushPreview["preflight"]>["worktreeStatus"] = status.isDirty ? "Dirty" : "Clean";
+  const actionReadiness: NonNullable<GitPushPreview["preflight"]>["actionReadiness"] = blockers.length > 0
+    ? "Blocked"
+    : status.isDirty || commitStatus === "Truncated"
+      ? "NeedsReview"
+      : "Ready";
+
+  return {
+    branchStatus,
+    branchSummary: pushBranchSummary(status, branchStatus),
+    upstreamStatus,
+    upstreamSummary: pushUpstreamSummary(status, upstreamParts, upstreamStatus),
+    remoteStatus,
+    remoteSummary: pushRemoteSummary(upstreamParts, remotes, remoteStatus),
+    commitStatus,
+    commitSummary: gitCommitRangeSummary(commitsToPush, "push"),
+    worktreeStatus,
+    worktreeSummary: worktreeStatus === "Clean"
+      ? "Working tree is clean for push."
+      : `${status.changedFiles.length} local change(s) will remain local after push.`,
+    actionReadiness,
+    actionReadinessSummary: gitTransportActionReadinessSummary(blockers, actionReadiness, "push this branch"),
+    failureRiskSummary: gitPushFailureRiskSummary(upstreamParts?.remote)
+  };
+}
+
+function pushBranchStatus(status: GitStatusSnapshot): NonNullable<GitPushPreview["preflight"]>["branchStatus"] {
+  if (!status.branch) {
+    return "Missing";
+  }
+
+  if (status.branch.startsWith("HEAD")) {
+    return "Detached";
+  }
+
+  return "Ready";
+}
+
+function pushBranchSummary(
+  status: GitStatusSnapshot,
+  branchStatus: NonNullable<GitPushPreview["preflight"]>["branchStatus"]
+): string {
+  switch (branchStatus) {
+  case "Detached":
+    return "Current checkout is detached; push requires a named branch.";
+  case "Ready":
+    return `Current branch ${status.branch} is ready for upstream push review.`;
+  default:
+    return "Current branch could not be resolved.";
+  }
+}
+
+function pushUpstreamStatus(
   status: GitStatusSnapshot,
   upstreamParts: { remote: string; remoteBranch: string } | undefined
+): NonNullable<GitPushPreview["preflight"]>["upstreamStatus"] {
+  if (!upstreamParts) {
+    return "Missing";
+  }
+
+  if ((status.behind ?? 0) > 0) {
+    return "Behind";
+  }
+
+  if ((status.ahead ?? 0) <= 0) {
+    return "NoAhead";
+  }
+
+  return "Unpushed";
+}
+
+function pushUpstreamSummary(
+  status: GitStatusSnapshot,
+  upstreamParts: { remote: string; remoteBranch: string } | undefined,
+  upstreamStatus: NonNullable<GitPushPreview["preflight"]>["upstreamStatus"]
+): string {
+  if (!upstreamParts) {
+    return "Current branch has no upstream remote branch.";
+  }
+
+  if (upstreamStatus === "Behind") {
+    return `Current branch is behind ${upstreamParts.remote}/${upstreamParts.remoteBranch} by ${status.behind ?? 0} commit(s).`;
+  }
+
+  if (upstreamStatus === "NoAhead") {
+    return `No local commits are ahead of ${upstreamParts.remote}/${upstreamParts.remoteBranch}.`;
+  }
+
+  return `${status.ahead ?? 0} local commit(s) are ready to push to ${upstreamParts.remote}/${upstreamParts.remoteBranch}.`;
+}
+
+function pushRemoteStatus(
+  upstreamParts: { remote: string; remoteBranch: string } | undefined,
+  remotes: string[]
+): NonNullable<GitPushPreview["preflight"]>["remoteStatus"] {
+  if (!upstreamParts) {
+    return "Missing";
+  }
+
+  return remotes.includes(upstreamParts.remote) ? "Ready" : "Unknown";
+}
+
+function pushRemoteSummary(
+  upstreamParts: { remote: string; remoteBranch: string } | undefined,
+  remotes: string[],
+  remoteStatus: NonNullable<GitPushPreview["preflight"]>["remoteStatus"]
+): string {
+  if (!upstreamParts) {
+    return "No upstream remote is configured.";
+  }
+
+  if (remoteStatus === "Unknown") {
+    return `Configured upstream remote ${upstreamParts.remote} is not in the local remote list (${remotes.join(", ") || "none"}).`;
+  }
+
+  return `Upstream remote ${upstreamParts.remote} is configured.`;
+}
+
+function gitCommitRangeStatus(commits: GitCommitToPush[]): "Ready" | "Empty" | "Truncated" {
+  if (commits.length === 0) {
+    return "Empty";
+  }
+
+  return commits.length >= 20 ? "Truncated" : "Ready";
+}
+
+function gitCommitRangeSummary(commits: GitCommitToPush[], action: "push" | "publish"): string {
+  if (commits.length === 0) {
+    return `No commits are currently ready to ${action}.`;
+  }
+
+  if (commits.length >= 20) {
+    return `At least ${commits.length} commit(s) are in scope; only the first ${commits.length} are shown.`;
+  }
+
+  return `${commits.length} commit(s) are in scope for ${action}.`;
+}
+
+function gitTransportActionReadinessSummary(
+  blockers: string[],
+  actionReadiness: "Ready" | "NeedsReview" | "Blocked",
+  actionLabel: string
+): string {
+  if (actionReadiness === "Blocked") {
+    return `Resolve ${blockers.length} blocker(s) before attempting to ${actionLabel}.`;
+  }
+
+  if (actionReadiness === "NeedsReview") {
+    return `Review local changes and commit range before attempting to ${actionLabel}.`;
+  }
+
+  return `Ready to ${actionLabel} after explicit confirmation.`;
+}
+
+function gitPushFailureRiskSummary(remote: string | undefined): string {
+  return `If ${remote ?? "the remote"} rejects the operation, Forge classifies common authentication, non-fast-forward, network, and protected-branch failures before showing the error.`;
+}
+
+function gitPushBlockers(
+  status: GitStatusSnapshot,
+  upstreamParts: { remote: string; remoteBranch: string } | undefined,
+  remotes: string[]
 ): string[] {
   const blockers: string[] = [];
 
@@ -2137,6 +2501,8 @@ function gitPushBlockers(
 
   if (!upstreamParts) {
     blockers.push("Current branch does not have an upstream remote branch.");
+  } else if (!remotes.includes(upstreamParts.remote)) {
+    blockers.push(`Configured upstream remote is not present locally: ${upstreamParts.remote}.`);
   }
 
   if ((status.behind ?? 0) > 0) {
@@ -2249,6 +2615,79 @@ function recordGitPushOnTask(
 
 function summarizeGitCommandOutput(output: string): string {
   return output.replace(/\s+/g, " ").trim().slice(0, 800) || "git command completed.";
+}
+
+function gitPushFailureMessage(output: string, prefix: string): string {
+  const cleaned = summarizeGitCommandOutput(output);
+  const classification = classifyGitPushFailure(output);
+  return `${prefix}: ${classification.summary} ${cleaned}`.trim();
+}
+
+function classifyGitPushFailure(output: string): { kind: string; summary: string } {
+  const text = output.toLowerCase();
+
+  if (
+    text.includes("authentication failed") ||
+    text.includes("permission denied") ||
+    text.includes("could not read username") ||
+    text.includes("repository not found") ||
+    text.includes("access denied")
+  ) {
+    return {
+      kind: "Authentication",
+      summary: "authentication or repository access was rejected."
+    };
+  }
+
+  if (
+    text.includes("non-fast-forward") ||
+    text.includes("fetch first") ||
+    text.includes("failed to push some refs") && text.includes("rejected")
+  ) {
+    return {
+      kind: "NonFastForward",
+      summary: "remote has commits that are not present locally; update before pushing."
+    };
+  }
+
+  if (
+    text.includes("protected branch") ||
+    text.includes("branch is protected") ||
+    text.includes("cannot force-push") ||
+    text.includes("pre-receive hook declined") ||
+    text.includes("protected branch hook declined")
+  ) {
+    return {
+      kind: "ProtectedBranch",
+      summary: "remote policy rejected the branch update."
+    };
+  }
+
+  if (
+    text.includes("could not resolve host") ||
+    text.includes("failed to connect") ||
+    text.includes("network is unreachable") ||
+    text.includes("operation timed out") ||
+    text.includes("connection timed out") ||
+    text.includes("couldn't connect")
+  ) {
+    return {
+      kind: "Network",
+      summary: "network connection to the remote failed."
+    };
+  }
+
+  if (text.includes("remote rejected") || text.includes("[remote rejected]")) {
+    return {
+      kind: "RemoteRejected",
+      summary: "remote rejected the push."
+    };
+  }
+
+  return {
+    kind: "Unknown",
+    summary: "git remote operation failed."
+  };
 }
 
 async function getGitPullRequestPreview(rawTaskID: string | null): Promise<GitPullRequestPreview> {

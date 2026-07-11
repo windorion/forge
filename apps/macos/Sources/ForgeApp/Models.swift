@@ -345,6 +345,7 @@ struct GitPushPreview: Codable, Hashable {
     var generatedAt: String
     var readiness: String
     var summary: String
+    var preflight: GitPushPreflight?
     var expectedHead: String?
     var branch: String?
     var upstream: String?
@@ -359,6 +360,22 @@ struct GitPushPreview: Codable, Hashable {
     var riskNotes: [String]
     var blockers: [String]
     var operationBoundary: String
+}
+
+struct GitPushPreflight: Codable, Hashable {
+    var branchStatus: String
+    var branchSummary: String
+    var upstreamStatus: String
+    var upstreamSummary: String
+    var remoteStatus: String
+    var remoteSummary: String
+    var commitStatus: String
+    var commitSummary: String
+    var worktreeStatus: String
+    var worktreeSummary: String
+    var actionReadiness: String
+    var actionReadinessSummary: String
+    var failureRiskSummary: String
 }
 
 struct GitPushRequest: Codable, Hashable {
@@ -438,6 +455,7 @@ struct GitBranchPublishPreview: Codable, Hashable {
     var generatedAt: String
     var readiness: String
     var summary: String
+    var preflight: GitBranchPublishPreflight?
     var expectedHead: String?
     var branch: String?
     var baseBranch: String
@@ -451,6 +469,22 @@ struct GitBranchPublishPreview: Codable, Hashable {
     var riskNotes: [String]
     var blockers: [String]
     var operationBoundary: String
+}
+
+struct GitBranchPublishPreflight: Codable, Hashable {
+    var branchStatus: String
+    var branchSummary: String
+    var remoteStatus: String
+    var remoteSummary: String
+    var baseStatus: String
+    var baseSummary: String
+    var commitStatus: String
+    var commitSummary: String
+    var worktreeStatus: String
+    var worktreeSummary: String
+    var actionReadiness: String
+    var actionReadinessSummary: String
+    var failureRiskSummary: String
 }
 
 struct GitBranchPublishRequest: Codable, Hashable {

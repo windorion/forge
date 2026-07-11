@@ -122,12 +122,20 @@ Before push, Forge should show:
 Current implementation:
 
 - Forge can prepare a push preview with branch, upstream, ahead/behind counts,
-  commits to push, uncommitted local changes, blockers, and risk notes.
+  commits to push, uncommitted local changes, structured preflight metadata,
+  blockers, and risk notes.
+- The push preflight summarizes branch readiness, upstream ahead/behind state,
+  configured remote availability, commit-range scope, dirty-worktree state,
+  action readiness, and common failure categories Forge will classify after an
+  approved push attempt.
 - Forge can push the current branch to its configured upstream after explicit
   confirmation in the macOS Review panel.
 - The runtime rechecks expected HEAD, branch, and upstream from the reviewed
   preview, blocks detached/no-upstream/behind/no-ahead/unmerged states, and
   runs a non-force `git push <remote> HEAD:<remote-branch>`.
+- If git rejects the push, Forge classifies common authentication,
+  non-fast-forward, protected-branch, network, remote-rejected, and unknown
+  failures before surfacing the command output.
 - Forge does not force push, merge, reset, delete branches, or create a PR.
 
 ## Branch Workflow
@@ -181,7 +189,11 @@ Current implementation:
 
 - Forge can prepare a branch publish preview with configured remote detection,
   default-base comparison, commits to publish, uncommitted local changes,
-  blockers, and risk notes.
+  structured preflight metadata, blockers, and risk notes.
+- The branch publish preflight summarizes branch readiness, remote and remote
+  branch availability, default-base comparison, commit-range scope,
+  dirty-worktree state, action readiness, and common failure categories Forge
+  will classify after an approved first-push attempt.
 - Forge can publish the current local branch and set upstream after explicit
   confirmation in the macOS Review panel.
 - The runtime rechecks expected HEAD, current branch, remote, and remote branch
@@ -190,6 +202,9 @@ Current implementation:
   non-force `git push --set-upstream <remote> HEAD:<branch>`.
 - Publishing to a differently named remote branch is intentionally blocked in
   the first implementation.
+- If git rejects the publish, Forge classifies common authentication,
+  non-fast-forward, protected-branch, network, remote-rejected, and unknown
+  failures before surfacing the command output.
 - Forge does not force push, merge, reset, delete branches, or create a PR from
   the branch publish action.
 

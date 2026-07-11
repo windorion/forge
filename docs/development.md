@@ -155,12 +155,15 @@ files, blocks dirty switches, and does not push or publish a PR.
 The same section can prepare a Branch Publish Review through
 `GET /git/branch-publish-preview`, showing the current branch, configured
 remote, remote branch, default base branch, commits to publish, local changes
-that will remain local, blockers, and risk notes. From that reviewed card, the
-user can explicitly publish the current branch and set upstream through
-`POST /git/branch-publish`; the runtime rechecks expected HEAD, branch,
-remote, and remote branch, blocks detached/default-base/already-upstream/
-no-commit/unmerged/remote-collision states, and performs a non-force
-`git push --set-upstream`. It does not create a PR.
+that will remain local, structured preflight metadata, blockers, and risk
+notes. The preflight card summarizes branch/remote/base/commit/worktree/action
+readiness and common remote failure categories Forge will classify after an
+approved publish attempt. From that reviewed card, the user can explicitly
+publish the current branch and set upstream through `POST /git/branch-publish`;
+the runtime rechecks expected HEAD, branch, remote, and remote branch, blocks
+detached/default-base/already-upstream/no-commit/unmerged/remote-collision
+states, performs a non-force `git push --set-upstream`, and classifies failed
+git push output before surfacing it. It does not create a PR.
 The same section can prepare a read-only Commit Review through
 `GET /git/commit-preview?taskID=<task-id>`, showing a
 suggested commit message, included files, validation suggestions, preflight
@@ -175,11 +178,15 @@ reviewed selection, preflights git identity, stages the selected paths,
 creates the local commit, records a task event when linked, and still does not
 push. A separate Push Review through `GET /git/push-preview` shows
 branch, upstream, ahead/behind counts, commits to push, uncommitted local
-changes, blockers, and risk notes. From that reviewed card, the user can
-explicitly push the current branch through `POST /git/push`; the runtime
-rechecks expected HEAD, branch, and upstream, blocks detached/no-upstream/
-behind/no-ahead/unmerged states, and performs a non-force push to the
-configured upstream. It does not create a PR. A read-only PR Handoff through
+changes, structured preflight metadata, blockers, and risk notes. The
+preflight card summarizes branch/upstream/remote/commit/worktree/action
+readiness and common remote failure categories Forge will classify after an
+approved push attempt. From that reviewed card, the user can explicitly push
+the current branch through `POST /git/push`; the runtime rechecks expected
+HEAD, branch, and upstream, blocks detached/no-upstream/behind/no-ahead/
+unmerged states, performs a non-force push to the configured upstream, and
+classifies failed git push output before surfacing it. It does not create a
+PR. A read-only PR Handoff through
 `GET /git/pr-preview` shows the default base branch, current head branch,
 upstream, suggested branch name, PR title, draft body, test plan, commits,
 changed files, structured preflight metadata, blockers, and risk notes. The

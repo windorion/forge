@@ -34,7 +34,7 @@ auditable boundaries.
 
 ## Current Status
 
-Last updated: 2026-07-10
+Last updated: 2026-07-11
 
 Implemented today:
 
@@ -67,12 +67,15 @@ Implemented today:
   checks, default-branch target blockers, target branch validation, and
   dirty-worktree blockers for switching existing branches.
 - Branch publish preview plus explicit first-push/upstream setup for task
-  branches, guarded by expected-HEAD/branch/remote checks, remote-branch
-  collision checks, and a no-force-push/no-PR boundary.
+  branches with structured preflight metadata, guarded by
+  expected-HEAD/branch/remote checks, remote-branch collision checks,
+  classified push failure messages, and a no-force-push/no-PR boundary.
 - Explicit local git commit action from the commit review card, guarded by a
   confirmation dialog, expected-HEAD check, path validation, and no push.
-- Push preparation preview and explicit current-branch push action guarded by
-  expected-HEAD/branch/upstream checks, blockers, and a no-force-push boundary.
+- Push preparation preview and explicit current-branch push action with
+  structured preflight metadata, guarded by expected-HEAD/branch/upstream
+  checks, blockers, classified push failure messages, and a no-force-push
+  boundary.
 - Read-only PR handoff preview with base/head branch awareness, suggested
   branch name, PR title/body, test plan, commits, changed files, structured
   preflight metadata, blockers, risk notes, and a no-publication boundary.

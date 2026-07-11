@@ -3,7 +3,7 @@
 Document role: record the current product state, objective completion estimate,
 major gaps, and what "finished" means at each product horizon.
 
-Last updated: 2026-07-10
+Last updated: 2026-07-11
 
 ## One-Line Status
 
@@ -69,10 +69,14 @@ Implemented:
 - Branch publish preview and explicit first-push/upstream setup from the macOS
   Review UI. The runtime chooses or validates a configured remote, compares
   current branch work against the default base branch, lists commits to
-  publish, blocks default-base/detached/already-upstream/no-commit/unmerged
-  states, blocks remote branch collisions, rechecks expected HEAD, branch,
-  remote, and remote branch values, then runs a non-force
-  `git push --set-upstream <remote> HEAD:<branch>` when approved.
+  publish, exposes structured preflight metadata for branch/remote/base/
+  commit/worktree/action readiness, blocks default-base/detached/
+  already-upstream/no-commit/unmerged states, blocks remote branch collisions,
+  rechecks expected HEAD, branch, remote, and remote branch values, then runs a
+  non-force `git push --set-upstream <remote> HEAD:<branch>` when approved.
+  Failed git pushes are classified into common auth, non-fast-forward,
+  protected-branch, network, remote-rejected, or unknown failure summaries
+  before being shown in the app.
 - Explicit local git commit action from the macOS Review UI. The runtime
   requires a fresh expected-HEAD value, explicit confirmation, selected paths
   from the current working tree, no unmerged files, and no staged files outside
@@ -81,8 +85,10 @@ Implemented:
 - Push preparation preview and explicit current-branch push action from the
   macOS Review UI. The runtime requires expected HEAD, branch, and upstream
   values to match the reviewed preview, blocks detached/no-upstream/behind/no
-  ahead/unmerged states, pushes with no force, and records a linked task event
-  when possible.
+  ahead/unmerged states, exposes structured preflight metadata for branch/
+  upstream/remote/commit/worktree/action readiness, pushes with no force,
+  classifies failed git push output into common failure categories, and records
+  a linked task event when possible.
 - Read-only PR handoff preview from the macOS Review UI. The runtime resolves
   a default base branch when possible, compares current branch work against
   that base, suggests a branch name, PR title, draft body, test plan, commits,
@@ -159,11 +165,9 @@ Remaining V0 gaps:
 - polish git/diff review navigation for larger multi-file changes and packaged
   app workflows
 - polish local commit review for signing and project-specific hook edge cases
-- harden push review for remote auth failures, non-fast-forward rejections,
-  branch protection, and disconnected networks
-- harden branch publish/upstream setup for remote auth failures, protected
-  branch names, stale remote refs, fork remotes, and isolated success-path
-  tests
+- add live remote fixtures for push/branch-publish auth failures,
+  non-fast-forward rejections, branch protection, disconnected networks, and
+  fork remotes
 - add approved PR publication/GitHub integration on top of the read-only PR
   handoff preflight
 - optional live-provider smoke with a user-supplied OpenAI key outside

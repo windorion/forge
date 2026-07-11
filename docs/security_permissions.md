@@ -38,7 +38,7 @@ Examples:
   readiness, blockers, and risk notes
 - prepare a read-only branch publish review artifact from current branch
   status, configured remotes, default-base comparison, commit summaries,
-  uncommitted local changes, blockers, and risk notes
+  uncommitted local changes, preflight readiness, blockers, and risk notes
 - prepare a read-only PR handoff artifact from branch status, default-base
   detection, commit summaries, changed files, optional task context, and latest
   task validation state plus preflight evidence
@@ -59,10 +59,12 @@ only summarizes target branch validation, default-base target blocking,
 create/switch mode, dirty state, local/remote branch state, preflight
 readiness, blockers, and risk notes. The
 branch-publish-preview endpoint only summarizes current branch, remote, remote
-branch, default-base comparison, commits to publish, local changes, blockers,
-and risk notes. These endpoints must not stage, unstage, commit, checkout,
-reset, clean, push, create pull requests, call external hosting APIs, or
-otherwise mutate the repository.
+branch, default-base comparison, commits to publish, local changes, preflight
+readiness, blockers, and risk notes. The push-preview endpoint only summarizes
+branch/upstream/remote/commit/worktree preflight readiness, blockers, and risk
+notes. These endpoints must not stage, unstage, commit, checkout, reset,
+clean, push, create pull requests, call external hosting APIs, or otherwise
+mutate the repository.
 
 ### Medium Risk
 
@@ -126,15 +128,19 @@ current branch, remote, and remote branch from the branch publish preview,
 blocks detached/default-base/already-upstream/no-commit/unmerged states,
 blocks remote branch collisions, and uses a non-force
 `git push --set-upstream <remote> HEAD:<branch>` to publish the current branch
-and set upstream. It does not force push, merge, reset, delete branches, or
-create a PR.
+and set upstream. If the git push fails, Forge classifies common auth,
+non-fast-forward, protected-branch, network, remote-rejected, and unknown
+failures before surfacing bounded output. It does not force push, merge,
+reset, delete branches, or create a PR.
 
 Current push implementation is also high risk and requires explicit user
 confirmation from the macOS Review panel. The runtime rechecks expected HEAD,
 branch, and upstream from the push preview, blocks detached/no-upstream/
 behind/no-ahead/unmerged states, and uses a non-force push to the configured
-upstream branch. It does not force push, merge, reset, delete branches, or
-create a PR.
+upstream branch. If the git push fails, Forge classifies common auth,
+non-fast-forward, protected-branch, network, remote-rejected, and unknown
+failures before surfacing bounded output. It does not force push, merge,
+reset, delete branches, or create a PR.
 
 ## Approval Dialogs
 

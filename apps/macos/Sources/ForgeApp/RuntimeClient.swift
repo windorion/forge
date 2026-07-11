@@ -6,14 +6,14 @@ struct RuntimeClient {
     func health() async throws -> RuntimeHealth {
         let url = baseURL.appending(path: "health")
         let (data, response) = try await URLSession.shared.data(from: url)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(RuntimeHealth.self, from: data)
     }
 
     func listTasks() async throws -> [ForgeTask] {
         let url = baseURL.appending(path: "tasks")
         let (data, response) = try await URLSession.shared.data(from: url)
-        try validate(response)
+        try validate(response, data: data)
         let envelope = try JSONDecoder().decode(TaskListEnvelope.self, from: data)
         return envelope.tasks
     }
@@ -21,7 +21,7 @@ struct RuntimeClient {
     func listValidationPresets() async throws -> ValidationPresetListEnvelope {
         let url = baseURL.appending(path: "validation-presets")
         let (data, response) = try await URLSession.shared.data(from: url)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(ValidationPresetListEnvelope.self, from: data)
     }
 
@@ -30,7 +30,7 @@ struct RuntimeClient {
             .appending(path: "git")
             .appending(path: "status")
         let (data, response) = try await URLSession.shared.data(from: url)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(GitStatusSnapshot.self, from: data)
     }
 
@@ -48,7 +48,7 @@ struct RuntimeClient {
         }
 
         let (data, response) = try await URLSession.shared.data(from: requestURL)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(GitFileDiff.self, from: data)
     }
 
@@ -68,7 +68,7 @@ struct RuntimeClient {
         }
 
         let (data, response) = try await URLSession.shared.data(from: requestURL)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(GitCommitPreview.self, from: data)
     }
 
@@ -82,7 +82,7 @@ struct RuntimeClient {
         request.httpBody = try JSONEncoder().encode(requestBody)
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(GitCreateCommitResult.self, from: data)
     }
 
@@ -107,7 +107,7 @@ struct RuntimeClient {
         }
 
         let (data, response) = try await URLSession.shared.data(from: requestURL)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(GitBranchPreview.self, from: data)
     }
 
@@ -121,7 +121,7 @@ struct RuntimeClient {
         request.httpBody = try JSONEncoder().encode(requestBody)
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(GitBranchResult.self, from: data)
     }
 
@@ -153,7 +153,7 @@ struct RuntimeClient {
         }
 
         let (data, response) = try await URLSession.shared.data(from: requestURL)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(GitBranchPublishPreview.self, from: data)
     }
 
@@ -167,7 +167,7 @@ struct RuntimeClient {
         request.httpBody = try JSONEncoder().encode(requestBody)
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(GitBranchPublishResult.self, from: data)
     }
 
@@ -187,7 +187,7 @@ struct RuntimeClient {
         }
 
         let (data, response) = try await URLSession.shared.data(from: requestURL)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(GitPushPreview.self, from: data)
     }
 
@@ -201,7 +201,7 @@ struct RuntimeClient {
         request.httpBody = try JSONEncoder().encode(requestBody)
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(GitPushResult.self, from: data)
     }
 
@@ -221,7 +221,7 @@ struct RuntimeClient {
         }
 
         let (data, response) = try await URLSession.shared.data(from: requestURL)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(GitPullRequestPreview.self, from: data)
     }
 
@@ -230,7 +230,7 @@ struct RuntimeClient {
             .appending(path: "settings")
             .appending(path: "model-provider")
         let (data, response) = try await URLSession.shared.data(from: url)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(ModelProviderSettingsEnvelope.self, from: data)
     }
 
@@ -244,7 +244,7 @@ struct RuntimeClient {
         request.httpBody = try JSONEncoder().encode(update)
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(ModelProviderSettingsEnvelope.self, from: data)
     }
 
@@ -254,7 +254,7 @@ struct RuntimeClient {
             .appending(path: taskID)
             .appending(path: "validation-permissions")
         let (data, response) = try await URLSession.shared.data(from: url)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(ValidationPermissionEnvelope.self, from: data)
     }
 
@@ -266,7 +266,7 @@ struct RuntimeClient {
         request.httpBody = try JSONEncoder().encode(CreateTaskRequest(title: title, objective: objective))
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
 
@@ -281,7 +281,7 @@ struct RuntimeClient {
         request.httpBody = try JSONEncoder().encode(CreateTaskMessageRequest(content: content))
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
 
@@ -296,7 +296,7 @@ struct RuntimeClient {
         request.httpBody = Data("{}".utf8)
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
 
@@ -311,7 +311,7 @@ struct RuntimeClient {
         request.httpBody = try JSONEncoder().encode(ApprovePlanRequest(note: note))
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
 
@@ -326,7 +326,7 @@ struct RuntimeClient {
         request.httpBody = Data("{}".utf8)
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
 
@@ -341,7 +341,7 @@ struct RuntimeClient {
         request.httpBody = Data("{}".utf8)
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
 
@@ -356,7 +356,7 @@ struct RuntimeClient {
         request.httpBody = Data("{}".utf8)
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
 
@@ -371,7 +371,7 @@ struct RuntimeClient {
         request.httpBody = Data("{}".utf8)
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
 
@@ -386,7 +386,7 @@ struct RuntimeClient {
         request.httpBody = try JSONEncoder().encode(EditProposalDecisionRequest(note: note))
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
 
@@ -401,7 +401,7 @@ struct RuntimeClient {
         request.httpBody = try JSONEncoder().encode(EditProposalDecisionRequest(note: note))
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
 
@@ -420,7 +420,7 @@ struct RuntimeClient {
         request.httpBody = try JSONEncoder().encode(ApproveValidationPresetRequest(presetID: presetID, note: note))
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
 
@@ -435,7 +435,7 @@ struct RuntimeClient {
         request.httpBody = try JSONEncoder().encode(RunValidationRequest(presetID: presetID))
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        try validate(response)
+        try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
 
@@ -475,19 +475,36 @@ struct RuntimeClient {
         }
     }
 
-    private func validate(_ response: URLResponse) throws {
+    private func validate(_ response: URLResponse, data: Data? = nil) throws {
         guard let http = response as? HTTPURLResponse else {
             throw RuntimeClientError.invalidResponse
         }
 
         guard (200..<300).contains(http.statusCode) else {
-            throw RuntimeClientError.httpStatus(http.statusCode)
+            throw RuntimeClientError.httpStatus(http.statusCode, responseMessage(from: data))
         }
+    }
+
+    private func responseMessage(from data: Data?) -> String? {
+        guard let data, !data.isEmpty else {
+            return nil
+        }
+
+        if let envelope = try? JSONDecoder().decode(RuntimeErrorEnvelope.self, from: data) {
+            return envelope.error.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        return String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
 private struct TaskListEnvelope: Decodable {
     var tasks: [ForgeTask]
+}
+
+private struct RuntimeErrorEnvelope: Decodable {
+    var error: String
 }
 
 struct ValidationPresetListEnvelope: Decodable {
@@ -497,13 +514,17 @@ struct ValidationPresetListEnvelope: Decodable {
 
 enum RuntimeClientError: LocalizedError {
     case invalidResponse
-    case httpStatus(Int)
+    case httpStatus(Int, String?)
 
     var errorDescription: String? {
         switch self {
         case .invalidResponse:
             return "Runtime returned an invalid response."
-        case .httpStatus(let status):
+        case .httpStatus(let status, let message):
+            if let message, !message.isEmpty {
+                return "Runtime returned HTTP \(status): \(message)"
+            }
+
             return "Runtime returned HTTP \(status)."
         }
     }

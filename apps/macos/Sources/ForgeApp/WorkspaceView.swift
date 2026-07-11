@@ -2587,6 +2587,10 @@ private struct GitBranchPublishPreviewCard: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 
+                if let preflight = preview.preflight {
+                    BranchPublishPreflightCard(preflight: preflight)
+                }
+
                 if let relatedTask = preview.relatedTask {
                     Label("\(relatedTask.title) / \(relatedTask.status) / \(relatedTask.currentPhase)", systemImage: "target")
                         .font(.caption)
@@ -2744,6 +2748,41 @@ private struct GitBranchPublishPreviewCard: View {
         default:
             return .orange
         }
+    }
+}
+
+private struct BranchPublishPreflightCard: View {
+    var preflight: GitBranchPublishPreflight
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Label("Preflight", systemImage: "checklist")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            Text(preflight.actionReadinessSummary)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+
+            VStack(alignment: .leading, spacing: 5) {
+                GitTransportPreflightStatusRow(title: "Branch", status: preflight.branchStatus, summary: preflight.branchSummary)
+                GitTransportPreflightStatusRow(title: "Remote", status: preflight.remoteStatus, summary: preflight.remoteSummary)
+                GitTransportPreflightStatusRow(title: "Base", status: preflight.baseStatus, summary: preflight.baseSummary)
+                GitTransportPreflightStatusRow(title: "Commits", status: preflight.commitStatus, summary: preflight.commitSummary)
+                GitTransportPreflightStatusRow(title: "Worktree", status: preflight.worktreeStatus, summary: preflight.worktreeSummary)
+                GitTransportPreflightStatusRow(title: "Action", status: preflight.actionReadiness, summary: preflight.actionReadinessSummary)
+            }
+
+            Label(preflight.failureRiskSummary, systemImage: "exclamationmark.shield")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .textSelection(.enabled)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 }
 
@@ -2915,6 +2954,10 @@ private struct GitPushPreviewCard: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 
+                if let preflight = preview.preflight {
+                    PushPreflightCard(preflight: preflight)
+                }
+
                 if !preview.blockers.isEmpty {
                     CommitPreviewNoteList(
                         title: "Blockers",
@@ -3029,6 +3072,91 @@ private struct GitPushPreviewCard: View {
         case "Ready":
             return .green
         case "Blocked":
+            return .red
+        default:
+            return .orange
+        }
+    }
+}
+
+private struct PushPreflightCard: View {
+    var preflight: GitPushPreflight
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Label("Preflight", systemImage: "checklist")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            Text(preflight.actionReadinessSummary)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+
+            VStack(alignment: .leading, spacing: 5) {
+                GitTransportPreflightStatusRow(title: "Branch", status: preflight.branchStatus, summary: preflight.branchSummary)
+                GitTransportPreflightStatusRow(title: "Upstream", status: preflight.upstreamStatus, summary: preflight.upstreamSummary)
+                GitTransportPreflightStatusRow(title: "Remote", status: preflight.remoteStatus, summary: preflight.remoteSummary)
+                GitTransportPreflightStatusRow(title: "Commits", status: preflight.commitStatus, summary: preflight.commitSummary)
+                GitTransportPreflightStatusRow(title: "Worktree", status: preflight.worktreeStatus, summary: preflight.worktreeSummary)
+                GitTransportPreflightStatusRow(title: "Action", status: preflight.actionReadiness, summary: preflight.actionReadinessSummary)
+            }
+
+            Label(preflight.failureRiskSummary, systemImage: "exclamationmark.shield")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .textSelection(.enabled)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+private struct GitTransportPreflightStatusRow: View {
+    var title: String
+    var status: String
+    var summary: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Label(status, systemImage: statusImage(for: status))
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(statusColor(for: status))
+                .frame(width: 112, alignment: .leading)
+
+            Text(title)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 66, alignment: .leading)
+
+            Text(summary)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .textSelection(.enabled)
+
+            Spacer(minLength: 4)
+        }
+    }
+
+    private func statusImage(for status: String) -> String {
+        switch status {
+        case "Ready", "Resolved", "Clean":
+            return "checkmark.circle"
+        case "Missing", "Unknown", "Detached", "DefaultBranch", "AlreadyTracking", "RemoteCollision", "Empty", "Behind", "NoAhead", "Blocked":
+            return "xmark.octagon"
+        default:
+            return "exclamationmark.triangle"
+        }
+    }
+
+    private func statusColor(for status: String) -> Color {
+        switch status {
+        case "Ready", "Resolved", "Clean":
+            return .green
+        case "Missing", "Unknown", "Detached", "DefaultBranch", "AlreadyTracking", "RemoteCollision", "Empty", "Behind", "NoAhead", "Blocked":
             return .red
         default:
             return .orange

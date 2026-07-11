@@ -439,6 +439,7 @@ export interface GitPushPreview {
   generatedAt: string;
   readiness: "Ready" | "NeedsReview" | "Blocked";
   summary: string;
+  preflight?: GitPushPreflight;
   expectedHead?: string;
   branch?: string;
   upstream?: string;
@@ -453,6 +454,22 @@ export interface GitPushPreview {
   riskNotes: string[];
   blockers: string[];
   operationBoundary: string;
+}
+
+export interface GitPushPreflight {
+  branchStatus: "Ready" | "Detached" | "Missing";
+  branchSummary: string;
+  upstreamStatus: "Ready" | "Missing" | "Unpushed" | "Behind" | "NoAhead";
+  upstreamSummary: string;
+  remoteStatus: "Ready" | "Missing" | "Unknown";
+  remoteSummary: string;
+  commitStatus: "Ready" | "Empty" | "Truncated";
+  commitSummary: string;
+  worktreeStatus: "Clean" | "Dirty";
+  worktreeSummary: string;
+  actionReadiness: "Ready" | "NeedsReview" | "Blocked";
+  actionReadinessSummary: string;
+  failureRiskSummary: string;
 }
 
 export interface GitPushRequest {
@@ -532,6 +549,7 @@ export interface GitBranchPublishPreview {
   generatedAt: string;
   readiness: "Ready" | "NeedsReview" | "Blocked";
   summary: string;
+  preflight?: GitBranchPublishPreflight;
   expectedHead?: string;
   branch?: string;
   baseBranch: string;
@@ -545,6 +563,22 @@ export interface GitBranchPublishPreview {
   riskNotes: string[];
   blockers: string[];
   operationBoundary: string;
+}
+
+export interface GitBranchPublishPreflight {
+  branchStatus: "Ready" | "Detached" | "DefaultBranch" | "AlreadyTracking" | "Missing";
+  branchSummary: string;
+  remoteStatus: "Ready" | "Missing" | "Unknown" | "RemoteCollision";
+  remoteSummary: string;
+  baseStatus: "Resolved" | "Missing";
+  baseSummary: string;
+  commitStatus: "Ready" | "Empty" | "Truncated";
+  commitSummary: string;
+  worktreeStatus: "Clean" | "Dirty";
+  worktreeSummary: string;
+  actionReadiness: "Ready" | "NeedsReview" | "Blocked";
+  actionReadinessSummary: string;
+  failureRiskSummary: string;
 }
 
 export interface GitBranchPublishRequest {

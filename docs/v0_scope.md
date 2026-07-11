@@ -155,7 +155,8 @@ V0 is complete when:
   blocks unsafe branch changes.
 - The app can prepare a branch publish review, then explicitly publish the
   current local branch and set upstream after confirmation. The runtime
-  rechecks HEAD/branch/remote/remote branch, blocks unsafe first-push states,
+  shows structured publish preflight, rechecks HEAD/branch/remote/remote
+  branch, blocks unsafe first-push states, classifies failed git push output,
   and does not force push or create a PR.
 - The app can prepare a read-only commit review artifact with suggested commit
   message, included files, validation suggestions, blockers, risk notes, and
@@ -165,7 +166,9 @@ V0 is complete when:
   safety blockers before staging and committing. It does not push.
 - The app can prepare a push review and explicitly push the current branch to
   its configured upstream after confirmation, while the runtime rechecks HEAD,
-  branch, upstream, and safety blockers. It does not force push or create a PR.
+  branch, upstream, and safety blockers. The runtime shows structured push
+  preflight, classifies failed git push output, and does not force push or
+  create a PR.
 - The app can prepare a read-only PR handoff preview with base/head branch
   awareness, suggested branch name, title, body, test plan, commits, changed
   files, structured preflight metadata, blockers, risk notes, and an explicit
