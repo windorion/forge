@@ -82,3 +82,15 @@ The first narrow proof should be:
 
 If this loop feels better than using chat, terminal, and git separately, Forge
 has a real product wedge.
+
+## 2026-07-11 Direction Correction
+
+The early runtime and review foundation is valuable, but the demo drifted too
+far toward workflow/status panels. The product should now optimize around the
+coding-agent session described in `design_handoff_forge/`: task composer, plan
+gate, live agent stream, code/test output, self-fix, and full diff review.
+
+The next work should make Forge feel credible next to Codex and Claude Code
+without copying their surfaces. The wedge is not "more admin around tasks"; it
+is a Mac-native, local-first place to supervise agent coding work and review
+what changed.

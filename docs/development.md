@@ -23,9 +23,30 @@ terms and repo-relative read paths or `ReadyForPlan` to stop. The runtime
 validates requests, executes only logged read-only tools, stops on repeated
 context or the round limit, and then sends compact context summaries into the
 plan revision call.
+After a plan is approved, the runtime now runs another bounded read-only
+execution-context pass before asking the provider for an execution proposal.
+The proposal stores the inspected context files and concise tool evidence so
+the app can show what informed the proposed next action.
 
 The runtime core has an automated smoke regression that exercises the main
 task lifecycle without using real project memory or provider settings.
+
+Product-direction note: this development slice proves the trust/runtime
+foundation. It does not yet represent the new Coding-Agent Demo V0. The next
+app/runtime work should make the local walkthrough look like a live coding
+agent session with source patches, streamed tests, self-fix, and full diff
+review.
+
+The macOS app now has a first-pass coding-agent session shell: a task queue,
+`1a`-style empty composer, live agent stream, plan progress strip,
+Log/Diff/Tests tabs, compact plan gate, and action rail. The runtime still
+needs real source patching and streamed command execution before the shell
+behaves like the finished V0.
+
+The shell also includes a first usable `10a`-style full-screen diff review
+surface. It opens from the Diff tab or review state card, shows a file tree,
+main diff pane, why-this-change reasoning, validation evidence, and
+apply/request-change actions wired to the existing proposal review gates.
 
 ## Run Runtime
 
@@ -51,6 +72,10 @@ By default, runtime task history is stored in:
 ```
 
 Use `FORGE_RUNTIME_DB_PATH` to point the runtime at a different SQLite file.
+Use `FORGE_REPO_ROOT` to point a packaged or separately installed runtime at
+the repository it should inspect. When omitted, the runtime keeps the
+development default of treating the runtime directory's parent as the repo
+root.
 
 The runtime uses a model-provider abstraction. The default provider is local
 and deterministic:
@@ -236,9 +261,11 @@ the task stops at the human review gate.
 
 When a task reaches `Human Review`, the Review panel enables `Approve Plan`.
 That action calls `POST /tasks/:taskID/approve-plan`, records approval history,
-targets the current plan revision when one exists, asks the model provider for
-an execution proposal, and moves the task into `Execution Preparation` without
-changing files.
+targets the current plan revision when one exists, runs bounded read-only
+repository tools for execution context, asks the model provider for an
+execution proposal, and moves the task into `Execution Preparation` without
+changing files. The proposal carries `contextFiles` and `toolEvidence` for the
+Review panel.
 
 After an execution proposal exists, the Review panel enables
 `Generate Edit Proposal`. That action calls
@@ -309,9 +336,11 @@ run button. The runtime provides the task-specific permission state through
 active provider status, editable provider settings, loaded workspace
 validation config path, and any config issues.
 
-## V0 Demo Script
+## Foundation Demo Script
 
-Use this path for a local V0 walkthrough:
+Use this path for a local foundation walkthrough. It verifies the current
+runtime, review, validation, and git preflight surfaces; it is not the new
+coding-agent V0 described in `docs/v0_scope.md`.
 
 1. Start the macOS app with `./script/build_and_run.sh`.
 2. Use the toolbar or Settings window to start/check the local runtime.
@@ -348,6 +377,7 @@ It covers:
 - message with repo-local file reference
 - generate plan revision
 - approve plan
+- bounded execution-context evidence before execution proposal generation
 - generate and validate edit proposal
 - apply restricted edit proposal
 - built-in post-apply validation
@@ -373,6 +403,24 @@ It covers:
 In sandboxed Codex sessions, the command may need approval because it listens
 on `127.0.0.1`.
 
+## Git Remote Fixtures
+
+```bash
+cd runtime
+npm run smoke:git-remote
+```
+
+This command builds the runtime, creates temporary local bare remotes and
+working clones, starts the real runtime HTTP server with `FORGE_REPO_ROOT`
+pointing at each fixture repo, and verifies:
+
+- stale remote/non-fast-forward push rejection after a reviewed push preview
+- branch-publish remote branch collision detection
+- branch-publish remote policy rejection through a pre-receive hook
+
+It does not require GitHub credentials or network access. Hosted-provider auth,
+fork, and branch-protection fixtures are still future work.
+
 ## Build Checks
 
 ```bash
@@ -380,6 +428,7 @@ swift build
 cd runtime && npm run check
 cd runtime && npm run build
 cd runtime && npm run smoke:core
+cd runtime && npm run smoke:git-remote
 ```
 
 ## Current Limitations
@@ -388,8 +437,8 @@ cd runtime && npm run smoke:core
   provider id, model name, base URL, timeout, max output tokens, and Keychain
   API key sync.
 - The OpenAI provider uses compact task/context summaries and Structured
-  Outputs. It can now run a bounded read/search context loop before plan
-  revisions, but tool use is still limited to pre-plan read-only context.
+  Outputs. It can now run bounded read/search context loops before plan
+  revisions and before execution proposals, but tool use is still read-only.
 - Edit proposal application is intentionally narrow: v0 supports append-text
   and exact replace-text operations on existing Markdown files in `README.md`
   or `docs/`, plus create-file operations for new `docs/*.md` files only.
@@ -410,10 +459,11 @@ cd runtime && npm run smoke:core
 - Git status and diff inspection are read-only review surfaces. The runtime
   blocks absolute paths, parent-directory traversal, and `.git`/`.forge`
   internals; diffs are bounded and large previews are truncated.
-- App-managed runtime start/stop is a development-lifecycle convenience. It
-  builds `runtime`, launches `node dist/server.js`, and can stop only the
-  process started by the app. External terminal-launched runtime processes are
-  detected through health checks but are not terminated by the app.
+- App-managed runtime start/stop is a lifecycle convenience. During
+  development it can build `runtime`; in an app bundle it can launch a
+  prebuilt bundled runtime resource and pass the resolved repository root via
+  `FORGE_REPO_ROOT`. External terminal-launched runtime processes are detected
+  through health checks but are not terminated by the app.
 - Post-apply validation defaults to built-in `forge:` checks. Medium-risk
   project validation commands are allowlisted runtime presets, run without a
   shell, and require explicit task-level approval before execution.
@@ -424,6 +474,6 @@ cd runtime && npm run smoke:core
 - Repository context is still a bounded v1 scanner, not a full repository
   index. It does not use Tree-sitter, symbols, embeddings, dependency graphs,
   or semantic search yet.
-- Agent Loop v0 is deterministic and local; it can inspect task-selected repo
-  context, but it still simulates planning and review before real model
-  execution exists.
+- Agent Loop v0 is still bounded and proposal-first. It now gathers read-only
+  context before planning and before execution proposals, but it does not run
+  autonomous write/command/git tools.

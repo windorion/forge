@@ -2522,3 +2522,172 @@ Next:
 - Commit the push/branch-publish preflight hardening.
 - Continue with live remote fixtures, packaged runtime path resolution, or
   git/diff review navigation polish.
+
+### 2026-07-11 08:18:27 CEST +0200
+
+Conversation summary:
+
+- User asked to do the next three workstreams: packaged runtime path
+  resolution, git remote fixtures, and agent capability progress.
+
+Done:
+
+- Separated runtime installation directory from repository root in the runtime
+  through `FORGE_REPO_ROOT`; health now reports runtime and repo paths.
+- Updated the macOS app-managed runtime launcher to resolve bundled runtime
+  resources separately from repo roots, pass `FORGE_REPO_ROOT`, show the repo
+  root in Settings/diagnostics, and skip npm build for bundled prebuilt
+  runtime resources.
+- Updated `script/build_and_run.sh` to build and copy the runtime `dist/`
+  output into `Contents/Resources/runtime`.
+- Added a bounded read-only execution-context pass after plan approval and
+  before execution proposal generation; proposals now retain context files and
+  tool evidence for the Review UI.
+- Added `npm run smoke:git-remote`, a local bare-remote fixture suite covering
+  stale remote/non-fast-forward push rejection, branch-publish remote branch
+  collision, and pre-receive remote policy rejection through real runtime HTTP
+  endpoints.
+- Hardened remote branch collision detection with `git ls-remote --heads`.
+- Fixed git push failure classification so pre-receive/protected-branch
+  rejections are classified before generic rejected push output.
+- Updated README, project status, TODO, development, runtime architecture,
+  model provider, git workflow, macOS native, V0 scope, and security docs.
+- Verified `npm run check`, `npm run smoke:git-remote`, `npm run smoke:core`,
+  and `swift build`.
+
+Not done:
+
+- Did not add hosted GitHub/GitLab auth, fork, disconnected-network, or real
+  branch-protection fixtures.
+- Did not implement autonomous write/command/git tool execution; the new
+  execution-context pass is intentionally read-only and still behind human
+  review.
+- Did not add a real workspace/repository picker for installed apps.
+
+Next:
+
+- Polish the macOS git/diff review panel for larger multi-file navigation.
+- Add hosted remote fixture coverage when a controlled remote account or
+  integration is available.
+- Continue alpha agent work with a richer patch engine and broader
+  tool-call-driven execution while preserving review gates.
+
+### 2026-07-11 23:03:01 CEST +0200
+
+Conversation summary:
+
+- User said the current demo feels strange and not like a real agent coding
+  application compared with Codex or Claude Code, then asked to update the
+  direction, documentation, roadmap, and account for the UI design handoff.
+
+Done:
+
+- Reviewed `design_handoff_forge/README.md` and the core screen definitions in
+  `Forge App States.dc.html`, especially `1a`, `1b`, `14a`, `32a`, `10a`,
+  `33a`, and `34a`.
+- Reset the roadmap around a coding-agent session: task composer, plan gate,
+  live read/edit/test/self-fix run, and full diff review.
+- Reframed the old V0 as a strong trust/runtime foundation, not the finished
+  product demo.
+- Updated completion estimates: trust/runtime foundation is around 80-85%,
+  while the new Coding-Agent Demo V0 is around 35-45%.
+- Rewrote `docs/roadmap.md`, `docs/workspace_design.md`, `docs/user_flows.md`,
+  and `docs/v0_scope.md` to follow the design handoff and prioritize the live
+  coding loop.
+- Updated `README.md`, `docs/project_status.md`, `docs/todo.md`,
+  `docs/product_vision.md`, `docs/product_positioning.md`,
+  `docs/founder_notes.md`, and `docs/development.md` so future work does not
+  continue optimizing the old dashboard-like demo.
+
+Not done:
+
+- Did not implement the redesigned UI yet.
+- Did not add the real source patch engine, streamed command runner, or
+  provider-driven write/run/repair loop yet.
+- Did not run code tests because this was a documentation and product-direction
+  update.
+
+Next:
+
+- Rebuild the macOS UI around `design_handoff_forge` screens `1a`, `1b`,
+  `14a`, and `10a`.
+- Add source-file patch proposal/apply/rollback support.
+- Add task-scoped command execution with streamed logs and connect failed
+  checks to the self-fix proposal loop.
+
+### 2026-07-11 23:10:32 CEST +0200
+
+Conversation summary:
+
+- User asked to continue the next step after the roadmap reset toward a real
+  coding-agent application.
+
+Done:
+
+- Reworked the macOS `WorkspaceView` into a first-pass coding-agent session
+  shell inspired by `design_handoff_forge`.
+- Added shared neo-brutalist visual tokens and button/card styles in the
+  workspace view layer.
+- Replaced the old selected-task detail shape with a task header, plan progress
+  strip, black live agent stream, Log/Diff/Tests tabs, compact plan gate, and
+  action rail.
+- Added a `1a`-style empty state asking "What should Forge build?" with
+  example task prompts.
+- Moved existing conversation, context, tools, events, git diff, validation,
+  and repair surfaces under the new coding-session shell without removing the
+  existing review/runtime actions.
+- Updated README, project status, TODO, V0 scope, and development docs to
+  record the first-pass UI shell and shift the next implementation target.
+- Verified `swift build` and `git diff --check`.
+
+Not done:
+
+- Did not implement the full `10a` full-screen diff review yet.
+- Did not add source-code patch apply/rollback beyond the existing restricted
+  Markdown proposal path.
+- Did not add streamed task-scoped command execution yet.
+
+Next:
+
+- Implement the `10a` full-screen diff review surface from the new session
+  shell.
+- Add source-file patch proposal/apply/rollback support.
+- Add streamed task-scoped command execution and wire failures into the
+  self-fix proposal loop.
+
+### 2026-07-11 23:21:51 CEST +0200
+
+Conversation summary:
+
+- User asked to continue the next step after the first-pass coding-agent
+  session shell landed.
+
+Done:
+
+- Implemented a first usable `10a`-style full-screen diff review surface in
+  the macOS app.
+- Added a sheet launched from the Diff tab and review state card.
+- Added a changed-file tree that merges git status, task changed files, and
+  edit proposal file changes.
+- Added a main diff pane using the existing bounded runtime git diff preview
+  and a unified/split mode control.
+- Added a right-side review pane with why-this-change reasoning, validation
+  evidence, per-file review affordance, and proposal-level apply/request-change
+  actions wired to existing review gates.
+- Updated README, project status, TODO, V0 scope, and development docs to mark
+  the first usable full-screen diff review as built.
+- Verified `swift build` and `git diff --check`.
+
+Not done:
+
+- Did not add durable file-level approval state yet; the backend still applies
+  or rejects the proposal as a whole.
+- Did not add true source-code patch apply/rollback beyond the existing
+  restricted Markdown path.
+- Did not add streamed task-scoped command execution yet.
+
+Next:
+
+- Add source-file patch proposal/apply/rollback support.
+- Add task-scoped command execution with streamed logs.
+- Connect failed command output into the self-fix proposal loop.

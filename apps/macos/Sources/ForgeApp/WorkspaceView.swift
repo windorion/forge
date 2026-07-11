@@ -1,17 +1,109 @@
 import SwiftUI
 
+private enum ForgeDesign {
+    static let paper = Color(red: 244 / 255, green: 244 / 255, blue: 241 / 255)
+    static let ink = Color(red: 10 / 255, green: 10 / 255, blue: 10 / 255)
+    static let muted = Color(red: 106 / 255, green: 106 / 255, blue: 100 / 255)
+    static let border = Color(red: 10 / 255, green: 10 / 255, blue: 10 / 255)
+    static let divider = Color(red: 226 / 255, green: 225 / 255, blue: 220 / 255)
+    static let accent = Color(red: 166 / 255, green: 116 / 255, blue: 255 / 255)
+    static let warning = Color(red: 254 / 255, green: 188 / 255, blue: 46 / 255)
+    static let success = Color(red: 40 / 255, green: 200 / 255, blue: 64 / 255)
+    static let danger = Color(red: 192 / 255, green: 57 / 255, blue: 43 / 255)
+
+    static var mono: Font {
+        .system(.caption, design: .monospaced)
+    }
+}
+
+private extension View {
+    func forgeCard(shadow: Bool = true) -> some View {
+        self
+            .background(Color.white)
+            .overlay(Rectangle().stroke(ForgeDesign.border, lineWidth: 1.5))
+            .shadow(color: shadow ? ForgeDesign.ink : .clear, radius: 0, x: 4, y: 4)
+    }
+
+    func forgeTerminal() -> some View {
+        self
+            .background(ForgeDesign.ink)
+            .overlay(Rectangle().stroke(ForgeDesign.border, lineWidth: 1.5))
+    }
+}
+
+private struct ForgePrimaryButtonStyle: ButtonStyle {
+    var fill: Color = ForgeDesign.ink
+    var foreground: Color = ForgeDesign.paper
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(.caption, design: .monospaced).weight(.bold))
+            .textCase(.uppercase)
+            .foregroundStyle(foreground)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(fill)
+            .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+            .shadow(color: ForgeDesign.ink, radius: 0, x: configuration.isPressed ? 1 : 3, y: configuration.isPressed ? 1 : 3)
+            .offset(x: configuration.isPressed ? 2 : 0, y: configuration.isPressed ? 2 : 0)
+    }
+}
+
+private struct ForgeSecondaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(.caption, design: .monospaced).weight(.bold))
+            .textCase(.uppercase)
+            .foregroundStyle(ForgeDesign.ink)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(Color.white)
+            .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+            .offset(x: configuration.isPressed ? 1 : 0, y: configuration.isPressed ? 1 : 0)
+    }
+}
+
+private enum SessionTab: String, CaseIterable, Identifiable {
+    case log = "LOG"
+    case diff = "DIFF"
+    case tests = "TESTS"
+
+    var id: String { rawValue }
+}
+
+private enum DiffReviewMode: String, CaseIterable, Identifiable {
+    case unified = "UNIFIED"
+    case split = "SPLIT"
+
+    var id: String { rawValue }
+}
+
+private struct DiffReviewFile: Identifiable, Hashable {
+    var id: String { path }
+    var path: String
+    var status: String
+    var detail: String
+    var additions: Int?
+    var deletions: Int?
+    var rationale: String?
+    var validationStatus: String?
+}
+
 struct WorkspaceView: View {
     @EnvironmentObject private var workspace: WorkspaceModel
 
     var body: some View {
         NavigationSplitView {
             SidebarView()
-                .navigationSplitViewColumnWidth(min: 240, ideal: 280)
+                .navigationSplitViewColumnWidth(min: 250, ideal: 300)
         } detail: {
-            if let task = workspace.selectedTask {
-                TaskWorkspaceView(task: task)
-            } else {
-                ContentUnavailableView("No Task Selected", systemImage: "tray")
+            ZStack {
+                ForgeDesign.paper.ignoresSafeArea()
+                if let task = workspace.selectedTask {
+                    TaskWorkspaceView(task: task)
+                } else {
+                    NewTaskEmptyState()
+                }
             }
         }
         .toolbar {
@@ -53,12 +145,17 @@ private struct SidebarView: View {
     @EnvironmentObject private var workspace: WorkspaceModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Forge")
-                    .font(.title2.weight(.semibold))
-                Text("Agent workspace")
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .lastTextBaseline) {
+                Text("FORGE")
+                    .font(.system(size: 22, weight: .black, design: .monospaced))
+                Spacer()
+                Text("AGENT")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(ForgeDesign.accent)
+                    .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
             }
             .padding(.horizontal, 14)
             .padding(.top, 16)
@@ -70,7 +167,7 @@ private struct SidebarView: View {
                 .padding(.horizontal, 14)
 
             List(selection: $workspace.selectedTaskID) {
-                Section("Tasks") {
+                Section("TASK QUEUE") {
                     ForEach(workspace.tasks) { task in
                         TaskRow(task: task)
                             .tag(task.id)
@@ -79,6 +176,7 @@ private struct SidebarView: View {
             }
             .listStyle(.sidebar)
         }
+        .background(ForgeDesign.paper)
     }
 }
 
@@ -163,8 +261,7 @@ private struct RuntimeBadge: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.thinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .forgeCard(shadow: false)
     }
 
     private var runtimeDetail: String {
@@ -260,33 +357,45 @@ private struct RuntimeBadge: View {
 
 private struct TaskComposer: View {
     @EnvironmentObject private var workspace: WorkspaceModel
-    @State private var title = "Plan Agent Loop v0"
-    @State private var objective = "Create a reviewable plan, show agent progress, and stop before code changes."
+    @State private var title = ""
+    @State private var objective = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("New Task")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 10) {
+            Text("NEW TASK")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(ForgeDesign.muted)
 
-            TextField("Title", text: $title)
+            TextField("Short title", text: $title)
                 .textFieldStyle(.roundedBorder)
 
-            TextField("Objective", text: $objective, axis: .vertical)
-                .lineLimit(2...4)
+            TextField("What should Forge build?", text: $objective, axis: .vertical)
+                .lineLimit(3...5)
                 .textFieldStyle(.roundedBorder)
 
             Button {
-                workspace.createTask(title: title, objective: objective)
+                workspace.createTask(title: resolvedTitle, objective: resolvedObjective)
             } label: {
-                Label("Start Agent Loop", systemImage: "sparkles")
+                Label("Start Task", systemImage: "sparkles")
                     .frame(maxWidth: .infinity)
             }
-            .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .buttonStyle(ForgePrimaryButtonStyle())
+            .disabled(resolvedObjective.isEmpty)
         }
         .padding(10)
-        .background(.thinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .forgeCard()
+    }
+
+    private var resolvedObjective: String {
+        objective.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var resolvedTitle: String {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            return trimmed
+        }
+        return String(resolvedObjective.prefix(54))
     }
 }
 
@@ -294,47 +403,79 @@ private struct TaskRow: View {
     var task: ForgeTask
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(task.title)
-                .font(.headline)
-                .lineLimit(2)
-            Text(task.currentPhase)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        HStack(spacing: 8) {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 8, height: 8)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(task.title)
+                    .font(.system(.subheadline, design: .monospaced).weight(.semibold))
+                    .lineLimit(2)
+                Text(task.currentPhase.uppercased())
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(ForgeDesign.muted)
+            }
         }
         .padding(.vertical, 4)
+    }
+
+    private var statusColor: Color {
+        switch task.status {
+        case "Completed":
+            return ForgeDesign.success
+        case "Failed":
+            return ForgeDesign.danger
+        case "Human Review":
+            return ForgeDesign.warning
+        case "Running", "Testing":
+            return ForgeDesign.accent
+        default:
+            return ForgeDesign.muted
+        }
     }
 }
 
 private struct TaskWorkspaceView: View {
     var task: ForgeTask
+    @State private var selectedTab: SessionTab = .log
+    @State private var showDiffReview = false
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 14) {
             TaskHeader(task: task)
 
-            Divider()
-
-            HStack(spacing: 0) {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        TaskConversationPanel(task: task)
-                        PlannerPanel(task: task)
-                        ContextPanel(task: task)
-                        ToolCallPanel(task: task)
-                        AgentPanel(task: task)
-                        EventPanel(task: task)
-                    }
-                    .padding(20)
+            HStack(alignment: .top, spacing: 14) {
+                VStack(spacing: 12) {
+                    PlanProgressStrip(task: task)
+                    LiveAgentStream(task: task)
+                    SessionTabs(selectedTab: $selectedTab, task: task)
+                    SessionTabContent(
+                        tab: selectedTab,
+                        task: task,
+                        openDiffReview: {
+                            showDiffReview = true
+                        }
+                    )
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
-                Divider()
-
-                ReviewPanel(task: task)
-                    .frame(width: 360)
+                SessionDecisionRail(
+                    task: task,
+                    openDiffReview: {
+                        showDiffReview = true
+                    }
+                )
+                    .frame(width: 330)
             }
+            .frame(maxHeight: .infinity, alignment: .top)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .padding(18)
+        .background(ForgeDesign.paper)
+        .sheet(isPresented: $showDiffReview) {
+            FullscreenDiffReview(task: task)
+                .frame(minWidth: 1180, minHeight: 760)
+        }
     }
 }
 
@@ -342,27 +483,1464 @@ private struct TaskHeader: View {
     var task: ForgeTask
 
     var body: some View {
+        HStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("CURRENT TASK")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(ForgeDesign.muted)
+
+                Text(task.title)
+                    .font(.system(size: 24, weight: .black, design: .default))
+                    .lineLimit(1)
+
+                Text(task.objective)
+                    .font(.callout)
+                    .foregroundStyle(ForgeDesign.muted)
+                    .lineLimit(2)
+            }
+
+            Spacer()
+
+            StatusPill(label: task.status, color: statusColor)
+            StatusPill(label: task.currentPhase, color: ForgeDesign.paper, foreground: ForgeDesign.ink)
+
+            Button {} label: {
+                Label("Pause", systemImage: "pause.fill")
+            }
+            .buttonStyle(ForgeSecondaryButtonStyle())
+            .disabled(true)
+
+            Button {} label: {
+                Label("Abort", systemImage: "xmark")
+            }
+            .buttonStyle(ForgeSecondaryButtonStyle())
+            .disabled(true)
+        }
+        .padding(14)
+        .forgeCard()
+    }
+
+    private var statusColor: Color {
+        switch task.status {
+        case "Completed":
+            return ForgeDesign.success
+        case "Failed":
+            return ForgeDesign.danger
+        case "Human Review":
+            return ForgeDesign.warning
+        case "Running", "Testing":
+            return ForgeDesign.accent
+        default:
+            return Color.white
+        }
+    }
+}
+
+private struct NewTaskEmptyState: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
+    @State private var prompt = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Spacer(minLength: 20)
+
+            Text("What should Forge build?")
+                .font(.system(size: 34, weight: .black))
+
+            Text("Start with a coding task. Forge will turn it into a plan, stop for approval, then make the work reviewable.")
+                .font(.title3)
+                .foregroundStyle(ForgeDesign.muted)
+                .frame(maxWidth: 720, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 12) {
+                TextField("Example: Add a source patch engine with rollback metadata", text: $prompt, axis: .vertical)
+                    .lineLimit(5...8)
+                    .font(.system(size: 15, design: .monospaced))
+                    .textFieldStyle(.plain)
+                    .padding(12)
+                    .background(Color.white)
+                    .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+
+                HStack {
+                    Button {
+                        workspace.createTask(title: title, objective: objective)
+                    } label: {
+                        Label("Create Task", systemImage: "arrow.right")
+                    }
+                    .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.accent, foreground: ForgeDesign.ink))
+                    .disabled(objective.isEmpty)
+
+                    Text("Plan approval is still required before file changes.")
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundStyle(ForgeDesign.muted)
+                }
+            }
+            .frame(maxWidth: 760)
+            .forgeCard()
+
+            HStack(spacing: 10) {
+                ExampleTaskButton(title: "Refactor WorkspaceView into live session") {
+                    prompt = "Refactor the macOS WorkspaceView so the main task screen shows a live agent coding stream, Log/Diff/Tests tabs, and a compact plan approval rail."
+                }
+                ExampleTaskButton(title: "Add patch rollback metadata") {
+                    prompt = "Add rollback metadata to source-file patch proposals and show the rollback boundary in review."
+                }
+                ExampleTaskButton(title: "Stream validation output") {
+                    prompt = "Add streamed output for approved task-scoped validation commands and show it in the Tests tab."
+                }
+            }
+
+            Spacer()
+        }
+        .padding(36)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    }
+
+    private var objective: String {
+        prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var title: String {
+        String(objective.prefix(60))
+    }
+}
+
+private struct ExampleTaskButton: View {
+    var title: String
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title.uppercased())
+                .lineLimit(2)
+        }
+        .buttonStyle(ForgeSecondaryButtonStyle())
+    }
+}
+
+private struct StatusPill: View {
+    var label: String
+    var color: Color
+    var foreground: Color = ForgeDesign.ink
+
+    var body: some View {
+        Text(label.uppercased())
+            .font(.system(size: 10, weight: .bold, design: .monospaced))
+            .foregroundStyle(foreground)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(color)
+            .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+    }
+}
+
+private struct PlanProgressStrip: View {
+    var task: ForgeTask
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(task.title)
-                        .font(.title2.weight(.semibold))
-                    Text(task.objective)
-                        .foregroundStyle(.secondary)
+                Text("PLAN PROGRESS")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(ForgeDesign.muted)
+                Spacer()
+                Text("\(doneCount)/\(max(task.planSteps.count, 1)) STEPS")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(ForgeDesign.muted)
+            }
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Rectangle()
+                        .fill(Color.white)
+                    Rectangle()
+                        .fill(ForgeDesign.accent)
+                        .frame(width: proxy.size.width * progress)
+                }
+                .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+            }
+            .frame(height: 18)
+
+            HStack(spacing: 6) {
+                ForEach(task.planSteps.prefix(6)) { step in
+                    Text(step.status.uppercased())
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(stepColor(step.status))
+                        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1))
+                }
+            }
+        }
+        .padding(12)
+        .forgeCard(shadow: false)
+    }
+
+    private var doneCount: Int {
+        task.planSteps.filter { $0.status == "Done" }.count
+    }
+
+    private var progress: CGFloat {
+        guard !task.planSteps.isEmpty else {
+            return 0
+        }
+        return CGFloat(doneCount) / CGFloat(task.planSteps.count)
+    }
+
+    private func stepColor(_ status: String) -> Color {
+        switch status {
+        case "Done":
+            return ForgeDesign.success
+        case "Active":
+            return ForgeDesign.accent
+        case "Blocked":
+            return ForgeDesign.warning
+        default:
+            return Color.white
+        }
+    }
+}
+
+private struct LiveAgentStream: View {
+    var task: ForgeTask
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("LIVE AGENT STREAM")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(ForgeDesign.paper)
+                Spacer()
+                Text(task.currentPhase.uppercased())
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(ForgeDesign.accent)
+            }
+            .padding(10)
+            .background(Color(red: 26 / 255, green: 26 / 255, blue: 23 / 255))
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(streamRows) { row in
+                        HStack(alignment: .top, spacing: 10) {
+                            Text(row.time)
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(Color.gray)
+                                .frame(width: 72, alignment: .leading)
+                            Text(row.kind)
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundStyle(row.color)
+                                .frame(width: 92, alignment: .leading)
+                            Text(row.message)
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundStyle(ForgeDesign.paper)
+                                .textSelection(.enabled)
+                            Spacer(minLength: 0)
+                        }
+                    }
+
+                    HStack(spacing: 8) {
+                        Text("now")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(Color.gray)
+                            .frame(width: 72, alignment: .leading)
+                        Text("CURSOR")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundStyle(ForgeDesign.accent)
+                            .frame(width: 92, alignment: .leading)
+                        Rectangle()
+                            .fill(ForgeDesign.accent)
+                            .frame(width: 8, height: 14)
+                    }
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .frame(minHeight: 300, maxHeight: 430)
+        .forgeTerminal()
+    }
+
+    private var streamRows: [AgentStreamRow] {
+        var rows: [AgentStreamRow] = []
+
+        rows.append(AgentStreamRow(kind: "TASK", message: task.objective, color: ForgeDesign.accent, time: shortTime(task.createdAt)))
+
+        for message in task.messages.suffix(4) {
+            rows.append(AgentStreamRow(kind: message.role.uppercased(), message: message.intentBrief?.summary ?? message.content, color: message.role == "User" ? ForgeDesign.paper : ForgeDesign.warning, time: shortTime(message.createdAt)))
+        }
+
+        for call in task.toolCalls.suffix(6) {
+            rows.append(AgentStreamRow(kind: call.name.uppercased(), message: call.outputSummary, color: toolColor(call.status), time: shortTime(call.startedAt)))
+        }
+
+        for event in task.events.suffix(7) {
+            rows.append(AgentStreamRow(kind: event.type.uppercased(), message: event.message, color: ForgeDesign.paper, time: shortTime(event.createdAt)))
+        }
+
+        if rows.count == 1 {
+            rows.append(AgentStreamRow(kind: "WAITING", message: "Connect runtime or approve the next plan gate to start visible agent work.", color: ForgeDesign.warning, time: "local"))
+        }
+
+        return Array(rows.suffix(14))
+    }
+
+    private func toolColor(_ status: String) -> Color {
+        switch status {
+        case "Completed":
+            return ForgeDesign.success
+        case "Failed":
+            return ForgeDesign.danger
+        default:
+            return ForgeDesign.accent
+        }
+    }
+
+    private func shortTime(_ value: String) -> String {
+        if value.count > 8 {
+            return String(value.suffix(8))
+        }
+        return value
+    }
+}
+
+private struct AgentStreamRow: Identifiable {
+    let id = UUID()
+    var kind: String
+    var message: String
+    var color: Color
+    var time: String
+}
+
+private struct SessionTabs: View {
+    @Binding var selectedTab: SessionTab
+    var task: ForgeTask
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(SessionTab.allCases) { tab in
+                Button {
+                    selectedTab = tab
+                } label: {
+                    Text(label(for: tab))
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundStyle(selectedTab == tab ? ForgeDesign.paper : ForgeDesign.ink)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(selectedTab == tab ? ForgeDesign.ink : Color.white)
+                        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func label(for tab: SessionTab) -> String {
+        switch tab {
+        case .log:
+            return "LOG \(task.events.count)"
+        case .diff:
+            return "DIFF \(diffCount)"
+        case .tests:
+            return "TESTS \(task.validationRuns.count)"
+        }
+    }
+
+    private var diffCount: Int {
+        max(task.changedFiles.count, task.editProposal?.fileChanges.count ?? 0)
+    }
+}
+
+private struct SessionTabContent: View {
+    var tab: SessionTab
+    var task: ForgeTask
+    var openDiffReview: () -> Void
+
+    var body: some View {
+        Group {
+            switch tab {
+            case .log:
+                AgentLogTab(task: task)
+            case .diff:
+                AgentDiffTab(task: task, openDiffReview: openDiffReview)
+            case .tests:
+                AgentTestsTab(task: task)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+}
+
+private struct AgentLogTab: View {
+    var task: ForgeTask
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                TaskConversationPanel(task: task)
+                ContextPanel(task: task)
+                ToolCallPanel(task: task)
+                EventPanel(task: task)
+            }
+            .padding(14)
+        }
+        .forgeCard(shadow: false)
+    }
+}
+
+private struct AgentDiffTab: View {
+    var task: ForgeTask
+    var openDiffReview: () -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                DiffReviewSummary(task: task, openDiffReview: openDiffReview)
+                GitWorkingTreeCard(task: task)
+            }
+            .padding(14)
+        }
+        .forgeCard(shadow: false)
+    }
+}
+
+private struct DiffReviewSummary: View {
+    var task: ForgeTask
+    var openDiffReview: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("DIFF REVIEW")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(ForgeDesign.muted)
+                    Spacer()
+                    Button {
+                        openDiffReview()
+                    } label: {
+                        Label("Open Full Diff", systemImage: "rectangle.expand.vertical")
+                    }
+                    .buttonStyle(ForgeSecondaryButtonStyle())
+                    .disabled(diffFiles.isEmpty)
+                }
+
+                if diffFiles.isEmpty {
+                    Text("No diff is ready yet. Approve the plan, generate an edit proposal, then inspect changed files here.")
+                        .foregroundStyle(ForgeDesign.muted)
+                } else {
+                    ForEach(diffFiles, id: \.self) { file in
+                        HStack {
+                            Text(file)
+                                .font(.system(.caption, design: .monospaced))
+                                .lineLimit(1)
+                            Spacer()
+                            Text("REVIEW")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .foregroundStyle(ForgeDesign.muted)
+                        }
+                        .padding(8)
+                        .background(Color.white)
+                        .overlay(Rectangle().stroke(ForgeDesign.divider, lineWidth: 1))
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("WHY THIS CHANGE")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(ForgeDesign.muted)
+                Text(task.editProposal?.summary ?? task.reviewSummary ?? "Forge will explain the reasoning for each changed file here once a proposal exists.")
+                    .font(.callout)
+                    .foregroundStyle(ForgeDesign.ink)
+                    .textSelection(.enabled)
+            }
+            .frame(width: 260, alignment: .leading)
+            .padding(10)
+            .background(ForgeDesign.paper)
+            .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+        }
+    }
+
+    private var diffFiles: [String] {
+        let proposalPaths = task.editProposal?.fileChanges.map(\.path) ?? []
+        return Array(Set(task.changedFiles + proposalPaths)).sorted()
+    }
+}
+
+private struct FullscreenDiffReview: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
+    @Environment(\.dismiss) private var dismiss
+
+    var task: ForgeTask
+
+    @State private var selectedPath: String?
+    @State private var mode: DiffReviewMode = .unified
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+
+            HStack(spacing: 0) {
+                fileTree
+                    .frame(width: 275)
+
+                Rectangle()
+                    .fill(ForgeDesign.ink)
+                    .frame(width: 1.5)
+
+                diffPane
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                Rectangle()
+                    .fill(ForgeDesign.ink)
+                    .frame(width: 1.5)
+
+                reasoningPane
+                    .frame(width: 330)
+            }
+            .frame(maxHeight: .infinity)
+        }
+        .background(ForgeDesign.paper)
+        .onAppear {
+            if workspace.gitStatus == nil {
+                workspace.refreshGitStatus()
+            }
+            if let activePath {
+                workspace.refreshGitDiff(path: activePath)
+            }
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("FULLSCREEN DIFF REVIEW")
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundStyle(ForgeDesign.muted)
+                Text(task.title)
+                    .font(.system(size: 22, weight: .black))
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            StatusPill(label: "\(reviewFiles.count) Files", color: ForgeDesign.paper)
+            StatusPill(label: validationState, color: validationColor)
+
+            Button {
+                workspace.refreshGitStatus()
+            } label: {
+                Label(workspace.isRefreshingGitStatus() ? "Refreshing" : "Refresh", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(ForgeSecondaryButtonStyle())
+            .disabled(workspace.isRefreshingGitStatus())
+
+            Button {
+                dismiss()
+            } label: {
+                Label("Close", systemImage: "xmark")
+            }
+            .buttonStyle(ForgeSecondaryButtonStyle())
+        }
+        .padding(14)
+        .background(Color.white)
+        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+    }
+
+    private var fileTree: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("FILES")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(ForgeDesign.muted)
+                Spacer()
+                Text("+\(totalAdditions) -\(totalDeletions)")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(ForgeDesign.muted)
+            }
+            .padding(10)
+            .background(Color.white)
+            .overlay(Rectangle().stroke(ForgeDesign.divider, lineWidth: 1))
+
+            if reviewFiles.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("NO DIFF READY")
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    Text("Generate or apply a proposal, then refresh git status.")
+                        .font(.caption)
+                        .foregroundStyle(ForgeDesign.muted)
+                }
+                .padding(12)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(reviewFiles) { file in
+                            Button {
+                                selectedPath = file.path
+                                workspace.refreshGitDiff(path: file.path)
+                            } label: {
+                                DiffReviewFileRow(
+                                    file: file,
+                                    isSelected: activePath == file.path
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+        }
+        .background(Color.white)
+    }
+
+    private var diffPane: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                ForEach(DiffReviewMode.allCases) { item in
+                    Button {
+                        mode = item
+                    } label: {
+                        Text(item.rawValue)
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundStyle(mode == item ? ForgeDesign.paper : ForgeDesign.ink)
+                            .frame(width: 92)
+                            .padding(.vertical, 10)
+                            .background(mode == item ? ForgeDesign.ink : Color.white)
+                            .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                    }
+                    .buttonStyle(.plain)
                 }
 
                 Spacer()
 
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text(task.status)
-                        .font(.headline)
-                    Text(task.currentPhase)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                if let activePath {
+                    Text(activePath)
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .lineLimit(1)
+                        .padding(.horizontal, 10)
                 }
             }
+            .background(Color.white)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    if let activePath {
+                        if mode == .split {
+                            Text("Split mode uses Forge's bounded side-by-side renderer when the runtime marks the diff as previewable.")
+                                .font(.caption)
+                                .foregroundStyle(ForgeDesign.muted)
+                                .padding(10)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.white)
+                                .overlay(Rectangle().stroke(ForgeDesign.divider, lineWidth: 1))
+                        }
+
+                        GitDiffCard(
+                            path: activePath,
+                            diff: workspace.gitDiff(for: activePath),
+                            isLoading: workspace.isLoadingGitDiff(path: activePath),
+                            load: {
+                                workspace.refreshGitDiff(path: activePath)
+                            }
+                        )
+                    } else {
+                        EmptyTerminalMessage(
+                            title: "NO FILE SELECTED",
+                            message: "Select a changed file from the left tree to inspect its diff."
+                        )
+                    }
+                }
+                .padding(14)
+            }
         }
-        .padding(20)
+        .background(ForgeDesign.paper)
+    }
+
+    private var reasoningPane: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("WHY THIS CHANGE")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(ForgeDesign.muted)
+
+                    Text(selectedRationale)
+                        .font(.callout)
+                        .textSelection(.enabled)
+                }
+                .padding(12)
+                .forgeCard(shadow: false)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("TESTS COVERING THIS FILE")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(ForgeDesign.muted)
+
+                    if testEvidence.isEmpty {
+                        Text("No validation evidence has been recorded yet.")
+                            .font(.caption)
+                            .foregroundStyle(ForgeDesign.muted)
+                    } else {
+                        ForEach(Array(testEvidence.prefix(6).enumerated()), id: \.offset) { _, evidence in
+                            Text(evidence)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(ForgeDesign.ink)
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+                .padding(12)
+                .forgeCard(shadow: false)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("FILE REVIEW")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(ForgeDesign.muted)
+
+                    if let selectedFile {
+                        MetricRow(label: "Status", value: selectedFile.status)
+                        MetricRow(label: "Validation", value: selectedFile.validationStatus ?? "Unknown")
+                        MetricRow(label: "Lines", value: "+\(selectedFile.additions ?? 0) -\(selectedFile.deletions ?? 0)")
+                    }
+
+                    Button {} label: {
+                        Label("Looks Good", systemImage: "checkmark")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(ForgeSecondaryButtonStyle())
+                    .disabled(true)
+                    .help("Per-file approval state is UI-only until the review model grows file-level decisions.")
+
+                    Button {
+                        workspace.rejectEditProposal(for: task)
+                    } label: {
+                        Label(requestChangeTitle, systemImage: "arrow.uturn.backward")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(ForgeSecondaryButtonStyle())
+                    .disabled(!canRejectProposal)
+
+                    Button {
+                        workspace.applyEditProposal(for: task)
+                    } label: {
+                        Label(applyPatchTitle, systemImage: "checkmark.seal")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.accent, foreground: ForgeDesign.ink))
+                    .disabled(!canApplyProposal)
+                }
+                .padding(12)
+                .forgeCard()
+            }
+            .padding(12)
+        }
+        .background(ForgeDesign.paper)
+    }
+
+    private var activePath: String? {
+        if let selectedPath, reviewFiles.contains(where: { $0.path == selectedPath }) {
+            return selectedPath
+        }
+        return reviewFiles.first?.path
+    }
+
+    private var selectedFile: DiffReviewFile? {
+        guard let activePath else {
+            return nil
+        }
+        return reviewFiles.first { $0.path == activePath }
+    }
+
+    private var reviewFiles: [DiffReviewFile] {
+        var files: [String: DiffReviewFile] = [:]
+
+        for change in workspace.gitStatus?.changedFiles ?? [] {
+            files[change.path] = DiffReviewFile(
+                path: change.path,
+                status: change.status,
+                detail: "index \(change.indexStatus) / worktree \(change.worktreeStatus)",
+                additions: change.additions,
+                deletions: change.deletions,
+                rationale: nil,
+                validationStatus: nil
+            )
+        }
+
+        for change in task.editProposal?.fileChanges ?? [] {
+            let validation = validationResult(for: change.path)
+            let existing = files[change.path]
+            files[change.path] = DiffReviewFile(
+                path: change.path,
+                status: existing?.status ?? change.changeType,
+                detail: existing?.detail ?? change.changeType,
+                additions: existing?.additions,
+                deletions: existing?.deletions,
+                rationale: change.rationale,
+                validationStatus: validation?.status
+            )
+        }
+
+        for path in task.changedFiles where files[path] == nil {
+            files[path] = DiffReviewFile(
+                path: path,
+                status: "Changed",
+                detail: "task changed file",
+                additions: nil,
+                deletions: nil,
+                rationale: nil,
+                validationStatus: validationResult(for: path)?.status
+            )
+        }
+
+        return files.values.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+    }
+
+    private var selectedRationale: String {
+        if let rationale = selectedFile?.rationale, !rationale.isEmpty {
+            return rationale
+        }
+        if let summary = task.editProposal?.summary {
+            return summary
+        }
+        return task.reviewSummary ?? "Forge will attach file-level reasoning here when an edit proposal exists."
+    }
+
+    private var testEvidence: [String] {
+        task.validationRuns.reversed().flatMap { run in
+            run.commands.map { command in
+                "\(run.presetName) / \(command.name) / \(command.status): \(command.outputSummary)"
+            }
+        }
+    }
+
+    private var validationState: String {
+        task.validationRuns.last?.status ?? "No Tests"
+    }
+
+    private var validationColor: Color {
+        switch validationState {
+        case "Passed":
+            return ForgeDesign.success
+        case "Failed":
+            return ForgeDesign.danger
+        case "Running":
+            return ForgeDesign.warning
+        default:
+            return ForgeDesign.paper
+        }
+    }
+
+    private var totalAdditions: Int {
+        reviewFiles.compactMap(\.additions).reduce(0, +)
+    }
+
+    private var totalDeletions: Int {
+        reviewFiles.compactMap(\.deletions).reduce(0, +)
+    }
+
+    private var canApplyProposal: Bool {
+        task.editProposal?.status == "Proposed" &&
+            task.editProposal?.validation?.status != "Blocked" &&
+            !workspace.isApplyingEditProposal(taskID: task.id) &&
+            !workspace.isValidatingEditProposal(taskID: task.id) &&
+            !workspace.isRejectingEditProposal(taskID: task.id)
+    }
+
+    private var canRejectProposal: Bool {
+        task.editProposal?.status == "Proposed" &&
+            !workspace.isApplyingEditProposal(taskID: task.id) &&
+            !workspace.isRejectingEditProposal(taskID: task.id)
+    }
+
+    private var applyPatchTitle: String {
+        if workspace.isApplyingEditProposal(taskID: task.id) {
+            return "Applying"
+        }
+        return task.editProposal?.status == "Applied" ? "Applied" : "Apply Final Patch"
+    }
+
+    private var requestChangeTitle: String {
+        workspace.isRejectingEditProposal(taskID: task.id) ? "Requesting" : "Request Change"
+    }
+
+    private func validationResult(for path: String) -> FileChangeValidation? {
+        task.editProposal?.validation?.fileResults.first { result in
+            result.path == path
+        }
+    }
+}
+
+private struct DiffReviewFileRow: View {
+    var file: DiffReviewFile
+    var isSelected: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(statusToken)
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(ForgeDesign.ink)
+                .frame(width: 24)
+                .padding(.vertical, 3)
+                .background(statusColor)
+                .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(file.path)
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundStyle(ForgeDesign.ink)
+                    .lineLimit(2)
+
+                HStack(spacing: 6) {
+                    Text(file.detail)
+                    if let additions = file.additions, let deletions = file.deletions {
+                        Text("+\(additions) -\(deletions)")
+                    }
+                }
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundStyle(ForgeDesign.muted)
+                .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(9)
+        .background(isSelected ? ForgeDesign.accent : Color.white)
+        .overlay(Rectangle().stroke(ForgeDesign.divider, lineWidth: 1))
+    }
+
+    private var statusToken: String {
+        switch file.status {
+        case "Added", "Untracked", "CreateFile":
+            return "A"
+        case "Deleted", "Delete":
+            return "D"
+        case "Renamed":
+            return "R"
+        default:
+            return "M"
+        }
+    }
+
+    private var statusColor: Color {
+        switch statusToken {
+        case "A":
+            return ForgeDesign.success
+        case "D":
+            return ForgeDesign.danger
+        case "R":
+            return ForgeDesign.warning
+        default:
+            return ForgeDesign.paper
+        }
+    }
+}
+
+private struct AgentTestsTab: View {
+    var task: ForgeTask
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                if task.validationRuns.isEmpty {
+                    EmptyTerminalMessage(title: "NO TEST RUNS YET", message: "Approved checks and command output will appear here as the agent runs.")
+                } else {
+                    ForEach(task.validationRuns.reversed()) { run in
+                        TestRunTerminalCard(run: run)
+                    }
+                }
+
+                if !task.validationRepairBriefs.isEmpty {
+                    ForEach(task.validationRepairBriefs.reversed()) { brief in
+                        ValidationRepairBriefCard(brief: brief, validationRun: task.validationRuns.first { $0.id == brief.validationRunID }, isCurrentProposalSource: task.editProposal?.validationRepairBriefID == brief.id)
+                    }
+                }
+            }
+            .padding(14)
+        }
+        .forgeCard(shadow: false)
+    }
+}
+
+private struct EmptyTerminalMessage: View {
+    var title: String
+    var message: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(ForgeDesign.accent)
+            Text(message)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(ForgeDesign.paper)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .forgeTerminal()
+    }
+}
+
+private struct TestRunTerminalCard: View {
+    var run: ValidationRun
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack {
+                Text("\(run.presetName.uppercased()) / \(run.status.uppercased())")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(statusColor)
+                Spacer()
+                Text(run.endedAt ?? run.startedAt)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(Color.gray)
+            }
+
+            Text(run.summary)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(ForgeDesign.paper)
+                .textSelection(.enabled)
+
+            ForEach(run.commands) { command in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("$ \(command.command)")
+                        .font(.system(.caption, design: .monospaced).weight(.bold))
+                        .foregroundStyle(ForgeDesign.accent)
+                    Text(command.outputSummary)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(ForgeDesign.paper)
+                        .textSelection(.enabled)
+                }
+                .padding(.top, 4)
+            }
+        }
+        .padding(14)
+        .forgeTerminal()
+    }
+
+    private var statusColor: Color {
+        switch run.status {
+        case "Passed":
+            return ForgeDesign.success
+        case "Failed":
+            return ForgeDesign.danger
+        case "Running":
+            return ForgeDesign.warning
+        default:
+            return ForgeDesign.accent
+        }
+    }
+}
+
+private struct SessionDecisionRail: View {
+    var task: ForgeTask
+    var openDiffReview: () -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                PlanGateCard(task: task)
+                AgentRunActionsCard(task: task)
+                AgentMiniReviewCard(task: task, openDiffReview: openDiffReview)
+            }
+            .padding(.bottom, 4)
+        }
+    }
+}
+
+private struct PlanGateCard: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
+    var task: ForgeTask
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("PLAN GATE")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(ForgeDesign.muted)
+                Spacer()
+                StatusPill(label: planState, color: planColor)
+            }
+
+            if let revision = task.planRevisions.last {
+                Text(revision.summary)
+                    .font(.callout.weight(.semibold))
+                    .textSelection(.enabled)
+                Text(revision.rationale)
+                    .font(.caption)
+                    .foregroundStyle(ForgeDesign.muted)
+                    .textSelection(.enabled)
+                Label("Risk \(revision.riskLevel)", systemImage: "shield")
+                    .font(.caption)
+                    .foregroundStyle(ForgeDesign.muted)
+            } else {
+                Text(task.reviewSummary ?? "Forge is waiting for a generated plan before code changes can begin.")
+                    .font(.callout)
+                    .foregroundStyle(ForgeDesign.muted)
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
+                ForEach(activePlanSteps.prefix(5)) { step in
+                    HStack(alignment: .top, spacing: 8) {
+                        Text(step.status.uppercased())
+                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                            .frame(width: 54, alignment: .leading)
+                            .foregroundStyle(step.status == "Done" ? ForgeDesign.success : ForgeDesign.muted)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(step.title)
+                                .font(.caption.weight(.semibold))
+                            Text(step.summary)
+                                .font(.caption2)
+                                .foregroundStyle(ForgeDesign.muted)
+                                .lineLimit(2)
+                        }
+                    }
+                }
+            }
+
+            Button {
+                workspace.approvePlan(for: task)
+            } label: {
+                Label(approveTitle, systemImage: "checkmark.seal")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.accent, foreground: ForgeDesign.ink))
+            .disabled(!canApprovePlan)
+
+            Button {
+                workspace.generatePlanRevision(for: task)
+            } label: {
+                Label(planRevisionTitle, systemImage: "arrow.triangle.branch")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ForgeSecondaryButtonStyle())
+            .disabled(!canGeneratePlanRevision)
+        }
+        .padding(12)
+        .forgeCard()
+    }
+
+    private var activePlanSteps: [PlanStep] {
+        task.planRevisions.last?.steps ?? task.planSteps
+    }
+
+    private var latestPlanRevision: PlanRevision? {
+        task.planRevisions.last
+    }
+
+    private var hasApprovedCurrentPlan: Bool {
+        task.approvals.contains { approval in
+            approval.action == "Approve Plan" &&
+                approval.decision == "Approved" &&
+                approval.targetID == latestPlanRevision?.id
+        }
+    }
+
+    private var canApprovePlan: Bool {
+        task.status == "Human Review" &&
+            !hasApprovedCurrentPlan &&
+            !workspace.isApprovingPlan(taskID: task.id)
+    }
+
+    private var approveTitle: String {
+        if workspace.isApprovingPlan(taskID: task.id) {
+            return "Approving"
+        }
+        if hasApprovedCurrentPlan {
+            return "Plan Approved"
+        }
+        return "Approve Plan"
+    }
+
+    private var canGeneratePlanRevision: Bool {
+        !workspace.isGeneratingPlanRevision(taskID: task.id) &&
+            task.editProposal?.status != "Proposed" &&
+            task.editProposal?.status != "Applied"
+    }
+
+    private var planRevisionTitle: String {
+        workspace.isGeneratingPlanRevision(taskID: task.id) ? "Updating Plan" : "Regenerate Plan"
+    }
+
+    private var planState: String {
+        if hasApprovedCurrentPlan {
+            return "Approved"
+        }
+        return task.status == "Human Review" ? "Needs Review" : task.currentPhase
+    }
+
+    private var planColor: Color {
+        hasApprovedCurrentPlan ? ForgeDesign.success : ForgeDesign.warning
+    }
+}
+
+private struct AgentRunActionsCard: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
+    var task: ForgeTask
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text("NEXT ACTIONS")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(ForgeDesign.muted)
+
+            Button {
+                workspace.generateEditProposal(for: task)
+            } label: {
+                Label(generateEditProposalTitle, systemImage: "doc.badge.plus")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ForgePrimaryButtonStyle())
+            .disabled(!canGenerateEditProposal)
+
+            Button {
+                workspace.validateEditProposal(for: task)
+            } label: {
+                Label(validateEditProposalTitle, systemImage: "checkmark.shield")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ForgeSecondaryButtonStyle())
+            .disabled(!canValidateEditProposal)
+
+            Button {
+                workspace.applyEditProposal(for: task)
+            } label: {
+                Label(applyEditProposalTitle, systemImage: "checkmark.circle")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.accent, foreground: ForgeDesign.ink))
+            .disabled(!canApplyEditProposal)
+
+            Button {
+                workspace.rejectEditProposal(for: task)
+            } label: {
+                Label(rejectEditProposalTitle, systemImage: "arrow.uturn.backward")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ForgeSecondaryButtonStyle())
+            .disabled(!canRejectEditProposal)
+
+            Divider()
+
+            Button {
+                workspace.runValidation(for: task)
+            } label: {
+                Label(runValidationTitle, systemImage: "play.circle")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ForgeSecondaryButtonStyle())
+            .disabled(!canRunValidation)
+
+            Button {
+                workspace.generateValidationRepairProposal(for: task)
+            } label: {
+                Label(generateRepairTitle, systemImage: "wrench.and.screwdriver")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ForgeSecondaryButtonStyle())
+            .disabled(!canGenerateValidationRepairProposal)
+        }
+        .padding(12)
+        .forgeCard()
+    }
+
+    private var isGeneratingEditProposal: Bool {
+        workspace.isGeneratingEditProposal(taskID: task.id)
+    }
+
+    private var isGeneratingValidationRepairProposal: Bool {
+        workspace.isGeneratingValidationRepairProposal(taskID: task.id)
+    }
+
+    private var isValidatingEditProposal: Bool {
+        workspace.isValidatingEditProposal(taskID: task.id)
+    }
+
+    private var isApplyingEditProposal: Bool {
+        workspace.isApplyingEditProposal(taskID: task.id)
+    }
+
+    private var isRejectingEditProposal: Bool {
+        workspace.isRejectingEditProposal(taskID: task.id)
+    }
+
+    private var isRunningValidation: Bool {
+        workspace.isRunningValidation(taskID: task.id)
+    }
+
+    private var canGenerateEditProposal: Bool {
+        task.executionProposal != nil &&
+            (task.editProposal == nil || task.editProposal?.status == "Rejected") &&
+            !isGeneratingEditProposal &&
+            !isGeneratingValidationRepairProposal &&
+            !isApplyingEditProposal &&
+            !isRejectingEditProposal
+    }
+
+    private var generateEditProposalTitle: String {
+        if isGeneratingEditProposal {
+            return "Generating Proposal"
+        }
+        if task.editProposal?.status == "Rejected" {
+            return "Revise Proposal"
+        }
+        if task.editProposal != nil {
+            return "Proposal Ready"
+        }
+        return "Generate Proposal"
+    }
+
+    private var canValidateEditProposal: Bool {
+        task.editProposal?.status == "Proposed" &&
+            !isValidatingEditProposal &&
+            !isApplyingEditProposal &&
+            !isGeneratingValidationRepairProposal &&
+            !isRejectingEditProposal
+    }
+
+    private var validateEditProposalTitle: String {
+        isValidatingEditProposal ? "Validating" : "Validate Proposal"
+    }
+
+    private var canApplyEditProposal: Bool {
+        task.editProposal?.status == "Proposed" &&
+            task.editProposal?.validation?.status != "Blocked" &&
+            !isValidatingEditProposal &&
+            !isApplyingEditProposal &&
+            !isGeneratingValidationRepairProposal &&
+            !isRejectingEditProposal
+    }
+
+    private var applyEditProposalTitle: String {
+        if isApplyingEditProposal {
+            return "Applying"
+        }
+        if task.editProposal?.status == "Applied" {
+            return "Applied"
+        }
+        return "Apply Patch"
+    }
+
+    private var canRejectEditProposal: Bool {
+        task.editProposal?.status == "Proposed" &&
+            !isApplyingEditProposal &&
+            !isGeneratingValidationRepairProposal &&
+            !isRejectingEditProposal
+    }
+
+    private var rejectEditProposalTitle: String {
+        isRejectingEditProposal ? "Requesting" : "Request Change"
+    }
+
+    private var canRunValidation: Bool {
+        task.editProposal?.status == "Applied" &&
+            task.status != "Testing" &&
+            !isRunningValidation &&
+            !isGeneratingValidationRepairProposal
+    }
+
+    private var runValidationTitle: String {
+        if isRunningValidation {
+            return "Running Checks"
+        }
+        if !task.validationRuns.isEmpty {
+            return "Run Checks Again"
+        }
+        return "Run Checks"
+    }
+
+    private var latestFailedValidationRun: ValidationRun? {
+        task.validationRuns.reversed().first { run in
+            run.status == "Failed"
+        }
+    }
+
+    private var latestValidationRepairBrief: ValidationRepairBrief? {
+        guard let latestFailedValidationRun else {
+            return nil
+        }
+
+        return task.validationRepairBriefs.reversed().first { brief in
+            brief.validationRunID == latestFailedValidationRun.id
+        }
+    }
+
+    private var canGenerateValidationRepairProposal: Bool {
+        task.executionProposal != nil &&
+            task.editProposal?.status == "Applied" &&
+            latestFailedValidationRun != nil &&
+            latestValidationRepairBrief != nil &&
+            !isGeneratingValidationRepairProposal &&
+            !isGeneratingEditProposal &&
+            !isValidatingEditProposal &&
+            !isApplyingEditProposal &&
+            !isRejectingEditProposal &&
+            !isRunningValidation
+    }
+
+    private var generateRepairTitle: String {
+        isGeneratingValidationRepairProposal ? "Generating Repair" : "Generate Self-Fix"
+    }
+}
+
+private struct AgentMiniReviewCard: View {
+    var task: ForgeTask
+    var openDiffReview: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text("REVIEW STATE")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(ForgeDesign.muted)
+
+            MetricRow(label: "Changed", value: "\(changedFileCount)")
+            MetricRow(label: "Validation", value: validationState)
+            MetricRow(label: "Proposal", value: task.editProposal?.status ?? "None")
+            MetricRow(label: "Commands", value: "\(task.validationRuns.flatMap(\.commands).count)")
+
+            if let summary = task.reviewSummary {
+                Text(summary)
+                    .font(.caption)
+                    .foregroundStyle(ForgeDesign.muted)
+                    .textSelection(.enabled)
+            }
+
+            Button {
+                openDiffReview()
+            } label: {
+                Label("Open Full Diff", systemImage: "rectangle.expand.vertical")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ForgeSecondaryButtonStyle())
+            .disabled(changedFileCount == 0)
+        }
+        .padding(12)
+        .forgeCard(shadow: false)
+    }
+
+    private var changedFileCount: Int {
+        max(task.changedFiles.count, task.editProposal?.fileChanges.count ?? 0)
+    }
+
+    private var validationState: String {
+        task.validationRuns.last?.status ?? "Not Run"
+    }
+}
+
+private struct MetricRow: View {
+    var label: String
+    var value: String
+
+    var body: some View {
+        HStack {
+            Text(label.uppercased())
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(ForgeDesign.muted)
+            Spacer()
+            Text(value)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(ForgeDesign.ink)
+        }
     }
 }
 
@@ -873,6 +2451,35 @@ private struct ReviewPanel: View {
                                     Text(action)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+
+                        if let toolEvidence = proposal.toolEvidence,
+                           !toolEvidence.isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Execution Context")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                ForEach(toolEvidence, id: \.self) { evidence in
+                                    Label(evidence, systemImage: "checkmark.seal")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+
+                        if let contextFiles = proposal.contextFiles,
+                           !contextFiles.isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                ForEach(contextFiles, id: \.path) { contextFile in
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(contextFile.path)
+                                            .font(.caption2.monospaced())
+                                        Text(contextFile.summary)
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
                             }
                         }

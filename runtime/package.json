@@ -8,7 +8,8 @@
     "dev": "npm run build && npm run start",
     "start": "node --disable-warning=ExperimentalWarning dist/server.js",
     "check": "tsc -p tsconfig.json --noEmit",
-    "smoke:core": "npm run build && node scripts/smoke-core.mjs"
+    "smoke:core": "npm run build && node scripts/smoke-core.mjs",
+    "smoke:git-remote": "npm run build && node scripts/git-remote-fixtures.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

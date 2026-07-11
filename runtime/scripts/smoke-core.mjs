@@ -109,6 +109,7 @@ async function runAppendFlow() {
     note: "Core smoke test approves the append plan."
   });
   assert(current.executionProposal, "Append flow did not create an execution proposal.");
+  assertExecutionProposalContext(current, appendSmokePath);
 
   current = await post(`/tasks/${task.id}/generate-edit-proposal`, {});
   assertProposal(current, appendSmokePath, "AppendText");
@@ -221,6 +222,7 @@ async function runOpenAIContextFlow() {
     note: "Core smoke test approves the OpenAI context plan."
   });
   assert(current.executionProposal, "OpenAI context flow did not create an execution proposal.");
+  assertExecutionProposalContext(current, appendSmokePath);
 
   current = await post(`/tasks/${task.id}/generate-edit-proposal`, {});
   assertState(current, "Human Review", "Edit Proposal Review");
@@ -1503,6 +1505,24 @@ function assertCompletedTask(task, expectedChangedFile) {
   assert(
     task.validationRuns?.some((run) => run.presetID === "forge-post-apply" && run.status === "Passed"),
     "Completed task does not include a passed forge-post-apply validation run."
+  );
+}
+
+function assertExecutionProposalContext(task, expectedPath) {
+  const proposal = task.executionProposal;
+  assert(proposal, "Task does not have an execution proposal.");
+  assert(
+    proposal.contextFiles?.some((file) => file.path === expectedPath),
+    `Execution proposal did not include expected context file ${expectedPath}.`
+  );
+  assert(
+    proposal.toolEvidence?.some((line) => line.includes("Scanned")) &&
+      proposal.toolEvidence?.some((line) => line.includes("Read")),
+    "Execution proposal did not include read-only tool evidence."
+  );
+  assert(
+    task.events?.some((event) => event.type === "agent.execution_context.completed"),
+    "Task did not record execution context completion event."
   );
 }
 

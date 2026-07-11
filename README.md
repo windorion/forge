@@ -32,13 +32,28 @@ chat threads. The developer defines intent, approves plans, reviews diffs, and
 decides what ships. Agents do the implementation work inside visible,
 auditable boundaries.
 
+The first product proof should feel like a coding-agent session: the developer
+types a task, approves a plan, watches the agent read/edit/test/self-fix, and
+then reviews a real diff. The task/review model remains core, but the demo
+should no longer feel like a generic workflow dashboard.
+
 ## Current Status
 
 Last updated: 2026-07-11
 
+Direction reset: the trust/runtime foundation is strong, but the next milestone
+is a redesigned coding-agent demo based on `design_handoff_forge/`, especially
+the new-task, plan-approval, live-session, and full diff-review screens.
+
 Implemented today:
 
 - SwiftUI macOS app shell.
+- First-pass coding-agent session UI in the macOS app: neo-brutalist task
+  queue, new-task empty state, live agent stream, plan progress, Log/Diff/Tests
+  tabs, compact plan gate, and action rail based on `design_handoff_forge`.
+- First usable `10a`-style full-screen diff review surface with a changed-file
+  tree, main diff pane, why-this-change reasoning, test evidence, and
+  apply/request-change actions backed by the existing review gates.
 - TypeScript local runtime.
 - Task creation and task conversation.
 - Deterministic Agent Loop v0 with visible Manager, Planner, Coder, Tester, and Reviewer states.
@@ -46,6 +61,9 @@ Implemented today:
 - Structured intent briefs and conversation-driven plan revisions.
 - OpenAI plan revisions can run a bounded model-guided read/search context
   loop through logged read-only repo tools.
+- Plan approval triggers a bounded read-only execution-context pass before the
+  provider drafts the execution proposal, and the proposal keeps tool evidence
+  plus inspected context files.
 - Explicit human review gates for plans and edits.
 - Safe edit proposals with multi-file OpenAI proposal artifacts, including
   blocked preview-only operations, while apply remains restricted to Markdown
@@ -87,22 +105,32 @@ Implemented today:
   runtime badge, and Settings window, including external-runtime detection,
   runtime directory candidate diagnostics, launch command/output capture, and
   stop timeout messaging.
+- App-managed runtime launch separates the runtime installation directory from
+  the repository root through `FORGE_REPO_ROOT`, can launch a prebuilt bundled
+  runtime resource, and reports both paths in health/settings diagnostics.
+- Local repeatable git remote fixtures cover stale remote/non-fast-forward
+  push rejection, branch-publish remote branch collision, and remote policy
+  rejection through real runtime HTTP endpoints.
 - Core runtime smoke regression for the main task lifecycle, restricted
   append/replace/create edits, post-apply validation, restart recovery, and a
   mock OpenAI model-guided context/repair loop plus validation failure
   diagnosis. The smoke also covers runtime health diagnostics and provider
   settings GET/POST without persisting API keys.
-- Short local V0 demo script in `docs/development.md`.
+- Local foundation walkthrough in `docs/development.md`.
 - App-visible runtime state and diagnostics for endpoint, version, provider
   configuration, SSE stream, and copy/open diagnostics actions.
 
 Not finished yet:
 
-- Real autonomous model-backed tool loop.
-- General patch engine and richer diff review.
-- Actual PR creation/publication.
+- Full-fidelity `design_handoff_forge` UI, especially exact split-diff polish,
+  file-level review persistence, decision prompts, and polished live-run
+  states.
+- Real autonomous model-backed read/search/patch/run/repair loop.
+- General source-code patch engine, safe rollback, and richer diff review.
+- Streamed task-scoped command/test output and self-fix loops.
+- Actual PR creation/publication after explicit review.
 - Durable repository index with symbols and semantic search.
-- Hardened app-managed runtime lifecycle for packaged distribution.
+- Full workspace picker and commercial packaging/signing path.
 - Packaged, signed, notarized, auto-updating Mac distribution.
 
 ## Completion Estimate
@@ -111,24 +139,27 @@ Product-readiness estimate:
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| V0 local demo | 98-99% | The local task-to-review demo is mostly implemented, has core runtime/app-facing regression coverage, repair review UI, git status/diff visibility, branch review, branch publish/upstream setup, commit preparation preview, explicit local commit and push actions, PR handoff preview with preflight evidence, provider settings coverage, and hardened runtime lifecycle diagnostics. |
-| Useful developer alpha | 56-66% | Needs real model-backed work, richer patching, actual PR publication, and recovery. |
-| Commercial beta | 25-30% | Needs packaging, onboarding, runtime management, trust polish, and integrations. |
-| Polished v1 | 15-20% | Needs native distribution, indexing, git, memory, MCP/GitHub, and product polish. |
+| Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
+| Coding-agent demo V0 | 45-50% | Has a first-pass session UI shell and full-screen diff review surface, but still needs a real source patch engine, streamed command output, and provider-driven patch/run/repair loop. |
+| Useful developer alpha | 35-45% | A developer cannot yet rely on Forge like Codex or Claude Code for normal coding tasks. It needs real patching, command execution, recovery, and a stronger model-backed run loop. |
+| Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
+| Polished v1 | 15-20% | Needs native distribution, indexing, memory, MCP/GitHub, and product polish. |
 
-Short version: Forge is a real prototype with a strong architecture skeleton,
-but it is not close to a commercial finished product yet.
+Short version: Forge has a real trust/runtime skeleton, but the visible demo
+must now become a real coding-agent workspace.
 
 ## Next TODO
 
 Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
 
-- broaden the V0 regression/demo path beyond the runtime core
-- harden git/diff and edit proposal review for larger real changes
-- polish app-managed runtime start/stop for packaged app locations
-- make real provider-backed planning and proposal generation usable
-- add approved PR publication/GitHub integration after the read-only handoff
-- build a durable repository index
+- polish the first-pass macOS coding-agent session UI toward the exact
+  `design_handoff_forge` screens
+- add a source-file patch proposal/apply/rollback engine
+- add approved task-scoped command execution with streamed logs
+- wire provider-driven read/search/patch/run/repair into the normal task flow
+- connect full diff review to durable file-level decisions once the review
+  model supports them
+- return to PR/GitHub publication after the agent coding loop feels real
 
 ## Core Principles
 

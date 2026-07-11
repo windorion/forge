@@ -76,20 +76,25 @@ Current implementation:
 
 - the toolbar, sidebar runtime badge, and Settings window can start/stop an
   app-managed runtime process
-- the app builds `runtime` and launches `node dist/server.js` directly
+- the app can build a development checkout runtime or launch a prebuilt
+  bundled runtime resource with `node dist/server.js`
+- the app resolves the runtime installation directory separately from the
+  repository root and passes the repo root through `FORGE_REPO_ROOT`
 - stop only terminates the process that the app started, avoiding broad process
   killing
 - the app distinguishes an externally reachable runtime from an app-managed
   runtime process and does not offer to stop external processes
-- Settings and copied diagnostics include runtime directory candidates, launch
-  command, bounded build/launch output, process state, PID, and runtime
-  directory
+- Settings and copied diagnostics include runtime launch candidates, launch
+  command, bounded build/launch output, process state, PID, runtime directory,
+  and repository root
 - slow stop attempts are surfaced with a user-facing message
 
 Future hardening:
 
-- handle packaged app locations that no longer sit next to a checkout
-- add distribution-specific runtime path resolution after packaging decisions
+- add a real workspace/repository picker for installed apps that no longer sit
+  next to a checkout
+- add distribution-specific signing/notarization checks after packaging
+  decisions
 
 ### Finder Integration
 

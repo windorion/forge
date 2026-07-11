@@ -3,186 +3,183 @@
 Document role: record the product surface, information architecture, screen
 responsibilities, and interaction rules for the Forge workspace.
 
-## Design Principle
+Last updated: 2026-07-11
 
-The workspace should make agent work legible.
+## Design Direction
 
-The user should never wonder:
+Forge's workspace should feel like a macOS-native coding agent session, not a
+workflow dashboard.
 
-- what is happening
-- why it is happening
-- what changed
-- whether it is safe
-- what to do next
+The user should experience:
 
-## Main Workspace Regions
+```text
+describe task -> agent clarifies -> plan gate -> live coding run -> tests ->
+self-fix -> diff review -> commit/PR handoff
+```
 
-### Task Header
+The current app has too much emphasis on status panels and preflight cards.
+The next UI pass should follow `design_handoff_forge/`, especially:
 
-Responsibilities:
+- `32a` New session: chat to task, embedded plan card, live agent work.
+- `14a` Main window: task queue, live thinking stream, plan progress, tabs.
+- `1a` New task: "What should Forge build?"
+- `1b` and `20a` Plan approval.
+- `10a` Fullscreen diff review.
+- `33a` and `34a` decision prompts.
 
-- task title
-- task status
-- repository
-- branch
-- current phase
-- primary action
+## Visual System
 
-Examples of primary actions:
+Use the design handoff as the product style source:
 
-- approve plan
-- pause run
-- review diff
-- apply changes
-- commit
+- paper background `#f4f4f1`
+- white panels and black terminal panels
+- `1.5px solid #0a0a0a` borders
+- hard unblurred shadows
+- `#a674ff` accent for selected/running/primary states
+- JetBrains Mono for UI labels, metrics, code, command output, and task data
+- Helvetica Neue for prose where needed
+- square controls and sharp app-owned UI, with rounded corners only where
+  macOS system surfaces require them
 
-### Planner Panel
+Do not drift into generic macOS dashboard styling. The product should feel
+developer-first, sharp, high-contrast, and slightly raw.
 
-Responsibilities:
+## Primary Workspace Model
 
-- plan steps
-- active step
-- completed steps
-- blocked steps
-- rationale
-- current plan revision
-- plan revision history
-- user approval points
-
-The planner is not a decorative checklist. It is the user's map of what the
-agent intends to do.
-
-### Agent Status Panel
+### Left: Repository And Task Queue
 
 Responsibilities:
 
-- active agent
-- queued agents
-- current tool call
-- elapsed time
-- status
-- recent events
+- selected repository
+- compact task composer
+- active/running/blocked/failed/PR-ready tasks
+- task status badges
+- budget/usage glance
+- runtime connection status only as a small utility signal
 
-Minimum agents to display:
+This should replace the current broad sidebar/status feeling. The sidebar is a
+task queue, not a settings dashboard.
 
-- Manager
-- Planner
-- Coder
-- Tester
-- Reviewer
-
-### Terminal Panel
+### Center: Live Agent Session
 
 Responsibilities:
 
-- command output
-- command status
-- exit code
-- test results
-- rerun controls
+- current task title and status
+- pause/abort controls
+- plan progress strip
+- live thinking/tool/code stream
+- command output summaries
+- visible step transitions
+- bottom tabs: `LOG`, `DIFF`, `TESTS`
 
-Terminal output should be readable, searchable, and linked to the task run.
+This is the most important surface. When a task is running, the user should
+see the agent doing engineering work: reading files, matching conventions,
+editing code, running tests, and explaining skips.
 
-### Diff Panel
-
-Responsibilities:
-
-- changed files
-- inline diff
-- change summary
-- proposal revision history
-- accept/reject controls
-- file-level notes
-
-The diff panel is one of the highest-trust surfaces in the product.
-
-### Chat Panel
+### New Session Surface
 
 Responsibilities:
 
-- task-scoped conversation
-- clarifying questions
-- user instructions
-- explanations
-- follow-up requests
-- structured intent brief
-- plan revision request
-- file references
+- task conversation
+- clarification questions
+- plan card embedded in chat
+- explicit approve/run action
+- live run preview on the right once approved
 
-Chat is a supporting surface. It should not dominate the product.
+Chat is strongest during task formation. After approval, the live coding run
+should become the dominant surface.
 
-### Memory Panel
+### Plan Gate
 
 Responsibilities:
 
-- relevant project rules
-- previous decisions
-- task context
-- linked documents
-- repository notes
+- proposed plan steps
+- touched files or expected file areas
+- estimated time/cost
+- risk labels
+- approve all vs step-by-step mode
+- edit/regenerate plan
 
-Memory should be inspectable and editable over time.
+The plan gate is the boundary before code changes. It should be fast to read
+and approve, not buried among generic state cards.
 
-## Navigation Model
+### Diff Review
 
-Primary navigation should be task-centered:
+Responsibilities:
 
-- Inbox or active tasks
-- Current workspace
-- History
-- Repositories
-- Memory
-- Settings
+- file tree with A/M/D markers and line stats
+- unified and split diff modes
+- per-file reasoning: why this change, convention matched, tests covering it
+- per-file approve/request-change actions
+- final approve/apply/commit/PR handoff
 
-Secondary navigation can expose:
+The diff review should follow `10a`. It is the trust surface, not an
+afterthought inside a scroll stack.
 
-- files
-- commits
-- runs
-- logs
-- docs
+### Tests And Terminal
 
-## Task States
+Responsibilities:
 
-Core states:
+- live command output
+- command status and exit code
+- failed test summaries
+- rerun controls for approved commands
+- self-fix loop history
 
-- Created
-- Planning
-- Waiting for approval
-- Running
-- Testing
-- Waiting for review
-- Completed
-- Failed
-- Archived
+Terminal output should feel close to Claude Code/Codex: readable, chronological,
+and linked to agent actions.
 
-Each state should have a clear primary action.
+### Decision Inbox
+
+Responsibilities:
+
+- agent questions
+- explicit choices
+- consequence comparison
+- "nothing is guessed" state
+- batch answering across tasks later
+
+Decision prompts are not errors. They are part of the trust model.
+
+## State Model
+
+Core task states should map to visible product states:
+
+- Drafting: user is describing the task.
+- Clarifying: agent asks questions before planning.
+- Plan Proposed: nothing has run yet.
+- Running: agent is reading/editing/testing.
+- Needs You: agent is blocked on a decision.
+- Review Ready: diff and tests are ready.
+- Failed: failure summary and rollback/retry path are visible.
+- PR Ready/Open: reviewed output is ready to publish or already published.
+
+Avoid generic labels like `Human Review` as the primary UI copy. They describe
+implementation state, not user experience.
 
 ## Interaction Rules
 
-- Always show current task state.
-- Always show changed files before approval.
-- Always require a fresh approval when task conversation changes the active
-  plan.
-- Always preserve rejected edit proposals when a revised proposal replaces
-  them.
-- Always show resolved, missing, or blocked file references attached to task
-  messages.
-- Always show command logs for commands run by agents.
-- Never hide failures behind generic status.
-- Use native macOS controls where appropriate.
-- Make keyboard workflows first-class.
-- Avoid UI that implies the app is an IDE clone.
+- The first screen asks what Forge should build.
+- The main running screen shows live agent work before metadata.
+- The plan gate is required before code mutation.
+- The agent must ask when the next step requires product/architecture judgment.
+- Diff and tests must be one click away during and after a run.
+- Review actions are file-level first, task-level second.
+- Runtime diagnostics live in Settings, not the core demo path.
+- Git preflight remains available, but it should not dominate the primary
+  coding demo.
+- Keyboard shortcuts should follow the design handoff: `⌘1` Diff, `⌘2` Tests,
+  `⌘3` Log, `⌘N` New Task, `⌘K` command/repo switch.
 
 ## MVP Workspace
 
-The first useful workspace can include:
+The next MVP workspace should implement these surfaces in order:
 
-- left task list
-- center planner and run stream
-- right diff/review panel
-- bottom terminal output
-- compact chat input
+1. `1a` New task composer.
+2. `1b` Plan approval card.
+3. `14a` Main running task view with live stream and Log/Diff/Tests tabs.
+4. `10a` Fullscreen diff review.
+5. `32a` Chat-to-task session once the main run loop works.
 
-The exact layout can change, but the hierarchy should not: task and review are
-more important than chat.
+This is intentionally different from polishing the current dashboard. The goal
+is to make the first demo feel like an agent coding product.

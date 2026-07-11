@@ -50,14 +50,17 @@ execution proposals, and edit proposal guidance. Before a plan revision, the
 provider can run a bounded context loop: each round returns `SearchAndRead`
 with search terms/read paths or `ReadyForPlan` to stop. The runtime validates
 and executes those requests through logged read-only tools before calling the
-model again for the revision. During edit proposal generation, the runtime can
-also feed blocked validation checks back to the provider for a bounded repair
-loop. When validation commands fail, the runtime can ask the provider for a
-repair brief from compact command summaries. A later edit proposal request can
-include that repair brief so the provider proposes a narrow follow-up repair
-artifact. The runtime still generates IDs, timestamps, validation state, and
-restricted apply operations locally. The remote provider never directly edits
-files, runs commands, commits, pushes, or executes tools.
+model again for the revision. After plan approval, the runtime runs a bounded
+read-only execution-context pass before asking for the execution proposal, so
+the provider sees updated context without directly running tools. During edit
+proposal generation, the runtime can also feed blocked validation checks back
+to the provider for a bounded repair loop. When validation commands fail, the
+runtime can ask the provider for a repair brief from compact command summaries.
+A later edit proposal request can include that repair brief so the provider
+proposes a narrow follow-up repair artifact. The runtime still generates IDs,
+timestamps, validation state, execution proposal evidence, and restricted
+apply operations locally. The remote provider never directly edits files, runs
+commands, commits, pushes, or executes tools.
 
 ## Configuration
 
@@ -142,6 +145,7 @@ A provider receives task state and returns structured output. Current output:
 - bounded requested search terms and repo-relative read paths
 - execution summary
 - proposed actions
+- execution proposal context files and tool evidence
 - proposed file changes
 - proposal revision number
 - previous proposal link

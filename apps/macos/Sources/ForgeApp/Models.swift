@@ -629,6 +629,8 @@ struct ExecutionProposal: Identifiable, Codable, Hashable {
     var provider: ModelProviderInfo
     var summary: String
     var proposedActions: [String]
+    var contextFiles: [ContextFile]?
+    var toolEvidence: [String]?
     var riskLevel: String
     var generatedAt: String
 }
@@ -689,7 +691,14 @@ struct RuntimeHealth: Codable, Hashable {
     var uptimeSeconds: Double
     var modelProvider: ModelProviderInfo?
     var modelProviderConfiguration: ModelProviderConfiguration?
+    var workspace: RuntimeWorkspaceInfo?
     var persistence: RuntimePersistenceInfo?
+}
+
+struct RuntimeWorkspaceInfo: Codable, Hashable {
+    var runtimeDir: String
+    var repoRoot: String
+    var repoRootSource: String
 }
 
 struct RuntimePersistenceInfo: Codable, Hashable {

@@ -42,6 +42,8 @@ Examples:
 - prepare a read-only PR handoff artifact from branch status, default-base
   detection, commit summaries, changed files, optional task context, and latest
   task validation state plus preflight evidence
+- prepare execution proposal context through bounded read-only repo tools after
+  plan approval
 - read project docs
 
 Can run automatically after workspace access is granted.
@@ -65,6 +67,10 @@ branch/upstream/remote/commit/worktree preflight readiness, blockers, and risk
 notes. These endpoints must not stage, unstage, commit, checkout, reset,
 clean, push, create pull requests, call external hosting APIs, or otherwise
 mutate the repository.
+
+The execution-context pass after plan approval uses the same low-risk
+`list_repo_files`, `search_repo_context`, and `read_context_file` tools. It
+does not mutate files, run commands, or perform git/network side effects.
 
 ### Medium Risk
 

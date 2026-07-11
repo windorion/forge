@@ -7,17 +7,27 @@ Last updated: 2026-07-11
 
 ## One-Line Status
 
-Forge is a working local prototype of a macOS-native agent workspace. It can
-create tasks, inspect bounded repo context, hold review gates, generate safe
-edit proposals, apply restricted Markdown edits, validate work, and persist task
-state locally. The runtime core now has automated smoke coverage. It is not yet
-a real autonomous coding agent product.
+Forge is a strong trust/runtime foundation with a first-pass coding-agent
+session shell and a usable full-screen diff review surface in the macOS app.
+It can create tasks, inspect bounded repo context, hold review gates, generate
+safe edit proposals, apply restricted Markdown edits, validate work, expose
+guarded git actions, and persist task state locally. The next milestone is to
+make that shell real: source-code patching, streamed command output,
+provider-driven patch/run/repair, and self-fix.
 
 ## Current Implementation
 
 Implemented:
 
 - Native SwiftUI macOS app shell.
+- First-pass macOS coding-agent session UI based on `design_handoff_forge`:
+  task queue, `1a`-style new-task empty state, live agent stream, plan
+  progress strip, Log/Diff/Tests tabs, compact `1b`-style plan gate, and action
+  rail. Existing review/git surfaces remain available inside the new shell.
+- First usable `10a`-style full-screen diff review surface with a changed-file
+  tree, main diff pane, why-this-change reasoning, validation/test evidence,
+  and apply/request-change actions backed by the existing proposal review
+  gates.
 - Local TypeScript runtime.
 - Task creation and task conversation.
 - Server-Sent Events from runtime to app.
@@ -32,7 +42,9 @@ Implemented:
   read/search context loop; the runtime validates and executes each requested
   round through logged read-only repo tools.
 - Explicit human plan approval.
-- Execution proposals.
+- Execution proposals generated after an additional bounded read-only
+  execution-context pass. The proposal stores tool evidence and context files
+  so the app can show what repository evidence informed the next action.
 - Safe edit proposal review flow with multi-file OpenAI proposal artifacts,
   including blocked preview-only unsupported operations.
 - `AppendText` and exact `ReplaceText` restricted edit operations for
@@ -89,6 +101,11 @@ Implemented:
   upstream/remote/commit/worktree/action readiness, pushes with no force,
   classifies failed git push output into common failure categories, and records
   a linked task event when possible.
+- Local repeatable git remote fixtures now run the real runtime HTTP API
+  against temporary bare remotes for stale remote/non-fast-forward push
+  rejection, branch-publish remote branch collision, and remote policy
+  rejection. Remote branch collision checks now use both local tracking refs
+  and `git ls-remote --heads`.
 - Read-only PR handoff preview from the macOS Review UI. The runtime resolves
   a default base branch when possible, compares current branch work against
   that base, suggests a branch name, PR title, draft body, test plan, commits,
@@ -112,7 +129,7 @@ Implemented:
   blocked-to-repaired proposal handling, and bounded blocked preview-only
   proposal handling, plus failed project validation repair brief generation
   and follow-up repair proposal generation.
-- A short local V0 demo script in `docs/development.md`.
+- A local foundation walkthrough in `docs/development.md`.
 - App-visible runtime state and diagnostics for unchecked/checking/running,
   disconnected, wrong version, provider configuration issues, SSE stream state,
   expected endpoint, database/task count, and copy/open diagnostics actions.
@@ -123,6 +140,10 @@ Implemented:
   app-managed processes, capture bounded build/launch output, list runtime
   directory candidates, expose launch commands in Settings/diagnostics, and
   report slow stop attempts.
+- Runtime launch now separates the runtime installation directory from the
+  repository root through `FORGE_REPO_ROOT`; the macOS app can launch a
+  prebuilt bundled runtime resource while passing the resolved repository root
+  explicitly, and health/settings diagnostics show both paths.
 
 ## Completion Estimate
 
@@ -130,22 +151,26 @@ These percentages are product-readiness estimates, not calendar estimates.
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| V0 local demo | 98-99% | A local demo can show task creation, context inspection, planning, review, restricted edits, validation, repair proposal review, git status/diff visibility, branch review, branch publish/upstream setup, commit preparation preview, explicit local commit and push actions, PR handoff preview with preflight evidence, core runtime/app-facing regression coverage, runtime diagnostics, provider settings coverage, and hardened runtime lifecycle diagnostics. |
-| Useful developer alpha | 56-66% | A developer can use Forge on small real tasks with model-backed planning/editing, visible diffs, branch review, branch publish/upstream setup, commit preparation, local commits, guarded push, PR handoff preview with preflight evidence, runtime lifecycle controls, and reliable rollback. |
-| Commercial beta | 25-30% | A paid user can install it, connect providers, trust permissions, use git workflows, and recover from failures. |
+| Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
+| Coding-agent demo V0 | 45-50% | Has a first-pass session UI shell and full-screen diff review surface, but still needs a real source patch engine, streamed command output, and provider-driven patch/run/repair loop. |
+| Useful developer alpha | 35-45% | A developer cannot yet rely on Forge like Codex or Claude Code for normal coding tasks. It needs real patching, command execution, recovery, and a stronger model-backed run loop. |
+| Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
 
 ## Distance To "Finished"
 
 Forge is past the "blank prototype" stage and has a credible architecture
-skeleton. It is still far from finished as a commercial product.
+skeleton. The product direction has now shifted from proving safety surfaces to
+making the first demo feel like an agent coding app.
 
 The hardest remaining work is not the app shell. The hardest remaining work is:
 
-- real model-backed agent execution, not deterministic simulation
+- a real model-backed coding run loop, not deterministic simulation
+- a polished UI that fully matches the handoff, especially exact split-diff,
+  durable file-level review state, and decision prompts
+- a useful source-code patch engine beyond restricted Markdown edits
+- streamed command execution and self-fix loops
 - reliable repository understanding beyond bounded file scans
-- safe but useful patch generation and diff review
-- app-managed runtime lifecycle
 - git workflow from dirty tree to approved published PR
 - robust command execution and failure recovery
 - native macOS distribution, signing, notarization, and updates
@@ -154,25 +179,22 @@ The hardest remaining work is not the app shell. The hardest remaining work is:
 
 ## V0 Finish Line
 
-V0 is done when a user can run Forge locally, create a task, watch it inspect
-real repo context, review a plan, approve a safe edit proposal, apply a
-restricted change, and see validation results.
+The old V0 foundation is mostly built. The new V0 finish line is the
+Coding-Agent Demo defined in `docs/v0_scope.md`: a user should type a coding
+task, approve a plan, watch a live agent run, see code/test activity, review a
+real source diff, and approve the final patch.
 
 Remaining V0 gaps:
 
-- polish app-managed runtime start/stop for packaged app locations and
-  distribution-specific path resolution
-- polish git/diff review navigation for larger multi-file changes and packaged
-  app workflows
-- polish local commit review for signing and project-specific hook edge cases
-- add live remote fixtures for push/branch-publish auth failures,
-  non-fast-forward rejections, branch protection, disconnected networks, and
-  fork remotes
-- add approved PR publication/GitHub integration on top of the read-only PR
-  handoff preflight
-- optional live-provider smoke with a user-supplied OpenAI key outside
-  committed tests
-- small UI polish pass around task states and review panels
+- polish the first-pass `1a`/`1b`/`14a` shell toward the exact handoff
+- polish the first usable `10a` full-screen diff review toward exact handoff
+  behavior and durable per-file decisions
+- add source-file patch proposals and safe apply/rollback
+- add approved task-scoped command execution with streamed output
+- wire provider-driven read/search/patch/run/repair into the normal flow
+- implement full diff review with per-file reasoning and request-change loop
+- keep git/preflight work as supporting infrastructure rather than the main
+  demo
 
 ## Alpha Finish Line
 
@@ -181,12 +203,12 @@ with a model provider while preserving human review.
 
 Alpha requires:
 
-- real provider-backed planning and proposal generation in normal flows
-- a richer patch format than append/exact replace
-- side-by-side diff review
-- git status, changed-file inspection, commit preparation preview, and local
-  commit creation in the app
-- branch publish/upstream setup and guarded current-branch push in the app
+- real provider-backed patch/run/repair in normal flows
+- a richer patch format and rollback/recovery
+- full diff review matching the design handoff
+- streamed terminal/test output in the task
+- git status, changed-file inspection, commit preparation, local commit,
+  branch publish, guarded push, and PR handoff/publication
 - task recovery after runtime restart and common failures
 - a clean onboarding path for choosing a repo and provider
 
@@ -211,9 +233,13 @@ Commercial beta requires:
 
 Primary risks:
 
-- Forge may feel like a simulator until the real model/tool loop is strong.
-- The app can become too dashboard-like if diff, git, and terminal workflows do
-  not become first-class.
+- Forge has started moving away from the workflow dashboard shape, but the
+  current shell can still feel like a simulator until real patch/test activity
+  is first-class.
+- Forge may feel like a simulator until the real model/tool/patch/test loop is
+  strong.
+- The app can lose to Codex/Claude Code if it does not make live coding and
+  terminal/test output first-class.
 - Local-first privacy is valuable, but remote model configuration must be clear
   enough that users trust what leaves the machine.
 - The first commercial scope must stay narrow; becoming a full IDE too early

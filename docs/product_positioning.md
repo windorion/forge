@@ -51,7 +51,19 @@ Forge should not copy any one product. It should combine the missing layer
 between them: a local, native workspace where agent work is visible and
 reviewable.
 
+The near-term quality bar is set by Codex and Claude Code's interaction
+rhythm: the user should see the agent understand the repo, make changes, run
+checks, recover from failures, and produce a reviewable diff. Forge's
+differentiation is the native Mac workspace, local-first memory, explicit
+approval model, and stronger review surfaces around that loop.
+
 ## Core Differentiators
+
+### 0. Live Coding-Agent Session
+
+Forge should first look and feel like a place where an agent is actively doing
+software engineering work. Plans, logs, diffs, tests, and decisions are part of
+one session instead of separate admin panels.
 
 ### 1. Not Editor-First
 
@@ -114,6 +126,10 @@ Reasoning:
 
 ## Positioning Risks
 
+- If the first demo does not show live code/test/diff activity, users will not
+  believe Forge is in the same category as Codex or Claude Code.
+- If Forge looks like a workflow dashboard, the agent value will feel
+  abstract even if the runtime is technically strong.
 - If Forge looks too much like an editor, users will compare it directly to
   Cursor and VS Code.
 - If Forge looks too much like chat, users will not understand the workspace

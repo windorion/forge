@@ -12,19 +12,25 @@ DIST_DIR="$ROOT_DIR/dist"
 APP_BUNDLE="$DIST_DIR/$BUNDLE_NAME.app"
 APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
+APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$APP_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
+RUNTIME_RESOURCE="$APP_RESOURCES/runtime"
 
 pkill -x "$APP_NAME" >/dev/null 2>&1 || true
 
 cd "$ROOT_DIR"
 swift build
 BUILD_BINARY="$(swift build --show-bin-path)/$APP_NAME"
+(cd "$ROOT_DIR/runtime" && npm run build)
 
 rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_MACOS"
+mkdir -p "$RUNTIME_RESOURCE"
 cp "$BUILD_BINARY" "$APP_BINARY"
 chmod +x "$APP_BINARY"
+cp "$ROOT_DIR/runtime/package.json" "$RUNTIME_RESOURCE/package.json"
+cp -R "$ROOT_DIR/runtime/dist" "$RUNTIME_RESOURCE/dist"
 
 cat >"$INFO_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

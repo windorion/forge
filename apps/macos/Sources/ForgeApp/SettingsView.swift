@@ -18,6 +18,7 @@ struct SettingsView: View {
                 runtimeProcessMessage: workspace.runtimeProcessMessage,
                 runtimeProcessID: workspace.runtimeProcessID,
                 runtimeProcessDirectory: workspace.runtimeProcessDirectory,
+                runtimeRepositoryRoot: workspace.runtimeRepositoryRoot,
                 runtimeProcessCandidateDirectories: workspace.runtimeProcessCandidateDirectories,
                 runtimeProcessLastOutput: workspace.runtimeProcessLastOutput,
                 runtimeProcessLaunchCommand: workspace.runtimeProcessLaunchCommand,
@@ -80,6 +81,7 @@ private struct RuntimeSettingsTab: View {
     var runtimeProcessMessage: String
     var runtimeProcessID: Int32?
     var runtimeProcessDirectory: String?
+    var runtimeRepositoryRoot: String?
     var runtimeProcessCandidateDirectories: [String]
     var runtimeProcessLastOutput: String?
     var runtimeProcessLaunchCommand: String?
@@ -113,13 +115,19 @@ private struct RuntimeSettingsTab: View {
                 if let runtimeProcessDirectory {
                     LabeledContent("Process Directory", value: runtimeProcessDirectory)
                 }
+                if let runtimeRepositoryRoot {
+                    LabeledContent("Repository Root", value: runtimeRepositoryRoot)
+                } else if let workspace = runtimeHealth?.workspace {
+                    LabeledContent("Repository Root", value: workspace.repoRoot)
+                    LabeledContent("Repository Source", value: workspace.repoRootSource)
+                }
                 if let runtimeProcessLaunchCommand {
                     LabeledContent("Launch Command", value: runtimeProcessLaunchCommand)
                 }
 
                 if !runtimeProcessCandidateDirectories.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Runtime Directory Candidates")
+                        Text("Runtime Launch Candidates")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                         ForEach(runtimeProcessCandidateDirectories, id: \.self) { candidate in

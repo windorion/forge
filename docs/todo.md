@@ -10,40 +10,51 @@ Last updated: 2026-07-11
 Keep this file practical. A future agent should be able to open it and know
 what to do next without rereading the whole project history.
 
-## P0: Finish V0
+## P0: Coding-Agent Demo V0
 
-- Polish the macOS git/diff review panel for larger multi-file navigation and
-  packaged app workflows.
-- Polish local commit review for signing and project-specific hook edge cases.
-- Add live remote fixtures for push/branch-publish auth failures,
-  non-fast-forward rejections, branch protection, disconnected networks, stale
-  remote refs, and fork remotes.
-- Polish app-managed runtime start/stop for packaged app locations and
-  distribution-specific path resolution.
-- Optionally run a live-provider smoke with a user-supplied OpenAI API key,
-  without committing secrets.
+Goal: make Forge feel like a real coding-agent application, not a workflow
+dashboard.
+
+- Polish the first-pass `1a`/`1b`/`14a` macOS shell toward the exact handoff:
+  tighter spacing, better selected states, stronger task queue density, and
+  more faithful live-run copy.
+- Polish the first usable `10a` full-screen diff review: exact split-diff
+  behavior, keyboard shortcuts, file-level approval persistence, and stronger
+  tests-covering-this-file evidence.
+- Add source-file patch proposals for normal code files, not only Markdown,
+  with strict path validation, pre-apply checks, and rollback metadata.
+- Add approved task-scoped command execution with streamed output, status,
+  exit code, timeout, and cancellation hooks.
+- Connect command failures to the existing repair-brief/proposal loop so Forge
+  can produce a reviewable self-fix after failed tests.
+- Keep the current trust gates: plan approval before mutation, human review
+  before apply, explicit command approval, and explicit git actions.
 
 ## P1: Real Agent Behavior
 
-- Wire the OpenAI provider into the normal task flow beyond deterministic
-  fallback demos.
-- Extend the bounded OpenAI model-guided context loop into broader
-  tool-call-driven planning and execution loops beyond read-only context.
-- Add stricter model output normalization and failure recovery.
-- Extend the richer proposal artifact into a real patch apply engine: section
-  replace, structured multi-change rollback/recovery, and stronger workspace
-  revalidation.
-- Keep all patch application behind runtime validation and human approval.
-- Connect follow-up repair proposals to commit preparation and rollback
-  surfaces.
+- Wire the OpenAI provider into the normal read/search/patch/run/repair task
+  flow beyond deterministic fallback demos.
+- Extend the bounded read-only planning/execution context loops into a
+  runtime-owned tool-call loop with strict allowed tools and stop conditions.
+- Add stricter model output normalization, retry rules, and failure recovery
+  for malformed tool calls or patch artifacts.
+- Add request-change revision loops that operate from full diff review, not
+  only the current review stack.
+- Make pause, abort, resume, and stuck-task recovery visible in the live
+  session.
 
 ## P2: Review, Diff, And Git
 
-- Improve the first-pass native side-by-side diff view with file filtering and
-  better large-diff navigation.
-- Add approved PR creation/publication after the read-only PR handoff preflight.
+- Polish the native diff review for larger multi-file navigation, binary/large
+  file states, and packaged app workflows.
+- Connect accepted diffs to commit preparation, local commit, branch publish,
+  push, and PR handoff surfaces without letting git dominate the primary demo.
+- Add approved PR creation/publication after the read-only PR handoff
+  preflight.
 - Add GitHub integration for PR metadata, draft PR creation, and remote
   branch/fork awareness.
+- Add hosted-remote fixtures for push/branch-publish auth failures,
+  disconnected networks, hosting-provider branch protection, and fork remotes.
 
 ## P3: Repository Understanding
 
@@ -56,10 +67,6 @@ what to do next without rereading the whole project history.
 
 ## P4: Runtime And Permissions
 
-- Let the app manage the runtime lifecycle.
-- Add command runner permissions for task-scoped commands beyond allowlisted
-  validation presets.
-- Add terminal output streaming into the task.
 - Add task cancellation.
 - Add timeout and stuck-task recovery.
 - Add clearer audit log exports.
@@ -85,12 +92,39 @@ what to do next without rereading the whole project history.
 
 ## Done Recently
 
+- Added a first-pass macOS coding-agent session shell in `WorkspaceView.swift`:
+  neo-brutalist visual tokens, `1a`-style empty task composer, task queue,
+  live agent stream, plan progress strip, Log/Diff/Tests tabs, compact plan
+  gate, and action rail. Verified with `swift build`.
+- Added a first usable `10a` full-screen diff review surface with changed-file
+  tree, main diff pane, why-this-change reasoning, validation evidence, and
+  apply/request-change actions wired to the existing review gates. Verified
+  with `swift build`.
+- Reset the roadmap and product direction around `design_handoff_forge`.
+  Foundation V0 is now treated as mostly-built trust/runtime infrastructure;
+  the next V0 is the coding-agent demo with live coding, source patches,
+  streamed tests, self-fix, and full diff review.
+- Added a bounded read-only execution-context pass after plan approval and
+  before execution proposal generation. The runtime records tool events,
+  merges inspected context files, and attaches context evidence to the
+  execution proposal for the macOS Review UI.
+- Hardened packaged runtime path resolution. The runtime now honors
+  `FORGE_REPO_ROOT`, health reports runtime/repo paths, the macOS app resolves
+  bundled runtime resources separately from repository roots, and
+  `script/build_and_run.sh` copies a prebuilt runtime into the app bundle.
+- Added `npm run smoke:git-remote`, a repeatable local bare-remote fixture
+  suite covering stale remote/non-fast-forward push rejection,
+  branch-publish remote branch collision, and remote policy rejection through
+  real runtime HTTP endpoints.
+- Hardened remote branch collision detection with `git ls-remote --heads` and
+  fixed git push failure classification so pre-receive/protected-branch
+  rejections are not mislabeled as non-fast-forward failures.
 - Broadened `npm run smoke:core` from runtime task flows into app-facing
   runtime contracts: status page links, health diagnostics, persistence
   metadata, model-provider settings GET/POST, OpenAI missing-key/ready/clear
   states, and verification that API keys are never persisted to the settings
   file.
-- Added a short local V0 demo script to `docs/development.md`.
+- Added a local foundation walkthrough to `docs/development.md`.
 - Hardened git diff review for binary and oversized files. Runtime diff
   responses now include display mode, unavailable reason, byte/line counts, and
   app preview limits; the macOS Review panel shows explicit messages instead

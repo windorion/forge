@@ -26,6 +26,7 @@ final class WorkspaceModel: ObservableObject {
     @Published var runtimeProcessMessage = "Runtime process has not been started by the app."
     @Published var runtimeProcessID: Int32?
     @Published var runtimeProcessDirectory: String?
+    @Published var runtimeRepositoryRoot: String?
     @Published var runtimeProcessCandidateDirectories: [String] = []
     @Published var runtimeProcessLastOutput: String?
     @Published var runtimeProcessLaunchCommand: String?
@@ -102,20 +103,21 @@ final class WorkspaceModel: ObservableObject {
             return
         }
 
-        runtimeProcessCandidateDirectories = describeRuntimeDirectoryCandidates()
+        runtimeProcessCandidateDirectories = describeRuntimeLaunchCandidates()
         runtimeProcessLastOutput = nil
         runtimeProcessLaunchCommand = nil
 
-        guard let runtimeDirectory = resolveRuntimeDirectory() else {
+        guard let launchResolution = resolveRuntimeLaunch() else {
             runtimeProcessState = .failed
-            runtimeProcessMessage = "Could not find the repository runtime directory. Checked \(runtimeProcessCandidateDirectories.count) candidate(s)."
+            runtimeProcessMessage = "Could not resolve both a runtime directory and repository root. Checked \(runtimeProcessCandidateDirectories.count) candidate(s)."
             statusMessage = runtimeProcessMessage
             return
         }
 
         runtimeProcessState = .starting
         runtimeProcessMessage = "Building runtime before launch..."
-        runtimeProcessDirectory = runtimeDirectory.path(percentEncoded: false)
+        runtimeProcessDirectory = launchResolution.runtimeDirectory.path(percentEncoded: false)
+        runtimeRepositoryRoot = launchResolution.repositoryRoot.path(percentEncoded: false)
         statusMessage = "Starting Forge runtime..."
 
         Task {
@@ -126,10 +128,14 @@ final class WorkspaceModel: ObservableObject {
                     return
                 }
 
-                runtimeProcessLaunchCommand = "npm run build"
-                let buildOutput = try await Self.buildRuntime(at: runtimeDirectory)
-                runtimeProcessLastOutput = buildOutput
-                try launchRuntimeNodeProcess(at: runtimeDirectory)
+                if launchResolution.buildBeforeLaunch {
+                    runtimeProcessLaunchCommand = "npm run build"
+                    let buildOutput = try await Self.buildRuntime(at: launchResolution.runtimeDirectory)
+                    runtimeProcessLastOutput = buildOutput
+                } else {
+                    runtimeProcessLastOutput = "Using prebuilt bundled runtime; npm build skipped."
+                }
+                try launchRuntimeNodeProcess(launchResolution)
                 refreshRuntimeHealthAfterDelay()
             } catch {
                 runtimeProcessState = .failed
@@ -946,6 +952,7 @@ final class WorkspaceModel: ObservableObject {
         runtimeProcessID = nil
         runtimeProcessState = .external
         runtimeProcessDirectory = nil
+        runtimeRepositoryRoot = nil
         runtimeProcessMessage = "Runtime is reachable at \(runtimeEndpoint) but was not started by this app."
         runtimeProcessLaunchCommand = nil
         runtimeLastError = nil
@@ -973,7 +980,7 @@ final class WorkspaceModel: ObservableObject {
         return message
     }
 
-    private func launchRuntimeNodeProcess(at runtimeDirectory: URL) throws {
+    private func launchRuntimeNodeProcess(_ launchResolution: RuntimeLaunchResolution) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = [
@@ -981,10 +988,11 @@ final class WorkspaceModel: ObservableObject {
             "--disable-warning=ExperimentalWarning",
             "dist/server.js"
         ]
-        process.currentDirectoryURL = runtimeDirectory
+        process.currentDirectoryURL = launchResolution.runtimeDirectory
 
         var environment = ProcessInfo.processInfo.environment
         environment["FORGE_RUNTIME_PORT"] = "17373"
+        environment["FORGE_REPO_ROOT"] = launchResolution.repositoryRoot.path(percentEncoded: false)
         process.environment = environment
 
         let outputPipe = Pipe()
@@ -1006,8 +1014,8 @@ final class WorkspaceModel: ObservableObject {
         runtimeProcess = process
         runtimeProcessID = process.processIdentifier
         runtimeProcessState = .running
-        runtimeProcessLaunchCommand = "node --disable-warning=ExperimentalWarning dist/server.js"
-        runtimeProcessMessage = "Runtime process \(process.processIdentifier) is running from \(runtimeDirectory.path)."
+        runtimeProcessLaunchCommand = "FORGE_REPO_ROOT=\"\(launchResolution.repositoryRoot.path(percentEncoded: false))\" node --disable-warning=ExperimentalWarning dist/server.js"
+        runtimeProcessMessage = "Runtime process \(process.processIdentifier) is running from \(launchResolution.runtimeDirectory.path) against \(launchResolution.repositoryRoot.path)."
         statusMessage = "Runtime process started."
     }
 
@@ -1088,12 +1096,19 @@ final class WorkspaceModel: ObservableObject {
         }
     }
 
-    private func resolveRuntimeDirectory() -> URL? {
+    private func resolveRuntimeLaunch() -> RuntimeLaunchResolution? {
         for runtimeDirectory in runtimeDirectoryCandidateURLs() {
-            let packageFile = runtimeDirectory.appendingPathComponent("package.json")
-            if FileManager.default.fileExists(atPath: packageFile.path) {
-                return runtimeDirectory
+            guard runtimeDirectoryIsUsable(runtimeDirectory),
+                  let repositoryRoot = resolveRepositoryRoot(for: runtimeDirectory)
+            else {
+                continue
             }
+
+            return RuntimeLaunchResolution(
+                runtimeDirectory: runtimeDirectory,
+                repositoryRoot: repositoryRoot,
+                buildBeforeLaunch: runtimeDirectoryRequiresBuild(runtimeDirectory)
+            )
         }
 
         return nil
@@ -1101,25 +1116,105 @@ final class WorkspaceModel: ObservableObject {
 
     private func runtimeDirectoryCandidateURLs() -> [URL] {
         let currentDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+        let bundleResources = Bundle.main.resourceURL
         let bundleParent = Bundle.main.bundleURL.deletingLastPathComponent()
         let bundledRepositoryRoot = bundleParent.deletingLastPathComponent()
 
-        let candidateRoots = [
-            currentDirectory,
-            bundledRepositoryRoot,
-            bundleParent
-        ]
+        let explicitRuntime = ProcessInfo.processInfo.environment["FORGE_RUNTIME_DIR"]
+            .flatMap { value in
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : URL(fileURLWithPath: trimmed, isDirectory: true)
+            }
 
-        return candidateRoots.map { root in
-            root.appendingPathComponent("runtime", isDirectory: true).standardizedFileURL
-        }
+        return uniqueStandardizedURLs([
+            explicitRuntime,
+            bundleResources?.appendingPathComponent("runtime", isDirectory: true),
+            currentDirectory.appendingPathComponent("runtime", isDirectory: true),
+            bundledRepositoryRoot.appendingPathComponent("runtime", isDirectory: true),
+            bundleParent.appendingPathComponent("runtime", isDirectory: true)
+        ].compactMap { $0 })
     }
 
-    private func describeRuntimeDirectoryCandidates() -> [String] {
-        runtimeDirectoryCandidateURLs().map { runtimeDirectory in
+    private func repositoryRootCandidateURLs(for runtimeDirectory: URL) -> [URL] {
+        let currentDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+        let bundleParent = Bundle.main.bundleURL.deletingLastPathComponent()
+        let bundledRepositoryRoot = bundleParent.deletingLastPathComponent()
+        let runtimeParent = runtimeDirectory.deletingLastPathComponent()
+
+        let explicitRepository = ProcessInfo.processInfo.environment["FORGE_REPO_ROOT"]
+            .flatMap { value in
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : URL(fileURLWithPath: trimmed, isDirectory: true)
+            }
+
+        return uniqueStandardizedURLs([
+            explicitRepository,
+            currentDirectory,
+            currentDirectory.deletingLastPathComponent(),
+            runtimeParent,
+            runtimeParent.deletingLastPathComponent(),
+            bundledRepositoryRoot,
+            bundleParent
+        ].compactMap { $0 })
+    }
+
+    private func resolveRepositoryRoot(for runtimeDirectory: URL) -> URL? {
+        repositoryRootCandidateURLs(for: runtimeDirectory).first(where: repositoryRootIsUsable)
+    }
+
+    private func runtimeDirectoryIsUsable(_ runtimeDirectory: URL) -> Bool {
+        let packageFile = runtimeDirectory.appendingPathComponent("package.json")
+        let distServer = runtimeDirectory.appendingPathComponent("dist/server.js")
+        let sourceServer = runtimeDirectory.appendingPathComponent("src/server.ts")
+        return FileManager.default.fileExists(atPath: packageFile.path) &&
+            (FileManager.default.fileExists(atPath: distServer.path) || FileManager.default.fileExists(atPath: sourceServer.path))
+    }
+
+    private func runtimeDirectoryRequiresBuild(_ runtimeDirectory: URL) -> Bool {
+        let sourceServer = runtimeDirectory.appendingPathComponent("src/server.ts")
+        let packageLock = runtimeDirectory.appendingPathComponent("package-lock.json")
+        let bundledRuntime = Bundle.main.resourceURL?.appendingPathComponent("runtime", isDirectory: true).standardizedFileURL
+        let isBundledRuntime = bundledRuntime.map { $0.path(percentEncoded: false) == runtimeDirectory.standardizedFileURL.path(percentEncoded: false) } ?? false
+        return !isBundledRuntime &&
+            FileManager.default.fileExists(atPath: sourceServer.path) &&
+            FileManager.default.fileExists(atPath: packageLock.path)
+    }
+
+    private func repositoryRootIsUsable(_ root: URL) -> Bool {
+        let gitDirectory = root.appendingPathComponent(".git")
+        let readme = root.appendingPathComponent("README.md")
+        return FileManager.default.fileExists(atPath: gitDirectory.path) ||
+            FileManager.default.fileExists(atPath: readme.path)
+    }
+
+    private func uniqueStandardizedURLs(_ urls: [URL]) -> [URL] {
+        var seen = Set<String>()
+        var unique: [URL] = []
+        for url in urls.map(\.standardizedFileURL) {
+            let path = url.path(percentEncoded: false)
+            if seen.insert(path).inserted {
+                unique.append(url)
+            }
+        }
+        return unique
+    }
+
+    private func describeRuntimeLaunchCandidates() -> [String] {
+        runtimeDirectoryCandidateURLs().flatMap { runtimeDirectory in
             let packageFile = runtimeDirectory.appendingPathComponent("package.json")
-            let status = FileManager.default.fileExists(atPath: packageFile.path) ? "found package.json" : "missing package.json"
-            return "\(runtimeDirectory.path) (\(status))"
+            let distServer = runtimeDirectory.appendingPathComponent("dist/server.js")
+            let sourceServer = runtimeDirectory.appendingPathComponent("src/server.ts")
+            let runtimeStatus = [
+                FileManager.default.fileExists(atPath: packageFile.path) ? "found package.json" : "missing package.json",
+                FileManager.default.fileExists(atPath: distServer.path) ? "found dist/server.js" : "missing dist/server.js",
+                FileManager.default.fileExists(atPath: sourceServer.path) ? "found src/server.ts" : "missing src/server.ts"
+            ].joined(separator: ", ")
+            let repoCandidates = repositoryRootCandidateURLs(for: runtimeDirectory)
+                .map { repositoryRoot in
+                    let repoStatus = repositoryRootIsUsable(repositoryRoot) ? "usable repo root" : "not a repo root"
+                    return "  repo: \(repositoryRoot.path) (\(repoStatus))"
+                }
+            return ["runtime: \(runtimeDirectory.path) (\(runtimeStatus))"] + repoCandidates
         }
     }
 
@@ -1192,6 +1287,7 @@ final class WorkspaceModel: ObservableObject {
             "Runtime process message: \(runtimeProcessMessage)",
             "Runtime process id: \(runtimeProcessID.map(String.init) ?? "None")",
             "Runtime process directory: \(runtimeProcessDirectory ?? "Unknown")",
+            "Runtime repository root: \(runtimeRepositoryRoot ?? runtimeHealth?.workspace?.repoRoot ?? "Unknown")",
             "Runtime launch command: \(runtimeProcessLaunchCommand ?? "None")",
             "Git status: \(gitStatus?.summary ?? "Unavailable")",
             "Git status error: \(gitStatusLastError ?? "None")",
@@ -1225,6 +1321,12 @@ final class WorkspaceModel: ObservableObject {
                 "Version: \(health.version)",
                 "Uptime seconds: \(Int(health.uptimeSeconds.rounded()))"
             ])
+
+            if let workspace = health.workspace {
+                lines.append("Runtime directory: \(workspace.runtimeDir)")
+                lines.append("Repository root: \(workspace.repoRoot)")
+                lines.append("Repository root source: \(workspace.repoRootSource)")
+            }
 
             if let persistence = health.persistence {
                 lines.append("Database path: \(persistence.databasePath)")
@@ -1429,4 +1531,10 @@ private enum RuntimeProcessError: LocalizedError {
             return "Runtime build failed with exit status \(status). \(trimmed)"
         }
     }
+}
+
+private struct RuntimeLaunchResolution {
+    var runtimeDirectory: URL
+    var repositoryRoot: URL
+    var buildBeforeLaunch: Bool
 }

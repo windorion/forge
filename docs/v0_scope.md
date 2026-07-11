@@ -3,218 +3,167 @@
 Document role: define the first end-to-end product target for Forge so early
 implementation has a clear finish line.
 
-## V0 Goal
+Last updated: 2026-07-11
 
-V0 should make Forge feel like a local agent workspace, even before full model
-and code-editing autonomy exists.
+## Scope Reset
+
+The previous V0 target proved the trust/runtime foundation, but it does not
+yet make Forge feel like a coding agent product.
+
+From now on, V0 means:
+
+> a local demo where Forge behaves like an agent coding app: task input,
+> clarification, plan approval, live code/test stream, self-fix, and full diff
+> review.
+
+The old task-to-review flow remains valuable infrastructure, but it is no
+longer the product finish line.
+
+## V0 Goal
 
 The user should be able to:
 
-1. Start the local runtime.
-2. Launch the native macOS app.
-3. Create a task.
-4. Watch the agent inspect real local project context.
-5. See tool calls, context files, plan steps, agent states, and runtime events.
-6. Continue a task conversation and see a structured intent brief.
-7. Ask Forge to revise the plan from the task conversation.
-8. Reach a human review gate before any code changes are applied.
-9. Approve a generated edit proposal before a narrow, controlled file change is
-   applied.
+1. Open Forge on a repository.
+2. Type a coding task in a first-screen composer.
+3. Watch Forge inspect repo context and ask clarifying questions when needed.
+4. Review and approve a plan card.
+5. Watch the agent run live: read files, edit code, run checks, and react to
+   failures.
+6. Open Diff and Tests while the run is active.
+7. Review a real multi-file source diff with per-file reasoning.
+8. Request changes or approve the final patch.
+9. Optionally create a local commit from the reviewed output.
+
+## Primary Design Targets
+
+Implement these screens first from `design_handoff_forge/`:
+
+- `1a` New task empty state.
+- `1b` Plan approval card.
+- `14a` Main running task window.
+- `10a` Fullscreen diff review.
+- `32a` New session chat-to-task.
+
+Secondary V0-adjacent states:
+
+- `33a` Agent question waiting for answer.
+- `19a` Task failed / rollback.
+- `24a` First task success.
+- `1d` Run complete / PR ready, initially as PR handoff if full PR creation is
+  not ready.
 
 ## V0 Product Feeling
 
-Forge v0 should not feel like a static task manager. It should feel like a
-transparent agent that is preparing work.
+Forge v0 should feel like:
 
-The product should show:
+- a coding agent is actively working
+- the user can supervise without micromanaging
+- every important side effect is still reviewable
+- failures and decisions are visible, not hidden
+- the UI is sharp, terminal-adjacent, and developer-first
 
-- what the Manager is doing
-- what the Planner is doing
-- which local files were inspected
-- which tools ran
-- what plan was produced
-- why the task is waiting for human review
+It should not feel like:
+
+- a generic task dashboard
+- a settings-heavy admin panel
+- a git preflight demo
+- a chat app with cards attached
 
 ## V0 Included
 
-- SwiftUI native macOS app shell
+- macOS SwiftUI app using the design handoff's layout and visual language
 - local TypeScript runtime
-- task creation
-- Server-Sent Events stream
-- deterministic Agent Loop v0
-- local file listing and file reads
-- task-intent repo context search
-- OpenAI plan revision model-guided context loop through bounded read-only repo
-  tools
-- visible tool calls
-- visible context files
-- visible plan steps
-- task conversation
-- task message file references
-- structured intent briefs
-- conversation-driven plan revisions
-- human review gate
-- SQLite task persistence
-- model-provider abstraction
-- provider configuration visibility
-- editable model-provider settings
-- execution proposals
-- safe edit proposals
-- richer OpenAI edit proposal artifacts for review, including blocked
-  preview-only unsupported operations
-- revised edit proposals after requested changes
-- edit proposal validation
-- explicit apply/reject actions for edit proposals
-- post-apply validation runs
-- approved runtime validation preset
-- workspace validation preset config
-- command permission request surface
-- branch preparation review plus explicit local branch create/switch actions
-- branch publish review plus explicit first-push/upstream setup
-- git status, diff, commit preparation review, explicit local commit, and
-  explicit current-branch push surfaces
-- read-only PR handoff preview with title/body/test-plan suggestions and
-  structured preflight evidence
-- app-visible runtime state and diagnostics
-- copy/open runtime diagnostics actions
-- no automatic file changes
+- task composer and task session
+- repo context search/read tools
+- clarification question flow
+- plan card and approve/regenerate/edit path
+- live agent stream
+- plan progress strip
+- Log/Diff/Tests tabs
+- model-provider-backed normal run path
+- source-file patch proposal format beyond Markdown-only edits
+- controlled patch apply with rollback/revalidation
+- approved task-scoped command runner for checks/tests
+- command output streaming into the task
+- failed-check self-fix loop
+- full-screen diff review with file tree, unified/split mode, per-file
+  reasoning, tests covering the file, approve file, and request change
+- local commit review after final approval
+- runtime persistence and crash-resume basics
+- audit trail for tools, patches, commands, approvals, and git actions
+- Settings for provider/runtime only as supporting surfaces
 
 ## V0 Not Included
 
-- full autonomous tool-using real LLM loop
-- autonomous file edits
-- arbitrary command execution
-- general test runner orchestration
-- PR publication
-- branch deletion or history rewriting
-- full repository index
-- Tree-sitter parsing
-- provider ecosystem beyond local deterministic and optional OpenAI
-- release packaging
+- full IDE/editor replacement
+- arbitrary shell execution
+- silent autonomous commits, pushes, or PRs
+- hosted GitHub branch protection/auth/fork fixtures
+- multi-task mission control
+- command palette, menu bar, widgets, CLI companion
+- full repository semantic index
+- signed/notarized distribution
+- team collaboration
 
-## V0 Completion Criteria
+## Completion Criteria
 
 V0 is complete when:
 
-- A user can run `cd runtime && npm run dev`.
-- A user can run `./script/build_and_run.sh`.
-- The app can create a task.
-- Creating a task records the initial objective as a task message and produces
-  a structured intent brief.
-- A user can add a task message and receive an updated intent brief.
-- A user can mention repo-local files in task messages and see resolved,
-  missing, or blocked references preserved on the message.
-- A user can generate a plan revision from the latest task conversation.
-- Approving a plan targets the current plan revision when one exists, so an old
-  approval does not automatically approve a revised plan.
-- The runtime can inspect real local project files.
-- The runtime can derive search terms from the task intent and inspect
-  matching repo-local context files.
-- The app updates from runtime events.
-- The task reaches `Human Review`.
-- The UI shows tool calls and context files.
-- No code changes are made without approval.
-- A generated edit proposal can be rejected without changing files.
-- A rejected edit proposal can be revised from the latest task conversation
-  without changing files, while preserving the rejected proposal in history.
-- A generated edit proposal can be explicitly applied through a restricted
-  Markdown append, exact replace, or new docs create-file operation.
-- A generated edit proposal can be validated before apply, and blocked if the
-  workspace no longer matches the safe append, exact replace, or create-file
-  boundary.
-- A blocked generated edit proposal can be repaired through bounded validation
-  feedback before returning to human review.
-- Applying an edit proposal runs controlled built-in validation before the task
-  is marked completed.
-- Failed validation can produce a provider-backed repair brief without
-  changing files or rerunning commands.
-- A failed validation repair brief can seed a follow-up edit proposal without
-  changing files.
-- A task can approve and run the `runtime-typescript` validation preset for
-  `npm run check` and `npm run build`.
-- A task can approve and run the `macos-swiftpm` validation preset for
-  `swift build`.
-- Runtime can load workspace validation presets from
-  `.forge/validation-presets.json`.
-- The app can show runtime-derived command permission state before approving or
-  running project validation presets.
-- The Settings window can show and edit runtime-derived model-provider status,
-  missing provider configuration, non-secret provider options, Keychain-backed
-  OpenAI API key sync, and remote-context boundary.
-- The app shows whether the expected runtime endpoint is unchecked, checking,
-  running, disconnected, wrong version, or blocked by provider configuration,
-  and exposes copy/open diagnostics actions.
-- The app can build, start, and stop the local runtime process it owns during
-  development, while treating externally launched runtime processes as
-  connection targets rather than kill targets.
-- The app can show read-only git working tree status and bounded per-file diff
-  previews in the Review panel, with open/reveal actions for changed files.
-- The app can prepare a branch review, then explicitly create a new local
-  branch or switch to an existing clean local branch after confirmation. The
-  runtime shows structured branch preflight, rechecks HEAD/current branch, and
-  blocks unsafe branch changes.
-- The app can prepare a branch publish review, then explicitly publish the
-  current local branch and set upstream after confirmation. The runtime
-  shows structured publish preflight, rechecks HEAD/branch/remote/remote
-  branch, blocks unsafe first-push states, classifies failed git push output,
-  and does not force push or create a PR.
-- The app can prepare a read-only commit review artifact with suggested commit
-  message, included files, validation suggestions, blockers, risk notes, and
-  an explicit non-mutating operation boundary.
-- The app can explicitly create a local git commit from that review artifact
-  after confirmation, while the runtime rechecks HEAD, selected paths, and
-  safety blockers before staging and committing. It does not push.
-- The app can prepare a push review and explicitly push the current branch to
-  its configured upstream after confirmation, while the runtime rechecks HEAD,
-  branch, upstream, and safety blockers. The runtime shows structured push
-  preflight, classifies failed git push output, and does not force push or
-  create a PR.
-- The app can prepare a read-only PR handoff preview with base/head branch
-  awareness, suggested branch name, title, body, test plan, commits, changed
-  files, structured preflight metadata, blockers, risk notes, and an explicit
-  no-publication boundary.
+- The first screen asks what Forge should build.
+- A user can start a coding task without touching Settings first in the happy
+  path.
+- Forge can ask a clarification question before planning.
+- Forge can produce a plan with steps, expected file areas, tests, risk notes,
+  and cost/time estimate.
+- Approving the plan starts an agent run.
+- The live run shows chronological read/search/edit/test/self-fix events.
+- The patch engine can propose and apply a real source-file change inside the
+  repo, with rollback/revalidation.
+- The command runner can run an approved project check and stream output.
+- A failed check can produce a bounded repair attempt and rerun evidence.
+- Diff and Tests tabs update during or immediately after the run.
+- Fullscreen diff review can show at least a multi-file source diff with
+  file-level reasoning and tests.
+- User can request changes and receive a revised patch.
+- User can approve the final patch.
+- Local commit can be prepared and created after explicit approval.
+- No file change, command, commit, push, or PR happens without an explicit
+  policy path and audit record.
 
-## V0 Next After Completion
+## Current State Against New V0
 
-After v0, Forge should move toward v0.1:
+Built foundation:
 
-- richer file-edit proposal flow
-- deeper repository understanding with symbols, dependency hints, and
-  persistent indexing
+- local runtime and task persistence
+- bounded repo context reads
+- provider abstraction and OpenAI structured-output path
+- plan approval and review gates
+- restricted edit proposals
+- validation presets and repair briefs
+- git status/diff/commit/push/branch/PR handoff preflights
+- app-managed runtime diagnostics
+- local smoke coverage
+- first-pass macOS session shell with task queue, new-task empty state, live
+  agent stream, plan gate/action rail, and Log/Diff/Tests tabs
+- first usable full-screen diff review surface with file tree, main diff pane,
+  reasoning, validation evidence, and existing proposal apply/request-change
+  actions
 
-The explicit plan approval action has started: approval is recorded and opens
-controlled execution preparation, but it does not yet run model-driven edits.
+Major gaps:
 
-The model-provider abstraction has also started: the default local
-deterministic provider creates task intent briefs, plan revisions, and an
-execution proposal after plan approval. An optional OpenAI Responses provider
-exists behind the same boundary and can run a bounded read/search context loop
-before plan revisions. Full autonomous tool use beyond pre-plan read-only
-context is still future work.
+- UI has a first-pass shell but does not yet fully match `design_handoff_forge`.
+- Full-screen diff review exists but still needs exact split-diff polish,
+  keyboard shortcuts, and durable file-level review decisions.
+- Patch apply is still too narrow for normal source-code tasks.
+- Command output is not streamed as a first-class task surface.
+- Provider-backed run loop is not yet a real read/search/patch/run/repair
+  agent.
 
-Safe edit proposals have started: Forge can create a proposed diff preview and
-return the task to human review without mutating files. A proposal can now be
-validated, rejected without touching files, or applied through a narrow
-append-text or exact replace-text operation against existing Markdown files,
-plus create-file for new `docs/*.md` files.
-Applied proposals now run built-in validation before completion. Approved
-runtime validation presets can also run allowlisted project checks after
-completion, including presets composed from workspace config. The Review panel
-now shows command permission requests from runtime-derived permission snapshots
-instead of only listing preset commands.
-OpenAI proposals can also include richer multi-file review artifacts and
-preview-only unsupported operations. Unsupported operations still validate as
-blocked until the apply engine grows beyond the v0 boundary.
-When possible, blocked generated proposals can now be repaired by feeding
-runtime validation failures back to the provider, but repair still produces
-review artifacts only and never applies files.
-Failed validation runs can also produce repair briefs, which turn compact
-command output into likely cause and next repair prompt without taking further
-side effects.
-Those briefs can now seed a follow-up repair proposal, preserving the human
-review gate before any additional file mutation.
-The macOS app now surfaces those repair briefs in the Review panel and exposes
-the follow-up repair proposal action when the failed validation run has a
-matching brief.
-The macOS toolbar, sidebar runtime badge, and Settings window now include
-first-pass app-managed runtime start/stop controls.
+## Next Implementation Order
+
+1. Add source-file patch proposal/apply with rollback.
+2. Add task-scoped command execution and streamed logs.
+3. Connect provider-driven run loop to patch/run/repair.
+4. Implement request-change revision from full diff review.
+5. Polish `10a` with durable file-level decisions and exact split-diff behavior.
+6. Add `32a` chat-to-task polish once the live run works.

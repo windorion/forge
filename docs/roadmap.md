@@ -3,193 +3,168 @@
 Document role: record sequencing, milestones, proof points, and what should
 not be built too early.
 
-## Roadmap Principle
+Last updated: 2026-07-11
 
-Forge should prove one narrow workflow deeply before becoming broad.
+## Direction Reset
 
-## Phase 0: Documentation And Direction
+Forge should now optimize for one thing first:
 
-Goal: make product memory durable.
+> A developer types a coding task, approves a plan, watches the agent read,
+> edit, test, self-fix, and then reviews the resulting diff.
 
-Deliverables:
+The previous implementation built a strong safety/runtime foundation, but the
+demo reads too much like a workflow dashboard. The next roadmap must make the
+product feel like an agent coding application, closer in interaction rhythm to
+Codex and Claude Code, while preserving Forge's macOS-native and review-first
+identity.
 
-- root README constitution
-- docs structure
-- founder notes
-- agent rules
-- architecture direction
+## Design Source
 
-Proof point:
+Primary UI direction comes from `design_handoff_forge/`:
 
-- a future AI or engineer can understand what Forge is without reading the
-  original chat history.
+- `32a` New session: chat clarifies intent, embeds the plan card, then shows
+  the agent working live.
+- `14a` Main window: task queue on the left, current task with plan progress
+  and live thinking/code stream in the center, bottom tabs for Log/Diff/Tests.
+- `1a` New task: direct coding-task entry, not a generic task form.
+- `1b` and `20a` Plan approval: the plan gate is the start-work boundary.
+- `10a` Diff review: file tree, unified/split diff, per-file reasoning, tests,
+  and file-level approve/request-change actions.
+- `33a` and `34a` Decision points: the agent asks instead of guessing.
 
-## Phase 1: Native App Shell
+The neo-brutalist visual language in the handoff is not decoration; it is part
+of the product character. The app should feel sharp, developer-first,
+terminal-adjacent, and operational.
 
-Goal: create the first macOS workspace shell.
+## New Milestone Definitions
 
-Deliverables:
+### Foundation V0: Trust And Runtime Skeleton
 
-- SwiftUI app
-- main window
-- task workspace layout
-- settings shell
-- repository picker
+Status: mostly built.
 
-Proof point:
-
-- user can open a repo and see a task-centered workspace.
-
-## Phase 2: Local Runtime
-
-Goal: run a local agent runtime process and stream events to the app.
-
-Deliverables:
-
-- TypeScript runtime
-- app-runtime communication
-- task API
-- event stream
-- local persistence
+Goal: prove local runtime, task state, review gates, safe mutation boundaries,
+git preflight, validation, persistence, and diagnostics.
 
 Proof point:
 
-- user can create a task and see structured runtime events.
+- Forge can create tasks, inspect context, propose restricted edits, run
+  validation, and expose safe git review actions.
 
-## Phase 3: Repository Context
+This foundation is necessary but not sufficient. It should no longer be the
+main demo story.
 
-Goal: understand a local repository.
+### Coding-Agent Demo V0
 
-Deliverables:
+Status: next milestone.
 
-- repo scanner
-- file search
-- ripgrep integration
-- Tree-sitter prototype
-- context builder v1
-
-Proof point:
-
-- Forge can find relevant files for a task.
-
-## Phase 4: Agent Execution
-
-Goal: complete a small coding task with reviewable output.
+Goal: make Forge feel like an agent coding app.
 
 Deliverables:
 
-- LLM provider integration
-- tool registry
-- read/search/edit tools
-- command runner
-- validation loop
+- Implement the `32a`/`14a` session model in the macOS app.
+- Make the first screen a coding-task composer: "What should Forge build?"
+- Show a live agent stream as the primary center of gravity.
+- Promote Diff and Tests to first-class tabs next to the live log.
+- Add a real patch proposal format that can touch normal source files, not
+  only Markdown.
+- Add a controlled command runner for approved task-scoped test/check
+  commands, with streamed output.
+- Add a self-fix loop: failed validation creates a follow-up patch proposal
+  and reruns approved checks.
+- Make `10a` Diff Review the primary review surface, with file list,
+  unified/split diff, why-this-change, tests covering the file, approve file,
+  and request change.
+- Keep the plan gate, decision prompts, local-first defaults, and audit log.
 
 Proof point:
 
-- Forge can modify files and produce a diff for review.
+- A user can ask Forge to make a small code change in this repository, approve
+  the plan, watch it edit and test, review a multi-file diff, request a
+  revision if needed, and accept the final patch.
 
-## Phase 5: Review And Git
+### Alpha: Useful Local Coding Agent
 
-Goal: make changes safe to accept.
+Goal: make Forge useful on small real engineering tasks.
 
 Deliverables:
 
-- diff viewer
-- approval flow
-- test logs
-- git status
-- commit preparation
+- OpenAI provider in the normal run flow, not just plan/proposal demos.
+- Tool-call-driven loop for read/search/patch/run/repair.
+- Patch engine with multi-file apply, rollback, and workspace revalidation.
+- Repository index v1: ripgrep search plus lightweight symbols.
+- Hosted GitHub PR creation after explicit approval.
+- Task cancellation, pause/resume, and crash recovery checkpoints.
+- Workspace/repository picker and provider onboarding.
 
 Proof point:
 
-- user can review and approve a commit-ready change.
+- Forge can complete small code, test, docs, and refactor tasks on a real repo
+  with human review and reliable recovery.
 
-## Phase 6: Memory And Local Index
+### Beta: Installable Mac Product
 
-Goal: make Forge remember project context.
+Goal: make Forge trustworthy outside the development checkout.
 
 Deliverables:
 
-- SQLite schema
-- task history
-- project memory
-- local index metadata
-- semantic search prototype
+- Signed/notarized app distribution.
+- DMG and update mechanism.
+- Robust app-managed runtime packaging.
+- GitHub auth with least scopes.
+- Keychain provider setup.
+- Notifications, menu bar, and quick capture.
+- Usage/cost reporting and budget guardrails.
 
 Proof point:
 
-- Forge can reuse prior project decisions in a new task.
+- A developer can install Forge, connect a repo/provider/GitHub, run a small
+  agent coding task, review the diff, and open a PR without touching the
+  terminal.
 
-## Phase 7: Multi-Agent UX
+### v1: Native Agent Workspace
 
-Goal: expose specialized roles without overcomplicating runtime.
+Goal: turn the single-task coding loop into a durable engineering workspace.
 
 Deliverables:
 
-- Manager, Planner, Coder, Tester, Reviewer states
-- role-specific prompts
-- handoff summaries
-- agent status UI
+- Multi-task queue and mission control.
+- Decision inbox.
+- Task templates.
+- Local memory and semantic context.
+- CLI companion.
+- Shareable task review artifacts.
+- System integrations: menu bar, global shortcut, Spotlight, widgets,
+  notifications.
 
 Proof point:
 
-- user can understand which role is doing what.
+- Forge becomes the place a developer starts, supervises, resumes, and reviews
+  agent engineering work across repositories.
 
-## Phase 8: macOS Native Layer
+## Immediate Build Order
 
-Goal: prove the Mac-native wedge.
+1. Reshape the macOS UI around `32a`, `14a`, `1a`, `1b`, and `10a`.
+2. Add a real patch proposal/apply engine for source files.
+3. Add task-scoped command execution with streaming logs.
+4. Wire provider-driven read/search/patch/run/repair into the normal flow.
+5. Build full-screen diff review with per-file reasoning.
+6. Add pause/abort/request-change loops around the live run.
+7. Only then continue GitHub PR publication and broader integrations.
 
-Deliverables:
+## What Not To Optimize Next
 
-- menu bar item
-- global shortcut
-- notifications
-- Dock progress
-- open in IDE
+- More preflight cards before the main coding loop feels real.
+- More settings screens before the first-run coding task works.
+- Marketplace, enterprise admin, visual theme systems, or team collaboration.
+- Broad MCP integration before Forge has a compelling built-in agent loop.
+- IDE-like file explorer/editor features that compete with the coding session.
 
-Proof point:
+## Product Guardrails
 
-- user can start or resume agent work outside the main app window.
-
-## Phase 9: Integrations
-
-Goal: connect Forge to external workflows safely.
-
-Deliverables:
-
-- MCP discovery
-- GitHub integration
-- issue or PR handoff
-- tool permissions
-
-Proof point:
-
-- Forge can prepare a PR or issue update with explicit approval.
-
-## Phase 10: Release
-
-Goal: distribute a trustworthy Mac app.
-
-Deliverables:
-
-- signing
-- notarization
-- DMG
-- Sparkle updates
-- website download flow
-
-Proof point:
-
-- a user can install, update, and run Forge outside the developer machine.
-
-## Do Not Build Too Early
-
-- full IDE replacement
-- debugger
-- marketplace
-- enterprise admin console
-- complex team collaboration
-- every MCP integration
-- visual theming system
-
-These can come later after the task-to-review loop works.
+- The plan gate stays.
+- The agent should ask at decision points instead of guessing.
+- File changes, commands, commits, pushes, and PRs remain explicit,
+  reviewable, and auditable.
+- The main experience is not chat alone; it is chat plus live agent execution,
+  diff, tests, and review.
+- Forge should feel like a Mac-native coding agent, not a generic dashboard.

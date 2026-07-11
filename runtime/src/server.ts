@@ -67,7 +67,8 @@ const startedAt = Date.now();
 const port = Number(process.env.FORGE_RUNTIME_PORT ?? 17373);
 const eventClients = new Set<ServerResponse>();
 const runtimeDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const repoRoot = path.resolve(runtimeDir, "..");
+const repoRoot = resolveRepoRoot(runtimeDir);
+const repoRootSource = process.env.FORGE_REPO_ROOT?.trim() ? "FORGE_REPO_ROOT" : "runtime parent";
 const taskStore = new SqliteTaskStore(resolveDatabasePath());
 const tasks = new Map<string, ForgeTask>(taskStore.loadTasks().map((task) => [task.id, task]));
 let modelProviderSettings = loadModelProviderRuntimeSettings();
@@ -374,6 +375,11 @@ const server = createServer(async (request, response) => {
         uptimeSeconds: (Date.now() - startedAt) / 1000,
         modelProvider: modelProvider.info,
         modelProviderConfiguration: getModelProviderConfiguration(modelProviderSettings),
+        workspace: {
+          runtimeDir,
+          repoRoot,
+          repoRootSource
+        },
         persistence: {
           databasePath: taskStore.dbPath,
           taskCount: tasks.size
@@ -603,6 +609,15 @@ server.listen(port, "127.0.0.1", () => {
 
 process.once("SIGINT", () => shutdown(130));
 process.once("SIGTERM", () => shutdown(143));
+
+function resolveRepoRoot(runtimeDirectory: string): string {
+  const configured = process.env.FORGE_REPO_ROOT?.trim();
+  if (configured) {
+    return path.resolve(configured);
+  }
+
+  return path.resolve(runtimeDirectory, "..");
+}
 
 function resolveDatabasePath(): string {
   const configured = process.env.FORGE_RUNTIME_DB_PATH;
@@ -931,13 +946,23 @@ async function localGitBranchExists(gitRoot: string, targetBranch: string): Prom
 }
 
 async function remoteGitBranchExists(gitRoot: string, remote: string, targetBranch: string): Promise<boolean> {
-  const result = await runGitCommand([
+  const localTrackingResult = await runGitCommand([
     "show-ref",
     "--verify",
     "--quiet",
     `refs/remotes/${remote}/${targetBranch}`
   ], gitRoot, 8_000);
-  return result.exitCode === 0;
+  if (localTrackingResult.exitCode === 0) {
+    return true;
+  }
+
+  const remoteResult = await runGitCommand([
+    "ls-remote",
+    "--heads",
+    remote,
+    targetBranch
+  ], gitRoot, 16_000);
+  return remoteResult.exitCode === 0 && remoteResult.output.trim().length > 0;
 }
 
 function unavailableGitBranchPreflight(
@@ -2640,17 +2665,6 @@ function classifyGitPushFailure(output: string): { kind: string; summary: string
   }
 
   if (
-    text.includes("non-fast-forward") ||
-    text.includes("fetch first") ||
-    text.includes("failed to push some refs") && text.includes("rejected")
-  ) {
-    return {
-      kind: "NonFastForward",
-      summary: "remote has commits that are not present locally; update before pushing."
-    };
-  }
-
-  if (
     text.includes("protected branch") ||
     text.includes("branch is protected") ||
     text.includes("cannot force-push") ||
@@ -2660,6 +2674,17 @@ function classifyGitPushFailure(output: string): { kind: string; summary: string
     return {
       kind: "ProtectedBranch",
       summary: "remote policy rejected the branch update."
+    };
+  }
+
+  if (
+    text.includes("non-fast-forward") ||
+    text.includes("fetch first") ||
+    text.includes("failed to push some refs") && text.includes("rejected")
+  ) {
+    return {
+      kind: "NonFastForward",
+      summary: "remote has commits that are not present locally; update before pushing."
     };
   }
 
@@ -5148,7 +5173,10 @@ async function approvePlan(taskID: string, input: ApprovePlanRequest): Promise<F
   approved.createdAt = now;
   saveAndBroadcast(task, approved);
 
+  const executionContext = await prepareExecutionContext(task);
   const proposal = await modelProvider.createExecutionProposal({ task });
+  proposal.contextFiles = executionContext.contextFiles;
+  proposal.toolEvidence = executionContext.toolEvidence;
   task.executionProposal = proposal;
   task.reviewSummary = "Execution proposal generated. No files changed; the next slice will turn this into a reviewable diff.";
   setAgent(task, "Coder", "Ready", "Execution proposal generated; waiting for safe edit proposal tooling.");
@@ -5169,6 +5197,66 @@ async function approvePlan(taskID: string, input: ApprovePlanRequest): Promise<F
   proposed.createdAt = proposal.generatedAt;
   saveAndBroadcast(task, proposed);
   return task;
+}
+
+async function prepareExecutionContext(
+  task: ForgeTask
+): Promise<{ contextFiles: ContextFile[]; toolEvidence: string[] }> {
+  upsertPlanStep(task, {
+    id: "build-execution-context",
+    title: "Build execution context",
+    status: "Active",
+    summary: "Running bounded read-only repository tools before drafting the execution proposal."
+  });
+  setAgent(task, "Coder", "Active", "Gathering execution context through read-only repository tools.");
+
+  const started = event(
+    "agent.execution_context.started",
+    "Preparing execution proposal context with bounded read-only repository tools."
+  );
+  started.createdAt = new Date().toISOString();
+  saveAndBroadcast(task, started);
+
+  const projectFiles = await runTool(
+    task,
+    "list_repo_files",
+    "Execution proposal bounded repo scan excluding private and generated directories",
+    listRepositoryFiles
+  );
+  const searchTerms = deriveExecutionSearchTerms(task);
+  const contextMatches = await runTool(
+    task,
+    "search_repo_context",
+    searchTerms.join(", "),
+    () => searchRepositoryContext(projectFiles, searchTerms, explicitContextPathsForTask(task))
+  );
+  const contextFiles = await buildContextFiles(task, projectFiles, contextMatches);
+  task.contextFiles = mergeContextFiles(task.contextFiles, contextFiles);
+
+  const toolEvidence = [
+    `Scanned ${projectFiles.length} repo file(s).`,
+    `Searched for ${searchTerms.slice(0, 8).join(", ")}.`,
+    `Read ${contextFiles.length} execution context file(s).`
+  ];
+
+  upsertPlanStep(task, {
+    id: "build-execution-context",
+    title: "Build execution context",
+    status: "Done",
+    summary: `Prepared execution proposal context from ${contextFiles.length} read-only file(s): ${formatPathList(contextFiles.map((file) => file.path))}.`
+  });
+
+  const completed = event(
+    "agent.execution_context.completed",
+    `Execution context prepared from ${contextFiles.length} read-only file(s).`
+  );
+  completed.createdAt = new Date().toISOString();
+  saveAndBroadcast(task, completed);
+
+  return {
+    contextFiles,
+    toolEvidence
+  };
 }
 
 async function generateEditProposal(taskID: string): Promise<ForgeTask> {
@@ -6987,6 +7075,28 @@ function deriveRepositorySearchTerms(task: ForgeTask): string[] {
   }
 
   return [...terms].slice(0, 10);
+}
+
+function deriveExecutionSearchTerms(task: ForgeTask): string[] {
+  const executionTerms = new Set(deriveRepositorySearchTerms(task));
+  for (const step of task.planSteps) {
+    for (const part of `${step.title} ${step.summary}`.toLowerCase().split(/[^a-z0-9_-]+/)) {
+      const term = part.replaceAll("_", "-");
+      if (term.length >= 3 && !repositorySearchStopWords.has(term)) {
+        executionTerms.add(term);
+      }
+    }
+  }
+
+  for (const file of task.contextFiles) {
+    for (const part of file.path.toLowerCase().split(/[^a-z0-9_-]+/)) {
+      if (part.length >= 3 && !repositorySearchStopWords.has(part)) {
+        executionTerms.add(part);
+      }
+    }
+  }
+
+  return [...executionTerms].slice(0, 12);
 }
 
 async function runReadOnlyFileTool(relativePath: string): Promise<string> {

@@ -18,6 +18,11 @@ project management, logs, documentation, and Slack. AI assistants usually live
 inside one of those surfaces. Forge turns the task itself into the center of
 the workflow.
 
+The immediate product correction is that "task-centered" must not become
+"dashboard-centered." A task in Forge should quickly turn into a live coding
+session: plan, repository inspection, edits, commands, failures, self-fixes,
+diffs, and review decisions.
+
 ## Category
 
 Forge creates the category:
@@ -53,6 +58,12 @@ The AI should act more like an implementation team:
 - prepare reviewable output
 
 ## Product Principles
+
+### Coding Session First
+
+The first visible proof of Forge is a live agent coding session. Chat helps
+form the task; the main product surface is the agent reading, editing, testing,
+fixing, and preparing reviewable output.
 
 ### Task First
 
@@ -92,6 +103,7 @@ permissions.
 
 - Forge must not become a VS Code clone.
 - Forge must not become a chat-first app.
+- Forge must not become a workflow dashboard that hides the live coding loop.
 - Forge must not hide agent work from the user.
 - Forge must not silently apply risky changes.
 - Forge must not treat the editor as the product center.

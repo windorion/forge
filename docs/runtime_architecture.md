@@ -59,6 +59,16 @@ Later versions can consider:
 - XPC helpers
 - privileged helper tools if truly required
 
+Runtime process resolution now separates two paths:
+
+- runtime installation directory: where `dist/server.js` and runtime package
+  files live
+- repository root: the workspace Forge should inspect, provided by
+  `FORGE_REPO_ROOT` when the runtime is packaged separately from a checkout
+
+When `FORGE_REPO_ROOT` is omitted, development mode still treats the runtime
+directory's parent as the repository root.
+
 ## Core Modules
 
 ### Task Queue
@@ -97,6 +107,14 @@ logged read-only repo tools, stops on repeated requests or the round limit,
 and feeds compact summaries back into the plan revision. This is the first
 bounded tool loop, still limited to read-only pre-plan context.
 
+Current execution-preparation slice: after a user approves the plan, the
+runtime performs another bounded read-only context pass before calling the
+provider for an execution proposal. It records normal tool events, merges
+inspected context files into the task, and attaches `contextFiles` plus
+`toolEvidence` to the execution proposal. This makes the Coder step more
+agent-like without allowing autonomous writes, commands, git, or network
+side effects.
+
 ### Tool Registry
 
 Defines tools with schemas, permissions, risk levels, and execution handlers.
@@ -119,6 +137,9 @@ Current read-only context tools:
 - `list_repo_files`
 - `search_repo_context`
 - `read_context_file`
+
+The same tools are currently used in both planning context and execution
+proposal context. They remain read-only and repo-local.
 
 ### Model Providers
 
@@ -178,6 +199,10 @@ the provider for a bounded number of repair attempts with the failed per-file
 checks included as structured feedback. Each blocked intermediate proposal is
 archived as `Superseded`; the current review artifact is only the final
 proposal. This is still proposal-only and does not mutate files.
+
+Execution proposals are now generated after the execution-context pass. The
+provider still only proposes actions; runtime validation and human review own
+all later file changes.
 
 ### Edit Proposal Validator
 
@@ -242,7 +267,9 @@ remote branch collisions, and runs a non-force
 `git push --set-upstream <remote> HEAD:<branch>`. If git rejects the push, the
 runtime classifies common auth, non-fast-forward, protected-branch, network,
 remote-rejected, and unknown failures before surfacing output. It does not
-create a PR.
+create a PR. Remote branch collision detection checks local remote-tracking
+refs and `git ls-remote --heads`, so stale local refs do not hide an already
+published remote branch.
 
 The local commit action is `POST /git/commit`. It can create one local
 commit only after the app sends explicit confirmation from the reviewed commit
@@ -262,6 +289,11 @@ no-upstream/behind/no-ahead/unmerged states and uses a non-force push to the
 configured upstream. If git rejects the push, the runtime classifies common
 auth, non-fast-forward, protected-branch, network, remote-rejected, and
 unknown failures before surfacing output. It does not create a PR.
+
+`npm run smoke:git-remote` exercises the push and branch publish paths against
+temporary local bare remotes through the real runtime HTTP API. It covers stale
+remote/non-fast-forward push rejection, branch-publish remote branch collision,
+and pre-receive remote policy rejection.
 
 The PR handoff slice is still read-only. `GET /git/pr-preview` derives a
 review artifact from branch state, default-base detection, optional task

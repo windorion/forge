@@ -139,6 +139,8 @@ export interface ExecutionProposal {
   provider: ModelProviderInfo;
   summary: string;
   proposedActions: string[];
+  contextFiles?: ContextFile[];
+  toolEvidence?: string[];
   riskLevel: "Low" | "Medium" | "High";
   generatedAt: string;
 }

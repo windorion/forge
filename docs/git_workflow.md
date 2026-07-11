@@ -137,6 +137,8 @@ Current implementation:
   non-fast-forward, protected-branch, network, remote-rejected, and unknown
   failures before surfacing the command output.
 - Forge does not force push, merge, reset, delete branches, or create a PR.
+- The local `npm run smoke:git-remote` fixture verifies stale remote/
+  non-fast-forward rejection after a reviewed push preview.
 
 ## Branch Workflow
 
@@ -207,6 +209,9 @@ Current implementation:
   failures before surfacing the command output.
 - Forge does not force push, merge, reset, delete branches, or create a PR from
   the branch publish action.
+- Remote branch collision detection checks local remote-tracking refs and
+  `git ls-remote --heads` before publish. The local remote fixture verifies
+  branch collision blocking and pre-receive remote policy rejection.
 
 ## Pull Request Handoff
 
