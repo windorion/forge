@@ -66,8 +66,9 @@ Implemented today:
   plus inspected context files.
 - Explicit human review gates for plans and edits.
 - Safe edit proposals with multi-file OpenAI proposal artifacts, including
-  blocked preview-only operations, while apply remains restricted to Markdown
-  `AppendText`, exact `ReplaceText`, and new `docs/*.md` `CreateFile` changes.
+  blocked preview-only operations. Apply supports Markdown `AppendText`,
+  exact `ReplaceText` for Markdown and allowlisted source/text files, new
+  `docs/*.md` `CreateFile` changes, and applied-file rollback metadata.
 - Edit proposal validation, bounded validation-feedback repair, apply/reject
   flow, revision loop, and post-apply validation.
 - Validation failure repair briefs that turn failed command output into a
@@ -126,7 +127,8 @@ Not finished yet:
   file-level review persistence, decision prompts, and polished live-run
   states.
 - Real autonomous model-backed read/search/patch/run/repair loop.
-- General source-code patch engine, safe rollback, and richer diff review.
+- General source-code patch engine, user-facing rollback, and richer diff
+  review.
 - Streamed task-scoped command/test output and self-fix loops.
 - Actual PR creation/publication after explicit review.
 - Durable repository index with symbols and semantic search.
@@ -140,7 +142,7 @@ Product-readiness estimate:
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 45-50% | Has a first-pass session UI shell and full-screen diff review surface, but still needs a real source patch engine, streamed command output, and provider-driven patch/run/repair loop. |
+| Coding-agent demo V0 | 50-55% | Has a first-pass session UI shell, full-screen diff review surface, and first exact source replace path, but still needs a broader source patch engine, streamed command output, and provider-driven patch/run/repair loop. |
 | Useful developer alpha | 35-45% | A developer cannot yet rely on Forge like Codex or Claude Code for normal coding tasks. It needs real patching, command execution, recovery, and a stronger model-backed run loop. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, memory, MCP/GitHub, and product polish. |
@@ -154,7 +156,8 @@ Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
 
 - polish the first-pass macOS coding-agent session UI toward the exact
   `design_handoff_forge` screens
-- add a source-file patch proposal/apply/rollback engine
+- broaden source-file patch proposal/apply beyond exact replace and add a
+  user-facing rollback action
 - add approved task-scoped command execution with streamed logs
 - wire provider-driven read/search/patch/run/repair into the normal task flow
 - connect full diff review to durable file-level decisions once the review

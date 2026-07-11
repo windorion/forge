@@ -385,9 +385,9 @@ class OpenAIResponsesModelProvider implements ModelProvider {
         "Create a Forge edit proposal review artifact.",
         "You may propose multiple file changes, but the runtime will validate all of them before any apply.",
         "Use AppendText only for bounded appends to README.md or docs/*.md.",
-        "Use ReplaceText only when the task explicitly asks for an exact quoted replacement and you can provide the exact find text.",
+        "Use ReplaceText only when the task explicitly asks for an exact quoted replacement and you can provide the exact find text. It may target README.md, docs/*.md, or normal allowlisted source/text files such as .ts, .swift, .js, .json, .css, .html, .yml, .toml, .py, .go, .rs, .java, .kt, .c, .cpp, .h, and .hpp.",
         "Use CreateFile only for new docs/*.md files with bounded Markdown content.",
-        "Use PreviewOnly for broad code patches, deletes, unsupported paths, overwrite attempts, or anything that should be reviewed but not applied by the current v0 engine.",
+        "Use PreviewOnly for broad code patches, fuzzy patches, deletes, new source files, unsupported paths, overwrite attempts, or anything that should be reviewed but not applied by the current v0 engine.",
         request.validationFeedback
           ? "The previous proposal failed runtime validation. Generate a corrected proposal that addresses every blocked check while staying inside the supported operation boundary."
           : request.validationRepairBrief
@@ -1299,16 +1299,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function chooseTargetPath(task: ForgeTask, preferredPath?: string): string {
-  if (preferredPath && isEditableMarkdownPath(preferredPath)) {
+function chooseTargetPath(task: ForgeTask, preferredPath?: string, allowSourceText = false): string {
+  if (preferredPath && isEditableTargetPath(preferredPath, allowSourceText)) {
     return preferredPath;
   }
 
-  const mentionedMarkdownPath = latestResolvedFileReferencesForTask(task)
+  const mentionedEditablePath = latestResolvedFileReferencesForTask(task)
     .flatMap((reference) => reference.path ? [reference.path] : [])
-    .find(isEditableMarkdownPath);
-  if (mentionedMarkdownPath) {
-    return mentionedMarkdownPath;
+    .find((candidate) => isEditableTargetPath(candidate, allowSourceText));
+  if (mentionedEditablePath) {
+    return mentionedEditablePath;
   }
 
   const preferred = ["docs/v0_scope.md", "docs/development.md", "README.md"];
@@ -1320,9 +1320,13 @@ function buildRestrictedEditDraft(
   request: EditProposalRequest,
   guidance?: EditProposalGuidance
 ): RestrictedEditDraft {
-  const previousTargetPath = request.previousProposal?.fileChanges.find((change) => isEditableMarkdownPath(change.path))?.path;
-  const targetPath = chooseTargetPath(request.task, guidance?.targetPath ?? previousTargetPath);
   const replaceInstruction = parseExactReplaceInstruction(request.sourceMessage?.content ?? request.task.objective);
+  const allowSourceText = replaceInstruction !== undefined;
+  const previousTargetPath = request.previousProposal?.fileChanges.find((change) =>
+    isEditableTargetPath(change.path, allowSourceText)
+  )?.path;
+  const targetPath = chooseTargetPath(request.task, guidance?.targetPath ?? previousTargetPath, allowSourceText);
+
   if (replaceInstruction) {
     const applyOperation: ProposedFileOperation = {
       kind: "ReplaceText",
@@ -1487,4 +1491,66 @@ function formatFileReferenceList(references: TaskFileReference[]): string {
 
 function isEditableMarkdownPath(candidate: string): boolean {
   return candidate === "README.md" || (candidate.startsWith("docs/") && candidate.endsWith(".md"));
+}
+
+function isEditableTargetPath(candidate: string, allowSourceText: boolean): boolean {
+  return isEditableMarkdownPath(candidate) || (allowSourceText && isEditableSourceTextPath(candidate));
+}
+
+function isEditableSourceTextPath(candidate: string): boolean {
+  const normalized = candidate.replaceAll("\\", "/").replace(/^@/, "").replace(/^\.\/+/, "");
+  if (
+    !normalized ||
+    normalized.startsWith("/") ||
+    normalized.startsWith("../") ||
+    normalized.includes("/../") ||
+    normalized.split("/").some((segment) => [".build", ".forge", ".git", ".swiftpm", "DerivedData", "dist", "node_modules"].includes(segment))
+  ) {
+    return false;
+  }
+
+  const fileName = normalized.split("/").at(-1) ?? "";
+  if (
+    [".env", ".env.local", ".env.development", ".env.production", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "Package.resolved"].includes(fileName) ||
+    fileName.startsWith(".env")
+  ) {
+    return false;
+  }
+
+  if (["Dockerfile", "Makefile", "Package.swift", "Podfile", "Rakefile"].includes(fileName)) {
+    return true;
+  }
+
+  return [
+    ".c",
+    ".cc",
+    ".cpp",
+    ".cs",
+    ".css",
+    ".cts",
+    ".go",
+    ".h",
+    ".hpp",
+    ".html",
+    ".java",
+    ".js",
+    ".jsx",
+    ".json",
+    ".kt",
+    ".kts",
+    ".m",
+    ".mjs",
+    ".mm",
+    ".mts",
+    ".py",
+    ".rb",
+    ".rs",
+    ".sh",
+    ".swift",
+    ".toml",
+    ".ts",
+    ".tsx",
+    ".yaml",
+    ".yml"
+  ].some((extension) => fileName.endsWith(extension));
 }

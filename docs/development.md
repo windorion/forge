@@ -40,7 +40,7 @@ review.
 The macOS app now has a first-pass coding-agent session shell: a task queue,
 `1a`-style empty composer, live agent stream, plan progress strip,
 Log/Diff/Tests tabs, compact plan gate, and action rail. The runtime still
-needs real source patching and streamed command execution before the shell
+needs broader source patching and streamed command execution before the shell
 behaves like the finished V0.
 
 The shell also includes a first usable `10a`-style full-screen diff review
@@ -274,10 +274,12 @@ validates it against the current workspace, and returns the task to
 `Human Review` with current phase `Edit Proposal Review`. It still does not
 change files.
 For the OpenAI provider, edit proposals can now include multiple file changes.
-Only `AppendText`, exact `ReplaceText`, and restricted `CreateFile` operations
-inside the Markdown boundary can validate as apply-ready. Create-file apply is
-limited to new `docs/*.md` files. Delete, broad patch, unsupported path, or
-preview-only operations remain review artifacts and block apply until revised.
+`AppendText` remains limited to existing Markdown files in `README.md` or
+`docs/*.md`, exact `ReplaceText` can validate for existing allowlisted
+source/text files when the find text appears exactly once, and restricted
+`CreateFile` remains limited to new `docs/*.md` files. Delete, broad patch,
+unsupported path, or preview-only operations remain review artifacts and block
+apply until revised.
 If generated validation is blocked, the runtime can run a bounded repair loop:
 it archives the blocked proposal as `Superseded`, sends the failed checks back
 to the provider, and validates the repaired proposal before returning to human
@@ -288,7 +290,8 @@ and `Request Changes`. It also exposes `Validate Proposal`, which calls
 `POST /tasks/:taskID/validate-edit-proposal` to refresh applicability checks
 without writing files. Applying calls `POST /tasks/:taskID/apply-edit-proposal`,
 revalidates the current workspace, runs the restricted v0 edit operation,
-records the changed Markdown file, and marks the task completed.
+records the changed file plus before/after rollback metadata, and marks the
+task completed.
 Requesting changes calls `POST /tasks/:taskID/reject-edit-proposal`, records
 the rejection, leaves files unchanged, and allows another edit proposal to be
 generated. After a rejection, the same Review action area exposes
@@ -368,8 +371,8 @@ npm run smoke:core
 
 This command builds the runtime, starts a temporary runtime process on a random
 local port, uses a temporary SQLite database and provider settings file,
-creates unique temporary Markdown fixtures under `docs/`, and deletes them at
-the end.
+creates unique temporary Markdown fixtures under `docs/` plus a temporary
+TypeScript source fixture under `runtime/src/`, and deletes them at the end.
 
 It covers:
 
@@ -382,7 +385,8 @@ It covers:
 - apply restricted edit proposal
 - built-in post-apply validation
 - SQLite restart recovery
-- both `AppendText` and exact `ReplaceText`
+- `AppendText`, Markdown exact `ReplaceText`, source-file exact `ReplaceText`,
+  and applied-file rollback metadata
 - runtime home page, health diagnostics, persistence metadata, and model
   provider settings GET/POST paths
 - provider settings key handling with a fake OpenAI key, including verification
@@ -440,14 +444,16 @@ cd runtime && npm run smoke:git-remote
   Outputs. It can now run bounded read/search context loops before plan
   revisions and before execution proposals, but tool use is still read-only.
 - Edit proposal application is intentionally narrow: v0 supports append-text
-  and exact replace-text operations on existing Markdown files in `README.md`
-  or `docs/`, plus create-file operations for new `docs/*.md` files only.
-  Validation blocks unsupported paths, unsupported operations, oversized edits,
-  missing files, existing create targets, duplicate append text at the file
-  end, and replace operations whose find text is missing or appears more than
-  once. Richer OpenAI proposals can include unsupported preview-only operations
-  for review, but those proposals are blocked from apply until revised to an
-  apply-ready subset.
+  operations on existing Markdown files in `README.md` or `docs/`, exact
+  replace-text operations on existing Markdown or allowlisted source/text
+  files, and create-file operations for new `docs/*.md` files only. Validation
+  blocks unsupported paths, generated directories, lockfiles, secret-like
+  files, unsupported operations, oversized edits, missing files, existing
+  create targets, duplicate append text at the file end, and replace
+  operations whose find text is missing or appears more than once. Richer
+  OpenAI proposals can include unsupported preview-only operations for review,
+  but those proposals are blocked from apply until revised to an apply-ready
+  subset.
 - Proposal repair is bounded and proposal-only. It can ask the provider to
   revise a blocked artifact from runtime validation feedback, but it does not
   apply files or run commands.

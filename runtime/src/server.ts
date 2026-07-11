@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { appendFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -15,6 +15,7 @@ import {
 import { SqliteTaskStore } from "./taskStore.js";
 import type {
   AgentState,
+  AppliedFileChange,
   ApprovalRecord,
   ApprovePlanRequest,
   ApproveValidationPresetRequest,
@@ -81,6 +82,9 @@ const modelGuidedContextMaxRounds = 3;
 const modelGuidedContextMaxStoredFiles = 8;
 const editProposalRepairMaxAttempts = 2;
 const repositoryContextMaxFileBytes = 220_000;
+const editProposalTextOperationMaxChars = 10_000;
+const editProposalCreateFileMaxChars = 20_000;
+const editProposalEditableFileMaxBytes = 220_000;
 const gitDiffMaxBytes = 48_000;
 const gitDiffAppPreviewLineLimit = 260;
 const repositoryIgnoredDirectories = new Set([
@@ -96,6 +100,16 @@ const repositoryIgnoredFileNames = new Set([
   ".DS_Store",
   "package-lock.json"
 ]);
+const editProposalBlockedFileNames = new Set([
+  ".env",
+  ".env.local",
+  ".env.development",
+  ".env.production",
+  "package-lock.json",
+  "pnpm-lock.yaml",
+  "yarn.lock",
+  "Package.resolved"
+]);
 const repositoryContextExtensions = new Set([
   ".md",
   ".ts",
@@ -108,6 +122,36 @@ const repositoryContextExtensions = new Set([
   ".yml",
   ".yaml",
   ".toml"
+]);
+const editProposalEditableExtensions = new Set([
+  ...repositoryContextExtensions,
+  ".c",
+  ".cc",
+  ".cpp",
+  ".cs",
+  ".css",
+  ".cts",
+  ".go",
+  ".h",
+  ".hpp",
+  ".html",
+  ".java",
+  ".kt",
+  ".kts",
+  ".m",
+  ".mjs",
+  ".mm",
+  ".mts",
+  ".py",
+  ".rb",
+  ".rs"
+]);
+const editProposalEditableFileNames = new Set([
+  "Dockerfile",
+  "Makefile",
+  "Package.swift",
+  "Podfile",
+  "Rakefile"
 ]);
 const repositoryImportantFiles = [
   "README.md",
@@ -5679,19 +5723,20 @@ async function applyEditProposal(
   saveAndBroadcast(task, started);
 
   try {
-    const appliedFiles: string[] = [];
+    const appliedFileChanges: AppliedFileChange[] = [];
     for (const change of task.editProposal.fileChanges) {
-      const appliedPath = await applyProposedFileChange(change);
-      appliedFiles.push(appliedPath);
+      const appliedChange = await applyProposedFileChange(change);
+      appliedFileChanges.push(appliedChange);
     }
 
     const now = new Date().toISOString();
     task.editProposal.status = "Applied";
     task.editProposal.decidedAt = now;
     task.editProposal.decisionNote = input.note?.trim() || undefined;
+    task.editProposal.appliedFileChanges = appliedFileChanges;
     task.status = "Testing";
     task.currentPhase = "Awaiting Validation";
-    task.changedFiles = [...new Set(appliedFiles)];
+    task.changedFiles = [...new Set(appliedFileChanges.map((change) => change.path))];
     task.approvals.push({
       id: randomUUID(),
       action: "Apply Edit Proposal",
@@ -6110,10 +6155,10 @@ async function validateChangedFiles(task: ForgeTask): Promise<string> {
 
   const validatedFiles: string[] = [];
   for (const changedFile of task.changedFiles) {
-    const { absolutePath, relativePath } = resolveMarkdownWorkspacePath(changedFile);
+    const { absolutePath, relativePath } = resolveEditableWorkspacePath(changedFile);
     const fileStat = await stat(absolutePath);
     if (!fileStat.isFile()) {
-      throw new Error(`Changed file is no longer a file: ${relativePath}`);
+      throw new Error(`Changed file is no longer an editable text file: ${relativePath}`);
     }
     validatedFiles.push(relativePath);
   }
@@ -6187,7 +6232,7 @@ async function validateProposedFileChange(change: ProposedFileChange): Promise<F
         return blockedValidation(change, `CreateFile content is empty: ${relativePath}`, checks);
       }
 
-      if (operation.content.length > 20_000) {
+      if (operation.content.length > editProposalCreateFileMaxChars) {
         return blockedValidation(change, `CreateFile content is too large for v0 apply: ${relativePath}`, checks);
       }
 
@@ -6224,25 +6269,39 @@ async function validateProposedFileChange(change: ProposedFileChange): Promise<F
     }
     checks.push("Change type is modify.");
 
-    const { absolutePath, relativePath } = resolveMarkdownWorkspacePath(change.path);
-    checks.push("Path is inside the editable Markdown workspace boundary.");
+    const { absolutePath, relativePath } = resolveEditableWorkspacePath(change.path);
+    checks.push("Path is inside the editable source/text workspace boundary.");
 
     const fileStat = await stat(absolutePath);
     if (!fileStat.isFile()) {
-      return blockedValidation(change, `Can only append to existing files in v0: ${relativePath}`, checks);
+      return blockedValidation(change, `Can only modify existing files in v0: ${relativePath}`, checks);
     }
     checks.push("Target file exists.");
 
+    if (fileStat.size > editProposalEditableFileMaxBytes) {
+      return blockedValidation(change, `Target file is too large for restricted source apply: ${relativePath}`, checks);
+    }
+    checks.push("Target file is within the restricted source apply size limit.");
+
     const currentContent = await readFile(absolutePath, "utf8");
+    if (currentContent.includes("\0")) {
+      return blockedValidation(change, `Target file appears to be binary: ${relativePath}`, checks);
+    }
+    checks.push("Target file is readable as text.");
 
     if (operation.kind === "AppendText") {
       checks.push("Apply operation is append-text.");
+
+      if (!isEditableMarkdownWorkspacePath(relativePath)) {
+        return blockedValidation(change, `AppendText can only modify README.md or docs/*.md in v0: ${relativePath}`, checks);
+      }
+      checks.push("AppendText target is inside the editable Markdown boundary.");
 
       if (operation.text.length === 0) {
         return blockedValidation(change, `Append text is empty: ${change.path}`, checks);
       }
 
-      if (operation.text.length > 10_000) {
+      if (operation.text.length > editProposalTextOperationMaxChars) {
         return blockedValidation(change, `Edit operation is too large for v0 apply: ${change.path}`, checks);
       }
       checks.push("Append text size is within the v0 limit.");
@@ -6272,7 +6331,10 @@ async function validateProposedFileChange(change: ProposedFileChange): Promise<F
         return blockedValidation(change, `Replacement text is empty: ${change.path}`, checks);
       }
 
-      if (operation.findText.length > 10_000 || operation.replaceWith.length > 10_000) {
+      if (
+        operation.findText.length > editProposalTextOperationMaxChars ||
+        operation.replaceWith.length > editProposalTextOperationMaxChars
+      ) {
         return blockedValidation(change, `Replace operation is too large for v0 apply: ${change.path}`, checks);
       }
       checks.push("Replace text size is within the v0 limit.");
@@ -6400,11 +6462,13 @@ function latestValidationRepairBriefForRun(
   return [...task.validationRepairBriefs].reverse().find((brief) => brief.validationRunID === validationRunID);
 }
 
-async function applyProposedFileChange(change: ProposedFileChange): Promise<string> {
+async function applyProposedFileChange(change: ProposedFileChange): Promise<AppliedFileChange> {
   const operation = change.applyOperation;
   if (!operation) {
     throw new HttpError(409, `No apply operation was provided: ${change.path}`);
   }
+
+  const appliedAt = new Date().toISOString();
 
   if (change.changeType === "Create") {
     if (operation.kind !== "CreateFile") {
@@ -6420,7 +6484,7 @@ async function applyProposedFileChange(change: ProposedFileChange): Promise<stri
       throw new HttpError(409, `CreateFile content is empty: ${relativePath}`);
     }
 
-    if (operation.content.length > 20_000) {
+    if (operation.content.length > editProposalCreateFileMaxChars) {
       throw new HttpError(409, `CreateFile content is too large for v0 apply: ${relativePath}`);
     }
 
@@ -6447,27 +6511,46 @@ async function applyProposedFileChange(change: ProposedFileChange): Promise<stri
 
     await mkdir(path.dirname(absolutePath), { recursive: true });
     await writeFile(absolutePath, operation.content, { encoding: "utf8", flag: "wx" });
-    return relativePath;
+    const afterContent = await readFile(absolutePath, "utf8");
+    return buildAppliedFileChange({
+      relativePath,
+      operationKind: operation.kind,
+      appliedAt,
+      afterContent,
+      rollbackKind: "DeleteCreatedFile",
+      rollbackSummary: `Delete ${relativePath} to undo the created file.`
+    });
   }
 
   if (change.changeType !== "Modify") {
     throw new HttpError(409, `Only create and modify changes can be applied in v0: ${change.path}`);
   }
 
-  const { absolutePath, relativePath } = resolveMarkdownWorkspacePath(change.path);
+  const { absolutePath, relativePath } = resolveEditableWorkspacePath(change.path);
   const fileStat = await stat(absolutePath);
   if (!fileStat.isFile()) {
-    throw new HttpError(409, `Can only append to existing files in v0: ${relativePath}`);
+    throw new HttpError(409, `Can only modify existing files in v0: ${relativePath}`);
+  }
+
+  if (fileStat.size > editProposalEditableFileMaxBytes) {
+    throw new HttpError(409, `Target file is too large for restricted source apply: ${relativePath}`);
   }
 
   const currentContent = await readFile(absolutePath, "utf8");
+  if (currentContent.includes("\0")) {
+    throw new HttpError(409, `Target file appears to be binary: ${relativePath}`);
+  }
 
   if (operation.kind === "AppendText") {
+    if (!isEditableMarkdownWorkspacePath(relativePath)) {
+      throw new HttpError(409, `AppendText can only modify README.md or docs/*.md in v0: ${relativePath}`);
+    }
+
     if (operation.text.length === 0) {
       throw new HttpError(409, `Append text is empty: ${relativePath}`);
     }
 
-    if (operation.text.length > 10_000) {
+    if (operation.text.length > editProposalTextOperationMaxChars) {
       throw new HttpError(409, `Edit operation is too large for v0 apply: ${relativePath}`);
     }
 
@@ -6476,7 +6559,16 @@ async function applyProposedFileChange(change: ProposedFileChange): Promise<stri
     }
 
     await appendFile(absolutePath, operation.text, "utf8");
-    return relativePath;
+    const afterContent = await readFile(absolutePath, "utf8");
+    return buildAppliedFileChange({
+      relativePath,
+      operationKind: operation.kind,
+      appliedAt,
+      beforeContent: currentContent,
+      afterContent,
+      rollbackKind: "RestorePreviousContent",
+      rollbackSummary: `Restore the previous full contents of ${relativePath}.`
+    });
   }
 
   if (operation.kind === "ReplaceText") {
@@ -6484,7 +6576,10 @@ async function applyProposedFileChange(change: ProposedFileChange): Promise<stri
       throw new HttpError(409, `Replace operation requires non-empty find and replacement text: ${relativePath}`);
     }
 
-    if (operation.findText.length > 10_000 || operation.replaceWith.length > 10_000) {
+    if (
+      operation.findText.length > editProposalTextOperationMaxChars ||
+      operation.replaceWith.length > editProposalTextOperationMaxChars
+    ) {
       throw new HttpError(409, `Replace operation is too large for v0 apply: ${relativePath}`);
     }
 
@@ -6500,11 +6595,47 @@ async function applyProposedFileChange(change: ProposedFileChange): Promise<stri
       );
     }
 
-    await writeFile(absolutePath, currentContent.replace(operation.findText, operation.replaceWith), "utf8");
-    return relativePath;
+    const nextContent = currentContent.replace(operation.findText, operation.replaceWith);
+    await writeFile(absolutePath, nextContent, "utf8");
+    const afterContent = await readFile(absolutePath, "utf8");
+    return buildAppliedFileChange({
+      relativePath,
+      operationKind: operation.kind,
+      appliedAt,
+      beforeContent: currentContent,
+      afterContent,
+      rollbackKind: "RestorePreviousContent",
+      rollbackSummary: `Restore the previous full contents of ${relativePath}.`
+    });
   }
 
   throw new HttpError(409, `Unsupported apply operation for ${relativePath}.`);
+}
+
+function buildAppliedFileChange(input: {
+  relativePath: string;
+  operationKind: AppliedFileChange["operationKind"];
+  appliedAt: string;
+  beforeContent?: string;
+  afterContent?: string;
+  rollbackKind: AppliedFileChange["rollbackKind"];
+  rollbackSummary: string;
+}): AppliedFileChange {
+  return {
+    path: input.relativePath,
+    operationKind: input.operationKind,
+    rollbackKind: input.rollbackKind,
+    rollbackSummary: input.rollbackSummary,
+    appliedAt: input.appliedAt,
+    beforeSha256: input.beforeContent === undefined ? undefined : sha256Text(input.beforeContent),
+    afterSha256: input.afterContent === undefined ? undefined : sha256Text(input.afterContent),
+    beforeByteLength: input.beforeContent === undefined ? undefined : Buffer.byteLength(input.beforeContent, "utf8"),
+    afterByteLength: input.afterContent === undefined ? undefined : Buffer.byteLength(input.afterContent, "utf8")
+  };
+}
+
+function sha256Text(content: string): string {
+  return createHash("sha256").update(content, "utf8").digest("hex");
 }
 
 function countTextOccurrences(content: string, needle: string): number {
@@ -6526,6 +6657,24 @@ function countTextOccurrences(content: string, needle: string): number {
 }
 
 function resolveMarkdownWorkspacePath(inputPath: string): { absolutePath: string; relativePath: string } {
+  const resolved = resolveWorkspaceEditPath(inputPath);
+  if (!isEditableMarkdownWorkspacePath(resolved.relativePath)) {
+    throw new HttpError(409, `Only README.md and docs/*.md paths can be edited with Markdown operations in v0: ${inputPath}`);
+  }
+
+  return resolved;
+}
+
+function resolveEditableWorkspacePath(inputPath: string): { absolutePath: string; relativePath: string } {
+  const resolved = resolveWorkspaceEditPath(inputPath);
+  if (!isEditableWorkspaceTextPath(resolved.relativePath)) {
+    throw new HttpError(409, `Only allowlisted source/text files can be edited in v0: ${inputPath}`);
+  }
+
+  return resolved;
+}
+
+function resolveWorkspaceEditPath(inputPath: string): { absolutePath: string; relativePath: string } {
   if (inputPath.includes("\0") || path.isAbsolute(inputPath)) {
     throw new HttpError(409, `Unsafe edit path: ${inputPath}`);
   }
@@ -6535,19 +6684,13 @@ function resolveMarkdownWorkspacePath(inputPath: string): { absolutePath: string
     normalized === "." ||
     normalized === ".." ||
     normalized.startsWith("../") ||
-    normalized.startsWith("/") ||
-    normalized.startsWith(".git/") ||
-    normalized.startsWith(".forge/")
+    normalized.startsWith("/")
   ) {
     throw new HttpError(409, `Unsafe edit path: ${inputPath}`);
   }
 
-  if (normalized !== "README.md" && !normalized.startsWith("docs/")) {
-    throw new HttpError(409, `Only README.md and docs/*.md paths can be edited in v0: ${inputPath}`);
-  }
-
-  if (!normalized.endsWith(".md")) {
-    throw new HttpError(409, `Only Markdown files can be edited in v0: ${inputPath}`);
+  if (hasUnsafeEditPathSegment(normalized)) {
+    throw new HttpError(409, `Unsafe edit path segment: ${inputPath}`);
   }
 
   const absolutePath = path.resolve(repoRoot, normalized);
@@ -6556,6 +6699,38 @@ function resolveMarkdownWorkspacePath(inputPath: string): { absolutePath: string
   }
 
   return { absolutePath, relativePath: normalized };
+}
+
+function isEditableMarkdownWorkspacePath(normalized: string): boolean {
+  return normalized === "README.md" || (normalized.startsWith("docs/") && normalized.endsWith(".md"));
+}
+
+function isEditableWorkspaceTextPath(normalized: string): boolean {
+  if (isEditableMarkdownWorkspacePath(normalized)) {
+    return true;
+  }
+
+  const fileName = path.posix.basename(normalized);
+  if (
+    editProposalBlockedFileNames.has(fileName) ||
+    fileName.startsWith(".env") ||
+    hasIgnoredEditDirectory(normalized)
+  ) {
+    return false;
+  }
+
+  return editProposalEditableFileNames.has(fileName) || editProposalEditableExtensions.has(path.posix.extname(fileName));
+}
+
+function hasUnsafeEditPathSegment(normalized: string): boolean {
+  return normalized.split("/").some((segment) => segment === ".git" || segment === ".forge");
+}
+
+function hasIgnoredEditDirectory(normalized: string): boolean {
+  return normalized
+    .split("/")
+    .slice(0, -1)
+    .some((segment) => repositoryIgnoredDirectories.has(segment) || segment.endsWith(".xcodeproj"));
 }
 
 function resolvePresetCommandCwd(inputPath: string | undefined): string {

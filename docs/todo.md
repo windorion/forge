@@ -21,8 +21,9 @@ dashboard.
 - Polish the first usable `10a` full-screen diff review: exact split-diff
   behavior, keyboard shortcuts, file-level approval persistence, and stronger
   tests-covering-this-file evidence.
-- Add source-file patch proposals for normal code files, not only Markdown,
-  with strict path validation, pre-apply checks, and rollback metadata.
+- Broaden source-file patch proposals beyond exact single-match replacements:
+  add a richer patch format, user-facing rollback, and multi-file source
+  repair flows while keeping strict path validation and pre-apply checks.
 - Add approved task-scoped command execution with streamed output, status,
   exit code, timeout, and cancellation hooks.
 - Connect command failures to the existing repair-brief/proposal loop so Forge
@@ -92,6 +93,13 @@ dashboard.
 
 ## Done Recently
 
+- Added the first source-code edit path: exact `ReplaceText` proposals can now
+  validate and apply to existing allowlisted source/text files, not only
+  Markdown.
+- Added applied-file rollback metadata with before/after SHA-256 hashes, byte
+  lengths, operation kind, timestamp, and rollback strategy.
+- Extended `npm run smoke:core` with a temporary TypeScript source replacement
+  fixture and assertions for applied-file rollback metadata.
 - Added a first-pass macOS coding-agent session shell in `WorkspaceView.swift`:
   neo-brutalist visual tokens, `1a`-style empty task composer, task queue,
   live agent stream, plan progress strip, Log/Diff/Tests tabs, compact plan

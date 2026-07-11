@@ -96,12 +96,21 @@ Current restricted operation kinds:
 
 - `AppendText`: appends bounded text to an existing Markdown file.
 - `ReplaceText`: replaces exact bounded text only when the find text appears
-  exactly once in the target file. The provider can generate this operation
-  from explicit task messages such as `replace "old" with "new"` or
+  exactly once in the target file. It can now target existing Markdown files
+  and allowlisted source/text files such as TypeScript, Swift, JavaScript,
+  JSON, CSS, HTML, YAML, TOML, Python, Go, Rust, Java, Kotlin, C/C++, and
+  headers. The provider can generate this operation from explicit task
+  messages such as `replace "old" with "new"` or
   `把“旧文本”替换成“新文本”`.
 - `CreateFile`: creates a new bounded Markdown file under `docs/` only; it
   never overwrites an existing target.
 - `PreviewOnly`: review artifact only; validation blocks apply.
+
+After apply, the proposal records `appliedFileChanges` metadata for every
+changed file: operation kind, applied timestamp, before/after SHA-256 hashes,
+before/after byte lengths when available, and the rollback strategy
+(`RestorePreviousContent` or `DeleteCreatedFile`). This is not yet a user-facing
+rollback action; it is the durable audit data needed for one.
 
 Validation stores:
 
@@ -133,11 +142,13 @@ Post-apply validation stores:
 - A proposal is validated when generated and again immediately before apply.
 - A blocked generated proposal can be repaired automatically only within a
   bounded attempt limit and only by producing another review artifact.
-- Current v0 apply behavior only supports `AppendText`, `ReplaceText`, and
+- Current v0 apply behavior supports `AppendText`, exact `ReplaceText`, and
   `CreateFile`.
-- Current v0 modify behavior only writes existing Markdown files in
-  `README.md` or `docs/*.md`; current create behavior only writes new
-  `docs/*.md` files.
+- Current v0 append behavior only writes existing Markdown files in
+  `README.md` or `docs/*.md`.
+- Current v0 exact replace behavior can write existing allowlisted source/text
+  files after strict path, size, text, and single-occurrence checks.
+- Current v0 create behavior only writes new `docs/*.md` files.
 - Preview-only, delete, unsupported path, overwrite-create, or broad patch
   proposals may be shown for review but must validate as `Blocked`.
 - Absolute paths, parent-directory traversal, `.git`, and `.forge` paths are
@@ -146,6 +157,9 @@ Post-apply validation stores:
   file end.
 - Apply is blocked if replace find text is missing, appears more than once,
   is identical to the replacement, or if either side is empty or oversized.
+- Apply is blocked for source/text targets outside the allowlist, generated
+  directories, lockfiles, secret-like files, oversized files, or binary-looking
+  content.
 - Apply is blocked if create-file content is empty, oversized, outside
   `docs/*.md`, or targets an existing file.
 - Applying a proposal moves the task into `Testing` and runs built-in
@@ -163,7 +177,7 @@ Post-apply validation stores:
 
 ## Future Work
 
-- Generate richer model-backed patch content while keeping runtime-owned
-  validation and review gates.
+- Add a user-facing rollback endpoint using the recorded before/after metadata.
 - Add a richer patch apply engine after exact replace validation is mature.
-- Link edit proposals to normalized file-change records.
+- Generate broader model-backed patch content while keeping runtime-owned
+  validation and review gates.

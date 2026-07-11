@@ -18,6 +18,7 @@ const mockOpenAIPort = port + 2000;
 const baseURL = `http://127.0.0.1:${port}`;
 const appendSmokePath = `docs/${smokeID}-append.md`;
 const replaceSmokePath = `docs/${smokeID}-replace.md`;
+const sourceReplaceSmokePath = `runtime/src/${smokeID}-source-replace.ts`;
 const createSmokePath = `docs/${smokeID}-openai-created.md`;
 const binarySmokePath = `docs/${smokeID}-binary.bin`;
 const largeDiffSmokePath = `docs/${smokeID}-large-diff.txt`;
@@ -32,6 +33,10 @@ const smokeFiles = [
   {
     relativePath: replaceSmokePath,
     initialContent: "# Forge Replace Smoke\n\nSMOKE_OLD\n"
+  },
+  {
+    relativePath: sourceReplaceSmokePath,
+    initialContent: "export const forgeSourceReplaceSmoke = \"SOURCE_OLD\";\n"
   }
 ];
 
@@ -52,6 +57,7 @@ try {
   await assertRestartRecovery(appendTask.id, appendSmokePath);
 
   const replaceTask = await runReplaceFlow();
+  const sourceReplaceTask = await runSourceReplaceFlow();
 
   await stopRuntime(runtime);
   runtime = undefined;
@@ -73,6 +79,7 @@ try {
   console.log(`- Runtime: ${baseURL}`);
   console.log(`- Append task: ${appendTask.id}`);
   console.log(`- Replace task: ${replaceTask.id}`);
+  console.log(`- Source replace task: ${sourceReplaceTask.id}`);
   console.log(`- OpenAI context task: ${openAIContextTask.id}`);
   console.log(`- OpenAI auto-repair task: ${openAIAutoRepairTask.id}`);
   console.log(`- OpenAI validation repair task: ${openAIValidationRepairTask.id}`);
@@ -171,6 +178,58 @@ async function runReplaceFlow() {
   const after = await readFile(join(repoRoot, replaceSmokePath), "utf8");
   assert(after.includes("SMOKE_NEW"), "Replace smoke did not write the replacement text.");
   assert(!after.includes("SMOKE_OLD"), "Replace smoke left the original find text behind.");
+
+  return current;
+}
+
+async function runSourceReplaceFlow() {
+  const task = await createTask({
+    title: "Smoke source replace lifecycle",
+    objective: `Run an exact source replace lifecycle smoke against @${sourceReplaceSmokePath}.`
+  });
+
+  await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "source replace task to reach initial plan review"
+  );
+
+  let current = await post(`/tasks/${task.id}/messages`, {
+    content: `Use @${sourceReplaceSmokePath} and replace "SOURCE_OLD" with "SOURCE_NEW".`
+  });
+  assertResolvedReference(current, sourceReplaceSmokePath);
+
+  current = await post(`/tasks/${task.id}/generate-plan-revision`, {});
+  assertState(current, "Human Review", "Plan Review");
+
+  current = await post(`/tasks/${task.id}/approve-plan`, {
+    note: "Core smoke test approves the source replace plan."
+  });
+  assert(current.executionProposal, "Source replace flow did not create an execution proposal.");
+  assertExecutionProposalContext(current, sourceReplaceSmokePath);
+
+  current = await post(`/tasks/${task.id}/generate-edit-proposal`, {});
+  assertProposal(current, sourceReplaceSmokePath, "ReplaceText");
+
+  current = await post(`/tasks/${task.id}/validate-edit-proposal`, {});
+  assertProposal(current, sourceReplaceSmokePath, "ReplaceText");
+  assert(
+    current.editProposal.validation.fileResults?.some((result) =>
+      result.path === sourceReplaceSmokePath &&
+        result.checks?.some((check) => check.includes("editable source/text workspace boundary"))
+    ),
+    "Source replace validation did not use the source/text workspace boundary."
+  );
+
+  current = await post(`/tasks/${task.id}/apply-edit-proposal`, {
+    note: "Core smoke test applies the source replace proposal."
+  });
+  assertCompletedTask(current, sourceReplaceSmokePath);
+
+  const after = await readFile(join(repoRoot, sourceReplaceSmokePath), "utf8");
+  assert(after.includes("SOURCE_NEW"), "Source replace smoke did not write the replacement text.");
+  assert(!after.includes("SOURCE_OLD"), "Source replace smoke left the original find text behind.");
+  assertAppliedChangeMetadata(current, sourceReplaceSmokePath, "ReplaceText");
 
   return current;
 }
@@ -1502,10 +1561,42 @@ function assertCompletedTask(task, expectedChangedFile) {
   assertState(task, "Completed", "Validation Passed");
   assert(task.changedFiles?.includes(expectedChangedFile), `Changed files did not include ${expectedChangedFile}.`);
   assert(task.editProposal?.status === "Applied", "Completed task does not have an applied edit proposal.");
+  assertAppliedChangeMetadata(task, expectedChangedFile);
   assert(
     task.validationRuns?.some((run) => run.presetID === "forge-post-apply" && run.status === "Passed"),
     "Completed task does not include a passed forge-post-apply validation run."
   );
+}
+
+function assertAppliedChangeMetadata(task, expectedChangedFile, expectedOperation) {
+  const appliedChange = task.editProposal?.appliedFileChanges?.find((change) => change.path === expectedChangedFile);
+  assert(appliedChange, `Applied change metadata did not include ${expectedChangedFile}.`);
+  if (expectedOperation) {
+    assert(
+      appliedChange.operationKind === expectedOperation,
+      `Expected applied operation ${expectedOperation}, got ${appliedChange.operationKind}.`
+    );
+  }
+  assert(appliedChange.appliedAt, "Applied change metadata did not include appliedAt.");
+  assert(["RestorePreviousContent", "DeleteCreatedFile"].includes(appliedChange.rollbackKind), "Applied change metadata has an unknown rollback kind.");
+  assert(appliedChange.rollbackSummary, "Applied change metadata did not include a rollback summary.");
+  assert(appliedChange.afterSha256?.length === 64, "Applied change metadata did not include an after SHA-256.");
+  assert(
+    typeof appliedChange.afterByteLength === "number" && appliedChange.afterByteLength > 0,
+    "Applied change metadata did not include an after byte length."
+  );
+
+  if (appliedChange.rollbackKind === "RestorePreviousContent") {
+    assert(appliedChange.beforeSha256?.length === 64, "Restore rollback metadata did not include a before SHA-256.");
+    assert(
+      typeof appliedChange.beforeByteLength === "number" && appliedChange.beforeByteLength > 0,
+      "Restore rollback metadata did not include a before byte length."
+    );
+    assert(
+      appliedChange.beforeSha256 !== appliedChange.afterSha256,
+      "Restore rollback metadata should show different before and after hashes."
+    );
+  }
 }
 
 function assertExecutionProposalContext(task, expectedPath) {

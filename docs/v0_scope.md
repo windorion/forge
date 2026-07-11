@@ -81,8 +81,8 @@ It should not feel like:
 - plan progress strip
 - Log/Diff/Tests tabs
 - model-provider-backed normal run path
-- source-file patch proposal format beyond Markdown-only edits
-- controlled patch apply with rollback/revalidation
+- source-file patch proposal format beyond exact single-match replacements
+- controlled patch apply with user-facing rollback/revalidation
 - approved task-scoped command runner for checks/tests
 - command output streaming into the task
 - failed-check self-fix loop
@@ -118,7 +118,7 @@ V0 is complete when:
 - Approving the plan starts an agent run.
 - The live run shows chronological read/search/edit/test/self-fix events.
 - The patch engine can propose and apply a real source-file change inside the
-  repo, with rollback/revalidation.
+  repo, with rollback metadata and revalidation.
 - The command runner can run an approved project check and stream output.
 - A failed check can produce a bounded repair attempt and rerun evidence.
 - Diff and Tests tabs update during or immediately after the run.
@@ -154,14 +154,16 @@ Major gaps:
 - UI has a first-pass shell but does not yet fully match `design_handoff_forge`.
 - Full-screen diff review exists but still needs exact split-diff polish,
   keyboard shortcuts, and durable file-level review decisions.
-- Patch apply is still too narrow for normal source-code tasks.
+- Patch apply now has a first exact source replacement path, but it is still
+  too narrow for normal source-code tasks.
 - Command output is not streamed as a first-class task surface.
 - Provider-backed run loop is not yet a real read/search/patch/run/repair
   agent.
 
 ## Next Implementation Order
 
-1. Add source-file patch proposal/apply with rollback.
+1. Broaden source-file patch proposal/apply beyond exact replace and add a
+   user-facing rollback action.
 2. Add task-scoped command execution and streamed logs.
 3. Connect provider-driven run loop to patch/run/repair.
 4. Implement request-change revision from full diff review.

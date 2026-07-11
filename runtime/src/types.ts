@@ -201,6 +201,18 @@ export interface EditProposalValidation {
   fileResults: FileChangeValidation[];
 }
 
+export interface AppliedFileChange {
+  path: string;
+  operationKind: ProposedFileOperation["kind"];
+  rollbackKind: "RestorePreviousContent" | "DeleteCreatedFile";
+  rollbackSummary: string;
+  appliedAt: string;
+  beforeSha256?: string;
+  afterSha256?: string;
+  beforeByteLength?: number;
+  afterByteLength?: number;
+}
+
 export interface EditProposal {
   id: string;
   provider: ModelProviderInfo;
@@ -216,6 +228,7 @@ export interface EditProposal {
   decidedAt?: string;
   decisionNote?: string;
   validation?: EditProposalValidation;
+  appliedFileChanges?: AppliedFileChange[];
 }
 
 export interface ToolCall {

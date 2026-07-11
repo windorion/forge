@@ -83,6 +83,11 @@ Examples:
 
 May run automatically based on settings, but should be logged and visible.
 
+Current v0 edit application is medium risk and requires explicit human apply.
+It supports Markdown append/create operations and exact single-match
+replacements for allowlisted source/text files, then records applied-file
+metadata for audit and future rollback.
+
 Current v0 post-apply validation defaults to built-in `forge:` checks. It can
 also run allowlisted project validation presets, such as runtime `npm run
 check` and `npm run build`, after task-level approval. These commands are

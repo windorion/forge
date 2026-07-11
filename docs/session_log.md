@@ -2691,3 +2691,44 @@ Next:
 - Add source-file patch proposal/apply/rollback support.
 - Add task-scoped command execution with streamed logs.
 - Connect failed command output into the self-fix proposal loop.
+
+### 2026-07-11 23:39:52 CEST +0200
+
+Conversation summary:
+
+- User asked to commit all local code, then continue the next implementation
+  step toward completing V0.
+
+Done:
+
+- Committed the previous coding-agent session foundation work as
+  `47c5f16 Build coding-agent session foundation`.
+- Added the first source-code edit path: exact `ReplaceText` proposals can now
+  validate and apply to existing allowlisted source/text files, not only
+  Markdown.
+- Kept `AppendText` limited to `README.md` and `docs/*.md`, and kept
+  `CreateFile` limited to new `docs/*.md` files.
+- Added applied-file metadata with before/after SHA-256 hashes, byte lengths,
+  operation kind, applied timestamp, and rollback strategy.
+- Updated the local deterministic provider and OpenAI edit proposal guidance
+  so explicit replacement tasks can target referenced source/text files.
+- Added Swift model decoding for applied-file metadata.
+- Extended `npm run smoke:core` with a temporary TypeScript source replacement
+  fixture and applied-file metadata assertions.
+- Updated README and project docs to reflect the new exact source replacement
+  capability and the remaining patch/rollback gaps.
+- Verified `npm run check`, `npm run smoke:core`, `swift build`, and
+  `git diff --check`.
+
+Not done:
+
+- Did not add a general multi-hunk patch format.
+- Did not add a user-facing rollback endpoint/action yet.
+- Did not add streamed task-scoped command execution yet.
+
+Next:
+
+- Broaden source patching beyond exact single-match replace.
+- Add a user-facing rollback endpoint backed by the recorded apply metadata.
+- Add task-scoped command execution with streamed logs and connect failures to
+  the repair proposal loop.

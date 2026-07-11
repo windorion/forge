@@ -10,10 +10,11 @@ Last updated: 2026-07-11
 Forge is a strong trust/runtime foundation with a first-pass coding-agent
 session shell and a usable full-screen diff review surface in the macOS app.
 It can create tasks, inspect bounded repo context, hold review gates, generate
-safe edit proposals, apply restricted Markdown edits, validate work, expose
-guarded git actions, and persist task state locally. The next milestone is to
-make that shell real: source-code patching, streamed command output,
-provider-driven patch/run/repair, and self-fix.
+safe edit proposals, apply restricted Markdown edits and exact source/text
+replacements, validate work, expose guarded git actions, and persist task
+state locally. The next milestone is to make that shell real: broader
+source-code patching, streamed command output, provider-driven patch/run/
+repair, and self-fix.
 
 ## Current Implementation
 
@@ -49,9 +50,15 @@ Implemented:
   including blocked preview-only unsupported operations.
 - `AppendText` and exact `ReplaceText` restricted edit operations for
   `README.md` and `docs/*.md`.
+- Exact `ReplaceText` restricted edit operations for existing allowlisted
+  source/text files, with strict path, size, binary, and single-occurrence
+  validation.
 - Restricted `CreateFile` apply for new Markdown files under `docs/`.
 - Edit proposal validation before apply and immediate revalidation during
   apply.
+- Applied edit proposals now record per-file rollback metadata: operation kind,
+  before/after SHA-256 hashes, byte lengths, applied timestamp, and rollback
+  strategy.
 - Bounded validation-feedback repair loop for blocked edit proposals.
 - Request-changes revision loop for rejected edit proposals.
 - Post-apply validation runs.
@@ -123,9 +130,10 @@ Implemented:
 - Core runtime smoke regression command covering create task, file-reference
   messages, plan revision, plan approval, edit proposal generation,
   validation, apply, built-in post-apply validation, append/replace operations,
-  restricted docs create-file apply, SQLite restart recovery, runtime health
-  diagnostics, model-provider settings GET/POST, fake-key handling without
-  secret persistence, a mock OpenAI model-guided context loop,
+  exact source-file replace, applied-file rollback metadata, restricted docs
+  create-file apply, SQLite restart recovery, runtime health diagnostics,
+  model-provider settings GET/POST, fake-key handling without secret
+  persistence, a mock OpenAI model-guided context loop,
   blocked-to-repaired proposal handling, and bounded blocked preview-only
   proposal handling, plus failed project validation repair brief generation
   and follow-up repair proposal generation.
@@ -152,7 +160,7 @@ These percentages are product-readiness estimates, not calendar estimates.
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 45-50% | Has a first-pass session UI shell and full-screen diff review surface, but still needs a real source patch engine, streamed command output, and provider-driven patch/run/repair loop. |
+| Coding-agent demo V0 | 50-55% | Has a first-pass session UI shell, full-screen diff review surface, and first exact source replace path, but still needs a broader source patch engine, streamed command output, and provider-driven patch/run/repair loop. |
 | Useful developer alpha | 35-45% | A developer cannot yet rely on Forge like Codex or Claude Code for normal coding tasks. It needs real patching, command execution, recovery, and a stronger model-backed run loop. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
@@ -168,7 +176,7 @@ The hardest remaining work is not the app shell. The hardest remaining work is:
 - a real model-backed coding run loop, not deterministic simulation
 - a polished UI that fully matches the handoff, especially exact split-diff,
   durable file-level review state, and decision prompts
-- a useful source-code patch engine beyond restricted Markdown edits
+- a useful source-code patch engine beyond exact single-match replacements
 - streamed command execution and self-fix loops
 - reliable repository understanding beyond bounded file scans
 - git workflow from dirty tree to approved published PR
@@ -189,7 +197,8 @@ Remaining V0 gaps:
 - polish the first-pass `1a`/`1b`/`14a` shell toward the exact handoff
 - polish the first usable `10a` full-screen diff review toward exact handoff
   behavior and durable per-file decisions
-- add source-file patch proposals and safe apply/rollback
+- broaden source-file patch proposals beyond exact replace and add
+  user-facing rollback
 - add approved task-scoped command execution with streamed output
 - wire provider-driven read/search/patch/run/repair into the normal flow
 - implement full diff review with per-file reasoning and request-change loop

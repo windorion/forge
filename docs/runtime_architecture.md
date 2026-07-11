@@ -207,18 +207,20 @@ all later file changes.
 ### Edit Proposal Validator
 
 Checks proposed file changes against the current workspace before apply. The
-v0 validator confirms supported operation type, safe Markdown path, existing
-target file for modify operations, non-existing docs target for create
-operations, operation size, whether append text is already present at the file
-end, and whether exact replace text appears exactly once.
+v0 validator confirms supported operation type, safe Markdown paths for append
+and create operations, safe allowlisted source/text paths for exact replace
+operations, existing target file for modify operations, non-existing docs
+target for create operations, operation size, whether append text is already
+present at the file end, and whether exact replace text appears exactly once.
 
 ### Edit Proposal Applier
 
 Applies an explicitly approved proposal through restricted file operations.
-The v0 implementation supports append-text edits and exact replace-text edits
-to existing Markdown files in `README.md` or `docs/`, plus create-file edits
-for new `docs/*.md` files. It revalidates before writing and records rejected
-or superseded proposals without touching files.
+The v0 implementation supports append-text edits to existing Markdown files in
+`README.md` or `docs/`, exact replace-text edits to existing Markdown or
+allowlisted source/text files, plus create-file edits for new `docs/*.md`
+files. It revalidates before writing, records before/after apply metadata for
+rollback, and records rejected or superseded proposals without touching files.
 
 ### Git Review Surface
 
