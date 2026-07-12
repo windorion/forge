@@ -19,6 +19,7 @@ const baseURL = `http://127.0.0.1:${port}`;
 const appendSmokePath = `docs/${smokeID}-append.md`;
 const replaceSmokePath = `docs/${smokeID}-replace.md`;
 const sourceReplaceSmokePath = `runtime/src/${smokeID}-source-replace.ts`;
+const sourcePatchSmokePath = `runtime/src/${smokeID}-source-patch.ts`;
 const createSmokePath = `docs/${smokeID}-openai-created.md`;
 const binarySmokePath = `docs/${smokeID}-binary.bin`;
 const largeDiffSmokePath = `docs/${smokeID}-large-diff.txt`;
@@ -37,6 +38,14 @@ const smokeFiles = [
   {
     relativePath: sourceReplaceSmokePath,
     initialContent: "export const forgeSourceReplaceSmoke = \"SOURCE_OLD\";\n"
+  },
+  {
+    relativePath: sourcePatchSmokePath,
+    initialContent: [
+      "export const forgePatchSmokeOne = \"PATCH_OLD_ONE\";",
+      "export const forgePatchSmokeTwo = \"PATCH_OLD_TWO\";",
+      ""
+    ].join("\n")
   }
 ];
 
@@ -60,6 +69,7 @@ try {
 
   const replaceTask = await runReplaceFlow();
   const sourceReplaceTask = await runSourceReplaceFlow();
+  const sourcePatchTask = await runSourcePatchFlow();
 
   await stopRuntime(runtime);
   runtime = undefined;
@@ -82,6 +92,7 @@ try {
   console.log(`- Append task: ${appendTask.id}`);
   console.log(`- Replace task: ${replaceTask.id}`);
   console.log(`- Source replace task: ${sourceReplaceTask.id}`);
+  console.log(`- Source patch task: ${sourcePatchTask.id}`);
   console.log(`- OpenAI context task: ${openAIContextTask.id}`);
   console.log(`- OpenAI auto-repair task: ${openAIAutoRepairTask.id}`);
   console.log(`- OpenAI validation repair task: ${openAIValidationRepairTask.id}`);
@@ -252,6 +263,82 @@ async function runSourceReplaceFlow() {
   const restored = await readFile(join(repoRoot, sourceReplaceSmokePath), "utf8");
   assert(restored.includes("SOURCE_OLD"), "Source replace rollback did not restore the original text.");
   assert(!restored.includes("SOURCE_NEW"), "Source replace rollback left the replacement text behind.");
+
+  return current;
+}
+
+async function runSourcePatchFlow() {
+  const task = await createTask({
+    title: "Smoke source patch lifecycle",
+    objective: `Run a multi-hunk source patch lifecycle smoke against @${sourcePatchSmokePath}.`
+  });
+
+  await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "source patch task to reach initial plan review"
+  );
+
+  let current = await post(`/tasks/${task.id}/messages`, {
+    content: [
+      `Use @${sourcePatchSmokePath}.`,
+      `Replace "PATCH_OLD_ONE" with "PATCH_NEW_ONE".`,
+      `Replace "PATCH_OLD_TWO" with "PATCH_NEW_TWO".`
+    ].join(" ")
+  });
+  assertResolvedReference(current, sourcePatchSmokePath);
+
+  current = await post(`/tasks/${task.id}/generate-plan-revision`, {});
+  assertState(current, "Human Review", "Plan Review");
+
+  current = await post(`/tasks/${task.id}/approve-plan`, {
+    note: "Core smoke test approves the source patch plan."
+  });
+  assert(current.executionProposal, "Source patch flow did not create an execution proposal.");
+  assertExecutionProposalContext(current, sourcePatchSmokePath);
+
+  current = await post(`/tasks/${task.id}/generate-edit-proposal`, {});
+  assertProposal(current, sourcePatchSmokePath, "PatchText");
+  assert(
+    current.editProposal.fileChanges?.[0]?.applyOperation?.hunks?.length === 2,
+    "Source patch proposal did not include two patch hunks."
+  );
+
+  current = await post(`/tasks/${task.id}/validate-edit-proposal`, {});
+  assertProposal(current, sourcePatchSmokePath, "PatchText");
+  assert(
+    current.editProposal.validation.fileResults?.some((result) =>
+      result.path === sourcePatchSmokePath &&
+        result.checks?.some((check) => check.includes("Patch hunks apply cleanly in order"))
+    ),
+    "Source patch validation did not record ordered hunk application."
+  );
+
+  current = await post(`/tasks/${task.id}/apply-edit-proposal`, {
+    note: "Core smoke test applies the source patch proposal."
+  });
+  assertCompletedTask(current, sourcePatchSmokePath);
+
+  const after = await readFile(join(repoRoot, sourcePatchSmokePath), "utf8");
+  assert(after.includes("PATCH_NEW_ONE"), "Source patch smoke did not write the first replacement.");
+  assert(after.includes("PATCH_NEW_TWO"), "Source patch smoke did not write the second replacement.");
+  assert(!after.includes("PATCH_OLD_ONE"), "Source patch smoke left the first original text behind.");
+  assert(!after.includes("PATCH_OLD_TWO"), "Source patch smoke left the second original text behind.");
+  assertAppliedChangeMetadata(current, sourcePatchSmokePath, "PatchText");
+
+  current = await post(`/tasks/${task.id}/rollback-edit-proposal`, {
+    note: "Core smoke test rolls back the source patch proposal."
+  });
+  assertState(current, "Human Review", "Rollback Applied");
+  assert(current.editProposal?.status === "RolledBack", "Source patch rollback did not mark proposal RolledBack.");
+  const rolledBackChange = assertAppliedChangeMetadata(current, sourcePatchSmokePath, "PatchText");
+  assert(rolledBackChange.rolledBackAt, "Source patch rollback did not timestamp the applied change metadata.");
+
+  const restored = await readFile(join(repoRoot, sourcePatchSmokePath), "utf8");
+  assert(restored.includes("PATCH_OLD_ONE"), "Source patch rollback did not restore the first original text.");
+  assert(restored.includes("PATCH_OLD_TWO"), "Source patch rollback did not restore the second original text.");
+  assert(!restored.includes("PATCH_NEW_ONE"), "Source patch rollback left the first replacement text behind.");
+  assert(!restored.includes("PATCH_NEW_TWO"), "Source patch rollback left the second replacement text behind.");
 
   return current;
 }

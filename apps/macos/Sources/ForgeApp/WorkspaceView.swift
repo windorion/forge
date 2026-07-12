@@ -5822,6 +5822,8 @@ private struct OperationSummaryRow: View {
             return "AppendText / \(operation.text?.count ?? 0) chars"
         case "ReplaceText":
             return "ReplaceText / \(operation.findText?.count ?? 0) -> \(operation.replaceWith?.count ?? 0) chars"
+        case "PatchText":
+            return "PatchText / \(operation.hunks?.count ?? 0) hunk(s)"
         case "CreateFile":
             return "CreateFile / \(operation.content?.count ?? 0) chars"
         case "PreviewOnly":
@@ -5837,6 +5839,8 @@ private struct OperationSummaryRow: View {
             return "text.append"
         case "ReplaceText":
             return "arrow.left.arrow.right"
+        case "PatchText":
+            return "rectangle.stack.badge.plus"
         case "CreateFile":
             return "doc.badge.plus"
         case "PreviewOnly":
@@ -5857,6 +5861,8 @@ private struct OperationSummaryRow: View {
 
     private func operationNote(_ operation: ProposedFileOperation) -> String? {
         switch operation.kind {
+        case "PatchText":
+            return "Apply-ready only when every hunk has one exact match in the original file."
         case "CreateFile":
             return "Apply-ready only for new docs/*.md files after runtime validation."
         case "PreviewOnly":

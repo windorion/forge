@@ -107,6 +107,8 @@ interface RestrictedEditDraft {
   applyOperation: ProposedFileOperation;
 }
 
+type PatchTextHunkInput = Extract<ProposedFileOperation, { kind: "PatchText" }>["hunks"][number];
+
 export function createModelProviderFromEnv(): ModelProvider {
   return createModelProvider(defaultModelProviderRuntimeSettings());
 }
@@ -386,8 +388,9 @@ class OpenAIResponsesModelProvider implements ModelProvider {
         "You may propose multiple file changes, but the runtime will validate all of them before any apply.",
         "Use AppendText only for bounded appends to README.md or docs/*.md.",
         "Use ReplaceText only when the task explicitly asks for an exact quoted replacement and you can provide the exact find text. It may target README.md, docs/*.md, or normal allowlisted source/text files such as .ts, .swift, .js, .json, .css, .html, .yml, .toml, .py, .go, .rs, .java, .kt, .c, .cpp, .h, and .hpp.",
+        "Use PatchText only when the task explicitly asks for multiple exact quoted replacements in one existing allowlisted Markdown/source/text file. Every patchHunks item must include exact findText and replaceWith text that should appear once in the original target file.",
         "Use CreateFile only for new docs/*.md files with bounded Markdown content.",
-        "Use PreviewOnly for broad code patches, fuzzy patches, deletes, new source files, unsupported paths, overwrite attempts, or anything that should be reviewed but not applied by the current v0 engine.",
+        "Use PreviewOnly for broad code patches, fuzzy patches, line-number-only diffs, deletes, new source files, unsupported paths, overwrite attempts, or anything that should be reviewed but not applied by the current v0 engine.",
         request.validationFeedback
           ? "The previous proposal failed runtime validation. Generate a corrected proposal that addresses every blocked check while staying inside the supported operation boundary."
           : request.validationRepairBrief
@@ -596,10 +599,22 @@ const editProposalFileChangeSchema: JsonSchema = {
     changeType: { type: "string", enum: ["Create", "Modify", "Delete"] },
     rationale: { type: "string" },
     diffPreview: { type: "string" },
-    operationKind: { type: "string", enum: ["AppendText", "ReplaceText", "CreateFile", "PreviewOnly"] },
+    operationKind: { type: "string", enum: ["AppendText", "ReplaceText", "PatchText", "CreateFile", "PreviewOnly"] },
     appendText: { type: "string" },
     findText: { type: "string" },
     replaceWith: { type: "string" },
+    patchHunks: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          findText: { type: "string" },
+          replaceWith: { type: "string" }
+        },
+        required: ["findText", "replaceWith"]
+      }
+    },
     content: { type: "string" }
   },
   required: [
@@ -611,6 +626,7 @@ const editProposalFileChangeSchema: JsonSchema = {
     "appendText",
     "findText",
     "replaceWith",
+    "patchHunks",
     "content"
   ]
 };
@@ -758,9 +774,7 @@ class LocalDeterministicModelProvider implements ModelProvider {
 
   async createEditProposal(request: EditProposalRequest): Promise<EditProposal> {
     const draft = buildRestrictedEditDraft(request);
-    const operationLabel = draft.applyOperation.kind === "ReplaceText"
-      ? "an exact text replacement"
-      : "a small append-only note";
+    const operationLabel = editOperationLabel(draft.applyOperation);
 
     return {
       id: randomUUID(),
@@ -986,6 +1000,11 @@ function normalizeRichEditProposalFileChange(output: unknown): RichEditProposalF
     applyOperation = findText && replaceWith
       ? { kind: "ReplaceText", findText, replaceWith }
       : { kind: "PreviewOnly" };
+  } else if (operationKind === "PatchText") {
+    const hunks = normalizePatchTextHunks(output.patchHunks);
+    applyOperation = hunks.length > 0
+      ? { kind: "PatchText", hunks }
+      : { kind: "PreviewOnly" };
   } else if (operationKind === "CreateFile") {
     applyOperation = {
       kind: "CreateFile",
@@ -1002,6 +1021,29 @@ function normalizeRichEditProposalFileChange(output: unknown): RichEditProposalF
     diffPreview,
     applyOperation
   };
+}
+
+function normalizePatchTextHunks(value: unknown): PatchTextHunkInput[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .slice(0, 8)
+    .map((item): PatchTextHunkInput | undefined => {
+      if (!isRecord(item)) {
+        return undefined;
+      }
+
+      const findText = optionalMultilineString(item.findText, 10_000);
+      const replaceWith = optionalMultilineString(item.replaceWith, 10_000);
+      if (!findText || !replaceWith || findText === replaceWith) {
+        return undefined;
+      }
+
+      return { findText, replaceWith };
+    })
+    .filter((hunk): hunk is PatchTextHunkInput => hunk !== undefined);
 }
 
 function normalizeValidationRepairBriefOutput(
@@ -1320,14 +1362,28 @@ function buildRestrictedEditDraft(
   request: EditProposalRequest,
   guidance?: EditProposalGuidance
 ): RestrictedEditDraft {
-  const replaceInstruction = parseExactReplaceInstruction(request.sourceMessage?.content ?? request.task.objective);
-  const allowSourceText = replaceInstruction !== undefined;
+  const replaceInstructions = parseExactReplaceInstructions(request.sourceMessage?.content ?? request.task.objective);
+  const allowSourceText = replaceInstructions.length > 0;
   const previousTargetPath = request.previousProposal?.fileChanges.find((change) =>
     isEditableTargetPath(change.path, allowSourceText)
   )?.path;
   const targetPath = chooseTargetPath(request.task, guidance?.targetPath ?? previousTargetPath, allowSourceText);
 
-  if (replaceInstruction) {
+  if (replaceInstructions.length > 1) {
+    const applyOperation: ProposedFileOperation = {
+      kind: "PatchText",
+      hunks: replaceInstructions
+    };
+
+    return {
+      targetPath,
+      applyOperation,
+      diffPreview: buildPatchTextDiffPreview(targetPath, applyOperation)
+    };
+  }
+
+  if (replaceInstructions.length === 1) {
+    const replaceInstruction = replaceInstructions[0];
     const applyOperation: ProposedFileOperation = {
       kind: "ReplaceText",
       findText: replaceInstruction.findText,
@@ -1354,25 +1410,45 @@ function buildRestrictedEditDraft(
   };
 }
 
-function parseExactReplaceInstruction(content: string): { findText: string; replaceWith: string } | undefined {
+function editOperationLabel(operation: ProposedFileOperation): string {
+  if (operation.kind === "ReplaceText") {
+    return "an exact text replacement";
+  }
+
+  if (operation.kind === "PatchText") {
+    return `${operation.hunks.length} exact patch hunks`;
+  }
+
+  return "a small append-only note";
+}
+
+function parseExactReplaceInstructions(content: string): PatchTextHunkInput[] {
   const patterns = [
-    /\breplace\s+["“]([\s\S]+?)["”]\s+(?:with|to)\s+["“]([\s\S]+?)["”]/i,
-    /(?:把|将)\s*[“"]([\s\S]+?)[”"]\s*替换(?:成|为)\s*[“"]([\s\S]+?)[”"]/
+    /\breplace\s+["“]([\s\S]+?)["”]\s+(?:with|to)\s+["“]([\s\S]+?)["”]/gi,
+    /(?:把|将)\s*[“"]([\s\S]+?)[”"]\s*替换(?:成|为)\s*[“"]([\s\S]+?)[”"]/g
   ];
+  const instructions: PatchTextHunkInput[] = [];
+  const seen = new Set<string>();
 
   for (const pattern of patterns) {
-    const match = pattern.exec(content);
-    const findText = match?.[1]?.trim();
-    const replaceWith = match?.[2]?.trim();
-    if (findText && replaceWith && findText !== replaceWith) {
-      return {
-        findText: findText.slice(0, 10_000),
-        replaceWith: replaceWith.slice(0, 10_000)
-      };
+    for (const match of content.matchAll(pattern)) {
+      const findText = match[1]?.trim();
+      const replaceWith = match[2]?.trim();
+      if (findText && replaceWith && findText !== replaceWith && !seen.has(findText)) {
+        instructions.push({
+          findText: findText.slice(0, 10_000),
+          replaceWith: replaceWith.slice(0, 10_000)
+        });
+        seen.add(findText);
+      }
+
+      if (instructions.length >= 8) {
+        return instructions;
+      }
     }
   }
 
-  return undefined;
+  return instructions;
 }
 
 function buildAppendTextDiffPreview(targetPath: string, appendText: string): string {
@@ -1394,6 +1470,22 @@ function buildReplaceTextDiffPreview(
     "@@ proposed exact replacement @@",
     ...diffLines(operation.findText, "-"),
     ...diffLines(operation.replaceWith, "+")
+  ].join("\n");
+}
+
+function buildPatchTextDiffPreview(
+  targetPath: string,
+  operation: Extract<ProposedFileOperation, { kind: "PatchText" }>
+): string {
+  return [
+    `--- a/${targetPath}`,
+    `+++ b/${targetPath}`,
+    "@@ proposed exact patch @@",
+    ...operation.hunks.flatMap((hunk, index) => [
+      `@@ hunk ${index + 1} @@`,
+      ...diffLines(hunk.findText, "-"),
+      ...diffLines(hunk.replaceWith, "+")
+    ])
   ].join("\n");
 }
 

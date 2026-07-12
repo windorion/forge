@@ -84,6 +84,8 @@ const modelGuidedContextMaxStoredFiles = 8;
 const editProposalRepairMaxAttempts = 2;
 const repositoryContextMaxFileBytes = 220_000;
 const editProposalTextOperationMaxChars = 10_000;
+const editProposalPatchMaxHunks = 8;
+const editProposalPatchMaxTotalChars = 40_000;
 const editProposalCreateFileMaxChars = 20_000;
 const editProposalEditableFileMaxBytes = 220_000;
 const gitDiffMaxBytes = 48_000;
@@ -6476,6 +6478,22 @@ async function validateProposedFileChange(change: ProposedFileChange): Promise<F
       };
     }
 
+    if (operation.kind === "PatchText") {
+      checks.push("Apply operation is patch-text.");
+      const nextContent = validatePatchTextOperation(operation, currentContent, relativePath, checks);
+      if (nextContent === currentContent) {
+        return blockedValidation(change, `Patch operation would not change ${relativePath}.`, checks);
+      }
+
+      return {
+        id: change.id,
+        path: relativePath,
+        status: "Ready",
+        summary: `${relativePath} is ready for ${operation.hunks.length} restricted patch-text hunk(s).`,
+        checks
+      };
+    }
+
     return {
       id: change.id,
       path: relativePath,
@@ -6729,6 +6747,28 @@ async function applyProposedFileChange(
     });
   }
 
+  if (operation.kind === "PatchText") {
+    const nextContent = validatePatchTextOperation(operation, currentContent, relativePath);
+    if (nextContent === currentContent) {
+      throw new HttpError(409, `Patch operation would not change ${relativePath}.`);
+    }
+
+    const rollbackSnapshotPath = await writeRollbackSnapshot(proposalID, change.id, currentContent);
+    await writeFile(absolutePath, nextContent, "utf8");
+    const afterContent = await readFile(absolutePath, "utf8");
+    return buildAppliedFileChange({
+      relativePath,
+      proposalFileChangeID: change.id,
+      operationKind: operation.kind,
+      appliedAt,
+      beforeContent: currentContent,
+      afterContent,
+      rollbackSnapshotPath,
+      rollbackKind: "RestorePreviousContent",
+      rollbackSummary: `Restore the previous full contents of ${relativePath}.`
+    });
+  }
+
   throw new HttpError(409, `Unsupported apply operation for ${relativePath}.`);
 }
 
@@ -6895,6 +6935,85 @@ function countTextOccurrences(content: string, needle: string): number {
     count += 1;
     offset = index + needle.length;
   }
+}
+
+function validatePatchTextOperation(
+  operation: Extract<NonNullable<ProposedFileChange["applyOperation"]>, { kind: "PatchText" }>,
+  currentContent: string,
+  relativePath: string,
+  checks?: string[]
+): string {
+  if (operation.hunks.length === 0) {
+    throw new HttpError(409, `PatchText requires at least one hunk: ${relativePath}`);
+  }
+
+  if (operation.hunks.length > editProposalPatchMaxHunks) {
+    throw new HttpError(409, `PatchText has too many hunks for v0 apply: ${relativePath}`);
+  }
+  checks?.push(`Patch hunk count is within the v0 limit (${operation.hunks.length}/${editProposalPatchMaxHunks}).`);
+
+  const seenFindTexts = new Set<string>();
+  const totalChars = operation.hunks.reduce((total, hunk) => total + hunk.findText.length + hunk.replaceWith.length, 0);
+  if (totalChars > editProposalPatchMaxTotalChars) {
+    throw new HttpError(409, `PatchText operation is too large for v0 apply: ${relativePath}`);
+  }
+  checks?.push("Patch total text size is within the v0 limit.");
+
+  for (const [index, hunk] of operation.hunks.entries()) {
+    const hunkLabel = `Patch hunk ${index + 1}`;
+    if (hunk.findText.length === 0) {
+      throw new HttpError(409, `${hunkLabel} find text is empty: ${relativePath}`);
+    }
+
+    if (hunk.replaceWith.length === 0) {
+      throw new HttpError(409, `${hunkLabel} replacement text is empty: ${relativePath}`);
+    }
+
+    if (
+      hunk.findText.length > editProposalTextOperationMaxChars ||
+      hunk.replaceWith.length > editProposalTextOperationMaxChars
+    ) {
+      throw new HttpError(409, `${hunkLabel} is too large for v0 apply: ${relativePath}`);
+    }
+
+    if (hunk.findText === hunk.replaceWith) {
+      throw new HttpError(409, `${hunkLabel} find text and replacement text are identical: ${relativePath}`);
+    }
+
+    if (seenFindTexts.has(hunk.findText)) {
+      throw new HttpError(409, `${hunkLabel} duplicates an earlier find text: ${relativePath}`);
+    }
+    seenFindTexts.add(hunk.findText);
+
+    const originalOccurrenceCount = countTextOccurrences(currentContent, hunk.findText);
+    if (originalOccurrenceCount === 0) {
+      throw new HttpError(409, `${hunkLabel} find text was not found in ${relativePath}.`);
+    }
+
+    if (originalOccurrenceCount > 1) {
+      throw new HttpError(
+        409,
+        `${hunkLabel} find text appears ${originalOccurrenceCount} times in ${relativePath}; patch hunks require one original match.`
+      );
+    }
+  }
+  checks?.push("Every patch hunk find text appears exactly once in the original target file.");
+
+  let nextContent = currentContent;
+  for (const [index, hunk] of operation.hunks.entries()) {
+    const occurrenceCount = countTextOccurrences(nextContent, hunk.findText);
+    if (occurrenceCount !== 1) {
+      throw new HttpError(
+        409,
+        `Patch hunk ${index + 1} requires exactly one sequential match in ${relativePath}; found ${occurrenceCount}.`
+      );
+    }
+
+    nextContent = nextContent.replace(hunk.findText, hunk.replaceWith);
+  }
+  checks?.push("Patch hunks apply cleanly in order.");
+
+  return nextContent;
 }
 
 function resolveMarkdownWorkspacePath(inputPath: string): { absolutePath: string; relativePath: string } {

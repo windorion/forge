@@ -275,11 +275,11 @@ validates it against the current workspace, and returns the task to
 change files.
 For the OpenAI provider, edit proposals can now include multiple file changes.
 `AppendText` remains limited to existing Markdown files in `README.md` or
-`docs/*.md`, exact `ReplaceText` can validate for existing allowlisted
-source/text files when the find text appears exactly once, and restricted
-`CreateFile` remains limited to new `docs/*.md` files. Delete, broad patch,
-unsupported path, or preview-only operations remain review artifacts and block
-apply until revised.
+`docs/*.md`, exact `ReplaceText` and multi-hunk `PatchText` can validate for
+existing allowlisted source/text files when every find text appears exactly
+once, and restricted `CreateFile` remains limited to new `docs/*.md` files.
+Delete, broad patch, unsupported path, or preview-only operations remain
+review artifacts and block apply until revised.
 If generated validation is blocked, the runtime can run a bounded repair loop:
 it archives the blocked proposal as `Superseded`, sends the failed checks back
 to the provider, and validates the repaired proposal before returning to human
@@ -389,7 +389,8 @@ It covers:
 - built-in post-apply validation
 - SQLite restart recovery
 - `AppendText`, Markdown exact `ReplaceText`, source-file exact `ReplaceText`,
-  applied-file rollback metadata, and explicit rollback for a source replace
+  multi-hunk source `PatchText`, applied-file rollback metadata, and explicit
+  rollback for source replace/patch flows
 - runtime home page, health diagnostics, persistence metadata, and model
   provider settings GET/POST paths
 - provider settings key handling with a fake OpenAI key, including verification
@@ -448,15 +449,16 @@ cd runtime && npm run smoke:git-remote
   revisions and before execution proposals, but tool use is still read-only.
 - Edit proposal application is intentionally narrow: v0 supports append-text
   operations on existing Markdown files in `README.md` or `docs/`, exact
-  replace-text operations on existing Markdown or allowlisted source/text
-  files, and create-file operations for new `docs/*.md` files only. Validation
-  blocks unsupported paths, generated directories, lockfiles, secret-like
-  files, unsupported operations, oversized edits, missing files, existing
-  create targets, duplicate append text at the file end, and replace
-  operations whose find text is missing or appears more than once. Richer
-  OpenAI proposals can include unsupported preview-only operations for review,
-  but those proposals are blocked from apply until revised to an apply-ready
-  subset.
+  replace-text and multi-hunk patch-text operations on existing Markdown or
+  allowlisted source/text files, and create-file operations for new `docs/*.md`
+  files only. Validation blocks unsupported paths, generated directories,
+  lockfiles, secret-like files, unsupported operations, oversized edits,
+  missing files, existing create targets, duplicate append text at the file
+  end, replace operations whose find text is missing or appears more than
+  once, and patch hunks that cannot be matched exactly once in the original
+  file and applied in order. Richer OpenAI proposals can include unsupported
+  preview-only operations for review, but those proposals are blocked from
+  apply until revised to an apply-ready subset.
 - Rollback is explicit and guarded. The runtime stores restore snapshots under
   `.forge/rollback-snapshots/`, verifies the current file still matches the
   recorded post-apply hash, and then restores prior contents or deletes a

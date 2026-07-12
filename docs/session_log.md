@@ -2782,3 +2782,48 @@ Next:
 - Broaden patch proposals beyond exact single-match replace.
 - Add task-scoped command execution with streamed output and connect failures
   to the repair proposal loop.
+
+### 2026-07-12 11:55:57 CEST +0200
+
+Conversation summary:
+
+- User asked to continue the next long task after pushing the previous local
+  commits.
+
+Done:
+
+- Added `PatchText`, a multi-hunk exact text patch operation for existing
+  Markdown and allowlisted source/text files.
+- Added runtime validation for PatchText: hunk count limit, total text limit,
+  non-empty find/replacement text, duplicate-find blocking, original-file
+  single-occurrence checks, and ordered patch simulation before apply.
+- Added PatchText apply using the same validation path and the existing
+  rollback snapshot system.
+- Updated the local deterministic provider so multiple explicit quoted
+  replacement instructions generate PatchText instead of only the first
+  ReplaceText.
+- Updated the OpenAI edit proposal prompt and Structured Outputs schema to
+  support `PatchText` with `patchHunks`.
+- Added Swift model decoding and Review UI summary text for PatchText.
+- Extended `npm run smoke:core` with a two-hunk TypeScript source patch flow
+  that validates, applies, records rollback metadata, and rolls back.
+- Updated README, project status, TODO, edit proposal, runtime architecture,
+  model provider, security, development, and V0 scope docs to reflect the new
+  PatchText boundary.
+- Verified `npm run check`, `npm run smoke:core`, and `swift build`.
+
+Not done:
+
+- Did not add arbitrary unified-diff parsing.
+- Did not add cross-file patch orchestration beyond multiple proposal file
+  changes.
+- Did not add streamed task-scoped command execution yet.
+- Did not wire a full provider-driven read/search/patch/run/repair loop yet.
+
+Next:
+
+- Add approved task-scoped command execution with streamed output.
+- Connect failed command output to validation repair briefs and follow-up patch
+  proposals.
+- Later, broaden patch support beyond exact text hunks only if the review and
+  rollback gates remain strict.

@@ -81,7 +81,7 @@ It should not feel like:
 - plan progress strip
 - Log/Diff/Tests tabs
 - model-provider-backed normal run path
-- source-file patch proposal format beyond exact single-match replacements
+- source-file patch proposal format beyond exact text hunks
 - controlled patch apply with rollback, revalidation, and recovery states
 - approved task-scoped command runner for checks/tests
 - command output streaming into the task
@@ -154,15 +154,15 @@ Major gaps:
 - UI has a first-pass shell but does not yet fully match `design_handoff_forge`.
 - Full-screen diff review exists but still needs exact split-diff polish,
   keyboard shortcuts, and durable file-level review decisions.
-- Patch apply now has a first exact source replacement path, but it is still
-  too narrow for normal source-code tasks.
+- Patch apply now has exact source replacement and multi-hunk text patch
+  paths, but it is still too narrow for normal source-code tasks.
 - Command output is not streamed as a first-class task surface.
 - Provider-backed run loop is not yet a real read/search/patch/run/repair
   agent.
 
 ## Next Implementation Order
 
-1. Broaden source-file patch proposal/apply beyond exact replace and harden
+1. Broaden source-file patch proposal/apply beyond exact text hunks and harden
    rollback revalidation/recovery.
 2. Add task-scoped command execution and streamed logs.
 3. Connect provider-driven run loop to patch/run/repair.

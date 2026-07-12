@@ -649,7 +649,13 @@ struct ProposedFileOperation: Codable, Hashable {
     var text: String?
     var findText: String?
     var replaceWith: String?
+    var hunks: [PatchTextHunk]?
     var content: String?
+}
+
+struct PatchTextHunk: Codable, Hashable {
+    var findText: String
+    var replaceWith: String
 }
 
 struct EditProposal: Identifiable, Codable, Hashable {

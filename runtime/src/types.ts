@@ -166,6 +166,16 @@ export interface ReplaceTextOperation {
   replaceWith: string;
 }
 
+export interface PatchTextHunk {
+  findText: string;
+  replaceWith: string;
+}
+
+export interface PatchTextOperation {
+  kind: "PatchText";
+  hunks: PatchTextHunk[];
+}
+
 export interface CreateFileOperation {
   kind: "CreateFile";
   content: string;
@@ -178,6 +188,7 @@ export interface PreviewOnlyOperation {
 export type ProposedFileOperation =
   | AppendTextOperation
   | ReplaceTextOperation
+  | PatchTextOperation
   | CreateFileOperation
   | PreviewOnlyOperation;
 

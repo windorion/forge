@@ -67,9 +67,9 @@ Implemented today:
 - Explicit human review gates for plans and edits.
 - Safe edit proposals with multi-file OpenAI proposal artifacts, including
   blocked preview-only operations. Apply supports Markdown `AppendText`,
-  exact `ReplaceText` for Markdown and allowlisted source/text files, new
-  `docs/*.md` `CreateFile` changes, applied-file rollback metadata, and an
-  explicit rollback action.
+  exact `ReplaceText` and multi-hunk `PatchText` for Markdown and allowlisted
+  source/text files, new `docs/*.md` `CreateFile` changes, applied-file
+  rollback metadata, and an explicit rollback action.
 - Edit proposal validation, bounded validation-feedback repair, apply/reject
   flow, revision loop, and post-apply validation.
 - Validation failure repair briefs that turn failed command output into a
@@ -143,7 +143,7 @@ Product-readiness estimate:
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 50-55% | Has a first-pass session UI shell, full-screen diff review surface, and first exact source replace path, but still needs a broader source patch engine, streamed command output, and provider-driven patch/run/repair loop. |
+| Coding-agent demo V0 | 55-60% | Has a first-pass session UI shell, full-screen diff review surface, exact source replace, and multi-hunk source patch path, but still needs streamed command output and provider-driven patch/run/repair loop. |
 | Useful developer alpha | 35-45% | A developer cannot yet rely on Forge like Codex or Claude Code for normal coding tasks. It needs real patching, command execution, recovery, and a stronger model-backed run loop. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, memory, MCP/GitHub, and product polish. |
@@ -157,8 +157,8 @@ Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
 
 - polish the first-pass macOS coding-agent session UI toward the exact
   `design_handoff_forge` screens
-- broaden source-file patch proposal/apply beyond exact replace and harden
-  rollback/revalidation
+- broaden source-file patch proposal/apply beyond exact multi-hunk text patches
+  and harden rollback/revalidation
 - add approved task-scoped command execution with streamed logs
 - wire provider-driven read/search/patch/run/repair into the normal task flow
 - connect full diff review to durable file-level decisions once the review

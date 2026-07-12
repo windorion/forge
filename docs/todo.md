@@ -21,8 +21,8 @@ dashboard.
 - Polish the first usable `10a` full-screen diff review: exact split-diff
   behavior, keyboard shortcuts, file-level approval persistence, and stronger
   tests-covering-this-file evidence.
-- Broaden source-file patch proposals beyond exact single-match replacements:
-  add a richer patch format, rollback revalidation/recovery, and multi-file
+- Broaden source-file patch proposals beyond exact text hunks: add cross-file
+  patch orchestration, rollback revalidation/recovery, and provider-driven
   source repair flows while keeping strict path validation and pre-apply
   checks.
 - Add approved task-scoped command execution with streamed output, status,
@@ -104,6 +104,11 @@ dashboard.
 - Added an explicit rollback endpoint and macOS action for applied edit
   proposals, with current-file hash checks and local restore snapshots.
 - Extended `npm run smoke:core` to apply and roll back a source replacement.
+- Added `PatchText`, a multi-hunk exact source/text patch operation with
+  ordered validation, shared apply checks, rollback snapshots, local/OpenAI
+  provider support, Swift decoding, and Review UI summary text.
+- Extended `npm run smoke:core` to apply and roll back a two-hunk TypeScript
+  source patch.
 - Added a first-pass macOS coding-agent session shell in `WorkspaceView.swift`:
   neo-brutalist visual tokens, `1a`-style empty task composer, task queue,
   live agent stream, plan progress strip, Log/Diff/Tests tabs, compact plan

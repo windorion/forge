@@ -97,10 +97,10 @@ state machine, event stream, persistence path, and controlled apply path can be
 tested without introducing a general-purpose patch interpreter.
 
 The OpenAI provider can emit richer review artifacts: multiple file changes,
-restricted append/replace operations, and preview-only unsupported operations
-alongside restricted create-file operations. These artifacts are useful for
-review and future UI work, but validation blocks the proposal from apply when
-any change is not supported by the current v0 apply engine.
+restricted append/replace/patch operations, and preview-only unsupported
+operations alongside restricted create-file operations. These artifacts are
+useful for review and future UI work, but validation blocks the proposal from
+apply when any change is not supported by the current v0 apply engine.
 
 Current restricted operation kinds:
 
@@ -112,6 +112,11 @@ Current restricted operation kinds:
   headers. The provider can generate this operation from explicit task
   messages such as `replace "old" with "new"` or
   `把“旧文本”替换成“新文本”`.
+- `PatchText`: applies multiple exact bounded find/replace hunks to one
+  existing Markdown or allowlisted source/text file. Each hunk must have
+  non-empty find and replacement text, each find text must appear exactly once
+  in the original target file, and the runtime simulates the ordered patch
+  before applying it.
 - `CreateFile`: creates a new bounded Markdown file under `docs/` only; it
   never overwrites an existing target.
 - `PreviewOnly`: review artifact only; validation blocks apply.
@@ -155,12 +160,15 @@ Post-apply validation stores:
 - A proposal is validated when generated and again immediately before apply.
 - A blocked generated proposal can be repaired automatically only within a
   bounded attempt limit and only by producing another review artifact.
-- Current v0 apply behavior supports `AppendText`, exact `ReplaceText`, and
-  `CreateFile`.
+- Current v0 apply behavior supports `AppendText`, exact `ReplaceText`,
+  multi-hunk exact `PatchText`, and `CreateFile`.
 - Current v0 append behavior only writes existing Markdown files in
   `README.md` or `docs/*.md`.
 - Current v0 exact replace behavior can write existing allowlisted source/text
   files after strict path, size, text, and single-occurrence checks.
+- Current v0 patch behavior can write existing allowlisted source/text files
+  after strict path, size, hunk-count, original single-occurrence, and ordered
+  simulation checks.
 - Current v0 create behavior only writes new `docs/*.md` files.
 - Preview-only, delete, unsupported path, overwrite-create, or broad patch
   proposals may be shown for review but must validate as `Blocked`.
@@ -170,6 +178,9 @@ Post-apply validation stores:
   file end.
 - Apply is blocked if replace find text is missing, appears more than once,
   is identical to the replacement, or if either side is empty or oversized.
+- Apply is blocked if any patch hunk find text is missing, duplicated, appears
+  more than once in the original file, cannot be applied in order, is identical
+  to its replacement, or if any hunk/patch exceeds size limits.
 - Apply is blocked for source/text targets outside the allowlist, generated
   directories, lockfiles, secret-like files, oversized files, or binary-looking
   content.
@@ -193,7 +204,8 @@ Post-apply validation stores:
 
 ## Future Work
 
-- Add a richer patch apply engine after exact replace validation is mature.
+- Add richer cross-file patch orchestration after exact text-hunk validation is
+  mature.
 - Generate broader model-backed patch content while keeping runtime-owned
   validation and review gates.
 - Add richer rollback revalidation and recovery UI for partially failed or
