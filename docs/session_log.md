@@ -2958,3 +2958,45 @@ Next:
   only the `runtime-npm-check` shortcut.
 - Add rerun evidence after applying a self-fix proposal.
 - Continue toward the provider-driven agent loop.
+
+### 2026-07-12 20:47:07 CEST +0200
+
+Conversation summary:
+
+- User asked to continue the next step. The next development task replaced the
+  hardcoded live-session runtime check shortcut with a runtime-derived
+  approved-command chooser.
+
+Done:
+
+- Extended the validation permission envelope with `taskCommands`, a
+  deduplicated list of runtime-known project commands ranked by runnable and
+  approved state.
+- Added task-command permission metadata for command boundary, preset source,
+  approval/readiness state, blocked reasons, and last task-command run.
+- Kept execution enforcement in `run-task-command`; the macOS chooser still
+  sends only command IDs and the runtime rechecks catalog membership and preset
+  approval.
+- Updated macOS models and workspace state to cache task-command permissions.
+- Replaced the single `runtime-npm-check` action-rail shortcut with a command
+  `Menu`, selected-command preview, and generic Run Command action.
+- Extended `npm run smoke:core` assertions for chooser readiness before and
+  after preset approval, multiple commands becoming ready from one approved
+  preset, no built-in post-apply commands in the chooser, and last-run
+  metadata after execution.
+- Updated README, project status, TODO, runtime architecture, validation
+  preset, security, development, and V0 scope docs.
+
+Not done:
+
+- Did not add automatic rerun evidence after reviewed self-fix proposals.
+- Did not implement the full provider-driven read/search/patch/run/repair
+  loop.
+- Did not add full command palette or keyboard command switching.
+
+Next:
+
+- Add rerun evidence after applying a self-fix proposal so the failed command,
+  repair proposal, applied patch, and passing rerun appear as one coherent
+  loop.
+- Continue wiring provider-driven agent orchestration.

@@ -1806,6 +1806,7 @@ private struct PlanGateCard: View {
 
 private struct AgentRunActionsCard: View {
     @EnvironmentObject private var workspace: WorkspaceModel
+    @State private var selectedTaskCommandID: String?
     var task: ForgeTask
 
     var body: some View {
@@ -1861,14 +1862,39 @@ private struct AgentRunActionsCard: View {
 
             Divider()
 
-            Button {
-                workspace.runTaskCommand(for: task, commandID: "runtime-npm-check")
+            Menu {
+                ForEach(taskCommandPermissions) { permission in
+                    Button {
+                        selectedTaskCommandID = permission.command.id
+                    } label: {
+                        Label(taskCommandMenuTitle(permission), systemImage: taskCommandSystemImage(permission))
+                    }
+                }
             } label: {
-                Label(runRuntimeCheckTitle, systemImage: "terminal")
+                Label(selectedTaskCommandTitle, systemImage: "terminal")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(ForgeSecondaryButtonStyle())
-            .disabled(!canRunRuntimeCheck)
+            .disabled(taskCommandPermissions.isEmpty || isRunningTaskCommand || isCancellingTaskCommand)
+
+            if let selectedTaskCommandPermission {
+                Text(selectedTaskCommandPermission.command.command)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(ForgeDesign.muted)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            Button {
+                if let selectedTaskCommandPermission {
+                    workspace.runTaskCommand(for: task, commandID: selectedTaskCommandPermission.command.id)
+                }
+            } label: {
+                Label(runTaskCommandTitle, systemImage: "play.circle")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ForgeSecondaryButtonStyle())
+            .disabled(!canRunSelectedTaskCommand)
 
             Button {
                 if let latestRunningTaskCommandRun {
@@ -1945,16 +1971,29 @@ private struct AgentRunActionsCard: View {
         workspace.isCancellingTaskCommand(runID: latestRunningTaskCommandRun?.id)
     }
 
-    private var hasApprovedRuntimeCheckCommand: Bool {
-        task.approvals.contains { approval in
-            approval.action == "Approve Validation Preset" &&
-                approval.decision == "Approved" &&
-                approval.targetID == "runtime-typescript"
-        }
+    private var taskCommandPermissions: [TaskCommandPermission] {
+        workspace.taskCommandPermissions(for: task.id)
     }
 
-    private var canRunRuntimeCheck: Bool {
-        hasApprovedRuntimeCheckCommand &&
+    private var selectedTaskCommandPermission: TaskCommandPermission? {
+        if let selectedTaskCommandID,
+           let selected = taskCommandPermissions.first(where: { $0.command.id == selectedTaskCommandID }) {
+            return selected
+        }
+
+        return taskCommandPermissions.first { $0.canRun } ?? taskCommandPermissions.first
+    }
+
+    private var selectedTaskCommandTitle: String {
+        selectedTaskCommandPermission?.command.name ?? "Select Command"
+    }
+
+    private var canRunSelectedTaskCommand: Bool {
+        guard let selectedTaskCommandPermission else {
+            return false
+        }
+
+        return selectedTaskCommandPermission.canRun &&
             task.status != "Testing" &&
             !isRunningTaskCommand &&
             !isRunningValidation &&
@@ -1963,14 +2002,20 @@ private struct AgentRunActionsCard: View {
             !isCancellingTaskCommand
     }
 
-    private var runRuntimeCheckTitle: String {
+    private var runTaskCommandTitle: String {
         if isRunningTaskCommand {
-            return "Running Runtime Check"
+            return "Running Command"
         }
-        if !hasApprovedRuntimeCheckCommand {
-            return "Approve Runtime Checks First"
+        guard let selectedTaskCommandPermission else {
+            return "No Commands"
         }
-        return "Run Runtime Check"
+        if selectedTaskCommandPermission.canRun {
+            return "Run Command"
+        }
+        if selectedTaskCommandPermission.executionState == "NeedsApproval" {
+            return "Approve Preset First"
+        }
+        return "Command Blocked"
     }
 
     private var canCancelTaskCommand: Bool {
@@ -1979,6 +2024,27 @@ private struct AgentRunActionsCard: View {
 
     private var cancelTaskCommandTitle: String {
         isCancellingTaskCommand ? "Cancelling Command" : "Cancel Command"
+    }
+
+    private func taskCommandMenuTitle(_ permission: TaskCommandPermission) -> String {
+        if let lastRun = permission.lastRun {
+            return "\(permission.command.name) / \(permission.executionState) / last \(lastRun.status)"
+        }
+
+        return "\(permission.command.name) / \(permission.executionState)"
+    }
+
+    private func taskCommandSystemImage(_ permission: TaskCommandPermission) -> String {
+        if permission.canRun {
+            return "play.circle"
+        }
+        if permission.executionState == "NeedsApproval" {
+            return "lock"
+        }
+        if permission.executionState == "Running" {
+            return "hourglass"
+        }
+        return "exclamationmark.triangle"
     }
 
     private var canGenerateEditProposal: Bool {

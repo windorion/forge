@@ -370,6 +370,25 @@ async function runTaskCommandFlow() {
     `Expected unapproved task command response to mention approval: ${blocked.text}`
   );
 
+  let permissions = await get(`/tasks/${task.id}/validation-permissions`);
+  const blockedRuntimeCommandPermission = permissions.taskCommands?.find((permission) =>
+    permission.command?.id === "runtime-npm-check"
+  );
+  assert(blockedRuntimeCommandPermission, "Task command permissions did not include runtime-npm-check.");
+  assert(
+    blockedRuntimeCommandPermission.executionState === "NeedsApproval" &&
+      blockedRuntimeCommandPermission.canRun === false,
+    `Expected runtime-npm-check to need approval: ${JSON.stringify(blockedRuntimeCommandPermission)}`
+  );
+  assert(
+    blockedRuntimeCommandPermission.command.executionMode === "SpawnNoShell",
+    "Task command permission did not expose the no-shell execution boundary."
+  );
+  assert(
+    !permissions.taskCommands?.some((permission) => permission.command?.kind === "BuiltIn"),
+    "Task command chooser should expose project commands, not built-in post-apply checks."
+  );
+
   let current = await post(`/tasks/${task.id}/approve-validation-preset`, {
     presetID: "runtime-typescript",
     note: "Core smoke test approves runtime command execution."
@@ -377,6 +396,25 @@ async function runTaskCommandFlow() {
   assert(
     current.approvals?.some((approval) => approval.action === "Approve Validation Preset" && approval.targetID === "runtime-typescript"),
     "Task command flow did not approve the runtime-typescript preset."
+  );
+
+  permissions = await get(`/tasks/${task.id}/validation-permissions`);
+  const readyRuntimeCommandPermission = permissions.taskCommands?.find((permission) =>
+    permission.command?.id === "runtime-npm-check"
+  );
+  const readyRuntimeBuildPermission = permissions.taskCommands?.find((permission) =>
+    permission.command?.id === "runtime-npm-build"
+  );
+  assert(
+    readyRuntimeCommandPermission?.canRun === true &&
+      readyRuntimeCommandPermission.executionState === "Ready" &&
+      readyRuntimeCommandPermission.presetID === "runtime-typescript",
+    `Expected approved runtime-npm-check to be runnable: ${JSON.stringify(readyRuntimeCommandPermission)}`
+  );
+  assert(
+    readyRuntimeBuildPermission?.canRun === true &&
+      readyRuntimeBuildPermission.executionState === "Ready",
+    `Expected approved runtime-npm-build to be runnable through the chooser: ${JSON.stringify(readyRuntimeBuildPermission)}`
   );
 
   const collected = await collectRuntimeEventsDuring(async () =>
@@ -418,6 +456,16 @@ async function runTaskCommandFlow() {
   assert(
     collected.events.some((event) => event.type === "task.command.completed" && event.data?.taskCommandRunID === commandRun.id),
     "Task command flow did not stream a completed event."
+  );
+
+  permissions = await get(`/tasks/${task.id}/validation-permissions`);
+  const completedRuntimeCommandPermission = permissions.taskCommands?.find((permission) =>
+    permission.command?.id === "runtime-npm-check"
+  );
+  assert(
+    completedRuntimeCommandPermission?.lastRun?.status === "Passed" &&
+      completedRuntimeCommandPermission.lastRun.id === commandRun.id,
+    `Task command permission did not retain the last run: ${JSON.stringify(completedRuntimeCommandPermission)}`
   );
 
   return current;

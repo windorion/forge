@@ -25,8 +25,8 @@ dashboard.
   patch orchestration, rollback revalidation/recovery, and provider-driven
   source repair flows while keeping strict path validation and pre-apply
   checks.
-- Extend approved task-scoped command execution with richer command selection,
-  clearer active-run controls, and first-class rerun evidence.
+- Extend approved task-scoped command execution with first-class rerun
+  evidence after reviewed fixes.
 - Add rerun evidence after a reviewed self-fix proposal so Forge can show the
   failed command, proposed fix, applied patch, and passing command as one
   coherent loop.
@@ -95,6 +95,13 @@ dashboard.
 
 ## Done Recently
 
+- Added an approved-command chooser for live task command runs. The runtime
+  now includes project task command permissions in the validation permission
+  envelope, deduplicated by command id and ranked by runnable/approved state.
+  The macOS action rail uses that runtime-derived list to select and run
+  approved commands instead of hardcoding `runtime-npm-check`, while still
+  sending only command IDs to `run-task-command`. Smoke coverage now asserts
+  chooser readiness before and after preset approval plus last-run metadata.
 - Added cancellation for active spawned task command runs. The runtime exposes
   `POST /tasks/:taskID/cancel-task-command`, only cancels runtime-owned active
   command runs by run id, sends SIGTERM with a short SIGKILL grace path,

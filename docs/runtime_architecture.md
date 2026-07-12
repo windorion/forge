@@ -382,6 +382,12 @@ chunks in task state. The runtime emits `task.command.started`,
 `task.command.output`, and `task.command.completed` SSE events so the macOS
 Tests tab can show command output as a live coding-agent surface.
 
+The validation permission envelope also exposes a task-command chooser model
+for the live session UI. It lists runtime-known project commands by command
+ID, deduplicates commands that appear in multiple presets, prefers runnable or
+approved presets, includes approval/readiness state and last-run metadata, and
+still leaves execution enforcement inside `run-task-command`.
+
 Failed task-command output is now connected to the repair-brief/self-fix
 proposal loop.
 
@@ -393,9 +399,8 @@ system output chunk, emits `task.command.cancel.requested` and
 `task.command.cancelled`, and marks the run `Cancelled` instead of `Failed`.
 Cancelled commands return to human review and do not generate repair briefs.
 
-Current gaps: the app exposes only a first `runtime-npm-check` shortcut, and
-Forge does not yet automatically rerun the failed command after a reviewed fix
-is applied.
+Current gap: Forge does not yet automatically rerun the failed command after a
+reviewed fix is applied.
 
 ### Permission Manager
 

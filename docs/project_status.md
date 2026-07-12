@@ -74,8 +74,12 @@ Implemented:
   accepts only allowlisted command IDs, reuses validation-preset approvals,
   blocks concurrent validation/command execution, runs project commands with
   `spawn` and `shell:false`, streams stdout/stderr chunks over SSE, records
-  bounded output chunks plus exit code in task state, and exposes the first
-  macOS Tests tab/action-rail surface through `runtime-npm-check`.
+  bounded output chunks plus exit code in task state, and exposes macOS Tests
+  tab/action-rail surfaces for selectable approved commands.
+- The validation permission envelope now includes a task-command chooser model.
+  The macOS action rail shows runtime-known project commands, their approval/
+  readiness state, command boundary, and last-run status, then runs the
+  selected command by ID only after the runtime says it is ready.
 - Failed task-command output now feeds the existing repair path. The runtime
   generates provider repair briefs linked to `taskCommandRunID`, the macOS UI
   shows those briefs next to failed command output, and
@@ -188,7 +192,7 @@ These percentages are product-readiness estimates, not calendar estimates.
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 63-68% | Has a first-pass session UI shell, full-screen diff review surface, exact source replace, multi-hunk source patches, streamed/cancellable task commands, and first failed-command self-fix proposal flow, but still needs provider-driven autonomous patch/run/repair orchestration. |
+| Coding-agent demo V0 | 64-69% | Has a first-pass session UI shell, full-screen diff review surface, exact source replace, multi-hunk source patches, streamed/cancellable selectable task commands, and first failed-command self-fix proposal flow, but still needs provider-driven autonomous patch/run/repair orchestration. |
 | Useful developer alpha | 35-45% | A developer cannot yet rely on Forge like Codex or Claude Code for normal coding tasks. It needs real patching, command execution, recovery, and a stronger model-backed run loop. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
@@ -205,7 +209,7 @@ The hardest remaining work is not the app shell. The hardest remaining work is:
 - a polished UI that fully matches the handoff, especially exact split-diff,
   durable file-level review state, and decision prompts
 - a useful source-code patch engine beyond exact text-based hunks
-- richer command selection and rerun evidence after reviewed fixes
+- rerun evidence after reviewed fixes
 - reliable repository understanding beyond bounded file scans
 - git workflow from dirty tree to approved published PR
 - robust command execution and failure recovery
@@ -227,8 +231,8 @@ Remaining V0 gaps:
   behavior and durable per-file decisions
 - broaden source-file patch proposals beyond exact text hunks and harden
   rollback revalidation/recovery
-- extend approved task-scoped command execution with richer command selection
-  and rerun evidence after reviewed fixes
+- extend approved task-scoped command execution with rerun evidence after
+  reviewed fixes
 - wire provider-driven read/search/patch/run/repair into the normal flow
 - implement full diff review with per-file reasoning and request-change loop
 - keep git/preflight work as supporting infrastructure rather than the main

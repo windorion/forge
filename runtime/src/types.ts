@@ -376,11 +376,34 @@ export interface ValidationPresetPermission {
   lastRun?: ValidationPermissionLastRun;
 }
 
+export interface TaskCommandPermissionLastRun {
+  id: string;
+  status: TaskCommandRun["status"];
+  summary: string;
+  startedAt: string;
+  endedAt?: string;
+}
+
+export interface TaskCommandPermission {
+  command: ValidationCommandDefinition;
+  presetID: string;
+  presetName: string;
+  presetSource: ValidationPreset["source"];
+  presetRiskLevel: ValidationPreset["riskLevel"];
+  approvalState: ValidationPresetApprovalState;
+  executionState: ValidationPresetExecutionState;
+  canRun: boolean;
+  blockedReasons: string[];
+  approval?: ValidationPermissionApproval;
+  lastRun?: TaskCommandPermissionLastRun;
+}
+
 export interface ValidationPermissionEnvelope {
   taskID: string;
   taskStatus: TaskStatus;
   currentPhase: string;
   permissions: ValidationPresetPermission[];
+  taskCommands: TaskCommandPermission[];
 }
 
 export interface GitFileChange {

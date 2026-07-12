@@ -31,6 +31,7 @@ final class WorkspaceModel: ObservableObject {
     @Published var runtimeProcessLastOutput: String?
     @Published var runtimeProcessLaunchCommand: String?
     @Published private var validationPermissionSnapshots: [ForgeTask.ID: [ValidationPresetPermission]] = [:]
+    @Published private var taskCommandPermissionSnapshots: [ForgeTask.ID: [TaskCommandPermission]] = [:]
     @Published private var sendingMessageTaskIDs = Set<ForgeTask.ID>()
     @Published private var generatingPlanRevisionTaskIDs = Set<ForgeTask.ID>()
     @Published private var approvingTaskIDs = Set<ForgeTask.ID>()
@@ -625,6 +626,10 @@ final class WorkspaceModel: ObservableObject {
 
     func validationPermissions(for taskID: ForgeTask.ID) -> [ValidationPresetPermission] {
         validationPermissionSnapshots[taskID] ?? []
+    }
+
+    func taskCommandPermissions(for taskID: ForgeTask.ID) -> [TaskCommandPermission] {
+        taskCommandPermissionSnapshots[taskID] ?? []
     }
 
     func refreshGitStatus() {
@@ -1545,6 +1550,7 @@ final class WorkspaceModel: ObservableObject {
         do {
             let envelope = try await runtime.validationPermissions(taskID: taskID)
             validationPermissionSnapshots[taskID] = envelope.permissions
+            taskCommandPermissionSnapshots[taskID] = envelope.taskCommands
         } catch {
             statusMessage = "Refresh validation permissions failed: \(error.localizedDescription)"
         }

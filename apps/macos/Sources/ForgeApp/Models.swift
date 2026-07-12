@@ -249,11 +249,35 @@ struct ValidationPermissionLastRun: Identifiable, Codable, Hashable {
     var endedAt: String?
 }
 
+struct TaskCommandPermissionLastRun: Identifiable, Codable, Hashable {
+    var id: String
+    var status: String
+    var summary: String
+    var startedAt: String
+    var endedAt: String?
+}
+
+struct TaskCommandPermission: Identifiable, Codable, Hashable {
+    var id: String { command.id }
+    var command: ValidationCommandDefinition
+    var presetID: String
+    var presetName: String
+    var presetSource: String
+    var presetRiskLevel: String
+    var approvalState: String
+    var executionState: String
+    var canRun: Bool
+    var blockedReasons: [String]
+    var approval: ValidationPermissionApproval?
+    var lastRun: TaskCommandPermissionLastRun?
+}
+
 struct ValidationPermissionEnvelope: Codable, Hashable {
     var taskID: String
     var taskStatus: String
     var currentPhase: String
     var permissions: [ValidationPresetPermission]
+    var taskCommands: [TaskCommandPermission]
 }
 
 struct GitFileChange: Identifiable, Codable, Hashable {

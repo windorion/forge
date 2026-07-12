@@ -86,7 +86,9 @@ Each permission snapshot includes:
 - last validation run for the preset, if one exists
 
 The macOS Review panel uses this endpoint to show command permission requests.
-The UI should not locally invent a different permission policy.
+The macOS session action rail also uses the same envelope's task-command list
+to populate its command chooser. The UI should not locally invent a different
+permission policy.
 
 Approval and execution readiness are intentionally separate. A medium-risk
 preset can be approved before an edit proposal is applied. Running a full
@@ -108,12 +110,14 @@ runtime command catalog and must belong to a preset that is either low risk or
 approved for the task. Raw shell strings from the app, workspace config, model,
 or user prompt are not accepted.
 
-The first app surface uses `runtime-npm-check` as a live-session command. The
-runtime records the approving preset, status, exit code, output summary, and
-bounded stdout/stderr/system chunks in task state, and streams output through
-SSE events. Failed task-scoped commands generate provider repair briefs linked
-to `taskCommandRunID`; the same explicit repair-proposal endpoint can then
-create a review-only self-fix proposal without applying files automatically.
+The app surface uses runtime-derived task-command permissions to select among
+approved project commands such as `runtime-npm-check`, `runtime-npm-build`, or
+`macos-swift-build`. The runtime records the approving preset, status, exit
+code, output summary, and bounded stdout/stderr/system chunks in task state,
+and streams output through SSE events. Failed task-scoped commands generate
+provider repair briefs linked to `taskCommandRunID`; the same explicit
+repair-proposal endpoint can then create a review-only self-fix proposal
+without applying files automatically.
 
 Active spawned task-scoped commands can be cancelled by `taskCommandRunID`.
 Cancellation is not arbitrary process control: the runtime only cancels an
@@ -130,6 +134,8 @@ when the process exits. Cancelled commands do not create failure repair briefs.
 - Project commands run with `spawn`, `shell: false`.
 - Command cwd values are runtime-owned and must resolve inside the repo.
 - Permission cards show command boundaries before approval or execution.
+- The task-command chooser is derived from runtime permission state and sends
+  command IDs only.
 - Exit code and output summary are recorded for every command.
 - Cancellation accepts only task command run ids for active runtime-owned
   processes, never raw PIDs or shell text.

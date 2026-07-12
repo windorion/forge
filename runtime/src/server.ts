@@ -54,6 +54,7 @@ import type {
   RunTaskCommandRequest,
   RunValidationRequest,
   TaskCommandOutputChunk,
+  TaskCommandPermission,
   TaskCommandRun,
   TaskFileReference,
   TaskMessage,
@@ -4482,7 +4483,8 @@ async function listValidationPermissions(taskID: string): Promise<ValidationPerm
     taskID: task.id,
     taskStatus: task.status,
     currentPhase: task.currentPhase,
-    permissions: registry.presets.map((preset) => buildValidationPermission(task, preset))
+    permissions: registry.presets.map((preset) => buildValidationPermission(task, preset)),
+    taskCommands: buildTaskCommandPermissions(task, registry.presets)
   };
 }
 
@@ -4542,6 +4544,131 @@ function buildValidationPermission(
       : undefined,
     lastRun: findLastValidationRun(task, preset.id)
   };
+}
+
+function buildTaskCommandPermissions(
+  task: ForgeTask,
+  presets: InternalValidationPreset[]
+): TaskCommandPermission[] {
+  const byCommandID = new Map<string, TaskCommandPermission>();
+
+  for (const preset of presets) {
+    for (const command of preset.commands) {
+      if (command.kind !== "ProjectCommand") {
+        continue;
+      }
+
+      const permission = buildTaskCommandPermission(task, preset, command);
+      const existing = byCommandID.get(command.id);
+      if (!existing || compareTaskCommandPermissionPriority(permission, existing) < 0) {
+        byCommandID.set(command.id, permission);
+      }
+    }
+  }
+
+  return [...byCommandID.values()].sort(compareTaskCommandPermissionDisplay);
+}
+
+function buildTaskCommandPermission(
+  task: ForgeTask,
+  preset: InternalValidationPreset,
+  command: InternalValidationCommand
+): TaskCommandPermission {
+  const approval = findValidationPresetApproval(task, preset.id);
+  const approvalState: TaskCommandPermission["approvalState"] = !preset.requiresApproval
+    ? "NotRequired"
+    : approval
+      ? "Approved"
+      : "NeedsApproval";
+  const blockedReasons: string[] = [];
+
+  if (hasRunningTaskCommandRun(task)) {
+    blockedReasons.push("Another task command is already active.");
+  }
+
+  if (hasRunningValidationRun(task)) {
+    blockedReasons.push("A validation run is already active.");
+  }
+
+  if (preset.requiresApproval && !approval) {
+    blockedReasons.push("Preset requires task-level approval before execution.");
+  }
+
+  const executionState: TaskCommandPermission["executionState"] = hasRunningTaskCommandRun(task) || hasRunningValidationRun(task)
+    ? "Running"
+    : preset.requiresApproval && !approval
+      ? "NeedsApproval"
+      : "Ready";
+
+  return {
+    command: stripInternalCommandFields(command),
+    presetID: preset.id,
+    presetName: preset.name,
+    presetSource: preset.source,
+    presetRiskLevel: preset.riskLevel,
+    approvalState,
+    executionState,
+    canRun: executionState === "Ready",
+    blockedReasons,
+    approval: approval
+      ? {
+          id: approval.id,
+          decidedAt: approval.decidedAt,
+          summary: approval.summary
+        }
+      : undefined,
+    lastRun: findLastTaskCommandRun(task, command.id)
+  };
+}
+
+function compareTaskCommandPermissionPriority(
+  left: TaskCommandPermission,
+  right: TaskCommandPermission
+): number {
+  const leftRank = taskCommandPermissionRank(left);
+  const rightRank = taskCommandPermissionRank(right);
+  if (leftRank !== rightRank) {
+    return rightRank - leftRank;
+  }
+
+  return left.presetName.localeCompare(right.presetName);
+}
+
+function compareTaskCommandPermissionDisplay(
+  left: TaskCommandPermission,
+  right: TaskCommandPermission
+): number {
+  if (left.canRun !== right.canRun) {
+    return left.canRun ? -1 : 1;
+  }
+
+  const riskOrder = new Map([
+    ["Low", 0],
+    ["Medium", 1],
+    ["High", 2]
+  ]);
+  const riskDiff = (riskOrder.get(left.command.riskLevel) ?? 99) - (riskOrder.get(right.command.riskLevel) ?? 99);
+  if (riskDiff !== 0) {
+    return riskDiff;
+  }
+
+  return left.command.name.localeCompare(right.command.name);
+}
+
+function taskCommandPermissionRank(permission: TaskCommandPermission): number {
+  if (permission.canRun) {
+    return 4;
+  }
+
+  if (permission.approvalState === "Approved" || permission.approvalState === "NotRequired") {
+    return 3;
+  }
+
+  if (permission.executionState === "NeedsApproval") {
+    return 2;
+  }
+
+  return 1;
 }
 
 async function loadValidationPresetRegistry(): Promise<ValidationPresetRegistry> {
@@ -7110,6 +7237,21 @@ function findLastValidationRun(task: ForgeTask, presetID: string): ValidationPer
     id: run.id,
     status: run.status,
     summary: run.summary,
+    startedAt: run.startedAt,
+    endedAt: run.endedAt
+  };
+}
+
+function findLastTaskCommandRun(task: ForgeTask, commandID: string): TaskCommandPermission["lastRun"] {
+  const run = [...task.taskCommandRuns].reverse().find((candidate) => candidate.commandID === commandID);
+  if (!run) {
+    return undefined;
+  }
+
+  return {
+    id: run.id,
+    status: run.status,
+    summary: run.outputSummary,
     startedAt: run.startedAt,
     endedAt: run.endedAt
   };

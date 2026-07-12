@@ -113,8 +113,11 @@ path. Active task commands can be cancelled through `POST
 /tasks/:taskID/cancel-task-command`, but only by referencing a runtime-owned
 active `taskCommandRunID`; the API never accepts arbitrary PIDs or shell text.
 Cancellation records an audit entry and marks the run `Cancelled` rather than
-creating a failure repair brief. It does not yet automatically rerun failed
-commands after a reviewed fix is applied.
+creating a failure repair brief. The macOS command chooser is populated from
+runtime-derived task-command permissions and still sends command IDs only; the
+runtime rechecks command catalog membership and preset approval before
+execution. It does not yet automatically rerun failed commands after a
+reviewed fix is applied.
 
 ### High Risk
 
