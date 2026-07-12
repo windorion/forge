@@ -13,8 +13,9 @@ It can create tasks, inspect bounded repo context, hold review gates, generate
 safe edit proposals, apply restricted Markdown edits, exact source/text
 replacements, and multi-hunk source/text patches, validate work, expose
 guarded git actions, run approved task-scoped commands with streamed output,
-and persist task state locally. The next milestone is to make that shell real:
-provider-driven patch/run/repair orchestration.
+record rerun evidence after reviewed self-fixes, and persist task state
+locally. The next milestone is to make that shell real: provider-driven
+multi-step patch/run/repair orchestration.
 
 ## Current Implementation
 
@@ -86,6 +87,12 @@ Implemented:
   `generate-validation-repair-proposal` can create a linked review-only
   self-fix proposal even when the failure came from a live task command rather
   than a post-apply validation run.
+- Reviewed task-command self-fixes now produce rerun evidence after apply.
+  `POST /tasks/:taskID/rerun-repair-command` reruns the original failed command
+  through the same approved command path, links the new command run back to the
+  failed source run, repair brief, and applied proposal, and marks the task
+  `Repair Verified` when the command passes. The macOS Tests tab shows the
+  evidence chain and the action rail exposes `Rerun Self-Fix`.
 - Active spawned task commands can now be cancelled with `POST
   /tasks/:taskID/cancel-task-command`. Cancellation only targets runtime-owned
   active task command runs, sends SIGTERM followed by a short SIGKILL grace
@@ -192,7 +199,7 @@ These percentages are product-readiness estimates, not calendar estimates.
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 64-69% | Has a first-pass session UI shell, full-screen diff review surface, exact source replace, multi-hunk source patches, streamed/cancellable selectable task commands, and first failed-command self-fix proposal flow, but still needs provider-driven autonomous patch/run/repair orchestration. |
+| Coding-agent demo V0 | 68-72% | Has a first-pass session UI shell, full-screen diff review surface, exact source replace, multi-hunk source patches, streamed/cancellable selectable task commands, and failed-command self-fix rerun evidence, but still needs provider-driven autonomous patch/run/repair orchestration. |
 | Useful developer alpha | 35-45% | A developer cannot yet rely on Forge like Codex or Claude Code for normal coding tasks. It needs real patching, command execution, recovery, and a stronger model-backed run loop. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
@@ -209,7 +216,6 @@ The hardest remaining work is not the app shell. The hardest remaining work is:
 - a polished UI that fully matches the handoff, especially exact split-diff,
   durable file-level review state, and decision prompts
 - a useful source-code patch engine beyond exact text-based hunks
-- rerun evidence after reviewed fixes
 - reliable repository understanding beyond bounded file scans
 - git workflow from dirty tree to approved published PR
 - robust command execution and failure recovery
@@ -231,8 +237,6 @@ Remaining V0 gaps:
   behavior and durable per-file decisions
 - broaden source-file patch proposals beyond exact text hunks and harden
   rollback revalidation/recovery
-- extend approved task-scoped command execution with rerun evidence after
-  reviewed fixes
 - wire provider-driven read/search/patch/run/repair into the normal flow
 - implement full diff review with per-file reasoning and request-change loop
 - keep git/preflight work as supporting infrastructure rather than the main

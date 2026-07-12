@@ -3000,3 +3000,44 @@ Next:
   repair proposal, applied patch, and passing rerun appear as one coherent
   loop.
 - Continue wiring provider-driven agent orchestration.
+
+## 2026-07-12 21:18:53 CEST
+
+Conversation summary:
+
+- User asked for a very large next task. The session focused on completing the
+  failed-command self-fix evidence loop so Forge behaves more like a coding
+  agent: failed command, repair brief, reviewed fix, applied patch, rerun, and
+  verification evidence.
+
+Done:
+
+- Added `CommandRerunEvidence` to runtime task state and persistence defaults.
+- Added `POST /tasks/:taskID/rerun-repair-command`, which reruns the original
+  failed command through the existing approved command runner, links the new
+  command run back to the failed source run, repair brief, and applied repair
+  proposal, and marks the task `Repair Verified` when it passes.
+- Made command-sourced repair proposal apply create ready rerun evidence
+  without automatically running commands.
+- Added macOS models, runtime client call, workspace loading state, Tests tab
+  evidence cards, and action-rail `Rerun Self-Fix`.
+- Extended `npm run smoke:core` so the OpenAI task-command repair flow now
+  fixes a real broken TypeScript fixture, applies the repair, reruns
+  `runtime-npm-check`, and verifies the evidence chain.
+- Updated README, project status, TODO, development, runtime architecture,
+  validation preset, security, edit proposal, runtime README, and V0 scope
+  docs.
+
+Not done:
+
+- Did not implement the full provider-driven read/search/patch/run/repair loop.
+- Did not broaden patch application beyond exact text replace/patch operations.
+- Did not polish full diff review keyboard/file-decision behavior.
+
+Next:
+
+- Wire the provider-driven task loop so normal tasks can choose read/search,
+  propose patches, run approved commands, and iterate repairs without relying
+  on deterministic demo steps.
+- Broaden source patching and recovery so real coding tasks are less dependent
+  on exact text hunk matches.

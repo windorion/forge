@@ -106,6 +106,7 @@ function parseTaskPayload(payload: unknown): ForgeTask {
       ...run,
       outputChunks: run.outputChunks ?? []
     })),
+    commandRerunEvidence: parsed.commandRerunEvidence ?? [],
     validationRuns: (parsed.validationRuns ?? []).map((run) => ({
       ...run,
       presetID: run.presetID ?? "forge-post-apply",

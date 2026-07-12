@@ -298,6 +298,21 @@ export interface TaskCommandRun {
   endedAt?: string;
 }
 
+export interface CommandRerunEvidence {
+  id: string;
+  sourceTaskCommandRunID: string;
+  validationRepairBriefID: string;
+  repairProposalID: string;
+  repairAppliedAt?: string;
+  rerunTaskCommandRunID?: string;
+  commandID: string;
+  commandName: string;
+  status: "Ready" | "Running" | "Passed" | "Failed" | "Cancelled";
+  summary: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ValidationRun {
   id: string;
   trigger: "PostApply" | "Manual";
@@ -743,6 +758,7 @@ export interface ForgeTask {
   approvals: ApprovalRecord[];
   toolCalls: ToolCall[];
   taskCommandRuns: TaskCommandRun[];
+  commandRerunEvidence: CommandRerunEvidence[];
   validationRuns: ValidationRun[];
   validationRepairBriefs: ValidationRepairBrief[];
   messages: TaskMessage[];
@@ -780,6 +796,10 @@ export interface RunTaskCommandRequest {
 export interface CancelTaskCommandRequest {
   taskCommandRunID?: string;
   note?: string;
+}
+
+export interface RerunRepairCommandRequest {
+  commandRerunEvidenceID?: string;
 }
 
 export interface CreateTaskMessageRequest {

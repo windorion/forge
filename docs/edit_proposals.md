@@ -60,7 +60,11 @@ For post-apply validation failures, the previously applied proposal is
 archived, the new proposal is validated, and the task returns to human review.
 For task-command failures, Forge can create a linked review-only proposal even
 when no proposal has been applied yet. This does not mutate files until the
-user applies the new proposal.
+user applies the new proposal. If the user applies a command-sourced repair
+proposal, Forge records `commandRerunEvidence` tying together the failed
+command run, repair brief, applied proposal, and original command id; the
+separate rerun action then verifies the repair through the approved command
+runner.
 
 When rollback is requested, Forge treats it as another explicit mutation gate.
 Rollback is blocked if the current file no longer matches the recorded
@@ -203,6 +207,8 @@ Post-apply validation stores:
 - Generating a repair proposal from a validation or task-command repair brief
   must not mutate files. It archives the previously applied proposal only when
   one exists and exposes a new reviewed proposal linked to the repair brief.
+- Applying a task-command repair proposal may create rerun evidence, but the
+  original command is only rerun through the explicit rerun action.
 
 ## Future Work
 

@@ -102,6 +102,7 @@ The runtime exposes:
 
 ```text
 POST /tasks/:taskID/run-task-command
+POST /tasks/:taskID/rerun-repair-command
 POST /tasks/:taskID/cancel-task-command
 ```
 
@@ -118,6 +119,13 @@ and streams output through SSE events. Failed task-scoped commands generate
 provider repair briefs linked to `taskCommandRunID`; the same explicit
 repair-proposal endpoint can then create a review-only self-fix proposal
 without applying files automatically.
+
+After a command-sourced self-fix proposal is reviewed and applied, Forge stores
+`commandRerunEvidence` with the failed command run, repair brief, applied
+proposal, and original command id. `POST /tasks/:taskID/rerun-repair-command`
+uses that evidence to rerun the same command id through the normal permission
+and no-shell execution path, then links the new command run back to the
+evidence as passed, failed, or cancelled.
 
 Active spawned task-scoped commands can be cancelled by `taskCommandRunID`.
 Cancellation is not arbitrary process control: the runtime only cancels an

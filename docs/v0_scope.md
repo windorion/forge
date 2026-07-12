@@ -158,17 +158,16 @@ Major gaps:
   keyboard shortcuts, and durable file-level review decisions.
 - Patch apply now has exact source replacement and multi-hunk text patch
   paths, but it is still too narrow for normal source-code tasks.
-- Command output now has a first streamed, cancellable, selectable task-scoped
-  surface, but it still needs rerun evidence after reviewed fixes.
+- Command output now has a streamed, cancellable, selectable task-scoped
+  surface with reviewed self-fix rerun evidence after apply.
 - Provider-backed run loop is not yet a real read/search/patch/run/repair
   agent.
 
 ## Next Implementation Order
 
 1. Connect provider-driven run loop to read/search/patch/run/repair.
-2. Add rerun evidence after reviewed self-fix proposals.
-3. Broaden source-file patch proposal/apply beyond exact text hunks and harden
+2. Broaden source-file patch proposal/apply beyond exact text hunks and harden
    rollback revalidation/recovery.
-4. Implement request-change revision from full diff review.
-5. Polish `10a` with durable file-level decisions and exact split-diff behavior.
-6. Add `32a` chat-to-task polish once the live run works.
+3. Implement request-change revision from full diff review.
+4. Polish `10a` with durable file-level decisions and exact split-diff behavior.
+5. Add `32a` chat-to-task polish once the live run works.

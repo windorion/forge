@@ -25,11 +25,6 @@ dashboard.
   patch orchestration, rollback revalidation/recovery, and provider-driven
   source repair flows while keeping strict path validation and pre-apply
   checks.
-- Extend approved task-scoped command execution with first-class rerun
-  evidence after reviewed fixes.
-- Add rerun evidence after a reviewed self-fix proposal so Forge can show the
-  failed command, proposed fix, applied patch, and passing command as one
-  coherent loop.
 - Keep the current trust gates: plan approval before mutation, human review
   before apply, explicit command approval, and explicit git actions.
 
@@ -95,6 +90,14 @@ dashboard.
 
 ## Done Recently
 
+- Added first-class rerun evidence after reviewed task-command self-fixes.
+  Applying a command-sourced repair proposal records the failed command,
+  repair brief, and applied proposal; `POST /tasks/:taskID/rerun-repair-command`
+  reruns the original command through the existing approved command path and
+  stores the passing/failing rerun as evidence. The macOS Tests tab now shows
+  the self-fix rerun chain and the action rail exposes `Rerun Self-Fix`.
+  `npm run smoke:core` covers failed command -> repair proposal -> apply ->
+  rerun -> `Repair Verified`.
 - Added an approved-command chooser for live task command runs. The runtime
   now includes project task command permissions in the validation permission
   envelope, deduplicated by command id and ranked by runnable/approved state.

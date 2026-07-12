@@ -325,6 +325,7 @@ sessions:
 
 ```text
 POST /tasks/:taskID/run-task-command
+POST /tasks/:taskID/rerun-repair-command
 POST /tasks/:taskID/cancel-task-command
 ```
 
@@ -351,8 +352,15 @@ controls include a Cancel Command action: the app calls
 `POST /tasks/:taskID/cancel-task-command` with the active task command run id,
 the runtime sends SIGTERM with a short SIGKILL grace path, records a
 `Cancel Task Command` audit entry, streams a system output chunk, and marks the
-run `Cancelled` without generating a repair brief. Automatic rerun evidence is
-still future work.
+run `Cancelled` without generating a repair brief.
+
+When a command-sourced self-fix proposal is applied, the runtime records
+`commandRerunEvidence` linking the failed source command, repair brief, and
+applied repair proposal. The macOS Tests tab shows that evidence chain and the
+action rail exposes `Rerun Self-Fix`. That action calls
+`POST /tasks/:taskID/rerun-repair-command`, which reruns the original command
+ID through the same approval/cwd/no-shell path, attaches the new command run to
+the evidence, and moves the task to `Repair Verified` when it passes.
 
 Current validation presets:
 
@@ -523,7 +531,8 @@ cd runtime && npm run smoke:git-remote
   stream bounded output chunks into task state. They are not arbitrary shell
   execution; the command chooser is runtime-derived and sends only command
   IDs, cancellation is limited to active runtime-owned task command runs by run
-  id, and failed commands do not yet rerun automatically after reviewed fixes.
+  id, and reviewed command-sourced self-fixes can be explicitly rerun through
+  stored rerun evidence.
 - SQLite currently stores full task snapshots plus basic task index fields; the
   full normalized runs/messages/tool-calls schema is still ahead.
 - Repository context is still a bounded v1 scanner, not a full repository

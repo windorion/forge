@@ -927,8 +927,10 @@ async function runOpenAITaskCommandFailureRepairFlow() {
     current.editProposal.validation?.summary ?? "Task-command repair proposal should validate as ready."
   );
   assert(
-    current.editProposal.fileChanges?.some((change) => change.applyOperation?.kind === "AppendText"),
-    "Task-command repair proposal did not include a safe append operation."
+    current.editProposal.fileChanges?.some((change) =>
+      change.path === brokenTypeScriptSmokePath && change.applyOperation?.kind === "ReplaceText"
+    ),
+    "Task-command repair proposal did not include a safe replace operation for the broken TypeScript fixture."
   );
   assert(
     JSON.stringify(current.changedFiles ?? []) === JSON.stringify(changedFilesBeforeRepairProposal),
@@ -937,6 +939,56 @@ async function runOpenAITaskCommandFailureRepairFlow() {
   assert(
     current.events?.some((event) => event.type === "edit.proposal.validation_repair.ready"),
     "Task-command repair proposal did not record a ready event."
+  );
+
+  const repairProposalID = current.editProposal.id;
+  current = await post(`/tasks/${task.id}/apply-edit-proposal`, {
+    note: "Core smoke test applies the task-command repair proposal."
+  });
+  assertCompletedTask(current, brokenTypeScriptSmokePath);
+  const repairedSource = await readFile(join(repoRoot, brokenTypeScriptSmokePath), "utf8");
+  assert(
+    repairedSource.includes("forgeSmokeBroken: string = \"fixed\""),
+    "Task-command repair proposal did not fix the broken TypeScript fixture."
+  );
+
+  const rerunEvidence = current.commandRerunEvidence?.at(-1);
+  assert(rerunEvidence, "Task-command repair apply did not create rerun evidence.");
+  assert(rerunEvidence.sourceTaskCommandRunID === failedCommandRun.id, "Rerun evidence did not link the failed source command run.");
+  assert(rerunEvidence.validationRepairBriefID === repairBrief.id, "Rerun evidence did not link the repair brief.");
+  assert(rerunEvidence.repairProposalID === repairProposalID, "Rerun evidence did not link the applied repair proposal.");
+  assert(rerunEvidence.status === "Ready", `Expected rerun evidence Ready, got ${rerunEvidence.status}.`);
+  assert(!rerunEvidence.rerunTaskCommandRunID, "Ready rerun evidence should not have a rerun command id yet.");
+  assert(
+    current.events?.some((event) => event.type === "task.command.rerun_evidence.ready"),
+    "Task-command repair apply did not record rerun evidence ready event."
+  );
+
+  const collected = await collectRuntimeEventsDuring(async () =>
+    post(`/tasks/${task.id}/rerun-repair-command`, {
+      commandRerunEvidenceID: rerunEvidence.id
+    })
+  );
+  current = collected.result;
+  assertState(current, "Human Review", "Repair Verified");
+  const verifiedEvidence = current.commandRerunEvidence?.find((evidence) => evidence.id === rerunEvidence.id);
+  assert(verifiedEvidence?.status === "Passed", `Expected rerun evidence Passed, got ${verifiedEvidence?.status}.`);
+  assert(verifiedEvidence.rerunTaskCommandRunID, "Passed rerun evidence did not link the rerun command.");
+  const rerunCommand = current.taskCommandRuns?.find((run) => run.id === verifiedEvidence.rerunTaskCommandRunID);
+  assert(rerunCommand?.commandID === "runtime-npm-check", `Expected rerun command runtime-npm-check, got ${rerunCommand?.commandID}.`);
+  assert(rerunCommand.status === "Passed", `Expected rerun command to pass, got ${rerunCommand.status}: ${rerunCommand.outputSummary}`);
+  assert(rerunCommand.exitCode === 0, `Expected rerun command exit code 0, got ${rerunCommand.exitCode}.`);
+  assert(
+    current.events?.some((event) => event.type === "task.command.rerun_evidence.passed"),
+    "Task-command repair rerun did not record rerun evidence passed event."
+  );
+  assert(
+    collected.events.some((event) => event.type === "task.command.rerun_evidence.started" && event.data?.taskID === current.id),
+    "Task-command repair rerun did not stream rerun evidence started event."
+  );
+  assert(
+    collected.events.some((event) => event.type === "task.command.completed" && event.data?.taskCommandRunID === rerunCommand.id),
+    "Task-command repair rerun did not stream the rerun command completion event."
   );
 
   return current;
@@ -1637,6 +1689,32 @@ function mockOpenAIOutput(name, requests, body) {
 
   if (name === "forge_edit_proposal") {
     if (bodyText.includes("validation failure repair brief") || bodyText.includes("Validation repair brief")) {
+      if (bodyText.includes("TaskCommandRun")) {
+        return {
+          summary: "Fix the broken TypeScript fixture from the failed task command.",
+          riskLevel: "Medium",
+          fileChanges: [
+            {
+              path: brokenTypeScriptSmokePath,
+              changeType: "Modify",
+              rationale: "The failed runtime-npm-check command reports a syntax error in this temporary TypeScript fixture.",
+              diffPreview: [
+                `--- a/${brokenTypeScriptSmokePath}`,
+                `+++ b/${brokenTypeScriptSmokePath}`,
+                "@@ task command repair @@",
+                "-export const forgeSmokeBroken: string = ;",
+                "+export const forgeSmokeBroken: string = \"fixed\";"
+              ].join("\n"),
+              operationKind: "ReplaceText",
+              appendText: "",
+              findText: "export const forgeSmokeBroken: string = ;\n",
+              replaceWith: "export const forgeSmokeBroken: string = \"fixed\";\n",
+              content: ""
+            }
+          ]
+        };
+      }
+
       if (bodyText.includes("followUpPrompt")) {
         return {
           summary: "Generate a follow-up proposal from the validation repair brief.",

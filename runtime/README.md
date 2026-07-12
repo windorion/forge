@@ -31,9 +31,13 @@ This first slice is intentionally small:
 - `POST /tasks/:taskID/generate-validation-repair-proposal`
 - `POST /tasks/:taskID/validate-edit-proposal`
 - `POST /tasks/:taskID/apply-edit-proposal`
+- `POST /tasks/:taskID/rollback-edit-proposal`
 - `POST /tasks/:taskID/reject-edit-proposal`
 - `POST /tasks/:taskID/approve-validation-preset`
 - `POST /tasks/:taskID/run-validation`
+- `POST /tasks/:taskID/run-task-command`
+- `POST /tasks/:taskID/rerun-repair-command`
+- `POST /tasks/:taskID/cancel-task-command`
 - `GET /events` as a Server-Sent Events stream
 
 Creating a task starts Agent Loop v0. It is deterministic for now: the Manager
@@ -82,10 +86,11 @@ writing files. If generated validation is blocked, the runtime can run a
 bounded repair loop by feeding failed validation checks back to the model
 provider; blocked intermediate proposals are archived as `Superseded`. The
 apply path revalidates against the current workspace before writing. The
-current apply path is intentionally narrow: it only supports
-append-text and exact replace-text operations on existing Markdown files in
-`README.md` or `docs/`, plus create-file operations for new `docs/*.md`
-files. Exact replace requires the find text to appear once.
+current apply path is intentionally narrow: it supports append-text on
+existing Markdown files, exact replace and multi-hunk exact patch operations
+on existing Markdown and allowlisted source/text files, plus create-file
+operations for new `docs/*.md` files. Exact replace and patch hunks require
+the find text to appear once.
 After apply, the runtime runs controlled built-in validation commands and only
 marks the task completed if validation passes.
 If validation fails, the runtime asks the model provider for a repair brief
@@ -96,6 +101,11 @@ After a repair brief exists, `POST /tasks/:taskID/generate-validation-repair-pro
 can create a new proposed repair diff linked to that brief. The previous
 applied proposal is archived for audit, the new proposal is validated, and no
 files are changed until the user explicitly applies it.
+For repair proposals sourced from failed task commands, apply records rerun
+evidence but does not rerun the command automatically. The explicit
+`POST /tasks/:taskID/rerun-repair-command` endpoint reruns the original failed
+command through the same approved command runner and links the new command run
+to the failed source run, repair brief, and applied proposal.
 OpenAI-backed edit proposals can include multiple file changes and
 preview-only unsupported operations. Unsupported changes are kept as review
 artifacts; validation blocks apply until every proposed change fits the current

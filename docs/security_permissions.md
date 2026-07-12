@@ -116,8 +116,10 @@ Cancellation records an audit entry and marks the run `Cancelled` rather than
 creating a failure repair brief. The macOS command chooser is populated from
 runtime-derived task-command permissions and still sends command IDs only; the
 runtime rechecks command catalog membership and preset approval before
-execution. It does not yet automatically rerun failed commands after a
-reviewed fix is applied.
+execution. After a reviewed command-sourced self-fix is applied,
+`POST /tasks/:taskID/rerun-repair-command` can rerun only the original failed
+command ID already captured in `commandRerunEvidence`; it does not accept raw
+shell text, arbitrary command IDs from the caller, or arbitrary PIDs.
 
 ### High Risk
 

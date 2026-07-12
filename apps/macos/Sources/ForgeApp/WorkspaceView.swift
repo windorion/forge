@@ -1467,9 +1467,18 @@ private struct AgentTestsTab: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                if task.taskCommandRuns.isEmpty && task.validationRuns.isEmpty {
+                if task.taskCommandRuns.isEmpty && task.validationRuns.isEmpty && task.commandRerunEvidence.isEmpty {
                     EmptyTerminalMessage(title: "NO TEST RUNS YET", message: "Approved checks and command output will appear here as the agent runs.")
                 } else {
+                    ForEach(task.commandRerunEvidence.reversed()) { evidence in
+                        CommandRerunEvidenceCard(
+                            evidence: evidence,
+                            sourceRun: taskCommandRun(for: evidence.sourceTaskCommandRunID),
+                            repairBrief: validationRepairBrief(for: evidence.validationRepairBriefID),
+                            rerunRun: taskCommandRun(for: evidence.rerunTaskCommandRunID)
+                        )
+                    }
+
                     ForEach(task.taskCommandRuns.reversed()) { run in
                         TaskCommandTerminalCard(run: run)
                     }
@@ -1509,6 +1518,14 @@ private struct AgentTestsTab: View {
         }
 
         return task.taskCommandRuns.first { $0.id == id }
+    }
+
+    private func validationRepairBrief(for id: String?) -> ValidationRepairBrief? {
+        guard let id else {
+            return nil
+        }
+
+        return task.validationRepairBriefs.first { $0.id == id }
     }
 }
 
@@ -1607,6 +1624,107 @@ private struct TaskCommandTerminalCard: View {
             return ForgeDesign.muted
         default:
             return ForgeDesign.success
+        }
+    }
+}
+
+private struct CommandRerunEvidenceCard: View {
+    var evidence: CommandRerunEvidence
+    var sourceRun: TaskCommandRun?
+    var repairBrief: ValidationRepairBrief?
+    var rerunRun: TaskCommandRun?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Label("SELF-FIX RERUN / \(evidence.status.uppercased())", systemImage: statusSystemImage)
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(statusColor)
+
+                Spacer(minLength: 8)
+
+                Text(evidence.updatedAt)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(Color.gray)
+            }
+
+            Text(evidence.summary)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(ForgeDesign.paper)
+                .textSelection(.enabled)
+
+            VStack(alignment: .leading, spacing: 4) {
+                evidenceLine(
+                    title: "failed",
+                    value: sourceRun.map { "\($0.name) / \($0.status)" } ?? evidence.commandName
+                )
+                evidenceLine(
+                    title: "brief",
+                    value: repairBrief?.summary ?? evidence.validationRepairBriefID
+                )
+                evidenceLine(
+                    title: "proposal",
+                    value: evidence.repairProposalID
+                )
+                if let rerunRun {
+                    evidenceLine(
+                        title: "rerun",
+                        value: "\(rerunRun.name) / \(rerunRun.status)"
+                    )
+                } else {
+                    evidenceLine(
+                        title: "rerun",
+                        value: evidence.status == "Ready" ? "ready to verify" : "not recorded yet"
+                    )
+                }
+            }
+        }
+        .padding(14)
+        .forgeTerminal()
+    }
+
+    @ViewBuilder
+    private func evidenceLine(title: String, value: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(title.uppercased())
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(ForgeDesign.muted)
+                .frame(width: 54, alignment: .leading)
+            Text(value)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(ForgeDesign.paper)
+                .lineLimit(3)
+                .textSelection(.enabled)
+        }
+    }
+
+    private var statusSystemImage: String {
+        switch evidence.status {
+        case "Passed":
+            return "checkmark.seal"
+        case "Failed":
+            return "exclamationmark.triangle"
+        case "Running":
+            return "hourglass"
+        case "Cancelled":
+            return "stop.circle"
+        default:
+            return "arrow.clockwise.circle"
+        }
+    }
+
+    private var statusColor: Color {
+        switch evidence.status {
+        case "Passed":
+            return ForgeDesign.success
+        case "Failed":
+            return ForgeDesign.danger
+        case "Running":
+            return ForgeDesign.warning
+        case "Cancelled":
+            return ForgeDesign.muted
+        default:
+            return ForgeDesign.accent
         }
     }
 }
@@ -1875,7 +1993,7 @@ private struct AgentRunActionsCard: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(ForgeSecondaryButtonStyle())
-            .disabled(taskCommandPermissions.isEmpty || isRunningTaskCommand || isCancellingTaskCommand)
+            .disabled(taskCommandPermissions.isEmpty || isRunningTaskCommand || isCancellingTaskCommand || isRerunningRepairCommand)
 
             if let selectedTaskCommandPermission {
                 Text(selectedTaskCommandPermission.command.command)
@@ -1924,6 +2042,17 @@ private struct AgentRunActionsCard: View {
             }
             .buttonStyle(ForgeSecondaryButtonStyle())
             .disabled(!canGenerateValidationRepairProposal)
+
+            Button {
+                if let latestRunnableCommandRerunEvidence {
+                    workspace.rerunRepairCommand(for: task, evidence: latestRunnableCommandRerunEvidence)
+                }
+            } label: {
+                Label(rerunRepairCommandTitle, systemImage: "arrow.clockwise.circle")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ForgeSecondaryButtonStyle())
+            .disabled(!canRerunRepairCommand)
         }
         .padding(12)
         .forgeCard()
@@ -1959,6 +2088,21 @@ private struct AgentRunActionsCard: View {
 
     private var isRunningTaskCommand: Bool {
         workspace.isRunningTaskCommand(taskID: task.id)
+    }
+
+    private var latestCommandRerunEvidence: CommandRerunEvidence? {
+        task.commandRerunEvidence.reversed().first
+    }
+
+    private var latestRunnableCommandRerunEvidence: CommandRerunEvidence? {
+        task.commandRerunEvidence.reversed().first { evidence in
+            evidence.status == "Ready" || evidence.status == "Failed"
+        }
+    }
+
+    private var isRerunningRepairCommand: Bool {
+        workspace.isRerunningRepairCommand(evidenceID: latestCommandRerunEvidence?.id) ||
+            latestCommandRerunEvidence?.status == "Running"
     }
 
     private var latestRunningTaskCommandRun: TaskCommandRun? {
@@ -1999,7 +2143,8 @@ private struct AgentRunActionsCard: View {
             !isRunningValidation &&
             !isRollingBackEditProposal &&
             !isGeneratingValidationRepairProposal &&
-            !isCancellingTaskCommand
+            !isCancellingTaskCommand &&
+            !isRerunningRepairCommand
     }
 
     private var runTaskCommandTitle: String {
@@ -2056,7 +2201,8 @@ private struct AgentRunActionsCard: View {
             !isRollingBackEditProposal &&
             !isRejectingEditProposal &&
             !isRunningTaskCommand &&
-            !isCancellingTaskCommand
+            !isCancellingTaskCommand &&
+            !isRerunningRepairCommand
     }
 
     private var generateEditProposalTitle: String {
@@ -2080,7 +2226,8 @@ private struct AgentRunActionsCard: View {
             !isGeneratingValidationRepairProposal &&
             !isRejectingEditProposal &&
             !isRunningTaskCommand &&
-            !isCancellingTaskCommand
+            !isCancellingTaskCommand &&
+            !isRerunningRepairCommand
     }
 
     private var validateEditProposalTitle: String {
@@ -2096,7 +2243,8 @@ private struct AgentRunActionsCard: View {
             !isGeneratingValidationRepairProposal &&
             !isRejectingEditProposal &&
             !isRunningTaskCommand &&
-            !isCancellingTaskCommand
+            !isCancellingTaskCommand &&
+            !isRerunningRepairCommand
     }
 
     private var applyEditProposalTitle: String {
@@ -2116,7 +2264,8 @@ private struct AgentRunActionsCard: View {
             !isRollingBackEditProposal &&
             !isGeneratingValidationRepairProposal &&
             !isRunningTaskCommand &&
-            !isCancellingTaskCommand
+            !isCancellingTaskCommand &&
+            !isRerunningRepairCommand
     }
 
     private var rollbackEditProposalTitle: String {
@@ -2136,7 +2285,8 @@ private struct AgentRunActionsCard: View {
             !isGeneratingValidationRepairProposal &&
             !isRejectingEditProposal &&
             !isRunningTaskCommand &&
-            !isCancellingTaskCommand
+            !isCancellingTaskCommand &&
+            !isRerunningRepairCommand
     }
 
     private var rejectEditProposalTitle: String {
@@ -2150,7 +2300,8 @@ private struct AgentRunActionsCard: View {
             !isRollingBackEditProposal &&
             !isGeneratingValidationRepairProposal &&
             !isRunningTaskCommand &&
-            !isCancellingTaskCommand
+            !isCancellingTaskCommand &&
+            !isRerunningRepairCommand
     }
 
     private var runValidationTitle: String {
@@ -2217,7 +2368,8 @@ private struct AgentRunActionsCard: View {
             !isRejectingEditProposal &&
             !isRunningValidation &&
             !isRunningTaskCommand &&
-            !isCancellingTaskCommand
+            !isCancellingTaskCommand &&
+            !isRerunningRepairCommand
     }
 
     private var generateRepairTitle: String {
@@ -2228,6 +2380,40 @@ private struct AgentRunActionsCard: View {
             return "Self-Fix Ready"
         }
         return "Generate Self-Fix"
+    }
+
+    private var canRerunRepairCommand: Bool {
+        latestRunnableCommandRerunEvidence != nil &&
+            task.status != "Testing" &&
+            !isRerunningRepairCommand &&
+            !isRunningValidation &&
+            !isRunningTaskCommand &&
+            !isCancellingTaskCommand &&
+            !isApplyingEditProposal &&
+            !isRollingBackEditProposal &&
+            !isGeneratingValidationRepairProposal &&
+            !isGeneratingEditProposal
+    }
+
+    private var rerunRepairCommandTitle: String {
+        if isRerunningRepairCommand {
+            return "Rerunning Self-Fix"
+        }
+
+        if let evidence = latestCommandRerunEvidence {
+            switch evidence.status {
+            case "Passed":
+                return "Self-Fix Verified"
+            case "Failed":
+                return "Rerun Self-Fix Again"
+            case "Running":
+                return "Rerunning Self-Fix"
+            default:
+                return "Rerun Self-Fix"
+            }
+        }
+
+        return "No Self-Fix Rerun"
     }
 }
 

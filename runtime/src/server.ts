@@ -51,11 +51,13 @@ import type {
   PlanStep,
   ProposedFileChange,
   RuntimeEvent,
+  RerunRepairCommandRequest,
   RunTaskCommandRequest,
   RunValidationRequest,
   TaskCommandOutputChunk,
   TaskCommandPermission,
   TaskCommandRun,
+  CommandRerunEvidence,
   TaskFileReference,
   TaskMessage,
   ToolCall,
@@ -709,6 +711,14 @@ const server = createServer(async (request, response) => {
     if (request.method === "POST" && runTaskCommandTaskID) {
       const input = await readJson<RunTaskCommandRequest>(request);
       const task = await runTaskCommand(runTaskCommandTaskID, input);
+      writeJson(response, 200, task);
+      return;
+    }
+
+    const rerunRepairCommandTaskID = taskIDFromActionPath(url.pathname, "rerun-repair-command");
+    if (request.method === "POST" && rerunRepairCommandTaskID) {
+      const input = await readJson<RerunRepairCommandRequest>(request);
+      const task = await rerunRepairCommand(rerunRepairCommandTaskID, input);
       writeJson(response, 200, task);
       return;
     }
@@ -4881,6 +4891,7 @@ async function createTask(input: CreateTaskRequest): Promise<ForgeTask> {
     approvals: [],
     toolCalls: [],
     taskCommandRuns: [],
+    commandRerunEvidence: [],
     validationRuns: [],
     validationRepairBriefs: [],
     messages: [userMessage],
@@ -5948,6 +5959,7 @@ async function applyEditProposal(
     task.editProposal.decidedAt = now;
     task.editProposal.decisionNote = input.note?.trim() || undefined;
     task.editProposal.appliedFileChanges = appliedFileChanges;
+    const rerunEvidence = createOrUpdateCommandRerunEvidenceForAppliedProposal(task, task.editProposal, now);
     task.status = "Testing";
     task.currentPhase = "Awaiting Validation";
     task.changedFiles = [...new Set(appliedFileChanges.map((change) => change.path))];
@@ -5979,6 +5991,14 @@ async function applyEditProposal(
     const applied = event("edit.proposal.applied", "Approved edit proposal was applied to the workspace.");
     applied.createdAt = now;
     saveAndBroadcast(task, applied);
+    if (rerunEvidence) {
+      const ready = event(
+        "task.command.rerun_evidence.ready",
+        `Self-fix applied. Rerun ${rerunEvidence.commandName} to verify the repair.`
+      );
+      ready.createdAt = now;
+      saveAndBroadcast(task, ready);
+    }
     return runValidation(task.id, "PostApply");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -6102,6 +6122,102 @@ async function rollbackEditProposal(
   }
 }
 
+function createOrUpdateCommandRerunEvidenceForAppliedProposal(
+  task: ForgeTask,
+  proposal: EditProposal,
+  appliedAt: string
+): CommandRerunEvidence | undefined {
+  if (!proposal.validationRepairBriefID) {
+    return undefined;
+  }
+
+  const repairBrief = task.validationRepairBriefs.find((brief) => brief.id === proposal.validationRepairBriefID);
+  if (!repairBrief?.taskCommandRunID) {
+    return undefined;
+  }
+
+  const failedRun = task.taskCommandRuns.find((run) => run.id === repairBrief.taskCommandRunID);
+  if (!failedRun || failedRun.status !== "Failed") {
+    return undefined;
+  }
+
+  const summary = `Repair proposal applied. Rerun ${failedRun.name} to verify the self-fix.`;
+  let evidence = task.commandRerunEvidence.find((candidate) => candidate.repairProposalID === proposal.id);
+  if (!evidence) {
+    evidence = {
+      id: randomUUID(),
+      sourceTaskCommandRunID: failedRun.id,
+      validationRepairBriefID: repairBrief.id,
+      repairProposalID: proposal.id,
+      repairAppliedAt: appliedAt,
+      commandID: failedRun.commandID,
+      commandName: failedRun.name,
+      status: "Ready",
+      summary,
+      createdAt: appliedAt,
+      updatedAt: appliedAt
+    };
+    task.commandRerunEvidence.push(evidence);
+  } else {
+    evidence.repairAppliedAt = appliedAt;
+    evidence.status = "Ready";
+    evidence.summary = summary;
+    evidence.updatedAt = appliedAt;
+  }
+
+  upsertPlanStep(task, {
+    id: `rerun-repair-command-${failedRun.commandID}`,
+    title: "Rerun repaired command",
+    status: "Active",
+    summary
+  });
+  setAgent(task, "Tester", "Ready", `Ready to rerun ${failedRun.command}.`);
+  return evidence;
+}
+
+function findCommandRerunEvidenceForRequest(
+  task: ForgeTask,
+  input: RerunRepairCommandRequest
+): CommandRerunEvidence | undefined {
+  const requestedID = input.commandRerunEvidenceID?.trim();
+  if (requestedID) {
+    const evidence = task.commandRerunEvidence.find((candidate) => candidate.id === requestedID);
+    if (!evidence) {
+      throw new HttpError(404, `Repair command rerun evidence not found: ${requestedID}`);
+    }
+    return evidence;
+  }
+
+  return latestRunnableCommandRerunEvidence(task);
+}
+
+function latestRunnableCommandRerunEvidence(task: ForgeTask): CommandRerunEvidence | undefined {
+  return [...task.commandRerunEvidence]
+    .reverse()
+    .find((candidate) => candidate.status === "Ready" || candidate.status === "Failed");
+}
+
+function findEditProposalByID(task: ForgeTask, proposalID: string): EditProposal | undefined {
+  if (task.editProposal?.id === proposalID) {
+    return task.editProposal;
+  }
+
+  return [...task.editProposalRevisions].reverse().find((proposal) => proposal.id === proposalID);
+}
+
+function summarizeCommandRerunEvidence(rerun: TaskCommandRun): string {
+  switch (rerun.status) {
+  case "Passed":
+    return `Self-fix verified: ${rerun.name} passed after applying the repair proposal.`;
+  case "Cancelled":
+    return `Self-fix rerun cancelled: ${rerun.outputSummary}`;
+  case "Failed":
+    return `Self-fix rerun failed: ${rerun.outputSummary}`;
+  case "Running":
+    return `Self-fix rerun is still running: ${rerun.name}.`;
+  }
+}
+
 function rejectEditProposal(taskID: string, input: EditProposalDecisionRequest): ForgeTask {
   const task = tasks.get(taskID);
   if (!task) {
@@ -6187,6 +6303,150 @@ async function approveValidationPreset(taskID: string, input: ApproveValidationP
   approved.createdAt = now;
   saveAndBroadcast(task, approved);
   return task;
+}
+
+async function rerunRepairCommand(taskID: string, input: RerunRepairCommandRequest): Promise<ForgeTask> {
+  const task = tasks.get(taskID);
+  if (!task) {
+    throw new HttpError(404, `Task not found: ${taskID}`);
+  }
+
+  const evidence = findCommandRerunEvidenceForRequest(task, input);
+  if (!evidence) {
+    throw new HttpError(409, "No applied task-command repair is ready to rerun.");
+  }
+
+  if (evidence.status === "Running") {
+    throw new HttpError(409, "Repair command rerun is already active.");
+  }
+
+  if (evidence.status === "Passed") {
+    throw new HttpError(409, "Repair command rerun has already passed.");
+  }
+
+  if (!evidence.repairAppliedAt) {
+    throw new HttpError(409, "Repair command rerun requires an applied repair proposal.");
+  }
+
+  const sourceRun = task.taskCommandRuns.find((run) => run.id === evidence.sourceTaskCommandRunID);
+  if (!sourceRun || sourceRun.status !== "Failed") {
+    throw new HttpError(409, "Repair command rerun requires a failed source command run.");
+  }
+
+  const repairProposal = findEditProposalByID(task, evidence.repairProposalID);
+  if (!repairProposal || repairProposal.status !== "Applied") {
+    throw new HttpError(409, "Repair command rerun requires an applied repair proposal.");
+  }
+
+  if (hasRunningTaskCommandRun(task)) {
+    throw new HttpError(409, "Another task command is already active.");
+  }
+
+  if (hasRunningValidationRun(task)) {
+    throw new HttpError(409, "A validation run is already active.");
+  }
+
+  const startedAt = new Date().toISOString();
+  evidence.status = "Running";
+  evidence.summary = `Rerunning ${evidence.commandName} to verify the applied self-fix.`;
+  evidence.updatedAt = startedAt;
+  task.status = "Testing";
+  task.currentPhase = "Repair Rerun";
+  task.reviewSummary = evidence.summary;
+  setAgent(task, "Tester", "Active", `Rerunning ${sourceRun.command}.`);
+  setAgent(task, "Reviewer", "Idle", "Waiting for self-fix rerun evidence.");
+  upsertPlanStep(task, {
+    id: `rerun-repair-command-${sourceRun.commandID}`,
+    title: "Rerun repaired command",
+    status: "Active",
+    summary: evidence.summary
+  });
+
+  const existingRunIDs = new Set(task.taskCommandRuns.map((run) => run.id));
+  const started = event("task.command.rerun_evidence.started", evidence.summary);
+  started.createdAt = startedAt;
+  saveAndBroadcast(task, started);
+
+  try {
+    const updatedTask = await runTaskCommand(task.id, { commandID: evidence.commandID });
+    const updatedEvidence = updatedTask.commandRerunEvidence.find((candidate) => candidate.id === evidence.id);
+    if (!updatedEvidence) {
+      throw new Error("Repair command rerun evidence disappeared during command execution.");
+    }
+
+    const rerun = [...updatedTask.taskCommandRuns].reverse().find((run) => !existingRunIDs.has(run.id));
+    if (!rerun) {
+      throw new Error("Repair command rerun completed without recording a command run.");
+    }
+
+    const endedAt = rerun.endedAt ?? new Date().toISOString();
+    updatedEvidence.rerunTaskCommandRunID = rerun.id;
+    updatedEvidence.status = rerun.status;
+    updatedEvidence.updatedAt = endedAt;
+    updatedEvidence.summary = summarizeCommandRerunEvidence(rerun);
+
+    const passed = rerun.status === "Passed";
+    const cancelled = rerun.status === "Cancelled";
+    updatedTask.status = passed ? "Human Review" : cancelled ? "Human Review" : "Failed";
+    updatedTask.currentPhase = passed ? "Repair Verified" : cancelled ? "Repair Rerun Cancelled" : "Repair Rerun Failed";
+    updatedTask.reviewSummary = updatedEvidence.summary;
+    setAgent(
+      updatedTask,
+      "Tester",
+      passed ? "Done" : "Blocked",
+      passed ? `${rerun.name} passed after the repair.` : updatedEvidence.summary
+    );
+    setAgent(
+      updatedTask,
+      "Reviewer",
+      "Active",
+      passed
+        ? "Self-fix rerun evidence is ready for review."
+        : "Review the rerun output and new repair brief before continuing."
+    );
+    upsertPlanStep(updatedTask, {
+      id: `rerun-repair-command-${rerun.commandID}`,
+      title: "Rerun repaired command",
+      status: passed ? "Done" : "Blocked",
+      summary: updatedEvidence.summary
+    });
+
+    const finished = event(
+      passed
+        ? "task.command.rerun_evidence.passed"
+        : cancelled
+          ? "task.command.rerun_evidence.cancelled"
+          : "task.command.rerun_evidence.failed",
+      updatedEvidence.summary
+    );
+    finished.createdAt = endedAt;
+    saveAndBroadcast(updatedTask, finished);
+    return updatedTask;
+  } catch (error) {
+    const failedTask = tasks.get(taskID) ?? task;
+    const failedEvidence = failedTask.commandRerunEvidence.find((candidate) => candidate.id === evidence.id) ?? evidence;
+    const message = error instanceof Error ? error.message : String(error);
+    const failedAt = new Date().toISOString();
+    failedEvidence.status = "Failed";
+    failedEvidence.summary = `Repair command rerun failed before evidence could be recorded: ${message}`;
+    failedEvidence.updatedAt = failedAt;
+    failedTask.status = "Failed";
+    failedTask.currentPhase = "Repair Rerun Failed";
+    failedTask.reviewSummary = failedEvidence.summary;
+    setAgent(failedTask, "Tester", "Blocked", failedEvidence.summary);
+    setAgent(failedTask, "Reviewer", "Active", "Review the failed rerun attempt before continuing.");
+    upsertPlanStep(failedTask, {
+      id: `rerun-repair-command-${evidence.commandID}`,
+      title: "Rerun repaired command",
+      status: "Blocked",
+      summary: failedEvidence.summary
+    });
+
+    const failed = event("task.command.rerun_evidence.failed", failedEvidence.summary);
+    failed.createdAt = failedAt;
+    saveAndBroadcast(failedTask, failed);
+    throw error;
+  }
 }
 
 async function runTaskCommand(taskID: string, input: RunTaskCommandRequest): Promise<ForgeTask> {
@@ -8671,6 +8931,7 @@ function renderRuntimeHome(): string {
       <li><code>POST /tasks/:taskID/approve-validation-preset</code></li>
       <li><code>POST /tasks/:taskID/run-validation</code></li>
       <li><code>POST /tasks/:taskID/run-task-command</code></li>
+      <li><code>POST /tasks/:taskID/rerun-repair-command</code></li>
       <li><code>POST /tasks/:taskID/cancel-task-command</code></li>
       <li><code>GET /events</code></li>
     </ul>

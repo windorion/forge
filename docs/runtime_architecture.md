@@ -389,7 +389,13 @@ approved presets, includes approval/readiness state and last-run metadata, and
 still leaves execution enforcement inside `run-task-command`.
 
 Failed task-command output is now connected to the repair-brief/self-fix
-proposal loop.
+proposal loop. When a command-sourced repair proposal is applied,
+`commandRerunEvidence` records the failed source run, repair brief, applied
+proposal, and target command ID. `POST /tasks/:taskID/rerun-repair-command`
+then reruns that original command through `run-task-command`, attaches the new
+command run to the evidence, and marks the task `Repair Verified` only when
+the rerun passes. Failed or cancelled reruns remain reviewable and keep their
+output linked to the evidence chain.
 
 Active spawned task commands can be stopped through
 `POST /tasks/:taskID/cancel-task-command` with a `taskCommandRunID`. The
@@ -398,9 +404,6 @@ it started for that run, records a `Cancel Task Command` audit entry, appends a
 system output chunk, emits `task.command.cancel.requested` and
 `task.command.cancelled`, and marks the run `Cancelled` instead of `Failed`.
 Cancelled commands return to human review and do not generate repair briefs.
-
-Current gap: Forge does not yet automatically rerun the failed command after a
-reviewed fix is applied.
 
 ### Permission Manager
 

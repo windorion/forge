@@ -43,6 +43,7 @@ final class WorkspaceModel: ObservableObject {
     @Published private var rejectingEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var runningValidationTaskIDs = Set<ForgeTask.ID>()
     @Published private var runningTaskCommandTaskIDs = Set<ForgeTask.ID>()
+    @Published private var rerunningRepairCommandEvidenceIDs = Set<CommandRerunEvidence.ID>()
     @Published private var cancellingTaskCommandRunIDs = Set<TaskCommandRun.ID>()
     @Published private var approvingValidationPresetTaskIDs = Set<String>()
     @Published private var refreshingGitStatus = false
@@ -585,6 +586,37 @@ final class WorkspaceModel: ObservableObject {
 
     func isRunningTaskCommand(taskID: ForgeTask.ID) -> Bool {
         runningTaskCommandTaskIDs.contains(taskID)
+    }
+
+    func rerunRepairCommand(for task: ForgeTask, evidence: CommandRerunEvidence) {
+        rerunningRepairCommandEvidenceIDs.insert(evidence.id)
+
+        Task {
+            do {
+                let updatedTask = try await runtime.rerunRepairCommand(
+                    taskID: task.id,
+                    commandRerunEvidenceID: evidence.id
+                )
+                upsert(updatedTask)
+                selectedTaskID = updatedTask.id
+                statusMessage = "Self-fix command rerun completed."
+                await refreshGitStatusSnapshot()
+                await refreshValidationPermissionSnapshotIfPossible(for: updatedTask.id)
+                startEventStream()
+            } catch {
+                statusMessage = "Rerun self-fix command failed: \(error.localizedDescription)"
+            }
+
+            rerunningRepairCommandEvidenceIDs.remove(evidence.id)
+        }
+    }
+
+    func isRerunningRepairCommand(evidenceID: CommandRerunEvidence.ID?) -> Bool {
+        guard let evidenceID else {
+            return false
+        }
+
+        return rerunningRepairCommandEvidenceIDs.contains(evidenceID)
     }
 
     func cancelTaskCommand(for task: ForgeTask, run: TaskCommandRun? = nil) {
