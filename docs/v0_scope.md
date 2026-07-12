@@ -3,7 +3,7 @@
 Document role: define the first end-to-end product target for Forge so early
 implementation has a clear finish line.
 
-Last updated: 2026-07-11
+Last updated: 2026-07-12
 
 ## Scope Reset
 
@@ -158,8 +158,8 @@ Major gaps:
   keyboard shortcuts, and durable file-level review decisions.
 - Patch apply now has exact source replacement and multi-hunk text patch
   paths, but it is still too narrow for normal source-code tasks.
-- Command output now has a first streamed task-scoped surface, but it still
-  needs cancellation, a richer command chooser, and rerun evidence after
+- Command output now has a first streamed and cancellable task-scoped surface,
+  but it still needs a richer command chooser and rerun evidence after
   reviewed fixes.
 - Provider-backed run loop is not yet a real read/search/patch/run/repair
   agent.
@@ -167,7 +167,7 @@ Major gaps:
 ## Next Implementation Order
 
 1. Connect provider-driven run loop to read/search/patch/run/repair.
-2. Add task command cancellation and a richer approved-command chooser.
+2. Add a richer approved-command chooser.
 3. Add rerun evidence after reviewed self-fix proposals.
 4. Broaden source-file patch proposal/apply beyond exact text hunks and harden
    rollback revalidation/recovery.

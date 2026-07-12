@@ -71,6 +71,7 @@ try {
   const sourceReplaceTask = await runSourceReplaceFlow();
   const sourcePatchTask = await runSourcePatchFlow();
   const taskCommandTask = await runTaskCommandFlow();
+  const cancelledTaskCommandTask = await runTaskCommandCancellationFlow();
 
   await stopRuntime(runtime);
   runtime = undefined;
@@ -96,6 +97,7 @@ try {
   console.log(`- Source replace task: ${sourceReplaceTask.id}`);
   console.log(`- Source patch task: ${sourcePatchTask.id}`);
   console.log(`- Task command task: ${taskCommandTask.id}`);
+  console.log(`- Cancelled task command task: ${cancelledTaskCommandTask.id}`);
   console.log(`- OpenAI context task: ${openAIContextTask.id}`);
   console.log(`- OpenAI auto-repair task: ${openAIAutoRepairTask.id}`);
   console.log(`- OpenAI validation repair task: ${openAIValidationRepairTask.id}`);
@@ -417,6 +419,114 @@ async function runTaskCommandFlow() {
     collected.events.some((event) => event.type === "task.command.completed" && event.data?.taskCommandRunID === commandRun.id),
     "Task command flow did not stream a completed event."
   );
+
+  return current;
+}
+
+async function runTaskCommandCancellationFlow() {
+  const task = await createTask({
+    title: "Smoke task command cancellation",
+    objective: "Start and cancel a long-running allowlisted runtime command."
+  });
+
+  await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "task command cancellation task to reach initial plan review"
+  );
+
+  let current = await post(`/tasks/${task.id}/approve-validation-preset`, {
+    presetID: "smoke-task-commands",
+    note: "Core smoke test approves the long-running task command fixture."
+  });
+  assert(
+    current.approvals?.some((approval) => approval.action === "Approve Validation Preset" && approval.targetID === "smoke-task-commands"),
+    "Task command cancellation flow did not approve the smoke-task-commands preset."
+  );
+
+  const controller = new AbortController();
+  const events = [];
+  const streamPromise = collectRuntimeEvents(controller, events);
+  await sleep(100);
+
+  const runPromise = post(`/tasks/${task.id}/run-task-command`, {
+    commandID: "smoke-long-task-command"
+  });
+
+  current = await waitForTask(
+    task.id,
+    (candidate) => candidate.taskCommandRuns?.some((run) => run.commandID === "smoke-long-task-command" && run.status === "Running"),
+    "long-running task command to enter Running"
+  );
+
+  const runningRun = current.taskCommandRuns?.find(
+    (run) => run.commandID === "smoke-long-task-command" && run.status === "Running"
+  );
+  assert(runningRun, "Task command cancellation flow did not observe a running task command.");
+
+  current = await post(`/tasks/${task.id}/cancel-task-command`, {
+    taskCommandRunID: runningRun.id,
+    note: "Core smoke test cancels the long-running task command."
+  });
+  assert(
+    current.approvals?.some((approval) => approval.action === "Cancel Task Command" && approval.targetID === runningRun.id),
+    "Task command cancellation flow did not record a cancel approval."
+  );
+  assert(
+    current.events?.some((event) => event.type === "task.command.cancel.requested"),
+    "Task command cancellation flow did not record a cancel requested event."
+  );
+
+  current = await runPromise;
+  assertState(current, "Human Review", "Command Cancelled");
+  const cancelledRun = current.taskCommandRuns?.find((run) => run.id === runningRun.id);
+  assert(cancelledRun?.status === "Cancelled", `Expected cancelled task command, got ${cancelledRun?.status}.`);
+  assert(cancelledRun.exitCode === 130, `Expected cancelled task command exit code 130, got ${cancelledRun.exitCode}.`);
+  assert(
+    cancelledRun.outputSummary.includes("cancelled by user"),
+    `Cancelled task command summary did not mention cancellation: ${cancelledRun.outputSummary}`
+  );
+  assert(
+    cancelledRun.outputChunks?.some((chunk) => chunk.stream === "system" && chunk.text.includes("Cancellation requested")),
+    "Cancelled task command did not persist the cancellation system chunk."
+  );
+  assert(
+    current.events?.some((event) => event.type === "task.command.cancelled"),
+    "Task command cancellation flow did not record a cancelled event."
+  );
+  assert(
+    !current.validationRepairBriefs?.some((brief) => brief.taskCommandRunID === runningRun.id),
+    "Task command cancellation should not create a repair brief."
+  );
+
+  const deadline = Date.now() + 2_000;
+  while (
+    Date.now() < deadline &&
+    !events.some((event) => event.type === "task.command.completed" && event.data?.taskCommandRunID === runningRun.id)
+  ) {
+    await sleep(50);
+  }
+
+  controller.abort();
+  await streamPromise;
+  assert(
+    events.some((event) => event.type === "task.command.cancel.requested" && event.data?.taskID === current.id),
+    "Task command cancellation flow did not stream the cancel requested event."
+  );
+  assert(
+    events.some((event) => event.type === "task.command.cancelled" && event.data?.taskID === current.id),
+    "Task command cancellation flow did not stream the cancelled event."
+  );
+  assert(
+    events.some((event) => event.type === "task.command.completed" && event.data?.taskCommandRunID === runningRun.id),
+    "Task command cancellation flow did not stream the completed event."
+  );
+
+  const afterComplete = await postExpectError(`/tasks/${task.id}/cancel-task-command`, {
+    taskCommandRunID: runningRun.id
+  });
+  assert(afterComplete.status === 409, `Expected completed cancellation to be rejected, got ${afterComplete.status}.`);
+  assert(afterComplete.text.includes("not running"), `Expected completed cancellation error to mention not running: ${afterComplete.text}`);
 
   return current;
 }
@@ -1283,6 +1393,7 @@ async function startRuntime(options = {}) {
       FORGE_MODEL_PROVIDER: options.providerID ?? "local",
       FORGE_MODEL_NAME: options.modelName ?? "local-deterministic-smoke",
       FORGE_OPENAI_BASE_URL: options.openAIBaseURL ?? "",
+      FORGE_ENABLE_SMOKE_COMMANDS: "1",
       OPENAI_API_KEY: options.openAIAPIKey ?? ""
     }
   });

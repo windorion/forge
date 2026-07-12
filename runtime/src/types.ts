@@ -28,6 +28,7 @@ export interface ApprovalRecord {
     | "Rollback Edit Proposal"
     | "Reject Edit Proposal"
     | "Approve Validation Preset"
+    | "Cancel Task Command"
     | "Create Git Commit"
     | "Push Git Branch"
     | "Create Git Branch"
@@ -289,7 +290,7 @@ export interface TaskCommandRun {
   cwd?: string;
   presetID?: string;
   presetName?: string;
-  status: "Running" | "Passed" | "Failed";
+  status: "Running" | "Passed" | "Failed" | "Cancelled";
   outputSummary: string;
   outputChunks: TaskCommandOutputChunk[];
   exitCode?: number;
@@ -751,6 +752,11 @@ export interface RunValidationRequest {
 
 export interface RunTaskCommandRequest {
   commandID?: string;
+}
+
+export interface CancelTaskCommandRequest {
+  taskCommandRunID?: string;
+  note?: string;
 }
 
 export interface CreateTaskMessageRequest {

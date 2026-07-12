@@ -19,6 +19,7 @@ import type {
   ApprovalRecord,
   ApprovePlanRequest,
   ApproveValidationPresetRequest,
+  CancelTaskCommandRequest,
   ContextFile,
   CreateTaskMessageRequest,
   CreateTaskRequest,
@@ -76,9 +77,11 @@ const repoRootSource = process.env.FORGE_REPO_ROOT?.trim() ? "FORGE_REPO_ROOT" :
 const rollbackSnapshotRoot = path.join(repoRoot, ".forge", "rollback-snapshots");
 const taskStore = new SqliteTaskStore(resolveDatabasePath());
 const tasks = new Map<string, ForgeTask>(taskStore.loadTasks().map((task) => [task.id, task]));
+const activeTaskCommands = new Map<string, ActiveTaskCommand>();
 let modelProviderSettings = loadModelProviderRuntimeSettings();
 let modelProvider = createModelProvider(modelProviderSettings);
 const validationCommandTimeoutMs = 60_000;
+const taskCommandCancellationGraceMs = 3_000;
 const taskCommandOutputChunkLimit = 80;
 const taskCommandOutputTextLimit = 24_000;
 const taskCommandChunkTextLimit = 4_000;
@@ -96,6 +99,7 @@ const editProposalCreateFileMaxChars = 20_000;
 const editProposalEditableFileMaxBytes = 220_000;
 const gitDiffMaxBytes = 48_000;
 const gitDiffAppPreviewLineLimit = 260;
+const enableSmokeCommands = process.env.FORGE_ENABLE_SMOKE_COMMANDS === "1";
 const repositoryIgnoredDirectories = new Set([
   ".build",
   ".forge",
@@ -239,6 +243,30 @@ type InternalValidationPreset = Omit<ValidationPreset, "commands"> & {
   commands: InternalValidationCommand[];
 };
 
+interface ActiveTaskCommand {
+  taskID: string;
+  taskCommandRunID: string;
+  child: ReturnType<typeof spawn>;
+  timeout?: ReturnType<typeof setTimeout>;
+  cancelTimeout?: ReturnType<typeof setTimeout>;
+  cancelled: boolean;
+  cancellationNote?: string;
+  cancelledAt?: string;
+}
+
+interface TaskCommandExecutionResult {
+  outputSummary: string;
+  exitCode: number;
+  cancelled?: boolean;
+}
+
+interface SpawnedTaskCommandResult {
+  exitCode: number;
+  output: string;
+  timedOut: boolean;
+  cancelled: boolean;
+}
+
 type GitDiffBuildResult = {
   text: string;
   displayMode: NonNullable<GitFileDiff["displayMode"]>;
@@ -302,6 +330,21 @@ const builtInValidationCommands: InternalValidationCommand[] = [
   }
 ];
 
+const smokeTaskValidationCommands: InternalValidationCommand[] = enableSmokeCommands
+  ? [
+      {
+        id: "smoke-long-task-command",
+        name: "Smoke long task command",
+        command: "node -e \"setTimeout(() => console.log('forge smoke long command done'), 5000)\"",
+        kind: "ProjectCommand",
+        riskLevel: "Medium",
+        cwd: "runtime",
+        executable: "node",
+        args: ["-e", "setTimeout(() => console.log('forge smoke long command done'), 5000)"]
+      }
+    ]
+  : [];
+
 const projectValidationCommands: InternalValidationCommand[] = [
   {
     id: "runtime-npm-check",
@@ -331,7 +374,8 @@ const projectValidationCommands: InternalValidationCommand[] = [
     riskLevel: "Medium",
     executable: "swift",
     args: ["build"]
-  }
+  },
+  ...smokeTaskValidationCommands
 ];
 
 const validationCommandCatalog = new Map(
@@ -365,7 +409,20 @@ const builtInValidationPresets: InternalValidationPreset[] = [
     riskLevel: "Medium",
     requiresApproval: true,
     commands: projectValidationCommands.filter((command) => command.id === "macos-swift-build")
-  }
+  },
+  ...(enableSmokeCommands
+    ? [
+        {
+          id: "smoke-task-commands",
+          name: "Smoke Task Commands",
+          description: "Test-only long-running task command used by runtime smoke coverage.",
+          source: "BuiltIn" as const,
+          riskLevel: "Medium" as const,
+          requiresApproval: true,
+          commands: smokeTaskValidationCommands
+        }
+      ]
+    : [])
 ];
 
 const defaultAgents: AgentState[] = [
@@ -651,6 +708,14 @@ const server = createServer(async (request, response) => {
     if (request.method === "POST" && runTaskCommandTaskID) {
       const input = await readJson<RunTaskCommandRequest>(request);
       const task = await runTaskCommand(runTaskCommandTaskID, input);
+      writeJson(response, 200, task);
+      return;
+    }
+
+    const cancelTaskCommandTaskID = taskIDFromActionPath(url.pathname, "cancel-task-command");
+    if (request.method === "POST" && cancelTaskCommandTaskID) {
+      const input = await readJson<CancelTaskCommandRequest>(request);
+      const task = await cancelTaskCommand(cancelTaskCommandTaskID, input);
       writeJson(response, 200, task);
       return;
     }
@@ -6066,7 +6131,7 @@ async function runTaskCommand(taskID: string, input: RunTaskCommandRequest): Pro
       : await runProjectTaskCommand(command, task, commandRun);
     commandRun.exitCode = output.exitCode;
     commandRun.outputSummary = output.outputSummary;
-    commandRun.status = output.exitCode === 0 ? "Passed" : "Failed";
+    commandRun.status = output.cancelled ? "Cancelled" : output.exitCode === 0 ? "Passed" : "Failed";
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     commandRun.status = "Failed";
@@ -6077,20 +6142,25 @@ async function runTaskCommand(taskID: string, input: RunTaskCommandRequest): Pro
   const endedAt = new Date().toISOString();
   commandRun.endedAt = endedAt;
   const passed = commandRun.status === "Passed";
-  task.status = passed ? "Human Review" : "Failed";
-  task.currentPhase = passed ? "Command Passed" : "Command Failed";
+  const cancelled = commandRun.status === "Cancelled";
+  task.status = passed || cancelled ? "Human Review" : "Failed";
+  task.currentPhase = passed ? "Command Passed" : cancelled ? "Command Cancelled" : "Command Failed";
   task.reviewSummary = commandRun.outputSummary;
   setAgent(
     task,
     "Tester",
     passed ? "Done" : "Blocked",
-    passed ? `${command.name} passed.` : `${command.name} failed.`
+    passed ? `${command.name} passed.` : cancelled ? `${command.name} was cancelled.` : `${command.name} failed.`
   );
   setAgent(
     task,
     "Reviewer",
     "Active",
-    passed ? "Command output is ready for review." : "Review failed command output before continuing."
+    passed
+      ? "Command output is ready for review."
+      : cancelled
+        ? "Command was cancelled; review output before rerunning."
+        : "Review failed command output before continuing."
   );
   upsertPlanStep(task, {
     id: `run-task-command-${command.id}`,
@@ -6100,8 +6170,12 @@ async function runTaskCommand(taskID: string, input: RunTaskCommandRequest): Pro
   });
 
   const finished = event(
-    passed ? "task.command.passed" : "task.command.failed",
-    passed ? `Task command passed: ${command.name}.` : `Task command failed: ${command.name}.`
+    passed ? "task.command.passed" : cancelled ? "task.command.cancelled" : "task.command.failed",
+    passed
+      ? `Task command passed: ${command.name}.`
+      : cancelled
+        ? `Task command cancelled: ${command.name}.`
+        : `Task command failed: ${command.name}.`
   );
   finished.createdAt = endedAt;
   saveAndBroadcast(task, finished);
@@ -6111,9 +6185,86 @@ async function runTaskCommand(taskID: string, input: RunTaskCommandRequest): Pro
     commandRun,
     task
   });
-  if (!passed) {
+  if (!passed && !cancelled) {
     await createValidationRepairBriefForTaskCommandRun(task, commandRun);
   }
+  return task;
+}
+
+async function cancelTaskCommand(taskID: string, input: CancelTaskCommandRequest): Promise<ForgeTask> {
+  const task = tasks.get(taskID);
+  if (!task) {
+    throw new HttpError(404, `Task not found: ${taskID}`);
+  }
+
+  const requestedRunID = input.taskCommandRunID?.trim();
+  const commandRun = requestedRunID
+    ? task.taskCommandRuns.find((run) => run.id === requestedRunID)
+    : [...task.taskCommandRuns].reverse().find((run) => run.status === "Running");
+  if (!commandRun) {
+    throw new HttpError(404, requestedRunID ? `Task command run not found: ${requestedRunID}` : "No task command run found.");
+  }
+
+  if (commandRun.status !== "Running") {
+    throw new HttpError(409, `Task command is not running: ${commandRun.status}.`);
+  }
+
+  const active = activeTaskCommands.get(commandRun.id);
+  if (!active || active.taskID !== task.id) {
+    throw new HttpError(409, "Task command is not cancellable by this runtime process.");
+  }
+
+  if (active.cancelled) {
+    return task;
+  }
+
+  const now = new Date().toISOString();
+  const note = input.note?.trim();
+  active.cancelled = true;
+  active.cancelledAt = now;
+  active.cancellationNote = note || undefined;
+
+  commandRun.outputSummary = "Cancellation requested. Waiting for process to exit.";
+  task.status = "Testing";
+  task.currentPhase = "Command Cancelling";
+  task.reviewSummary = `Stopping task command: ${commandRun.name}.`;
+  setAgent(task, "Tester", "Active", `Stopping ${commandRun.command}.`);
+  setAgent(task, "Reviewer", "Idle", "Waiting for command to stop.");
+  upsertPlanStep(task, {
+    id: `run-task-command-${commandRun.commandID}`,
+    title: "Run task command",
+    status: "Active",
+    summary: "Cancellation requested; waiting for the process to exit."
+  });
+
+  appendTaskCommandOutputChunk(task, commandRun, "system", "Cancellation requested by user. Sending SIGTERM.\n");
+  active.cancelTimeout = setTimeout(() => {
+    appendTaskCommandOutputChunk(
+      task,
+      commandRun,
+      "system",
+      `Command did not stop after ${taskCommandCancellationGraceMs / 1000}s. Sending SIGKILL.\n`
+    );
+    active.child.kill("SIGKILL");
+  }, taskCommandCancellationGraceMs);
+  const signalSent = active.child.kill("SIGTERM");
+  if (!signalSent) {
+    appendTaskCommandOutputChunk(task, commandRun, "system", "Process was already exiting when cancellation was requested.\n");
+  }
+
+  task.approvals.push({
+    id: randomUUID(),
+    action: "Cancel Task Command",
+    decision: "Approved",
+    summary: `Cancel requested for task command: ${commandRun.name}.`,
+    decidedAt: now,
+    targetID: commandRun.id,
+    userNote: note || undefined
+  });
+
+  const requested = event("task.command.cancel.requested", `Task command cancellation requested: ${commandRun.name}.`);
+  requested.createdAt = now;
+  saveAndBroadcast(task, requested);
   return task;
 }
 
@@ -6148,7 +6299,7 @@ async function runBuiltInTaskCommand(
   command: InternalValidationCommand,
   task: ForgeTask,
   commandRun: TaskCommandRun
-): Promise<{ outputSummary: string; exitCode: number }> {
+): Promise<TaskCommandExecutionResult> {
   const outputSummary = await runBuiltInValidationCommand(command, task);
   appendTaskCommandOutputChunk(task, commandRun, "system", `${outputSummary.outputSummary}\n`);
   return {
@@ -6161,16 +6312,19 @@ async function runProjectTaskCommand(
   command: InternalValidationCommand,
   task: ForgeTask,
   commandRun: TaskCommandRun
-): Promise<{ outputSummary: string; exitCode: number }> {
+): Promise<TaskCommandExecutionResult> {
   if (!command.executable || !command.args) {
     throw new Error(`Project task command is missing executable metadata: ${command.command}`);
   }
 
   const cwd = resolvePresetCommandCwd(command.cwd);
-  const { exitCode, output } = await runSpawnedTaskCommand(command, cwd, task, commandRun);
+  const result = await runSpawnedTaskCommand(command, cwd, task, commandRun);
   return {
-    outputSummary: summarizeCommandOutput(command.command, exitCode, output),
-    exitCode
+    outputSummary: result.cancelled
+      ? `${command.command} cancelled by user.`
+      : summarizeCommandOutput(command.command, result.exitCode, result.output),
+    exitCode: result.exitCode,
+    cancelled: result.cancelled
   };
 }
 
@@ -6179,7 +6333,7 @@ function runSpawnedTaskCommand(
   cwd: string,
   task: ForgeTask,
   commandRun: TaskCommandRun
-): Promise<{ exitCode: number; output: string }> {
+): Promise<SpawnedTaskCommandResult> {
   const executable = command.executable;
   const args = command.args;
   if (!executable || !args) {
@@ -6192,10 +6346,18 @@ function runSpawnedTaskCommand(
       shell: false,
       env: { ...process.env, CI: "1" }
     });
+    const active: ActiveTaskCommand = {
+      taskID: task.id,
+      taskCommandRunID: commandRun.id,
+      child,
+      cancelled: false
+    };
+    activeTaskCommands.set(commandRun.id, active);
 
     let output = "";
     let timedOut = false;
     let timeoutMessage = "";
+    let settled = false;
     const appendOutput = (stream: TaskCommandOutputChunk["stream"], chunk: Buffer) => {
       const text = chunk.toString("utf8");
       output += text;
@@ -6211,18 +6373,38 @@ function runSpawnedTaskCommand(
       child.kill("SIGTERM");
       appendTaskCommandOutputChunk(task, commandRun, "system", timeoutMessage);
     }, validationCommandTimeoutMs);
+    active.timeout = timeout;
+
+    const clearActiveCommand = () => {
+      clearTimeout(timeout);
+      if (active.cancelTimeout) {
+        clearTimeout(active.cancelTimeout);
+      }
+      activeTaskCommands.delete(commandRun.id);
+    };
 
     child.stdout.on("data", (chunk: Buffer) => appendOutput("stdout", chunk));
     child.stderr.on("data", (chunk: Buffer) => appendOutput("stderr", chunk));
     child.on("error", (error: Error) => {
-      clearTimeout(timeout);
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearActiveCommand();
       reject(error);
     });
     child.on("close", (code: number | null) => {
-      clearTimeout(timeout);
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearActiveCommand();
+      const cancelled = active.cancelled;
       resolve({
-        exitCode: timedOut ? 124 : code ?? 1,
-        output: timedOut ? `${output}${timeoutMessage}` : output
+        exitCode: cancelled ? 130 : timedOut ? 124 : code ?? 1,
+        output: cancelled ? output : timedOut ? `${output}${timeoutMessage}` : output,
+        timedOut,
+        cancelled
       });
     });
   });
@@ -8347,6 +8529,7 @@ function renderRuntimeHome(): string {
       <li><code>POST /tasks/:taskID/approve-validation-preset</code></li>
       <li><code>POST /tasks/:taskID/run-validation</code></li>
       <li><code>POST /tasks/:taskID/run-task-command</code></li>
+      <li><code>POST /tasks/:taskID/cancel-task-command</code></li>
       <li><code>GET /events</code></li>
     </ul>
   </main>

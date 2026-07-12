@@ -25,8 +25,8 @@ dashboard.
   patch orchestration, rollback revalidation/recovery, and provider-driven
   source repair flows while keeping strict path validation and pre-apply
   checks.
-- Extend approved task-scoped command execution with cancellation hooks,
-  command selection, and clearer active-run controls.
+- Extend approved task-scoped command execution with richer command selection,
+  clearer active-run controls, and first-class rerun evidence.
 - Add rerun evidence after a reviewed self-fix proposal so Forge can show the
   failed command, proposed fix, applied patch, and passing command as one
   coherent loop.
@@ -95,6 +95,14 @@ dashboard.
 
 ## Done Recently
 
+- Added cancellation for active spawned task command runs. The runtime exposes
+  `POST /tasks/:taskID/cancel-task-command`, only cancels runtime-owned active
+  command runs by run id, sends SIGTERM with a short SIGKILL grace path,
+  records a `Cancel Task Command` audit entry, emits cancellation SSE events,
+  stores cancellation system output chunks, returns cancelled runs to human
+  review without repair briefs, and exposes a Cancel Command action in the
+  macOS session action rail. `npm run smoke:core` now covers the running to
+  cancelled lifecycle through a smoke-only long command fixture.
 - Connected failed task-command output to the existing repair path. Failed
   `run-task-command` runs now generate provider repair briefs linked by
   `taskCommandRunID`; the macOS Tests/Review surfaces display command-sourced

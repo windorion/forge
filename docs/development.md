@@ -325,6 +325,7 @@ sessions:
 
 ```text
 POST /tasks/:taskID/run-task-command
+POST /tasks/:taskID/cancel-task-command
 ```
 
 The request accepts only a runtime-known `commandID`. It reuses validation
@@ -344,7 +345,12 @@ fails, the runtime asks the model provider for a repair brief linked to the
 failed `taskCommandRunID`. The same `Generate Self-Fix` action calls
 `POST /tasks/:taskID/generate-validation-repair-proposal` and can produce a
 review-only repair proposal from that command-sourced brief. Cancellation, a
-richer command chooser, and automatic rerun evidence are still future work.
+active-run controls now include a Cancel Command action: the app calls
+`POST /tasks/:taskID/cancel-task-command` with the active task command run id,
+the runtime sends SIGTERM with a short SIGKILL grace path, records a
+`Cancel Task Command` audit entry, streams a system output chunk, and marks the
+run `Cancelled` without generating a repair brief. A richer command chooser
+and automatic rerun evidence are still future work.
 
 Current validation presets:
 
@@ -513,8 +519,9 @@ cd runtime && npm run smoke:git-remote
   allowlisted validation presets; they are not arbitrary shell execution.
 - Task command runs reuse those approvals for one command ID at a time and
   stream bounded output chunks into task state. They are not arbitrary shell
-  execution, do not yet support cancellation, and do not yet rerun failed
-  commands after reviewed fixes.
+  execution; cancellation is limited to active runtime-owned task command runs
+  by run id, and failed commands do not yet rerun automatically after reviewed
+  fixes.
 - SQLite currently stores full task snapshots plus basic task index fields; the
   full normalized runs/messages/tool-calls schema is still ahead.
 - Repository context is still a bounded v1 scanner, not a full repository

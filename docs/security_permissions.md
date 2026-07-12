@@ -109,7 +109,11 @@ validation/command runs, runs project commands with `spawn` and `shell:false`,
 stores bounded output chunks plus exit status, and streams command output to
 the app. Failed task-command output can generate a provider repair brief and a
 linked review-only self-fix proposal through the existing human-gated proposal
-path. It does not yet cancel active commands or automatically rerun failed
+path. Active task commands can be cancelled through `POST
+/tasks/:taskID/cancel-task-command`, but only by referencing a runtime-owned
+active `taskCommandRunID`; the API never accepts arbitrary PIDs or shell text.
+Cancellation records an audit entry and marks the run `Cancelled` rather than
+creating a failure repair brief. It does not yet automatically rerun failed
 commands after a reviewed fix is applied.
 
 ### High Risk

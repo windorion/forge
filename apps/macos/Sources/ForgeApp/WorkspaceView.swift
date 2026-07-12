@@ -1592,6 +1592,8 @@ private struct TaskCommandTerminalCard: View {
             return ForgeDesign.danger
         case "Running":
             return ForgeDesign.warning
+        case "Cancelled":
+            return ForgeDesign.muted
         default:
             return ForgeDesign.accent
         }
@@ -1869,6 +1871,17 @@ private struct AgentRunActionsCard: View {
             .disabled(!canRunRuntimeCheck)
 
             Button {
+                if let latestRunningTaskCommandRun {
+                    workspace.cancelTaskCommand(for: task, run: latestRunningTaskCommandRun)
+                }
+            } label: {
+                Label(cancelTaskCommandTitle, systemImage: "stop.circle")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ForgeSecondaryButtonStyle())
+            .disabled(!canCancelTaskCommand)
+
+            Button {
                 workspace.runValidation(for: task)
             } label: {
                 Label(runValidationTitle, systemImage: "play.circle")
@@ -1922,6 +1935,16 @@ private struct AgentRunActionsCard: View {
         workspace.isRunningTaskCommand(taskID: task.id)
     }
 
+    private var latestRunningTaskCommandRun: TaskCommandRun? {
+        task.taskCommandRuns.reversed().first { run in
+            run.status == "Running"
+        }
+    }
+
+    private var isCancellingTaskCommand: Bool {
+        workspace.isCancellingTaskCommand(runID: latestRunningTaskCommandRun?.id)
+    }
+
     private var hasApprovedRuntimeCheckCommand: Bool {
         task.approvals.contains { approval in
             approval.action == "Approve Validation Preset" &&
@@ -1936,7 +1959,8 @@ private struct AgentRunActionsCard: View {
             !isRunningTaskCommand &&
             !isRunningValidation &&
             !isRollingBackEditProposal &&
-            !isGeneratingValidationRepairProposal
+            !isGeneratingValidationRepairProposal &&
+            !isCancellingTaskCommand
     }
 
     private var runRuntimeCheckTitle: String {
@@ -1949,6 +1973,14 @@ private struct AgentRunActionsCard: View {
         return "Run Runtime Check"
     }
 
+    private var canCancelTaskCommand: Bool {
+        latestRunningTaskCommandRun != nil && !isCancellingTaskCommand
+    }
+
+    private var cancelTaskCommandTitle: String {
+        isCancellingTaskCommand ? "Cancelling Command" : "Cancel Command"
+    }
+
     private var canGenerateEditProposal: Bool {
         task.executionProposal != nil &&
             (task.editProposal == nil || task.editProposal?.status == "Rejected") &&
@@ -1957,7 +1989,8 @@ private struct AgentRunActionsCard: View {
             !isApplyingEditProposal &&
             !isRollingBackEditProposal &&
             !isRejectingEditProposal &&
-            !isRunningTaskCommand
+            !isRunningTaskCommand &&
+            !isCancellingTaskCommand
     }
 
     private var generateEditProposalTitle: String {
@@ -1980,7 +2013,8 @@ private struct AgentRunActionsCard: View {
             !isRollingBackEditProposal &&
             !isGeneratingValidationRepairProposal &&
             !isRejectingEditProposal &&
-            !isRunningTaskCommand
+            !isRunningTaskCommand &&
+            !isCancellingTaskCommand
     }
 
     private var validateEditProposalTitle: String {
@@ -1995,7 +2029,8 @@ private struct AgentRunActionsCard: View {
             !isRollingBackEditProposal &&
             !isGeneratingValidationRepairProposal &&
             !isRejectingEditProposal &&
-            !isRunningTaskCommand
+            !isRunningTaskCommand &&
+            !isCancellingTaskCommand
     }
 
     private var applyEditProposalTitle: String {
@@ -2014,7 +2049,8 @@ private struct AgentRunActionsCard: View {
             !isApplyingEditProposal &&
             !isRollingBackEditProposal &&
             !isGeneratingValidationRepairProposal &&
-            !isRunningTaskCommand
+            !isRunningTaskCommand &&
+            !isCancellingTaskCommand
     }
 
     private var rollbackEditProposalTitle: String {
@@ -2033,7 +2069,8 @@ private struct AgentRunActionsCard: View {
             !isRollingBackEditProposal &&
             !isGeneratingValidationRepairProposal &&
             !isRejectingEditProposal &&
-            !isRunningTaskCommand
+            !isRunningTaskCommand &&
+            !isCancellingTaskCommand
     }
 
     private var rejectEditProposalTitle: String {
@@ -2046,7 +2083,8 @@ private struct AgentRunActionsCard: View {
             !isRunningValidation &&
             !isRollingBackEditProposal &&
             !isGeneratingValidationRepairProposal &&
-            !isRunningTaskCommand
+            !isRunningTaskCommand &&
+            !isCancellingTaskCommand
     }
 
     private var runValidationTitle: String {
@@ -2112,7 +2150,8 @@ private struct AgentRunActionsCard: View {
             !isApplyingEditProposal &&
             !isRejectingEditProposal &&
             !isRunningValidation &&
-            !isRunningTaskCommand
+            !isRunningTaskCommand &&
+            !isCancellingTaskCommand
     }
 
     private var generateRepairTitle: String {

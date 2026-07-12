@@ -100,6 +100,7 @@ The runtime exposes:
 
 ```text
 POST /tasks/:taskID/run-task-command
+POST /tasks/:taskID/cancel-task-command
 ```
 
 The request accepts a `commandID` only. The command must already exist in the
@@ -114,6 +115,13 @@ SSE events. Failed task-scoped commands generate provider repair briefs linked
 to `taskCommandRunID`; the same explicit repair-proposal endpoint can then
 create a review-only self-fix proposal without applying files automatically.
 
+Active spawned task-scoped commands can be cancelled by `taskCommandRunID`.
+Cancellation is not arbitrary process control: the runtime only cancels an
+active child process it started for the given task command run. A cancellation
+request records a `Cancel Task Command` approval/audit entry, appends a system
+output chunk, emits cancellation events, and marks the command `Cancelled`
+when the process exits. Cancelled commands do not create failure repair briefs.
+
 ## Safety Rules
 
 - Workspace preset ids must be lowercase, dash-separated identifiers.
@@ -123,6 +131,8 @@ create a review-only self-fix proposal without applying files automatically.
 - Command cwd values are runtime-owned and must resolve inside the repo.
 - Permission cards show command boundaries before approval or execution.
 - Exit code and output summary are recorded for every command.
+- Cancellation accepts only task command run ids for active runtime-owned
+  processes, never raw PIDs or shell text.
 - Task-scoped command output chunks are bounded before persistence.
 - Failed commands make the validation run fail.
 - Failed validation runs and failed task-scoped commands can trigger a

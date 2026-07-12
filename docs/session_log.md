@@ -2918,3 +2918,43 @@ Next:
 - Add an approved-command chooser in the session UI.
 - Add rerun evidence after applying a self-fix proposal so failed command,
   repair proposal, applied patch, and passing command appear as one loop.
+
+### 2026-07-12 20:37:18 CEST +0200
+
+Conversation summary:
+
+- User asked to continue the next step. The next development task added
+  cancellation for active task-scoped command runs so Forge's live agent
+  session has a visible stop control for running checks.
+
+Done:
+
+- Added `POST /tasks/:taskID/cancel-task-command` with `taskCommandRunID` input.
+- Scoped cancellation to runtime-owned active child processes only; the API
+  does not accept arbitrary PIDs or shell text.
+- Added active task command process tracking, SIGTERM cancellation, a short
+  SIGKILL grace path, cleanup on close/error, and `Cancelled` task command
+  status handling.
+- Recorded `Cancel Task Command` audit entries, system output chunks, and
+  cancellation SSE events.
+- Kept cancelled commands out of the failed-command repair brief path.
+- Added macOS RuntimeClient, WorkspaceModel, action rail, and terminal status
+  handling for cancel command behavior.
+- Added a smoke-only long-running command fixture and `npm run smoke:core`
+  coverage for Running to Cancelled lifecycle.
+- Updated README, project status, TODO, runtime architecture, validation
+  preset, security, development, and V0 scope docs.
+
+Not done:
+
+- Did not add the richer approved-command chooser.
+- Did not add rerun evidence after reviewed self-fix proposals.
+- Did not implement full provider-driven read/search/patch/run/repair
+  orchestration.
+
+Next:
+
+- Add a command chooser that lists approved runtime-known commands instead of
+  only the `runtime-npm-check` shortcut.
+- Add rerun evidence after applying a self-fix proposal.
+- Continue toward the provider-driven agent loop.

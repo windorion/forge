@@ -812,6 +812,11 @@ struct RunTaskCommandRequest: Encodable {
     var commandID: String
 }
 
+struct CancelTaskCommandRequest: Encodable {
+    var taskCommandRunID: String?
+    var note: String?
+}
+
 struct CreateTaskMessageRequest: Encodable {
     var content: String
 }

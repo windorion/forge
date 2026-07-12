@@ -42,6 +42,7 @@ final class WorkspaceModel: ObservableObject {
     @Published private var rejectingEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var runningValidationTaskIDs = Set<ForgeTask.ID>()
     @Published private var runningTaskCommandTaskIDs = Set<ForgeTask.ID>()
+    @Published private var cancellingTaskCommandRunIDs = Set<TaskCommandRun.ID>()
     @Published private var approvingValidationPresetTaskIDs = Set<String>()
     @Published private var refreshingGitStatus = false
     @Published private var loadingGitDiffPaths = Set<String>()
@@ -583,6 +584,43 @@ final class WorkspaceModel: ObservableObject {
 
     func isRunningTaskCommand(taskID: ForgeTask.ID) -> Bool {
         runningTaskCommandTaskIDs.contains(taskID)
+    }
+
+    func cancelTaskCommand(for task: ForgeTask, run: TaskCommandRun? = nil) {
+        let runningRun = run ?? task.taskCommandRuns.reversed().first { $0.status == "Running" }
+        guard let runningRun else {
+            statusMessage = "No running task command to cancel."
+            return
+        }
+
+        cancellingTaskCommandRunIDs.insert(runningRun.id)
+
+        Task {
+            do {
+                let updatedTask = try await runtime.cancelTaskCommand(
+                    taskID: task.id,
+                    taskCommandRunID: runningRun.id,
+                    note: "Cancelled from Forge macOS app."
+                )
+                upsert(updatedTask)
+                selectedTaskID = updatedTask.id
+                statusMessage = "Task command cancellation requested."
+                await refreshValidationPermissionSnapshotIfPossible(for: updatedTask.id)
+                startEventStream()
+            } catch {
+                statusMessage = "Cancel task command failed: \(error.localizedDescription)"
+            }
+
+            cancellingTaskCommandRunIDs.remove(runningRun.id)
+        }
+    }
+
+    func isCancellingTaskCommand(runID: TaskCommandRun.ID?) -> Bool {
+        guard let runID else {
+            return false
+        }
+
+        return cancellingTaskCommandRunIDs.contains(runID)
     }
 
     func validationPermissions(for taskID: ForgeTask.ID) -> [ValidationPresetPermission] {

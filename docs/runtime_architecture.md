@@ -383,9 +383,19 @@ chunks in task state. The runtime emits `task.command.started`,
 Tests tab can show command output as a live coding-agent surface.
 
 Failed task-command output is now connected to the repair-brief/self-fix
-proposal loop. Current gaps: cancellation is not wired yet, the app exposes
-only a first `runtime-npm-check` shortcut, and Forge does not yet automatically
-rerun the failed command after a reviewed fix is applied.
+proposal loop.
+
+Active spawned task commands can be stopped through
+`POST /tasks/:taskID/cancel-task-command` with a `taskCommandRunID`. The
+runtime never accepts arbitrary PIDs; it cancels only the active child process
+it started for that run, records a `Cancel Task Command` audit entry, appends a
+system output chunk, emits `task.command.cancel.requested` and
+`task.command.cancelled`, and marks the run `Cancelled` instead of `Failed`.
+Cancelled commands return to human review and do not generate repair briefs.
+
+Current gaps: the app exposes only a first `runtime-npm-check` shortcut, and
+Forge does not yet automatically rerun the failed command after a reviewed fix
+is applied.
 
 ### Permission Manager
 
