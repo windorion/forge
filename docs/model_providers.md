@@ -57,13 +57,13 @@ model again for the revision. After plan approval, the runtime runs a bounded
 read-only execution-context pass before asking for the execution proposal, so
 the provider sees updated context without directly running tools. During edit
 proposal generation, the runtime can also feed blocked validation checks back
-to the provider for a bounded repair loop. When validation commands fail, the
-runtime can ask the provider for a repair brief from compact command summaries.
-A later edit proposal request can include that repair brief so the provider
-proposes a narrow follow-up repair artifact. The runtime still generates IDs,
-timestamps, validation state, execution proposal evidence, and restricted
-apply operations locally. The remote provider never directly edits files, runs
-commands, commits, pushes, or executes tools.
+to the provider for a bounded repair loop. When validation commands or
+task-scoped commands fail, the runtime can ask the provider for a repair brief
+from compact command summaries. A later edit proposal request can include that
+repair brief so the provider proposes a narrow follow-up repair artifact. The
+runtime still generates IDs, timestamps, validation state, execution proposal
+evidence, and restricted apply operations locally. The remote provider never
+directly edits files, runs commands, commits, pushes, or executes tools.
 
 ## Configuration
 
@@ -103,8 +103,8 @@ Remote-provider privacy boundary:
 
 - Forge sends compact task state, recent task messages, file reference
   summaries, context file summaries, current plan steps, changed-file names,
-  proposal metadata, and compact validation command summaries for repair
-  briefs.
+  proposal metadata, compact validation command summaries, and compact
+  task-command summaries for repair briefs.
 - Forge does not upload whole repositories in this provider slice.
 - Users should still treat `FORGE_MODEL_PROVIDER=openai` as explicit consent
   to send selected task context to OpenAI or the configured compatible base
@@ -156,7 +156,7 @@ A provider receives task state and returns structured output. Current output:
 - restricted apply operations
 - preview-only unsupported operations for review artifacts
 - validation feedback for bounded proposal repair attempts
-- validation failure repair brief summaries
+- validation and task-command failure repair brief summaries
 - validation repair brief context for follow-up proposals
 - risk level
 - generated timestamp

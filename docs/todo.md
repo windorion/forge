@@ -27,8 +27,9 @@ dashboard.
   checks.
 - Extend approved task-scoped command execution with cancellation hooks,
   command selection, and clearer active-run controls.
-- Connect failed task-command output to the existing repair-brief/proposal loop
-  so Forge can produce a reviewable self-fix after failed tests.
+- Add rerun evidence after a reviewed self-fix proposal so Forge can show the
+  failed command, proposed fix, applied patch, and passing command as one
+  coherent loop.
 - Keep the current trust gates: plan approval before mutation, human review
   before apply, explicit command approval, and explicit git actions.
 
@@ -94,6 +95,12 @@ dashboard.
 
 ## Done Recently
 
+- Connected failed task-command output to the existing repair path. Failed
+  `run-task-command` runs now generate provider repair briefs linked by
+  `taskCommandRunID`; the macOS Tests/Review surfaces display command-sourced
+  briefs; and `generate-validation-repair-proposal` can create a linked,
+  review-only self-fix proposal from a failed live command without applying
+  files automatically.
 - Added approved task-scoped command execution for runtime-known command IDs:
   `POST /tasks/:taskID/run-task-command` accepts only command IDs, reuses
   validation-preset approvals, blocks concurrent command/validation runs, runs

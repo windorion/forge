@@ -2872,3 +2872,49 @@ Next:
 - Add cancellation for active task command runs.
 - Add a command chooser that lists approved runtime-known commands instead of
   only the `runtime-npm-check` shortcut.
+
+### 2026-07-12 20:21:55 CEST +0200
+
+Conversation summary:
+
+- User asked to continue the next step after the streamed task-command runner.
+  The next development task connected failed task command output to the
+  existing repair brief and self-fix proposal flow.
+
+Done:
+
+- Extended repair briefs so they can point to either `validationRunID` or
+  `taskCommandRunID`.
+- Updated the model-provider request path so OpenAI/local providers can create
+  repair briefs from failed task-command output.
+- Added automatic provider repair brief generation after a failed
+  `run-task-command`.
+- Updated `generate-validation-repair-proposal` so it can generate a linked,
+  review-only repair proposal from either a failed validation run or a failed
+  task command run.
+- Preserved the human review gate: command failure repair proposals do not
+  apply files automatically.
+- Updated macOS decoding and UI so command-sourced repair briefs show in Tests
+  and Review surfaces, and `Generate Self-Fix` can work for command failures.
+- Extended `npm run smoke:core` with an OpenAI mock flow for failed task
+  command output to repair brief to linked repair proposal.
+- Updated README, project status, TODO, runtime architecture, model provider,
+  edit proposal, validation preset, security, development, and V0 docs.
+- Verified `npm run check`, `npm run smoke:core`, and `swift build`.
+
+Not done:
+
+- Did not add cancellation for active task commands.
+- Did not add an approved-command chooser beyond the current runtime check
+  shortcut.
+- Did not automatically rerun the failed command after a reviewed self-fix is
+  applied.
+- Did not make the provider run loop autonomously choose read/search/patch/run
+  steps yet.
+
+Next:
+
+- Add cancellation for active task command runs.
+- Add an approved-command chooser in the session UI.
+- Add rerun evidence after applying a self-fix proposal so failed command,
+  repair proposal, applied patch, and passing command appear as one loop.

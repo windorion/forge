@@ -107,8 +107,10 @@ session instead of only as post-apply validation. `POST
 /tasks/:taskID/run-task-command` accepts no raw shell, blocks concurrent
 validation/command runs, runs project commands with `spawn` and `shell:false`,
 stores bounded output chunks plus exit status, and streams command output to
-the app. It does not yet cancel active commands or automatically create
-self-fix proposals from failed task-command output.
+the app. Failed task-command output can generate a provider repair brief and a
+linked review-only self-fix proposal through the existing human-gated proposal
+path. It does not yet cancel active commands or automatically rerun failed
+commands after a reviewed fix is applied.
 
 ### High Risk
 

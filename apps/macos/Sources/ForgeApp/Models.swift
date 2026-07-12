@@ -184,7 +184,10 @@ struct ValidationRun: Identifiable, Codable, Hashable {
 struct ValidationRepairBrief: Identifiable, Codable, Hashable {
     var id: String
     var provider: ModelProviderInfo
-    var validationRunID: String
+    var validationRunID: String?
+    var taskCommandRunID: String?
+    var source: String?
+    var sourceSummary: String?
     var summary: String
     var likelyCause: String
     var recommendedActions: [String]

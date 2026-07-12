@@ -114,7 +114,11 @@ function parseTaskPayload(payload: unknown): ForgeTask {
       riskLevel: run.riskLevel ?? "Low",
       commands: run.commands ?? []
     })),
-    validationRepairBriefs: parsed.validationRepairBriefs ?? [],
+    validationRepairBriefs: (parsed.validationRepairBriefs ?? []).map((brief) => ({
+      ...brief,
+      source: brief.source ?? (brief.taskCommandRunID ? "TaskCommandRun" : "ValidationRun"),
+      sourceSummary: brief.sourceSummary ?? (brief.taskCommandRunID ? "Task command failure" : "Validation failure")
+    })),
     messages: (parsed.messages ?? []).map((message) => ({
       ...message,
       fileReferences: message.fileReferences ?? []

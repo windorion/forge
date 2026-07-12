@@ -314,7 +314,10 @@ export interface ValidationRun {
 export interface ValidationRepairBrief {
   id: string;
   provider: ModelProviderInfo;
-  validationRunID: string;
+  validationRunID?: string;
+  taskCommandRunID?: string;
+  source?: "ValidationRun" | "TaskCommandRun";
+  sourceSummary?: string;
   summary: string;
   likelyCause: string;
   recommendedActions: string[];

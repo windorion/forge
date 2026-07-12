@@ -1481,13 +1481,34 @@ private struct AgentTestsTab: View {
 
                 if !task.validationRepairBriefs.isEmpty {
                     ForEach(task.validationRepairBriefs.reversed()) { brief in
-                        ValidationRepairBriefCard(brief: brief, validationRun: task.validationRuns.first { $0.id == brief.validationRunID }, isCurrentProposalSource: task.editProposal?.validationRepairBriefID == brief.id)
+                        ValidationRepairBriefCard(
+                            brief: brief,
+                            validationRun: validationRun(for: brief.validationRunID),
+                            taskCommandRun: taskCommandRun(for: brief.taskCommandRunID),
+                            isCurrentProposalSource: task.editProposal?.validationRepairBriefID == brief.id
+                        )
                     }
                 }
             }
             .padding(14)
         }
         .forgeCard(shadow: false)
+    }
+
+    private func validationRun(for id: String?) -> ValidationRun? {
+        guard let id else {
+            return nil
+        }
+
+        return task.validationRuns.first { $0.id == id }
+    }
+
+    private func taskCommandRun(for id: String?) -> TaskCommandRun? {
+        guard let id else {
+            return nil
+        }
+
+        return task.taskCommandRuns.first { $0.id == id }
     }
 }
 
@@ -2044,6 +2065,12 @@ private struct AgentRunActionsCard: View {
         }
     }
 
+    private var latestFailedTaskCommandRun: TaskCommandRun? {
+        task.taskCommandRuns.reversed().first { run in
+            run.status == "Failed"
+        }
+    }
+
     private var latestValidationRepairBrief: ValidationRepairBrief? {
         guard let latestFailedValidationRun else {
             return nil
@@ -2054,11 +2081,31 @@ private struct AgentRunActionsCard: View {
         }
     }
 
+    private var latestTaskCommandRepairBrief: ValidationRepairBrief? {
+        guard let latestFailedTaskCommandRun else {
+            return nil
+        }
+
+        return task.validationRepairBriefs.reversed().first { brief in
+            brief.taskCommandRunID == latestFailedTaskCommandRun.id
+        }
+    }
+
+    private var latestRepairBrief: ValidationRepairBrief? {
+        if let latestTaskCommandRepairBrief,
+           latestFailedValidationRun == nil ||
+            (latestFailedTaskCommandRun?.endedAt ?? latestFailedTaskCommandRun?.startedAt ?? "") >=
+            (latestFailedValidationRun?.endedAt ?? latestFailedValidationRun?.startedAt ?? "") {
+            return latestTaskCommandRepairBrief
+        }
+
+        return latestValidationRepairBrief ?? latestTaskCommandRepairBrief
+    }
+
     private var canGenerateValidationRepairProposal: Bool {
         task.executionProposal != nil &&
-            task.editProposal?.status == "Applied" &&
-            latestFailedValidationRun != nil &&
-            latestValidationRepairBrief != nil &&
+            task.editProposal?.status != "Proposed" &&
+            latestRepairBrief != nil &&
             !isGeneratingValidationRepairProposal &&
             !isGeneratingEditProposal &&
             !isValidatingEditProposal &&
@@ -2069,7 +2116,13 @@ private struct AgentRunActionsCard: View {
     }
 
     private var generateRepairTitle: String {
-        isGeneratingValidationRepairProposal ? "Generating Repair" : "Generate Self-Fix"
+        if isGeneratingValidationRepairProposal {
+            return "Generating Repair"
+        }
+        if task.editProposal?.validationRepairBriefID == latestRepairBrief?.id {
+            return "Self-Fix Ready"
+        }
+        return "Generate Self-Fix"
     }
 }
 
@@ -2847,6 +2900,7 @@ private struct ReviewPanel: View {
                             ValidationRepairBriefCard(
                                 brief: brief,
                                 validationRun: validationRun(for: brief.validationRunID),
+                                taskCommandRun: taskCommandRun(for: brief.taskCommandRunID),
                                 isCurrentProposalSource: task.editProposal?.validationRepairBriefID == brief.id
                             )
                         }
@@ -3079,8 +3133,22 @@ private struct ReviewPanel: View {
         }
     }
 
-    private func validationRun(for id: String) -> ValidationRun? {
-        task.validationRuns.first { run in
+    private func validationRun(for id: String?) -> ValidationRun? {
+        guard let id else {
+            return nil
+        }
+
+        return task.validationRuns.first { run in
+            run.id == id
+        }
+    }
+
+    private func taskCommandRun(for id: String?) -> TaskCommandRun? {
+        guard let id else {
+            return nil
+        }
+
+        return task.taskCommandRuns.first { run in
             run.id == id
         }
     }
@@ -3280,6 +3348,12 @@ private struct ReviewPanel: View {
         }
     }
 
+    private var latestFailedTaskCommandRun: TaskCommandRun? {
+        task.taskCommandRuns.reversed().first { run in
+            run.status == "Failed"
+        }
+    }
+
     private var latestValidationRepairBrief: ValidationRepairBrief? {
         guard let latestFailedValidationRun else {
             return nil
@@ -3290,11 +3364,31 @@ private struct ReviewPanel: View {
         }
     }
 
+    private var latestTaskCommandRepairBrief: ValidationRepairBrief? {
+        guard let latestFailedTaskCommandRun else {
+            return nil
+        }
+
+        return task.validationRepairBriefs.reversed().first { brief in
+            brief.taskCommandRunID == latestFailedTaskCommandRun.id
+        }
+    }
+
+    private var latestRepairBrief: ValidationRepairBrief? {
+        if let latestTaskCommandRepairBrief,
+           latestFailedValidationRun == nil ||
+            (latestFailedTaskCommandRun?.endedAt ?? latestFailedTaskCommandRun?.startedAt ?? "") >=
+            (latestFailedValidationRun?.endedAt ?? latestFailedValidationRun?.startedAt ?? "") {
+            return latestTaskCommandRepairBrief
+        }
+
+        return latestValidationRepairBrief ?? latestTaskCommandRepairBrief
+    }
+
     private var canGenerateValidationRepairProposal: Bool {
         task.executionProposal != nil &&
-            task.editProposal?.status == "Applied" &&
-            latestFailedValidationRun != nil &&
-            latestValidationRepairBrief != nil &&
+            task.editProposal?.status != "Proposed" &&
+            latestRepairBrief != nil &&
             !isGeneratingValidationRepairProposal &&
             !isGeneratingEditProposal &&
             !isValidatingEditProposal &&
@@ -3308,11 +3402,11 @@ private struct ReviewPanel: View {
             return "Generating Repair Proposal"
         }
 
-        if task.editProposal?.validationRepairBriefID == latestValidationRepairBrief?.id {
+        if task.editProposal?.validationRepairBriefID == latestRepairBrief?.id {
             return "Repair Proposal Ready"
         }
 
-        if latestFailedValidationRun != nil && latestValidationRepairBrief == nil {
+        if (latestFailedValidationRun != nil || latestFailedTaskCommandRun != nil) && latestRepairBrief == nil {
             return "Repair Brief Needed"
         }
 
@@ -5765,6 +5859,7 @@ private struct DiffLineRow: View {
 private struct ValidationRepairBriefCard: View {
     var brief: ValidationRepairBrief
     var validationRun: ValidationRun?
+    var taskCommandRun: TaskCommandRun?
     var isCurrentProposalSource: Bool
 
     var body: some View {
@@ -5786,6 +5881,14 @@ private struct ValidationRepairBriefCard: View {
 
             if let validationRun {
                 Label("\(validationRun.presetName) / \(validationRun.status)", systemImage: validationRun.status == "Failed" ? "exclamationmark.triangle" : "checkmark.circle")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+            } else if let taskCommandRun {
+                Label("\(taskCommandRun.name) / \(taskCommandRun.status)", systemImage: taskCommandRun.status == "Failed" ? "exclamationmark.triangle" : "terminal")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+            } else if let sourceSummary = brief.sourceSummary {
+                Label(sourceSummary, systemImage: brief.source == "TaskCommandRun" ? "terminal" : "checklist")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
             }

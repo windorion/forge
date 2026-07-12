@@ -348,16 +348,20 @@ Tasks enter `Testing` after apply and only move to `Completed` after
 validation passes. Failed validation moves the task to `Failed` with command
 results preserved for review.
 
-Current validation repair slice: when a validation run fails, the runtime asks
-the model provider for a repair brief using compact failed command summaries.
-The brief records likely cause, recommended actions, and a follow-up prompt in
-task state. It does not rerun commands or mutate files; it turns failure output
-into a reviewable next step.
+Current repair slice: when a validation run or task-scoped command run fails,
+the runtime asks the model provider for a repair brief using compact failed
+command summaries. The brief records likely cause, recommended actions, a
+follow-up prompt, and its source (`validationRunID` or `taskCommandRunID`) in
+task state. It does not rerun commands or mutate files; it turns failure
+output into a reviewable next step.
 
-After a repair brief exists, the runtime can generate a follow-up validation
-repair proposal. It archives the previously applied proposal, links the new
-proposal to the repair brief, validates the proposal, and returns to human
-review. This still does not apply files automatically.
+After a repair brief exists, the runtime can generate a follow-up repair
+proposal through the same `generate-validation-repair-proposal` endpoint. For
+post-apply validation failures it archives the previously applied proposal,
+links the new proposal to the repair brief, validates the proposal, and
+preserves changed-file evidence. For task-command failures it can create a
+linked review-only repair proposal even when no proposal has been applied yet.
+This still does not apply files automatically.
 
 ### Task Command Runner
 
@@ -378,9 +382,10 @@ chunks in task state. The runtime emits `task.command.started`,
 `task.command.output`, and `task.command.completed` SSE events so the macOS
 Tests tab can show command output as a live coding-agent surface.
 
-Current gaps: cancellation is not wired yet, the app exposes only a first
-`runtime-npm-check` shortcut, and failed task-command output is not yet
-connected to the validation repair-brief/self-fix loop.
+Failed task-command output is now connected to the repair-brief/self-fix
+proposal loop. Current gaps: cancellation is not wired yet, the app exposes
+only a first `runtime-npm-check` shortcut, and Forge does not yet automatically
+rerun the failed command after a reviewed fix is applied.
 
 ### Permission Manager
 

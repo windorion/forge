@@ -339,8 +339,12 @@ events over `GET /events`.
 In the macOS session shell, the action rail exposes a first `Run Runtime Check`
 button for `runtime-npm-check` after the task has approved the
 `runtime-typescript` preset. The Tests tab shows task command runs before
-validation runs, including stdout/stderr/system chunks. Cancellation, a richer
-command chooser, and failed-command self-fix are still future work.
+validation runs, including stdout/stderr/system chunks. When a task command
+fails, the runtime asks the model provider for a repair brief linked to the
+failed `taskCommandRunID`. The same `Generate Self-Fix` action calls
+`POST /tasks/:taskID/generate-validation-repair-proposal` and can produce a
+review-only repair proposal from that command-sourced brief. Cancellation, a
+richer command chooser, and automatic rerun evidence are still future work.
 
 Current validation presets:
 
@@ -489,9 +493,9 @@ cd runtime && npm run smoke:git-remote
 - Proposal repair is bounded and proposal-only. It can ask the provider to
   revise a blocked artifact from runtime validation feedback, but it does not
   apply files or run commands.
-- Validation failure repair briefs are advisory. They summarize failed command
-  output and suggest a next repair prompt, but they do not apply fixes or rerun
-  validation automatically.
+- Validation and task-command failure repair briefs are advisory. They
+  summarize failed command output and suggest a next repair prompt, but they do
+  not apply fixes or rerun validation/commands automatically.
 - Follow-up repair proposals are review artifacts. They can be generated from a
   repair brief, but they still require validation and explicit human apply.
 - Git status and diff inspection are read-only review surfaces. The runtime
@@ -509,8 +513,8 @@ cd runtime && npm run smoke:git-remote
   allowlisted validation presets; they are not arbitrary shell execution.
 - Task command runs reuse those approvals for one command ID at a time and
   stream bounded output chunks into task state. They are not arbitrary shell
-  execution, do not yet support cancellation, and do not yet generate self-fix
-  proposals from failed output.
+  execution, do not yet support cancellation, and do not yet rerun failed
+  commands after reviewed fixes.
 - SQLite currently stores full task snapshots plus basic task index fields; the
   full normalized runs/messages/tool-calls schema is still ahead.
 - Repository context is still a bounded v1 scanner, not a full repository

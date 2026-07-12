@@ -86,6 +86,7 @@ try {
   const openAIContextTask = await runOpenAIContextFlow();
   const openAIAutoRepairTask = await runOpenAIAutoRepairFlow();
   const openAIValidationRepairTask = await runOpenAIValidationFailureRepairFlow();
+  const openAITaskCommandRepairTask = await runOpenAITaskCommandFailureRepairFlow();
   const openAIPreviewBlockedTask = await runOpenAIPreviewBlockedFlow();
 
   console.log("Core runtime smoke passed.");
@@ -98,6 +99,7 @@ try {
   console.log(`- OpenAI context task: ${openAIContextTask.id}`);
   console.log(`- OpenAI auto-repair task: ${openAIAutoRepairTask.id}`);
   console.log(`- OpenAI validation repair task: ${openAIValidationRepairTask.id}`);
+  console.log(`- OpenAI task command repair task: ${openAITaskCommandRepairTask.id}`);
   console.log(`- OpenAI preview-blocked task: ${openAIPreviewBlockedTask.id}`);
   console.log(`- Temporary database: ${dbPath}`);
 } finally {
@@ -693,6 +695,90 @@ async function runOpenAIValidationFailureRepairFlow() {
   assert(
     current.events?.some((event) => event.type === "edit.proposal.validation_repair.ready"),
     "Validation repair proposal did not record a ready event."
+  );
+
+  return current;
+}
+
+async function runOpenAITaskCommandFailureRepairFlow() {
+  const task = await createTask({
+    title: "Smoke task command validation failure repair brief",
+    objective: `Analyze a failed live task command and generate a reviewed repair proposal for @${appendSmokePath}.`
+  });
+
+  await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "OpenAI task-command repair task to reach initial plan review"
+  );
+
+  let current = await post(`/tasks/${task.id}/approve-plan`, {
+    note: "Core smoke test approves the task command repair plan."
+  });
+  assert(current.executionProposal, "Task-command repair flow did not create an execution proposal.");
+
+  current = await post(`/tasks/${task.id}/approve-validation-preset`, {
+    presetID: "runtime-typescript",
+    note: "Core smoke test approves task command failure analysis."
+  });
+  assert(
+    current.approvals?.some((approval) => approval.action === "Approve Validation Preset" && approval.targetID === "runtime-typescript"),
+    "Task-command repair flow did not approve the runtime-typescript preset."
+  );
+
+  current = await post(`/tasks/${task.id}/run-task-command`, {
+    commandID: "runtime-npm-check"
+  });
+  assertState(current, "Failed", "Command Failed");
+  const failedCommandRun = current.taskCommandRuns?.at(-1);
+  assert(failedCommandRun?.status === "Failed", "Task-command repair flow did not record a failed task command run.");
+  assert(
+    current.validationRepairBriefs?.some((brief) =>
+      brief.taskCommandRunID === failedCommandRun.id &&
+        brief.source === "TaskCommandRun" &&
+        brief.provider?.id === "openai" &&
+        brief.recommendedActions?.length > 0
+    ),
+    "Task-command repair flow did not create an OpenAI command repair brief."
+  );
+  assert(
+    current.events?.some((event) => event.type === "task.command.repair_brief.ready"),
+    "Task-command repair flow did not record a command repair brief ready event."
+  );
+  assert(
+    current.planSteps?.some((step) => step.id === "plan-validation-repair" && step.status === "Active"),
+    "Task-command repair flow did not create an active repair planning step."
+  );
+
+  const repairBrief = current.validationRepairBriefs.at(-1);
+  const changedFilesBeforeRepairProposal = [...(current.changedFiles ?? [])];
+
+  current = await post(`/tasks/${task.id}/generate-validation-repair-proposal`, {});
+  assertState(current, "Human Review", "Edit Proposal Review");
+  assert(current.editProposal?.status === "Proposed", "Task-command repair proposal was not proposed.");
+  assert(
+    current.editProposal.validationRepairBriefID === repairBrief.id,
+    "Task-command repair proposal did not retain the repair brief link."
+  );
+  assert(
+    current.editProposal.revisionNumber >= 1,
+    `Task-command repair proposal should have a valid revision number, got ${current.editProposal.revisionNumber}.`
+  );
+  assert(
+    current.editProposal.validation?.status === "Ready",
+    current.editProposal.validation?.summary ?? "Task-command repair proposal should validate as ready."
+  );
+  assert(
+    current.editProposal.fileChanges?.some((change) => change.applyOperation?.kind === "AppendText"),
+    "Task-command repair proposal did not include a safe append operation."
+  );
+  assert(
+    JSON.stringify(current.changedFiles ?? []) === JSON.stringify(changedFilesBeforeRepairProposal),
+    "Task-command repair proposal generation should not mutate changedFiles."
+  );
+  assert(
+    current.events?.some((event) => event.type === "edit.proposal.validation_repair.ready"),
+    "Task-command repair proposal did not record a ready event."
   );
 
   return current;
@@ -1391,7 +1477,7 @@ function mockOpenAIOutput(name, requests, body) {
   }
 
   if (name === "forge_edit_proposal") {
-    if (bodyText.includes("validation failure repair brief")) {
+    if (bodyText.includes("validation failure repair brief") || bodyText.includes("Validation repair brief")) {
       if (bodyText.includes("followUpPrompt")) {
         return {
           summary: "Generate a follow-up proposal from the validation repair brief.",

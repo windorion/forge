@@ -54,11 +54,13 @@ proposal, validates again, and stops after the configured attempt limit. Each
 blocked intermediate proposal is archived in `editProposalRevisions` as
 `Superseded`; no file is changed during repair.
 
-When post-apply validation fails and a validation repair brief exists, Forge can
-generate a follow-up repair proposal linked to that brief. The previously
-applied proposal is archived, the new proposal is validated, and the task
-returns to human review. This does not mutate files until the user applies the
-new proposal.
+When post-apply validation or a task-scoped command fails and a repair brief
+exists, Forge can generate a follow-up repair proposal linked to that brief.
+For post-apply validation failures, the previously applied proposal is
+archived, the new proposal is validated, and the task returns to human review.
+For task-command failures, Forge can create a linked review-only proposal even
+when no proposal has been applied yet. This does not mutate files until the
+user applies the new proposal.
 
 When rollback is requested, Forge treats it as another explicit mutation gate.
 Rollback is blocked if the current file no longer matches the recorded
@@ -198,9 +200,9 @@ Post-apply validation stores:
   review artifact after archiving the rejected one.
 - Repairing a proposal must not mutate files; it only archives superseded
   blocked artifacts and exposes the final proposal for review.
-- Generating a validation repair proposal must not mutate files; it archives
-  the previously applied proposal and exposes a new reviewed proposal linked to
-  the repair brief.
+- Generating a repair proposal from a validation or task-command repair brief
+  must not mutate files. It archives the previously applied proposal only when
+  one exists and exposes a new reviewed proposal linked to the repair brief.
 
 ## Future Work
 

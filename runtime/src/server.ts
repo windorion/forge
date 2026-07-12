@@ -5385,23 +5385,19 @@ async function generateValidationRepairProposal(taskID: string): Promise<ForgeTa
     throw new HttpError(409, "This task already has a proposed edit awaiting review.");
   }
 
-  if (task.editProposal?.status !== "Applied") {
+  const repairSource = latestRepairProposalSource(task);
+  if (!repairSource) {
+    throw new HttpError(409, "A failed validation run or task command repair brief is required before generating a repair proposal.");
+  }
+
+  if (repairSource.kind === "ValidationRun" && task.editProposal?.status !== "Applied") {
     throw new HttpError(409, "An applied edit proposal is required before generating a validation repair proposal.");
   }
 
-  const failedRun = latestFailedValidationRun(task);
-  if (!failedRun) {
-    throw new HttpError(409, "A failed validation run is required before generating a validation repair proposal.");
-  }
-
-  const repairBrief = latestValidationRepairBriefForRun(task, failedRun.id);
-  if (!repairBrief) {
-    throw new HttpError(409, "A validation repair brief is required before generating a repair proposal.");
-  }
-
-  return createEditProposalForTask(task, "ValidationRepair", task.editProposal, {
-    validationRepairBrief: repairBrief,
-    preserveChangedFiles: true
+  const previousProposal = task.editProposal?.status === "Applied" ? task.editProposal : undefined;
+  return createEditProposalForTask(task, "ValidationRepair", previousProposal, {
+    validationRepairBrief: repairSource.brief,
+    preserveChangedFiles: Boolean(previousProposal)
   });
 }
 
@@ -6115,6 +6111,9 @@ async function runTaskCommand(taskID: string, input: RunTaskCommandRequest): Pro
     commandRun,
     task
   });
+  if (!passed) {
+    await createValidationRepairBriefForTaskCommandRun(task, commandRun);
+  }
   return task;
 }
 
@@ -6444,6 +6443,63 @@ async function createValidationRepairBriefForRun(
     });
 
     const failed = event("validation.repair_brief.failed", message);
+    failed.createdAt = new Date().toISOString();
+    saveAndBroadcast(task, failed);
+  }
+}
+
+async function createValidationRepairBriefForTaskCommandRun(
+  task: ForgeTask,
+  taskCommandRun: TaskCommandRun
+): Promise<void> {
+  const startedAt = new Date().toISOString();
+  upsertPlanStep(task, {
+    id: "analyze-task-command-failure",
+    title: "Analyze command failure",
+    status: "Active",
+    summary: `Asking ${modelProvider.info.name} for a repair brief from failed command output.`
+  });
+
+  const started = event(
+    "task.command.repair_brief.started",
+    `Generating repair brief for failed task command: ${taskCommandRun.name}.`
+  );
+  started.createdAt = startedAt;
+  saveAndBroadcast(task, started);
+
+  try {
+    const brief = await modelProvider.createValidationRepairBrief({ task, taskCommandRun });
+    task.validationRepairBriefs.push(brief);
+    task.reviewSummary = `${taskCommandRun.name} failed. Repair brief: ${brief.summary}`;
+    setAgent(task, "Planner", "Done", "Prepared a repair brief from task command output.");
+    setAgent(task, "Coder", "Ready", "Ready to turn the command failure brief into a reviewed proposal.");
+    setAgent(task, "Reviewer", "Active", "Review the failed command and repair brief before continuing.");
+    upsertPlanStep(task, {
+      id: "analyze-task-command-failure",
+      title: "Analyze command failure",
+      status: "Done",
+      summary: brief.summary
+    });
+    upsertPlanStep(task, {
+      id: "plan-validation-repair",
+      title: "Plan command repair",
+      status: "Active",
+      summary: brief.followUpPrompt
+    });
+
+    const ready = event("task.command.repair_brief.ready", brief.summary);
+    ready.createdAt = brief.generatedAt;
+    saveAndBroadcast(task, ready);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    upsertPlanStep(task, {
+      id: "analyze-task-command-failure",
+      title: "Analyze command failure",
+      status: "Blocked",
+      summary: message
+    });
+
+    const failed = event("task.command.repair_brief.failed", message);
     failed.createdAt = new Date().toISOString();
     saveAndBroadcast(task, failed);
   }
@@ -6881,11 +6937,74 @@ function latestFailedValidationRun(task: ForgeTask): ValidationRun | undefined {
   return [...task.validationRuns].reverse().find((run) => run.status === "Failed");
 }
 
+function latestFailedTaskCommandRun(task: ForgeTask): TaskCommandRun | undefined {
+  return [...task.taskCommandRuns].reverse().find((run) => run.status === "Failed");
+}
+
 function latestValidationRepairBriefForRun(
   task: ForgeTask,
   validationRunID: string
 ): ValidationRepairBrief | undefined {
   return [...task.validationRepairBriefs].reverse().find((brief) => brief.validationRunID === validationRunID);
+}
+
+function latestValidationRepairBriefForTaskCommandRun(
+  task: ForgeTask,
+  taskCommandRunID: string
+): ValidationRepairBrief | undefined {
+  return [...task.validationRepairBriefs].reverse().find((brief) => brief.taskCommandRunID === taskCommandRunID);
+}
+
+function latestRepairProposalSource(
+  task: ForgeTask
+): { kind: "ValidationRun"; brief: ValidationRepairBrief; validationRun: ValidationRun } |
+  { kind: "TaskCommandRun"; brief: ValidationRepairBrief; taskCommandRun: TaskCommandRun } |
+  undefined {
+  const failedValidationRun = latestFailedValidationRun(task);
+  const validationBrief = failedValidationRun
+    ? latestValidationRepairBriefForRun(task, failedValidationRun.id)
+    : undefined;
+  const failedTaskCommandRun = latestFailedTaskCommandRun(task);
+  const taskCommandBrief = failedTaskCommandRun
+    ? latestValidationRepairBriefForTaskCommandRun(task, failedTaskCommandRun.id)
+    : undefined;
+
+  if (failedTaskCommandRun && taskCommandBrief) {
+    if (!failedValidationRun || compareTaskCommandAndValidationFailureTime(failedTaskCommandRun, failedValidationRun) >= 0) {
+      return {
+        kind: "TaskCommandRun",
+        brief: taskCommandBrief,
+        taskCommandRun: failedTaskCommandRun
+      };
+    }
+  }
+
+  if (failedValidationRun && validationBrief) {
+    return {
+      kind: "ValidationRun",
+      brief: validationBrief,
+      validationRun: failedValidationRun
+    };
+  }
+
+  if (failedTaskCommandRun && taskCommandBrief) {
+    return {
+      kind: "TaskCommandRun",
+      brief: taskCommandBrief,
+      taskCommandRun: failedTaskCommandRun
+    };
+  }
+
+  return undefined;
+}
+
+function compareTaskCommandAndValidationFailureTime(
+  taskCommandRun: TaskCommandRun,
+  validationRun: ValidationRun
+): number {
+  const commandTime = taskCommandRun.endedAt ?? taskCommandRun.startedAt;
+  const validationTime = validationRun.endedAt ?? validationRun.startedAt;
+  return commandTime.localeCompare(validationTime);
 }
 
 async function applyProposedFileChange(

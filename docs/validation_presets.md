@@ -110,7 +110,9 @@ or user prompt are not accepted.
 The first app surface uses `runtime-npm-check` as a live-session command. The
 runtime records the approving preset, status, exit code, output summary, and
 bounded stdout/stderr/system chunks in task state, and streams output through
-SSE events.
+SSE events. Failed task-scoped commands generate provider repair briefs linked
+to `taskCommandRunID`; the same explicit repair-proposal endpoint can then
+create a review-only self-fix proposal without applying files automatically.
 
 ## Safety Rules
 
@@ -123,9 +125,9 @@ SSE events.
 - Exit code and output summary are recorded for every command.
 - Task-scoped command output chunks are bounded before persistence.
 - Failed commands make the validation run fail.
-- Failed validation runs can trigger a provider-generated repair brief from
-  compact command summaries. The brief is advisory and does not rerun commands
-  or change files.
+- Failed validation runs and failed task-scoped commands can trigger a
+  provider-generated repair brief from compact command summaries. The brief is
+  advisory and does not rerun commands or change files.
 
 ## Future Work
 

@@ -141,6 +141,7 @@ Built foundation:
 - restricted edit proposals
 - validation presets and repair briefs
 - approved task-scoped command runner with streamed stdout/stderr chunks
+- failed task-command repair briefs and review-only self-fix proposals
 - git status/diff/commit/push/branch/PR handoff preflights
 - app-managed runtime diagnostics
 - local smoke coverage
@@ -158,15 +159,16 @@ Major gaps:
 - Patch apply now has exact source replacement and multi-hunk text patch
   paths, but it is still too narrow for normal source-code tasks.
 - Command output now has a first streamed task-scoped surface, but it still
-  needs cancellation, a richer command chooser, and failed-output self-fix.
+  needs cancellation, a richer command chooser, and rerun evidence after
+  reviewed fixes.
 - Provider-backed run loop is not yet a real read/search/patch/run/repair
   agent.
 
 ## Next Implementation Order
 
 1. Connect provider-driven run loop to read/search/patch/run/repair.
-2. Connect failed task-command output to a bounded self-fix proposal loop.
-3. Add task command cancellation and a richer approved-command chooser.
+2. Add task command cancellation and a richer approved-command chooser.
+3. Add rerun evidence after reviewed self-fix proposals.
 4. Broaden source-file patch proposal/apply beyond exact text hunks and harden
    rollback revalidation/recovery.
 5. Implement request-change revision from full diff review.

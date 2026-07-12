@@ -78,7 +78,9 @@ Implemented today:
   `shell:false`, streams stdout/stderr chunks over SSE, and stores bounded
   command-run output in task state. The macOS Tests tab shows these task
   command runs, and the action rail includes a first `runtime-npm-check`
-  shortcut after approval.
+  shortcut after approval. Failed task commands can now generate a provider
+  repair brief and a follow-up review-only repair proposal through the same
+  human-gated proposal flow used by validation failures.
 - Validation failure repair briefs that turn failed command output into a
   reviewable next-step diagnosis.
 - Follow-up repair edit proposals generated from validation repair briefs,
@@ -137,8 +139,8 @@ Not finished yet:
 - Real autonomous model-backed read/search/patch/run/repair loop.
 - General source-code patch engine, richer rollback/revalidation, and richer
   diff review.
-- Command cancellation, richer command selection, and self-fix loops from
-  failed task command output.
+- Command cancellation, richer command selection, and automatic rerun evidence
+  after reviewed self-fix proposals.
 - Actual PR creation/publication after explicit review.
 - Durable repository index with symbols and semantic search.
 - Full workspace picker and commercial packaging/signing path.
@@ -151,7 +153,7 @@ Product-readiness estimate:
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 60-65% | Has a first-pass session UI shell, full-screen diff review surface, exact source replace, multi-hunk source patches, and a streamed task command runner, but still needs provider-driven patch/run/repair/self-fix loop. |
+| Coding-agent demo V0 | 62-67% | Has a first-pass session UI shell, full-screen diff review surface, exact source replace, multi-hunk source patches, streamed task commands, and first failed-command self-fix proposal flow, but still needs provider-driven autonomous patch/run/repair orchestration. |
 | Useful developer alpha | 35-45% | A developer cannot yet rely on Forge like Codex or Claude Code for normal coding tasks. It needs real patching, command execution, recovery, and a stronger model-backed run loop. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, memory, MCP/GitHub, and product polish. |
@@ -168,7 +170,7 @@ Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
 - broaden source-file patch proposal/apply beyond exact multi-hunk text patches
   and harden rollback/revalidation
 - extend task-scoped command execution with cancellation, command selection,
-  and failed-output self-fix
+  and rerun evidence after reviewed fixes
 - wire provider-driven read/search/patch/run/repair into the normal task flow
 - connect full diff review to durable file-level decisions once the review
   model supports them

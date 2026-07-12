@@ -11,6 +11,7 @@ import type {
   PlanRevision,
   PlanStep,
   ProposedFileOperation,
+  TaskCommandRun,
   TaskFileReference,
   TaskMessage,
   ValidationRepairBrief,
@@ -23,7 +24,8 @@ export interface ExecutionProposalRequest {
 
 export interface ValidationRepairBriefRequest {
   task: ForgeTask;
-  validationRun: ValidationRun;
+  validationRun?: ValidationRun;
+  taskCommandRun?: TaskCommandRun;
 }
 
 export interface PlanRevisionRequest {
@@ -394,7 +396,7 @@ class OpenAIResponsesModelProvider implements ModelProvider {
         request.validationFeedback
           ? "The previous proposal failed runtime validation. Generate a corrected proposal that addresses every blocked check while staying inside the supported operation boundary."
           : request.validationRepairBrief
-            ? "This is a follow-up repair proposal after validation command failure. Use the validation repair brief to propose a narrow, reviewable fix inside the supported operation boundary."
+            ? "This is a follow-up repair proposal after a validation or task command failure. Use the repair brief to propose a narrow, reviewable fix inside the supported operation boundary."
           : "Prefer an apply-ready proposal when the task can be satisfied inside the supported operation boundary.",
         "Never claim files were changed. This proposal is not a workspace mutation.",
         taskProviderContext(request.task, request.sourceMessage),
@@ -432,7 +434,7 @@ class OpenAIResponsesModelProvider implements ModelProvider {
       [
         "Create a Forge validation failure repair brief.",
         "Do not claim files were changed, commands were rerun, commits were made, or tools were executed.",
-        "Use only the provided validation command summaries and task context.",
+        "Use only the provided failed validation or task command summaries and task context.",
         "Recommend reviewable next actions that preserve human approval and runtime validation boundaries.",
         "If a new edit is needed, describe the next proposal direction rather than applying it.",
         taskProviderContext(request.task),
@@ -444,7 +446,10 @@ class OpenAIResponsesModelProvider implements ModelProvider {
     return {
       id: randomUUID(),
       provider: this.info,
-      validationRunID: request.validationRun.id,
+      validationRunID: request.validationRun?.id,
+      taskCommandRunID: request.taskCommandRun?.id,
+      source: request.taskCommandRun ? "TaskCommandRun" : "ValidationRun",
+      sourceSummary: validationRepairSourceSummary(request),
       summary: normalized.summary,
       likelyCause: normalized.likelyCause,
       recommendedActions: normalized.recommendedActions,
@@ -813,6 +818,35 @@ class LocalDeterministicModelProvider implements ModelProvider {
   }
 
   async createValidationRepairBrief(request: ValidationRepairBriefRequest): Promise<ValidationRepairBrief> {
+    if (request.taskCommandRun) {
+      const commandRun = request.taskCommandRun;
+      const likelyCause = commandRun.outputSummary
+        ? singleLine(commandRun.outputSummary).slice(0, 700)
+        : "The task command failed, but no output summary was retained.";
+
+      return {
+        id: randomUUID(),
+        provider: this.info,
+        taskCommandRunID: commandRun.id,
+        source: "TaskCommandRun",
+        sourceSummary: `${commandRun.name} / ${commandRun.status}`,
+        summary: `Task command repair brief for ${commandRun.name}: command failed.`,
+        likelyCause,
+        recommendedActions: [
+          "Review the failed task command output before changing files.",
+          "Add a task message with any intended repair constraint.",
+          "Generate a reviewed repair proposal, then rerun the approved command after applying a fix."
+        ],
+        followUpPrompt: `Repair task command failure from ${commandRun.command}; focus on ${commandRun.name}.`,
+        riskLevel: commandRun.riskLevel,
+        generatedAt: new Date().toISOString()
+      };
+    }
+
+    if (!request.validationRun) {
+      throw new Error("Validation repair brief requires a validation run or task command run.");
+    }
+
     const failedCommands = request.validationRun.commands.filter((command) => command.status === "Failed");
     const failedNames = failedCommands.map((command) => command.name).join(", ") || request.validationRun.presetName;
     const firstFailure = failedCommands[0];
@@ -824,6 +858,8 @@ class LocalDeterministicModelProvider implements ModelProvider {
       id: randomUUID(),
       provider: this.info,
       validationRunID: request.validationRun.id,
+      source: "ValidationRun",
+      sourceSummary: `${request.validationRun.presetName} / ${request.validationRun.status}`,
       summary: `Validation repair brief for ${request.validationRun.presetName}: ${failedNames} failed.`,
       likelyCause,
       recommendedActions: [
@@ -1211,6 +1247,9 @@ function taskProviderContext(task: ForgeTask, sourceMessage?: TaskMessage): stri
     changedFiles: task.changedFiles,
     validationRepairBriefs: task.validationRepairBriefs?.slice(-3).map((brief) => ({
       validationRunID: brief.validationRunID,
+      taskCommandRunID: brief.taskCommandRunID,
+      source: brief.source,
+      sourceSummary: brief.sourceSummary,
       summary: brief.summary,
       likelyCause: brief.likelyCause,
       recommendedActions: brief.recommendedActions
@@ -1275,6 +1314,9 @@ function editProposalRequestContext(request: EditProposalRequest): string {
         ? {
             id: request.validationRepairBrief.id,
             validationRunID: request.validationRepairBrief.validationRunID,
+            taskCommandRunID: request.validationRepairBrief.taskCommandRunID,
+            source: request.validationRepairBrief.source,
+            sourceSummary: request.validationRepairBrief.sourceSummary,
             summary: request.validationRepairBrief.summary,
             likelyCause: request.validationRepairBrief.likelyCause,
             recommendedActions: request.validationRepairBrief.recommendedActions,
@@ -1287,29 +1329,69 @@ function editProposalRequestContext(request: EditProposalRequest): string {
 }
 
 function validationRepairRequestContext(request: ValidationRepairBriefRequest): string {
-  return JSON.stringify({
-    validationRepairRequest: {
-      validationRun: {
-        id: request.validationRun.id,
-        trigger: request.validationRun.trigger,
-        presetID: request.validationRun.presetID,
-        presetName: request.validationRun.presetName,
-        riskLevel: request.validationRun.riskLevel,
-        status: request.validationRun.status,
-        summary: request.validationRun.summary,
-        commands: request.validationRun.commands.map((command) => ({
-          name: command.name,
-          command: command.command,
-          kind: command.kind,
-          riskLevel: command.riskLevel,
-          cwd: command.cwd,
-          status: command.status,
-          exitCode: command.exitCode,
-          outputSummary: command.outputSummary.slice(0, 1800)
-        }))
+  const source = request.validationRun
+    ? {
+        kind: "ValidationRun",
+        validationRun: {
+          id: request.validationRun.id,
+          trigger: request.validationRun.trigger,
+          presetID: request.validationRun.presetID,
+          presetName: request.validationRun.presetName,
+          riskLevel: request.validationRun.riskLevel,
+          status: request.validationRun.status,
+          summary: request.validationRun.summary,
+          commands: request.validationRun.commands.map((command) => ({
+            name: command.name,
+            command: command.command,
+            kind: command.kind,
+            riskLevel: command.riskLevel,
+            cwd: command.cwd,
+            status: command.status,
+            exitCode: command.exitCode,
+            outputSummary: command.outputSummary.slice(0, 1800)
+          }))
+        }
       }
-    }
+    : request.taskCommandRun
+      ? {
+          kind: "TaskCommandRun",
+          taskCommandRun: {
+            id: request.taskCommandRun.id,
+            commandID: request.taskCommandRun.commandID,
+            name: request.taskCommandRun.name,
+            command: request.taskCommandRun.command,
+            kind: request.taskCommandRun.kind,
+            riskLevel: request.taskCommandRun.riskLevel,
+            cwd: request.taskCommandRun.cwd,
+            presetID: request.taskCommandRun.presetID,
+            presetName: request.taskCommandRun.presetName,
+            status: request.taskCommandRun.status,
+            exitCode: request.taskCommandRun.exitCode,
+            outputSummary: request.taskCommandRun.outputSummary.slice(0, 1800),
+            outputChunks: request.taskCommandRun.outputChunks.slice(-12).map((chunk) => ({
+              stream: chunk.stream,
+              text: chunk.text.slice(0, 1200),
+              createdAt: chunk.createdAt
+            }))
+          }
+        }
+      : { kind: "Unknown" };
+
+  return JSON.stringify({
+    validationRepairRequest: source
   }, null, 2);
+}
+
+function validationRepairSourceSummary(request: ValidationRepairBriefRequest): string {
+  if (request.validationRun) {
+    return `${request.validationRun.presetName} / ${request.validationRun.status}`;
+  }
+
+  if (request.taskCommandRun) {
+    return `${request.taskCommandRun.name} / ${request.taskCommandRun.status}`;
+  }
+
+  return "Unknown repair source";
 }
 
 function compactTaskMessage(message: TaskMessage): Record<string, unknown> {
