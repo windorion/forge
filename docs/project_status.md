@@ -12,9 +12,9 @@ session shell and a usable full-screen diff review surface in the macOS app.
 It can create tasks, inspect bounded repo context, hold review gates, generate
 safe edit proposals, apply restricted Markdown edits, exact source/text
 replacements, and multi-hunk source/text patches, validate work, expose
-guarded git actions, and persist task state locally. The next milestone is to
-make that shell real: streamed command output, provider-driven patch/run/
-repair, and self-fix.
+guarded git actions, run approved task-scoped commands with streamed output,
+and persist task state locally. The next milestone is to make that shell real:
+provider-driven patch/run/repair and self-fix.
 
 ## Current Implementation
 
@@ -70,6 +70,12 @@ Implemented:
 - Bounded validation-feedback repair loop for blocked edit proposals.
 - Request-changes revision loop for rejected edit proposals.
 - Post-apply validation runs.
+- Approved task-scoped command runs for runtime-known command IDs. The runtime
+  accepts only allowlisted command IDs, reuses validation-preset approvals,
+  blocks concurrent validation/command execution, runs project commands with
+  `spawn` and `shell:false`, streams stdout/stderr chunks over SSE, records
+  bounded output chunks plus exit code in task state, and exposes the first
+  macOS Tests tab/action-rail surface through `runtime-npm-check`.
 - Validation failure repair briefs for failed validation command output.
 - Follow-up repair edit proposals generated from validation repair briefs.
 - macOS Review UI display and action flow for validation repair briefs and
@@ -169,7 +175,7 @@ These percentages are product-readiness estimates, not calendar estimates.
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 55-60% | Has a first-pass session UI shell, full-screen diff review surface, exact source replace, and multi-hunk source patch path, but still needs streamed command output and provider-driven patch/run/repair loop. |
+| Coding-agent demo V0 | 60-65% | Has a first-pass session UI shell, full-screen diff review surface, exact source replace, multi-hunk source patches, and a streamed task command runner, but still needs provider-driven patch/run/repair/self-fix loop. |
 | Useful developer alpha | 35-45% | A developer cannot yet rely on Forge like Codex or Claude Code for normal coding tasks. It needs real patching, command execution, recovery, and a stronger model-backed run loop. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
@@ -186,7 +192,7 @@ The hardest remaining work is not the app shell. The hardest remaining work is:
 - a polished UI that fully matches the handoff, especially exact split-diff,
   durable file-level review state, and decision prompts
 - a useful source-code patch engine beyond exact text-based hunks
-- streamed command execution and self-fix loops
+- command cancellation, richer command selection, and failed-output self-fix loops
 - reliable repository understanding beyond bounded file scans
 - git workflow from dirty tree to approved published PR
 - robust command execution and failure recovery
@@ -208,7 +214,8 @@ Remaining V0 gaps:
   behavior and durable per-file decisions
 - broaden source-file patch proposals beyond exact text hunks and harden
   rollback revalidation/recovery
-- add approved task-scoped command execution with streamed output
+- extend approved task-scoped command execution with cancellation, command
+  selection, and failed-output self-fix
 - wire provider-driven read/search/patch/run/repair into the normal flow
 - implement full diff review with per-file reasoning and request-change loop
 - keep git/preflight work as supporting infrastructure rather than the main

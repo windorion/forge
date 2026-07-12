@@ -1467,9 +1467,13 @@ private struct AgentTestsTab: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                if task.validationRuns.isEmpty {
+                if task.taskCommandRuns.isEmpty && task.validationRuns.isEmpty {
                     EmptyTerminalMessage(title: "NO TEST RUNS YET", message: "Approved checks and command output will appear here as the agent runs.")
                 } else {
+                    ForEach(task.taskCommandRuns.reversed()) { run in
+                        TaskCommandTerminalCard(run: run)
+                    }
+
                     ForEach(task.validationRuns.reversed()) { run in
                         TestRunTerminalCard(run: run)
                     }
@@ -1503,6 +1507,84 @@ private struct EmptyTerminalMessage: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .forgeTerminal()
+    }
+}
+
+private struct TaskCommandTerminalCard: View {
+    var run: TaskCommandRun
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack {
+                Text("\(run.name.uppercased()) / \(run.status.uppercased())")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(statusColor)
+                Spacer()
+                Text(run.endedAt ?? run.startedAt)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(Color.gray)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("$ \(run.command)")
+                    .font(.system(.caption, design: .monospaced).weight(.bold))
+                    .foregroundStyle(ForgeDesign.accent)
+                if let cwd = run.cwd {
+                    Text("cwd: \(cwd)")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(Color.gray)
+                }
+                Text(run.presetName ?? "Approved command")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(Color.gray)
+            }
+
+            if run.outputChunks.isEmpty {
+                Text(run.outputSummary)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(ForgeDesign.paper)
+                    .textSelection(.enabled)
+            } else {
+                ForEach(run.outputChunks) { chunk in
+                    HStack(alignment: .top, spacing: 8) {
+                        Text(chunk.stream.uppercased())
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundStyle(streamColor(chunk.stream))
+                            .frame(width: 48, alignment: .leading)
+                        Text(chunk.text.trimmingCharacters(in: .newlines))
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(ForgeDesign.paper)
+                            .textSelection(.enabled)
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .forgeTerminal()
+    }
+
+    private var statusColor: Color {
+        switch run.status {
+        case "Passed":
+            return ForgeDesign.success
+        case "Failed":
+            return ForgeDesign.danger
+        case "Running":
+            return ForgeDesign.warning
+        default:
+            return ForgeDesign.accent
+        }
+    }
+
+    private func streamColor(_ stream: String) -> Color {
+        switch stream {
+        case "stderr":
+            return ForgeDesign.warning
+        case "system":
+            return ForgeDesign.muted
+        default:
+            return ForgeDesign.success
+        }
     }
 }
 
@@ -1757,6 +1839,15 @@ private struct AgentRunActionsCard: View {
             Divider()
 
             Button {
+                workspace.runTaskCommand(for: task, commandID: "runtime-npm-check")
+            } label: {
+                Label(runRuntimeCheckTitle, systemImage: "terminal")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ForgeSecondaryButtonStyle())
+            .disabled(!canRunRuntimeCheck)
+
+            Button {
                 workspace.runValidation(for: task)
             } label: {
                 Label(runValidationTitle, systemImage: "play.circle")
@@ -1806,6 +1897,37 @@ private struct AgentRunActionsCard: View {
         workspace.isRunningValidation(taskID: task.id)
     }
 
+    private var isRunningTaskCommand: Bool {
+        workspace.isRunningTaskCommand(taskID: task.id)
+    }
+
+    private var hasApprovedRuntimeCheckCommand: Bool {
+        task.approvals.contains { approval in
+            approval.action == "Approve Validation Preset" &&
+                approval.decision == "Approved" &&
+                approval.targetID == "runtime-typescript"
+        }
+    }
+
+    private var canRunRuntimeCheck: Bool {
+        hasApprovedRuntimeCheckCommand &&
+            task.status != "Testing" &&
+            !isRunningTaskCommand &&
+            !isRunningValidation &&
+            !isRollingBackEditProposal &&
+            !isGeneratingValidationRepairProposal
+    }
+
+    private var runRuntimeCheckTitle: String {
+        if isRunningTaskCommand {
+            return "Running Runtime Check"
+        }
+        if !hasApprovedRuntimeCheckCommand {
+            return "Approve Runtime Checks First"
+        }
+        return "Run Runtime Check"
+    }
+
     private var canGenerateEditProposal: Bool {
         task.executionProposal != nil &&
             (task.editProposal == nil || task.editProposal?.status == "Rejected") &&
@@ -1813,7 +1935,8 @@ private struct AgentRunActionsCard: View {
             !isGeneratingValidationRepairProposal &&
             !isApplyingEditProposal &&
             !isRollingBackEditProposal &&
-            !isRejectingEditProposal
+            !isRejectingEditProposal &&
+            !isRunningTaskCommand
     }
 
     private var generateEditProposalTitle: String {
@@ -1835,7 +1958,8 @@ private struct AgentRunActionsCard: View {
             !isApplyingEditProposal &&
             !isRollingBackEditProposal &&
             !isGeneratingValidationRepairProposal &&
-            !isRejectingEditProposal
+            !isRejectingEditProposal &&
+            !isRunningTaskCommand
     }
 
     private var validateEditProposalTitle: String {
@@ -1849,7 +1973,8 @@ private struct AgentRunActionsCard: View {
             !isApplyingEditProposal &&
             !isRollingBackEditProposal &&
             !isGeneratingValidationRepairProposal &&
-            !isRejectingEditProposal
+            !isRejectingEditProposal &&
+            !isRunningTaskCommand
     }
 
     private var applyEditProposalTitle: String {
@@ -1867,7 +1992,8 @@ private struct AgentRunActionsCard: View {
             task.editProposal?.appliedFileChanges?.isEmpty == false &&
             !isApplyingEditProposal &&
             !isRollingBackEditProposal &&
-            !isGeneratingValidationRepairProposal
+            !isGeneratingValidationRepairProposal &&
+            !isRunningTaskCommand
     }
 
     private var rollbackEditProposalTitle: String {
@@ -1885,7 +2011,8 @@ private struct AgentRunActionsCard: View {
             !isApplyingEditProposal &&
             !isRollingBackEditProposal &&
             !isGeneratingValidationRepairProposal &&
-            !isRejectingEditProposal
+            !isRejectingEditProposal &&
+            !isRunningTaskCommand
     }
 
     private var rejectEditProposalTitle: String {
@@ -1897,7 +2024,8 @@ private struct AgentRunActionsCard: View {
             task.status != "Testing" &&
             !isRunningValidation &&
             !isRollingBackEditProposal &&
-            !isGeneratingValidationRepairProposal
+            !isGeneratingValidationRepairProposal &&
+            !isRunningTaskCommand
     }
 
     private var runValidationTitle: String {
@@ -1936,7 +2064,8 @@ private struct AgentRunActionsCard: View {
             !isValidatingEditProposal &&
             !isApplyingEditProposal &&
             !isRejectingEditProposal &&
-            !isRunningValidation
+            !isRunningValidation &&
+            !isRunningTaskCommand
     }
 
     private var generateRepairTitle: String {
@@ -1957,7 +2086,7 @@ private struct AgentMiniReviewCard: View {
             MetricRow(label: "Changed", value: "\(changedFileCount)")
             MetricRow(label: "Validation", value: validationState)
             MetricRow(label: "Proposal", value: task.editProposal?.status ?? "None")
-            MetricRow(label: "Commands", value: "\(task.validationRuns.flatMap(\.commands).count)")
+            MetricRow(label: "Commands", value: "\(commandCount)")
 
             if let summary = task.reviewSummary {
                 Text(summary)
@@ -1985,6 +2114,10 @@ private struct AgentMiniReviewCard: View {
 
     private var validationState: String {
         task.validationRuns.last?.status ?? "Not Run"
+    }
+
+    private var commandCount: Int {
+        task.taskCommandRuns.count + task.validationRuns.flatMap(\.commands).count
     }
 }
 

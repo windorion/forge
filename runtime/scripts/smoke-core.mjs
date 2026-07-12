@@ -70,6 +70,7 @@ try {
   const replaceTask = await runReplaceFlow();
   const sourceReplaceTask = await runSourceReplaceFlow();
   const sourcePatchTask = await runSourcePatchFlow();
+  const taskCommandTask = await runTaskCommandFlow();
 
   await stopRuntime(runtime);
   runtime = undefined;
@@ -93,6 +94,7 @@ try {
   console.log(`- Replace task: ${replaceTask.id}`);
   console.log(`- Source replace task: ${sourceReplaceTask.id}`);
   console.log(`- Source patch task: ${sourcePatchTask.id}`);
+  console.log(`- Task command task: ${taskCommandTask.id}`);
   console.log(`- OpenAI context task: ${openAIContextTask.id}`);
   console.log(`- OpenAI auto-repair task: ${openAIAutoRepairTask.id}`);
   console.log(`- OpenAI validation repair task: ${openAIValidationRepairTask.id}`);
@@ -339,6 +341,80 @@ async function runSourcePatchFlow() {
   assert(restored.includes("PATCH_OLD_TWO"), "Source patch rollback did not restore the second original text.");
   assert(!restored.includes("PATCH_NEW_ONE"), "Source patch rollback left the first replacement text behind.");
   assert(!restored.includes("PATCH_NEW_TWO"), "Source patch rollback left the second replacement text behind.");
+
+  return current;
+}
+
+async function runTaskCommandFlow() {
+  const task = await createTask({
+    title: "Smoke task command run",
+    objective: "Approve and run an allowlisted runtime command without applying an edit proposal."
+  });
+
+  await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "task command task to reach initial plan review"
+  );
+
+  const blocked = await postExpectError(`/tasks/${task.id}/run-task-command`, {
+    commandID: "runtime-npm-check"
+  });
+  assert(blocked.status === 409, `Expected unapproved task command to be blocked, got ${blocked.status}.`);
+  assert(
+    blocked.text.includes("requires approval"),
+    `Expected unapproved task command response to mention approval: ${blocked.text}`
+  );
+
+  let current = await post(`/tasks/${task.id}/approve-validation-preset`, {
+    presetID: "runtime-typescript",
+    note: "Core smoke test approves runtime command execution."
+  });
+  assert(
+    current.approvals?.some((approval) => approval.action === "Approve Validation Preset" && approval.targetID === "runtime-typescript"),
+    "Task command flow did not approve the runtime-typescript preset."
+  );
+
+  const collected = await collectRuntimeEventsDuring(async () =>
+    post(`/tasks/${task.id}/run-task-command`, {
+      commandID: "runtime-npm-check"
+    })
+  );
+  current = collected.result;
+  assertState(current, "Human Review", "Command Passed");
+
+  const commandRun = current.taskCommandRuns?.at(-1);
+  assert(commandRun, "Task command flow did not record a task command run.");
+  assert(commandRun.commandID === "runtime-npm-check", `Expected runtime-npm-check, got ${commandRun.commandID}.`);
+  assert(commandRun.status === "Passed", `Task command did not pass: ${commandRun.outputSummary}`);
+  assert(commandRun.exitCode === 0, `Expected task command exit code 0, got ${commandRun.exitCode}.`);
+  assert(commandRun.outputSummary.includes("npm run check exited with code 0"), "Task command summary did not include the exit code.");
+  assert(commandRun.outputChunks?.length > 0, "Task command flow did not persist output chunks.");
+  assert(
+    commandRun.outputChunks.some((chunk) => chunk.stream === "stdout" || chunk.stream === "stderr"),
+    "Task command flow did not persist process stdout/stderr chunks."
+  );
+  assert(commandRun.presetID === "runtime-typescript", "Task command run did not retain the approving preset id.");
+  assert(
+    current.events?.some((event) => event.type === "task.command.passed"),
+    "Task command flow did not record a passed event."
+  );
+  assert(
+    current.planSteps?.some((step) => step.id === "run-task-command-runtime-npm-check" && step.status === "Done"),
+    "Task command flow did not update the task plan step."
+  );
+  assert(
+    collected.events.some((event) => event.type === "task.command.started" && event.data?.taskID === current.id),
+    "Task command flow did not stream a started event."
+  );
+  assert(
+    collected.events.some((event) => event.type === "task.command.output" && event.data?.taskCommandRunID === commandRun.id),
+    "Task command flow did not stream output chunks."
+  );
+  assert(
+    collected.events.some((event) => event.type === "task.command.completed" && event.data?.taskCommandRunID === commandRun.id),
+    "Task command flow did not stream a completed event."
+  );
 
   return current;
 }
@@ -1574,6 +1650,87 @@ async function post(path, body) {
 
 async function postExpectError(path, body) {
   return requestExpectError("POST", path, body);
+}
+
+async function collectRuntimeEventsDuring(action) {
+  const controller = new AbortController();
+  const events = [];
+  const streamPromise = collectRuntimeEvents(controller, events);
+
+  await sleep(100);
+  const result = await action();
+  const deadline = Date.now() + 2_000;
+  while (
+    Date.now() < deadline &&
+    !events.some((event) => event.type === "task.command.completed" && event.data?.taskID === result.id)
+  ) {
+    await sleep(50);
+  }
+
+  controller.abort();
+  await streamPromise;
+  return { result, events };
+}
+
+async function collectRuntimeEvents(controller, events) {
+  try {
+    const response = await fetch(`${baseURL}/events`, { signal: controller.signal });
+    if (!response.ok || !response.body) {
+      throw new Error(`GET /events failed with ${response.status}.`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      let separatorIndex = buffer.indexOf("\n\n");
+      while (separatorIndex >= 0) {
+        const block = buffer.slice(0, separatorIndex);
+        buffer = buffer.slice(separatorIndex + 2);
+        const parsed = parseRuntimeEventBlock(block);
+        if (parsed) {
+          events.push(parsed);
+        }
+        separatorIndex = buffer.indexOf("\n\n");
+      }
+    }
+  } catch (error) {
+    if (!controller.signal.aborted) {
+      throw error;
+    }
+  }
+}
+
+function parseRuntimeEventBlock(block) {
+  const lines = block.split("\n");
+  let type = "message";
+  const dataLines = [];
+
+  for (const line of lines) {
+    if (line.startsWith("event: ")) {
+      type = line.slice("event: ".length);
+    } else if (line.startsWith("data: ")) {
+      dataLines.push(line.slice("data: ".length));
+    }
+  }
+
+  if (dataLines.length === 0) {
+    return { type, data: undefined };
+  }
+
+  const dataText = dataLines.join("\n");
+  try {
+    return { type, data: JSON.parse(dataText) };
+  } catch {
+    return { type, data: dataText };
+  }
 }
 
 async function runGit(args, options = {}) {

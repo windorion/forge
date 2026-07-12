@@ -25,10 +25,10 @@ dashboard.
   patch orchestration, rollback revalidation/recovery, and provider-driven
   source repair flows while keeping strict path validation and pre-apply
   checks.
-- Add approved task-scoped command execution with streamed output, status,
-  exit code, timeout, and cancellation hooks.
-- Connect command failures to the existing repair-brief/proposal loop so Forge
-  can produce a reviewable self-fix after failed tests.
+- Extend approved task-scoped command execution with cancellation hooks,
+  command selection, and clearer active-run controls.
+- Connect failed task-command output to the existing repair-brief/proposal loop
+  so Forge can produce a reviewable self-fix after failed tests.
 - Keep the current trust gates: plan approval before mutation, human review
   before apply, explicit command approval, and explicit git actions.
 
@@ -94,6 +94,12 @@ dashboard.
 
 ## Done Recently
 
+- Added approved task-scoped command execution for runtime-known command IDs:
+  `POST /tasks/:taskID/run-task-command` accepts only command IDs, reuses
+  validation-preset approvals, blocks concurrent command/validation runs, runs
+  project commands without a shell, streams output chunks over SSE, stores
+  bounded task command output with status/exit code/timeout result, and exposes
+  a first macOS Tests tab/action-rail path for `runtime-npm-check`.
 - Added the first source-code edit path: exact `ReplaceText` proposals can now
   validate and apply to existing allowlisted source/text files, not only
   Markdown.

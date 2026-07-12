@@ -101,6 +101,15 @@ The Review panel now presents these commands as task-specific permission
 requests with approval state, blocked reasons, command boundary, and last-run
 metadata before the user approves or runs them.
 
+Current task-scoped command execution reuses the same command catalog and
+approval records, but runs a single command by ID as part of the live task
+session instead of only as post-apply validation. `POST
+/tasks/:taskID/run-task-command` accepts no raw shell, blocks concurrent
+validation/command runs, runs project commands with `spawn` and `shell:false`,
+stores bounded output chunks plus exit status, and streams command output to
+the app. It does not yet cancel active commands or automatically create
+self-fix proposals from failed task-command output.
+
 ### High Risk
 
 Examples:

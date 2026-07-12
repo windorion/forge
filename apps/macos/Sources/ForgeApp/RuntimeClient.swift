@@ -454,6 +454,21 @@ struct RuntimeClient {
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
 
+    func runTaskCommand(taskID: ForgeTask.ID, commandID: String) async throws -> ForgeTask {
+        let url = baseURL
+            .appending(path: "tasks")
+            .appending(path: taskID)
+            .appending(path: "run-task-command")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(RunTaskCommandRequest(commandID: commandID))
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response, data: data)
+        return try JSONDecoder().decode(ForgeTask.self, from: data)
+    }
+
     func events() -> AsyncThrowingStream<RuntimeStreamEvent, Error> {
         AsyncThrowingStream { continuation in
             let streamTask = Task {

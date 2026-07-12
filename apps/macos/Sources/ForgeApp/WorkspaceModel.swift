@@ -41,6 +41,7 @@ final class WorkspaceModel: ObservableObject {
     @Published private var rollingBackEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var rejectingEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var runningValidationTaskIDs = Set<ForgeTask.ID>()
+    @Published private var runningTaskCommandTaskIDs = Set<ForgeTask.ID>()
     @Published private var approvingValidationPresetTaskIDs = Set<String>()
     @Published private var refreshingGitStatus = false
     @Published private var loadingGitDiffPaths = Set<String>()
@@ -558,6 +559,30 @@ final class WorkspaceModel: ObservableObject {
 
     func isRunningValidation(taskID: ForgeTask.ID, presetID: ValidationPreset.ID? = nil) -> Bool {
         runningValidationTaskIDs.contains(validationPresetActionKey(taskID: taskID, presetID: presetID ?? "forge-post-apply"))
+    }
+
+    func runTaskCommand(for task: ForgeTask, commandID: String) {
+        runningTaskCommandTaskIDs.insert(task.id)
+
+        Task {
+            do {
+                let updatedTask = try await runtime.runTaskCommand(taskID: task.id, commandID: commandID)
+                upsert(updatedTask)
+                selectedTaskID = updatedTask.id
+                statusMessage = "Task command completed."
+                await refreshGitStatusSnapshot()
+                await refreshValidationPermissionSnapshotIfPossible(for: updatedTask.id)
+                startEventStream()
+            } catch {
+                statusMessage = "Run task command failed: \(error.localizedDescription)"
+            }
+
+            runningTaskCommandTaskIDs.remove(task.id)
+        }
+    }
+
+    func isRunningTaskCommand(taskID: ForgeTask.ID) -> Bool {
+        runningTaskCommandTaskIDs.contains(taskID)
     }
 
     func validationPermissions(for taskID: ForgeTask.ID) -> [ValidationPresetPermission] {

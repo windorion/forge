@@ -102,6 +102,10 @@ function parseTaskPayload(payload: unknown): ForgeTask {
   return {
     ...parsed,
     approvals: parsed.approvals ?? [],
+    taskCommandRuns: (parsed.taskCommandRuns ?? []).map((run) => ({
+      ...run,
+      outputChunks: run.outputChunks ?? []
+    })),
     validationRuns: (parsed.validationRuns ?? []).map((run) => ({
       ...run,
       presetID: run.presetID ?? "forge-post-apply",

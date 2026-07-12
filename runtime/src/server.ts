@@ -50,7 +50,10 @@ import type {
   PlanStep,
   ProposedFileChange,
   RuntimeEvent,
+  RunTaskCommandRequest,
   RunValidationRequest,
+  TaskCommandOutputChunk,
+  TaskCommandRun,
   TaskFileReference,
   TaskMessage,
   ToolCall,
@@ -76,6 +79,9 @@ const tasks = new Map<string, ForgeTask>(taskStore.loadTasks().map((task) => [ta
 let modelProviderSettings = loadModelProviderRuntimeSettings();
 let modelProvider = createModelProvider(modelProviderSettings);
 const validationCommandTimeoutMs = 60_000;
+const taskCommandOutputChunkLimit = 80;
+const taskCommandOutputTextLimit = 24_000;
+const taskCommandChunkTextLimit = 4_000;
 const repositoryScanMaxFiles = 400;
 const repositorySearchMaxFiles = 240;
 const repositoryContextMaxFiles = 6;
@@ -637,6 +643,14 @@ const server = createServer(async (request, response) => {
     if (request.method === "POST" && runValidationTaskID) {
       const input = await readJson<RunValidationRequest>(request);
       const task = await runValidation(runValidationTaskID, "Manual", input.presetID);
+      writeJson(response, 200, task);
+      return;
+    }
+
+    const runTaskCommandTaskID = taskIDFromActionPath(url.pathname, "run-task-command");
+    if (request.method === "POST" && runTaskCommandTaskID) {
+      const input = await readJson<RunTaskCommandRequest>(request);
+      const task = await runTaskCommand(runTaskCommandTaskID, input);
       writeJson(response, 200, task);
       return;
     }
@@ -4433,10 +4447,10 @@ function buildValidationPermission(
 
   const executionState: ValidationPresetPermission["executionState"] = hasRunningValidationRun(task)
     ? "Running"
-    : task.editProposal?.status !== "Applied"
-      ? "Blocked"
-      : preset.requiresApproval && !approval
-        ? "NeedsApproval"
+    : preset.requiresApproval && !approval
+      ? "NeedsApproval"
+      : task.editProposal?.status !== "Applied"
+        ? "Blocked"
         : "Ready";
 
   return {
@@ -4451,7 +4465,7 @@ function buildValidationPermission(
     },
     approvalState,
     executionState,
-    canApprove: executionState === "NeedsApproval",
+    canApprove: preset.requiresApproval && !approval,
     canRun: executionState === "Ready",
     blockedReasons,
     approval: approval
@@ -4674,6 +4688,7 @@ async function createTask(input: CreateTaskRequest): Promise<ForgeTask> {
     events: [createdEvent],
     approvals: [],
     toolCalls: [],
+    taskCommandRuns: [],
     validationRuns: [],
     validationRepairBriefs: [],
     messages: [userMessage],
@@ -5986,6 +6001,285 @@ async function approveValidationPreset(taskID: string, input: ApproveValidationP
   return task;
 }
 
+async function runTaskCommand(taskID: string, input: RunTaskCommandRequest): Promise<ForgeTask> {
+  const task = tasks.get(taskID);
+  if (!task) {
+    throw new HttpError(404, `Task not found: ${taskID}`);
+  }
+
+  const commandID = input.commandID?.trim();
+  if (!commandID) {
+    throw new HttpError(400, "Task command requires a commandID.");
+  }
+
+  const command = validationCommandCatalog.get(commandID);
+  if (!command) {
+    throw new HttpError(404, `Task command not found: ${commandID}`);
+  }
+
+  if (hasRunningTaskCommandRun(task)) {
+    throw new HttpError(409, "Another task command is already active.");
+  }
+
+  if (hasRunningValidationRun(task)) {
+    throw new HttpError(409, "A validation run is already active.");
+  }
+
+  const preset = await findTaskCommandExecutionPreset(task, command);
+  if (command.kind === "ProjectCommand") {
+    resolvePresetCommandCwd(command.cwd);
+  }
+
+  const startedAt = new Date().toISOString();
+  const commandRun: TaskCommandRun = {
+    id: randomUUID(),
+    commandID: command.id,
+    name: command.name,
+    command: command.command,
+    kind: command.kind,
+    riskLevel: command.riskLevel,
+    cwd: command.cwd,
+    presetID: preset.id,
+    presetName: preset.name,
+    status: "Running",
+    outputSummary: "Running",
+    outputChunks: [],
+    startedAt
+  };
+
+  task.taskCommandRuns.push(commandRun);
+  task.status = "Testing";
+  task.currentPhase = "Command Running";
+  task.reviewSummary = `Running task command: ${command.name}.`;
+  setAgent(task, "Tester", "Active", `Running ${command.command}.`);
+  setAgent(task, "Reviewer", "Idle", "Waiting for command output.");
+  upsertPlanStep(task, {
+    id: `run-task-command-${command.id}`,
+    title: "Run task command",
+    status: "Active",
+    summary: `Running ${command.name} through approved preset ${preset.name}.`
+  });
+
+  const started = event("task.command.started", `Task command started: ${command.name}.`);
+  started.createdAt = startedAt;
+  saveAndBroadcast(task, started);
+
+  try {
+    const output = command.kind === "BuiltIn"
+      ? await runBuiltInTaskCommand(command, task, commandRun)
+      : await runProjectTaskCommand(command, task, commandRun);
+    commandRun.exitCode = output.exitCode;
+    commandRun.outputSummary = output.outputSummary;
+    commandRun.status = output.exitCode === 0 ? "Passed" : "Failed";
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    commandRun.status = "Failed";
+    commandRun.outputSummary = message;
+    appendTaskCommandOutputChunk(task, commandRun, "system", `${message}\n`);
+  }
+
+  const endedAt = new Date().toISOString();
+  commandRun.endedAt = endedAt;
+  const passed = commandRun.status === "Passed";
+  task.status = passed ? "Human Review" : "Failed";
+  task.currentPhase = passed ? "Command Passed" : "Command Failed";
+  task.reviewSummary = commandRun.outputSummary;
+  setAgent(
+    task,
+    "Tester",
+    passed ? "Done" : "Blocked",
+    passed ? `${command.name} passed.` : `${command.name} failed.`
+  );
+  setAgent(
+    task,
+    "Reviewer",
+    "Active",
+    passed ? "Command output is ready for review." : "Review failed command output before continuing."
+  );
+  upsertPlanStep(task, {
+    id: `run-task-command-${command.id}`,
+    title: "Run task command",
+    status: passed ? "Done" : "Blocked",
+    summary: commandRun.outputSummary
+  });
+
+  const finished = event(
+    passed ? "task.command.passed" : "task.command.failed",
+    passed ? `Task command passed: ${command.name}.` : `Task command failed: ${command.name}.`
+  );
+  finished.createdAt = endedAt;
+  saveAndBroadcast(task, finished);
+  emit("task.command.completed", {
+    taskID: task.id,
+    taskCommandRunID: commandRun.id,
+    commandRun,
+    task
+  });
+  return task;
+}
+
+async function findTaskCommandExecutionPreset(
+  task: ForgeTask,
+  command: InternalValidationCommand
+): Promise<InternalValidationPreset> {
+  const registry = await loadValidationPresetRegistry();
+  const matchingPresets = registry.presets.filter((preset) =>
+    preset.commands.some((candidate) => candidate.id === command.id)
+  );
+
+  const noApprovalPreset = matchingPresets.find((preset) => !preset.requiresApproval);
+  if (noApprovalPreset) {
+    return noApprovalPreset;
+  }
+
+  const approvedPreset = matchingPresets.find((preset) => hasValidationPresetApproval(task, preset.id));
+  if (approvedPreset) {
+    return approvedPreset;
+  }
+
+  if (matchingPresets.length === 0) {
+    throw new HttpError(409, `Task command is not exposed through a validation preset: ${command.id}`);
+  }
+
+  const presetNames = matchingPresets.map((preset) => preset.name).join(", ");
+  throw new HttpError(409, `Task command requires approval through one of these presets before execution: ${presetNames}`);
+}
+
+async function runBuiltInTaskCommand(
+  command: InternalValidationCommand,
+  task: ForgeTask,
+  commandRun: TaskCommandRun
+): Promise<{ outputSummary: string; exitCode: number }> {
+  const outputSummary = await runBuiltInValidationCommand(command, task);
+  appendTaskCommandOutputChunk(task, commandRun, "system", `${outputSummary.outputSummary}\n`);
+  return {
+    outputSummary: outputSummary.outputSummary,
+    exitCode: outputSummary.exitCode ?? 0
+  };
+}
+
+async function runProjectTaskCommand(
+  command: InternalValidationCommand,
+  task: ForgeTask,
+  commandRun: TaskCommandRun
+): Promise<{ outputSummary: string; exitCode: number }> {
+  if (!command.executable || !command.args) {
+    throw new Error(`Project task command is missing executable metadata: ${command.command}`);
+  }
+
+  const cwd = resolvePresetCommandCwd(command.cwd);
+  const { exitCode, output } = await runSpawnedTaskCommand(command, cwd, task, commandRun);
+  return {
+    outputSummary: summarizeCommandOutput(command.command, exitCode, output),
+    exitCode
+  };
+}
+
+function runSpawnedTaskCommand(
+  command: InternalValidationCommand,
+  cwd: string,
+  task: ForgeTask,
+  commandRun: TaskCommandRun
+): Promise<{ exitCode: number; output: string }> {
+  const executable = command.executable;
+  const args = command.args;
+  if (!executable || !args) {
+    return Promise.reject(new Error(`Task command is missing executable metadata: ${command.command}`));
+  }
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(executable, args, {
+      cwd,
+      shell: false,
+      env: { ...process.env, CI: "1" }
+    });
+
+    let output = "";
+    let timedOut = false;
+    let timeoutMessage = "";
+    const appendOutput = (stream: TaskCommandOutputChunk["stream"], chunk: Buffer) => {
+      const text = chunk.toString("utf8");
+      output += text;
+      if (output.length > 12_000) {
+        output = output.slice(output.length - 12_000);
+      }
+      appendTaskCommandOutputChunk(task, commandRun, stream, text);
+    };
+
+    const timeout = setTimeout(() => {
+      timeoutMessage = `Command timed out after ${validationCommandTimeoutMs / 1000}s.\n`;
+      timedOut = true;
+      child.kill("SIGTERM");
+      appendTaskCommandOutputChunk(task, commandRun, "system", timeoutMessage);
+    }, validationCommandTimeoutMs);
+
+    child.stdout.on("data", (chunk: Buffer) => appendOutput("stdout", chunk));
+    child.stderr.on("data", (chunk: Buffer) => appendOutput("stderr", chunk));
+    child.on("error", (error: Error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.on("close", (code: number | null) => {
+      clearTimeout(timeout);
+      resolve({
+        exitCode: timedOut ? 124 : code ?? 1,
+        output: timedOut ? `${output}${timeoutMessage}` : output
+      });
+    });
+  });
+}
+
+function appendTaskCommandOutputChunk(
+  task: ForgeTask,
+  commandRun: TaskCommandRun,
+  stream: TaskCommandOutputChunk["stream"],
+  text: string
+): void {
+  if (!text) {
+    return;
+  }
+
+  const createdAt = new Date().toISOString();
+  const chunk: TaskCommandOutputChunk = {
+    id: randomUUID(),
+    stream,
+    text: text.length > taskCommandChunkTextLimit ? text.slice(text.length - taskCommandChunkTextLimit) : text,
+    createdAt
+  };
+
+  commandRun.outputChunks.push(chunk);
+  trimTaskCommandOutputChunks(commandRun);
+  task.updatedAt = createdAt;
+  tasks.set(task.id, task);
+  saveTask(task);
+  emit("task.command.output", {
+    taskID: task.id,
+    taskCommandRunID: commandRun.id,
+    chunk,
+    task
+  });
+  emit("task.updated", { taskID: task.id, task });
+}
+
+function trimTaskCommandOutputChunks(commandRun: TaskCommandRun): void {
+  while (commandRun.outputChunks.length > taskCommandOutputChunkLimit) {
+    commandRun.outputChunks.shift();
+  }
+
+  let totalLength = commandRun.outputChunks.reduce((sum, chunk) => sum + chunk.text.length, 0);
+  while (totalLength > taskCommandOutputTextLimit && commandRun.outputChunks.length > 1) {
+    const removed = commandRun.outputChunks.shift();
+    totalLength -= removed?.text.length ?? 0;
+  }
+
+  if (totalLength > taskCommandOutputTextLimit) {
+    const onlyChunk = commandRun.outputChunks[0];
+    if (onlyChunk) {
+      onlyChunk.text = onlyChunk.text.slice(onlyChunk.text.length - taskCommandOutputTextLimit);
+    }
+  }
+}
+
 async function runValidation(
   taskID: string,
   trigger: ValidationRun["trigger"],
@@ -6562,6 +6856,10 @@ function findValidationPresetApproval(task: ForgeTask, presetID: string): Approv
 
 function hasRunningValidationRun(task: ForgeTask): boolean {
   return task.validationRuns.some((run) => run.status === "Running");
+}
+
+function hasRunningTaskCommandRun(task: ForgeTask): boolean {
+  return task.taskCommandRuns.some((run) => run.status === "Running");
 }
 
 function findLastValidationRun(task: ForgeTask, presetID: string): ValidationPermissionLastRun | undefined {
@@ -7929,6 +8227,7 @@ function renderRuntimeHome(): string {
       <li><code>POST /tasks/:taskID/reject-edit-proposal</code></li>
       <li><code>POST /tasks/:taskID/approve-validation-preset</code></li>
       <li><code>POST /tasks/:taskID/run-validation</code></li>
+      <li><code>POST /tasks/:taskID/run-task-command</code></li>
       <li><code>GET /events</code></li>
     </ul>
   </main>

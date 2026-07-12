@@ -341,7 +341,8 @@ The runtime also exposes task-specific validation permission snapshots through
 `GET /tasks/:taskID/validation-permissions`. The snapshot includes approval
 state, execution state, blocked reasons, command execution mode, and last run
 metadata so the app can show permission requests without guessing runtime
-policy locally.
+policy locally. Approval can be granted before an edit proposal is applied;
+running a validation preset still requires the normal applied-proposal gate.
 
 Tasks enter `Testing` after apply and only move to `Completed` after
 validation passes. Failed validation moves the task to `Failed` with command
@@ -358,12 +359,36 @@ repair proposal. It archives the previously applied proposal, links the new
 proposal to the repair brief, validates the proposal, and returns to human
 review. This still does not apply files automatically.
 
+### Task Command Runner
+
+Runs one approved, runtime-known command as part of the live task session
+without requiring an applied edit proposal. The current endpoint is
+`POST /tasks/:taskID/run-task-command` with a `commandID` only; the app, user,
+workspace config, and model provider cannot supply arbitrary shell strings.
+
+The runner reuses validation preset approvals. Low-risk commands can run when
+their preset does not require approval. Medium-risk project commands, such as
+`runtime-npm-check`, require task-level approval through a preset that includes
+that command. Project commands still run with `spawn`, `shell:false`, and a
+runtime-owned repo-local cwd.
+
+Each task command run records status, exit code, start/end timestamps, the
+approving preset, a compact output summary, and bounded stdout/stderr/system
+chunks in task state. The runtime emits `task.command.started`,
+`task.command.output`, and `task.command.completed` SSE events so the macOS
+Tests tab can show command output as a live coding-agent surface.
+
+Current gaps: cancellation is not wired yet, the app exposes only a first
+`runtime-npm-check` shortcut, and failed task-command output is not yet
+connected to the validation repair-brief/self-fix loop.
+
 ### Permission Manager
 
 Decides whether an action can run automatically or requires user approval.
 For validation presets, it derives `Blocked`, `NeedsApproval`, `Ready`, or
-`Running` from task state, preset risk, approval records, and active validation
-runs.
+`Running` from task state, preset risk, approval records, active validation
+runs, and the applied-proposal gate for validation execution. Task command
+execution uses the same approval records but has its own run state.
 
 ### Sandbox Manager
 

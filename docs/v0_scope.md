@@ -140,6 +140,7 @@ Built foundation:
 - plan approval and review gates
 - restricted edit proposals
 - validation presets and repair briefs
+- approved task-scoped command runner with streamed stdout/stderr chunks
 - git status/diff/commit/push/branch/PR handoff preflights
 - app-managed runtime diagnostics
 - local smoke coverage
@@ -156,16 +157,18 @@ Major gaps:
   keyboard shortcuts, and durable file-level review decisions.
 - Patch apply now has exact source replacement and multi-hunk text patch
   paths, but it is still too narrow for normal source-code tasks.
-- Command output is not streamed as a first-class task surface.
+- Command output now has a first streamed task-scoped surface, but it still
+  needs cancellation, a richer command chooser, and failed-output self-fix.
 - Provider-backed run loop is not yet a real read/search/patch/run/repair
   agent.
 
 ## Next Implementation Order
 
-1. Broaden source-file patch proposal/apply beyond exact text hunks and harden
+1. Connect provider-driven run loop to read/search/patch/run/repair.
+2. Connect failed task-command output to a bounded self-fix proposal loop.
+3. Add task command cancellation and a richer approved-command chooser.
+4. Broaden source-file patch proposal/apply beyond exact text hunks and harden
    rollback revalidation/recovery.
-2. Add task-scoped command execution and streamed logs.
-3. Connect provider-driven run loop to patch/run/repair.
-4. Implement request-change revision from full diff review.
-5. Polish `10a` with durable file-level decisions and exact split-diff behavior.
-6. Add `32a` chat-to-task polish once the live run works.
+5. Implement request-change revision from full diff review.
+6. Polish `10a` with durable file-level decisions and exact split-diff behavior.
+7. Add `32a` chat-to-task polish once the live run works.

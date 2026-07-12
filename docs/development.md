@@ -320,6 +320,28 @@ changed until explicit apply. The Review panel exposes this action when the
 latest failed validation run has a matching repair brief and the current edit
 proposal is still the applied proposal.
 
+The runtime also has a first task-scoped command runner for live agent
+sessions:
+
+```text
+POST /tasks/:taskID/run-task-command
+```
+
+The request accepts only a runtime-known `commandID`. It reuses validation
+preset approvals, blocks concurrent validation/command runs, and does not
+accept arbitrary shell text. Project commands run with `spawn`, `shell:false`,
+and runtime-owned repo-local cwd values. The response stores a
+`taskCommandRuns` record with status, exit code, output summary, approving
+preset, and bounded output chunks. The runtime also emits
+`task.command.started`, `task.command.output`, and `task.command.completed`
+events over `GET /events`.
+
+In the macOS session shell, the action rail exposes a first `Run Runtime Check`
+button for `runtime-npm-check` after the task has approved the
+`runtime-typescript` preset. The Tests tab shows task command runs before
+validation runs, including stdout/stderr/system chunks. Cancellation, a richer
+command chooser, and failed-command self-fix are still future work.
+
 Current validation presets:
 
 - `forge-post-apply`: low-risk built-in audit checks.
@@ -485,6 +507,10 @@ cd runtime && npm run smoke:git-remote
   shell, and require explicit task-level approval before execution.
 - Command permission cards are a visibility and approval surface for
   allowlisted validation presets; they are not arbitrary shell execution.
+- Task command runs reuse those approvals for one command ID at a time and
+  stream bounded output chunks into task state. They are not arbitrary shell
+  execution, do not yet support cancellation, and do not yet generate self-fix
+  proposals from failed output.
 - SQLite currently stores full task snapshots plus basic task index fields; the
   full normalized runs/messages/tool-calls schema is still ahead.
 - Repository context is still a bounded v1 scanner, not a full repository

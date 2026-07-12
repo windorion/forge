@@ -13,6 +13,7 @@ struct ForgeTask: Identifiable, Codable, Hashable {
     var events: [RuntimeEvent]
     var approvals: [ApprovalRecord]
     var toolCalls: [ToolCall]
+    var taskCommandRuns: [TaskCommandRun]
     var validationRuns: [ValidationRun]
     var validationRepairBriefs: [ValidationRepairBrief]
     var messages: [TaskMessage]
@@ -50,6 +51,7 @@ struct ForgeTask: Identifiable, Codable, Hashable {
         ],
         approvals: [],
         toolCalls: [],
+        taskCommandRuns: [],
         validationRuns: [],
         validationRepairBriefs: [],
         messages: [
@@ -135,6 +137,31 @@ struct ValidationCommandResult: Identifiable, Codable, Hashable {
     var cwd: String?
     var status: String
     var outputSummary: String
+    var exitCode: Int?
+    var startedAt: String
+    var endedAt: String?
+}
+
+struct TaskCommandOutputChunk: Identifiable, Codable, Hashable {
+    var id: String
+    var stream: String
+    var text: String
+    var createdAt: String
+}
+
+struct TaskCommandRun: Identifiable, Codable, Hashable {
+    var id: String
+    var commandID: String
+    var name: String
+    var command: String
+    var kind: String
+    var riskLevel: String
+    var cwd: String?
+    var presetID: String?
+    var presetName: String?
+    var status: String
+    var outputSummary: String
+    var outputChunks: [TaskCommandOutputChunk]
     var exitCode: Int?
     var startedAt: String
     var endedAt: String?
@@ -776,6 +803,10 @@ struct ApproveValidationPresetRequest: Encodable {
 
 struct RunValidationRequest: Encodable {
     var presetID: String?
+}
+
+struct RunTaskCommandRequest: Encodable {
+    var commandID: String
 }
 
 struct CreateTaskMessageRequest: Encodable {

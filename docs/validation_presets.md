@@ -88,6 +88,30 @@ Each permission snapshot includes:
 The macOS Review panel uses this endpoint to show command permission requests.
 The UI should not locally invent a different permission policy.
 
+Approval and execution readiness are intentionally separate. A medium-risk
+preset can be approved before an edit proposal is applied. Running a full
+validation preset still requires the applied-proposal validation gate, while a
+task-scoped command run can reuse the same approval to run one command by ID
+inside the live task session.
+
+## Task-Scoped Command Runs
+
+The runtime exposes:
+
+```text
+POST /tasks/:taskID/run-task-command
+```
+
+The request accepts a `commandID` only. The command must already exist in the
+runtime command catalog and must belong to a preset that is either low risk or
+approved for the task. Raw shell strings from the app, workspace config, model,
+or user prompt are not accepted.
+
+The first app surface uses `runtime-npm-check` as a live-session command. The
+runtime records the approving preset, status, exit code, output summary, and
+bounded stdout/stderr/system chunks in task state, and streams output through
+SSE events.
+
 ## Safety Rules
 
 - Workspace preset ids must be lowercase, dash-separated identifiers.
@@ -97,6 +121,7 @@ The UI should not locally invent a different permission policy.
 - Command cwd values are runtime-owned and must resolve inside the repo.
 - Permission cards show command boundaries before approval or execution.
 - Exit code and output summary are recorded for every command.
+- Task-scoped command output chunks are bounded before persistence.
 - Failed commands make the validation run fail.
 - Failed validation runs can trigger a provider-generated repair brief from
   compact command summaries. The brief is advisory and does not rerun commands

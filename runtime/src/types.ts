@@ -272,6 +272,31 @@ export interface ValidationCommandResult {
   endedAt?: string;
 }
 
+export interface TaskCommandOutputChunk {
+  id: string;
+  stream: "stdout" | "stderr" | "system";
+  text: string;
+  createdAt: string;
+}
+
+export interface TaskCommandRun {
+  id: string;
+  commandID: string;
+  name: string;
+  command: string;
+  kind: "BuiltIn" | "ProjectCommand";
+  riskLevel: "Low" | "Medium" | "High";
+  cwd?: string;
+  presetID?: string;
+  presetName?: string;
+  status: "Running" | "Passed" | "Failed";
+  outputSummary: string;
+  outputChunks: TaskCommandOutputChunk[];
+  exitCode?: number;
+  startedAt: string;
+  endedAt?: string;
+}
+
 export interface ValidationRun {
   id: string;
   trigger: "PostApply" | "Manual";
@@ -690,6 +715,7 @@ export interface ForgeTask {
   events: RuntimeEvent[];
   approvals: ApprovalRecord[];
   toolCalls: ToolCall[];
+  taskCommandRuns: TaskCommandRun[];
   validationRuns: ValidationRun[];
   validationRepairBriefs: ValidationRepairBrief[];
   messages: TaskMessage[];
@@ -718,6 +744,10 @@ export interface ApproveValidationPresetRequest {
 
 export interface RunValidationRequest {
   presetID?: string;
+}
+
+export interface RunTaskCommandRequest {
+  commandID?: string;
 }
 
 export interface CreateTaskMessageRequest {

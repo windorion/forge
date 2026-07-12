@@ -2827,3 +2827,48 @@ Next:
   proposals.
 - Later, broaden patch support beyond exact text hunks only if the review and
   rollback gates remain strict.
+
+### 2026-07-12 19:55:07 CEST +0200
+
+Conversation summary:
+
+- User asked to commit/push the current work and continue the next development
+  step. After pushing the PatchText work, the next task focused on making the
+  app feel more like a real coding-agent session by adding approved command
+  execution with live output.
+
+Done:
+
+- Committed and pushed the previous PatchText work to `main`.
+- Added `POST /tasks/:taskID/run-task-command` for task-scoped command runs.
+- Reused the existing validation command catalog and preset approval records
+  instead of accepting raw shell strings.
+- Added task command run state with command id, approving preset, status, exit
+  code, output summary, start/end timestamps, and bounded output chunks.
+- Streamed command lifecycle/output through `task.command.started`,
+  `task.command.output`, and `task.command.completed` SSE events.
+- Blocked concurrent validation and task command execution for a task.
+- Allowed validation presets to be approved before an edit proposal is applied,
+  while keeping full validation runs gated on applied proposals.
+- Added macOS models, RuntimeClient, WorkspaceModel action state, a first
+  `Run Runtime Check` action-rail button, and Tests tab rendering for task
+  command stdout/stderr/system chunks.
+- Extended `npm run smoke:core` with an approval/blocking/streaming test for
+  `runtime-npm-check`.
+- Updated README, project status, TODO, validation presets, runtime
+  architecture, security, development, and V0 scope docs.
+
+Not done:
+
+- Did not add command cancellation.
+- Did not add a richer approved-command chooser.
+- Did not connect failed task-command output to the validation
+  repair-brief/self-fix proposal loop yet.
+- Did not make the provider run loop autonomously call read/search/patch/run.
+
+Next:
+
+- Connect failed task command output to a bounded repair brief/proposal flow.
+- Add cancellation for active task command runs.
+- Add a command chooser that lists approved runtime-known commands instead of
+  only the `runtime-npm-check` shortcut.
