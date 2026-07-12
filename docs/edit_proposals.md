@@ -31,6 +31,10 @@ Current runtime flow:
 12. Runtime archives the rejected proposal in revision history, creates a new
     proposal from the latest conversation, validates it, and returns to
     `Human Review`.
+13. If an applied proposal has rollback metadata, the user can explicitly
+    rollback it. The runtime verifies current file hashes against the applied
+    hashes, restores local rollback snapshots or deletes created files, records
+    a rollback approval, and marks the proposal `RolledBack`.
 
 No file is changed while the proposal is generated. `changedFiles` remains
 empty until the user explicitly applies the proposal.
@@ -56,6 +60,10 @@ applied proposal is archived, the new proposal is validated, and the task
 returns to human review. This does not mutate files until the user applies the
 new proposal.
 
+When rollback is requested, Forge treats it as another explicit mutation gate.
+Rollback is blocked if the current file no longer matches the recorded
+post-apply hash, because that would overwrite later user or agent changes.
+
 ## Runtime Data
 
 An edit proposal stores:
@@ -76,6 +84,8 @@ An edit proposal stores:
 - optional decision note
 - optional restricted apply operation
 - optional validation result
+- optional applied-file rollback metadata
+- optional rollback timestamp and rollback note
 
 Task state also stores previous edit proposals in `editProposalRevisions`.
 The current proposal remains in `editProposal`; historical revisions are
@@ -109,8 +119,10 @@ Current restricted operation kinds:
 After apply, the proposal records `appliedFileChanges` metadata for every
 changed file: operation kind, applied timestamp, before/after SHA-256 hashes,
 before/after byte lengths when available, and the rollback strategy
-(`RestorePreviousContent` or `DeleteCreatedFile`). This is not yet a user-facing
-rollback action; it is the durable audit data needed for one.
+(`RestorePreviousContent` or `DeleteCreatedFile`). Restore rollbacks also keep
+a local snapshot path under `.forge/rollback-snapshots/`. The runtime exposes
+`POST /tasks/:taskID/rollback-edit-proposal` to apply that rollback after
+current-file hash verification.
 
 Validation stores:
 
@@ -139,6 +151,7 @@ Post-apply validation stores:
 - The UI must make the proposal status visible.
 - The runtime must log proposal events.
 - Applying a proposal requires a separate explicit action.
+- Rolling back an applied proposal requires a separate explicit action.
 - A proposal is validated when generated and again immediately before apply.
 - A blocked generated proposal can be repaired automatically only within a
   bounded attempt limit and only by producing another review artifact.
@@ -167,6 +180,9 @@ Post-apply validation stores:
 - Medium-risk project validation presets require explicit approval before they
   can run.
 - Commit or push actions remain separate from edit application.
+- Rollback is blocked if the current file hash differs from the recorded
+  post-apply hash, if a required snapshot is missing, or if a snapshot hash
+  does not match the recorded before hash.
 - Revising a proposal must not mutate files; it only replaces the current
   review artifact after archiving the rejected one.
 - Repairing a proposal must not mutate files; it only archives superseded
@@ -177,7 +193,8 @@ Post-apply validation stores:
 
 ## Future Work
 
-- Add a user-facing rollback endpoint using the recorded before/after metadata.
 - Add a richer patch apply engine after exact replace validation is mature.
 - Generate broader model-backed patch content while keeping runtime-owned
   validation and review gates.
+- Add richer rollback revalidation and recovery UI for partially failed or
+  user-modified rollback attempts.

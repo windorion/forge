@@ -222,6 +222,15 @@ allowlisted source/text files, plus create-file edits for new `docs/*.md`
 files. It revalidates before writing, records before/after apply metadata for
 rollback, and records rejected or superseded proposals without touching files.
 
+### Edit Proposal Rollback
+
+Rolls back an explicitly applied proposal through another guarded mutation
+endpoint. The runtime stores restore snapshots in `.forge/rollback-snapshots/`
+during apply, verifies current file hashes before rollback, restores previous
+contents or deletes files created by the proposal, records a rollback approval,
+and marks the proposal `RolledBack`. Rollback is blocked when the current file
+no longer matches the recorded post-apply hash.
+
 ### Git Review Surface
 
 Exposes read-only git state for review. The runtime provides

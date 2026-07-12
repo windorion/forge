@@ -1229,6 +1229,15 @@ private struct FullscreenDiffReview: View {
                     }
                     .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.accent, foreground: ForgeDesign.ink))
                     .disabled(!canApplyProposal)
+
+                    Button {
+                        workspace.rollbackEditProposal(for: task)
+                    } label: {
+                        Label(rollbackPatchTitle, systemImage: "arrow.uturn.backward.circle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(ForgeSecondaryButtonStyle())
+                    .disabled(!canRollbackProposal)
                 }
                 .padding(12)
                 .forgeCard()
@@ -1343,6 +1352,7 @@ private struct FullscreenDiffReview: View {
         task.editProposal?.status == "Proposed" &&
             task.editProposal?.validation?.status != "Blocked" &&
             !workspace.isApplyingEditProposal(taskID: task.id) &&
+            !workspace.isRollingBackEditProposal(taskID: task.id) &&
             !workspace.isValidatingEditProposal(taskID: task.id) &&
             !workspace.isRejectingEditProposal(taskID: task.id)
     }
@@ -1350,7 +1360,15 @@ private struct FullscreenDiffReview: View {
     private var canRejectProposal: Bool {
         task.editProposal?.status == "Proposed" &&
             !workspace.isApplyingEditProposal(taskID: task.id) &&
+            !workspace.isRollingBackEditProposal(taskID: task.id) &&
             !workspace.isRejectingEditProposal(taskID: task.id)
+    }
+
+    private var canRollbackProposal: Bool {
+        task.editProposal?.status == "Applied" &&
+            task.editProposal?.appliedFileChanges?.isEmpty == false &&
+            !workspace.isApplyingEditProposal(taskID: task.id) &&
+            !workspace.isRollingBackEditProposal(taskID: task.id)
     }
 
     private var applyPatchTitle: String {
@@ -1358,6 +1376,13 @@ private struct FullscreenDiffReview: View {
             return "Applying"
         }
         return task.editProposal?.status == "Applied" ? "Applied" : "Apply Final Patch"
+    }
+
+    private var rollbackPatchTitle: String {
+        if workspace.isRollingBackEditProposal(taskID: task.id) {
+            return "Rolling Back"
+        }
+        return task.editProposal?.status == "RolledBack" ? "Rolled Back" : "Rollback Patch"
     }
 
     private var requestChangeTitle: String {
@@ -1712,6 +1737,15 @@ private struct AgentRunActionsCard: View {
             .disabled(!canApplyEditProposal)
 
             Button {
+                workspace.rollbackEditProposal(for: task)
+            } label: {
+                Label(rollbackEditProposalTitle, systemImage: "arrow.uturn.backward.circle")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ForgeSecondaryButtonStyle())
+            .disabled(!canRollbackEditProposal)
+
+            Button {
                 workspace.rejectEditProposal(for: task)
             } label: {
                 Label(rejectEditProposalTitle, systemImage: "arrow.uturn.backward")
@@ -1760,6 +1794,10 @@ private struct AgentRunActionsCard: View {
         workspace.isApplyingEditProposal(taskID: task.id)
     }
 
+    private var isRollingBackEditProposal: Bool {
+        workspace.isRollingBackEditProposal(taskID: task.id)
+    }
+
     private var isRejectingEditProposal: Bool {
         workspace.isRejectingEditProposal(taskID: task.id)
     }
@@ -1774,6 +1812,7 @@ private struct AgentRunActionsCard: View {
             !isGeneratingEditProposal &&
             !isGeneratingValidationRepairProposal &&
             !isApplyingEditProposal &&
+            !isRollingBackEditProposal &&
             !isRejectingEditProposal
     }
 
@@ -1794,6 +1833,7 @@ private struct AgentRunActionsCard: View {
         task.editProposal?.status == "Proposed" &&
             !isValidatingEditProposal &&
             !isApplyingEditProposal &&
+            !isRollingBackEditProposal &&
             !isGeneratingValidationRepairProposal &&
             !isRejectingEditProposal
     }
@@ -1807,6 +1847,7 @@ private struct AgentRunActionsCard: View {
             task.editProposal?.validation?.status != "Blocked" &&
             !isValidatingEditProposal &&
             !isApplyingEditProposal &&
+            !isRollingBackEditProposal &&
             !isGeneratingValidationRepairProposal &&
             !isRejectingEditProposal
     }
@@ -1821,9 +1862,28 @@ private struct AgentRunActionsCard: View {
         return "Apply Patch"
     }
 
+    private var canRollbackEditProposal: Bool {
+        task.editProposal?.status == "Applied" &&
+            task.editProposal?.appliedFileChanges?.isEmpty == false &&
+            !isApplyingEditProposal &&
+            !isRollingBackEditProposal &&
+            !isGeneratingValidationRepairProposal
+    }
+
+    private var rollbackEditProposalTitle: String {
+        if isRollingBackEditProposal {
+            return "Rolling Back"
+        }
+        if task.editProposal?.status == "RolledBack" {
+            return "Rolled Back"
+        }
+        return "Rollback Patch"
+    }
+
     private var canRejectEditProposal: Bool {
         task.editProposal?.status == "Proposed" &&
             !isApplyingEditProposal &&
+            !isRollingBackEditProposal &&
             !isGeneratingValidationRepairProposal &&
             !isRejectingEditProposal
     }
@@ -1836,6 +1896,7 @@ private struct AgentRunActionsCard: View {
         task.editProposal?.status == "Applied" &&
             task.status != "Testing" &&
             !isRunningValidation &&
+            !isRollingBackEditProposal &&
             !isGeneratingValidationRepairProposal
     }
 
@@ -2828,6 +2889,14 @@ private struct ReviewPanel: View {
                     .disabled(!canApplyEditProposal)
 
                     Button {
+                        workspace.rollbackEditProposal(for: task)
+                    } label: {
+                        Label(rollbackEditProposalButtonTitle, systemImage: "arrow.uturn.backward.circle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .disabled(!canRollbackEditProposal)
+
+                    Button {
                         workspace.rejectEditProposal(for: task)
                     } label: {
                         Label(rejectEditProposalButtonTitle, systemImage: "arrow.uturn.backward")
@@ -2925,6 +2994,7 @@ private struct ReviewPanel: View {
             !isGeneratingEditProposal &&
             !isGeneratingValidationRepairProposal &&
             !isApplyingEditProposal &&
+            !isRollingBackEditProposal &&
             !isRejectingEditProposal
     }
 
@@ -2948,6 +3018,7 @@ private struct ReviewPanel: View {
         task.editProposal?.status == "Proposed" &&
             !isValidatingEditProposal &&
             !isApplyingEditProposal &&
+            !isRollingBackEditProposal &&
             !isGeneratingValidationRepairProposal &&
             !isRejectingEditProposal
     }
@@ -2968,6 +3039,10 @@ private struct ReviewPanel: View {
         workspace.isApplyingEditProposal(taskID: task.id)
     }
 
+    private var isRollingBackEditProposal: Bool {
+        workspace.isRollingBackEditProposal(taskID: task.id)
+    }
+
     private var isRejectingEditProposal: Bool {
         workspace.isRejectingEditProposal(taskID: task.id)
     }
@@ -2985,6 +3060,7 @@ private struct ReviewPanel: View {
             validationAllowsApply &&
             !isValidatingEditProposal &&
             !isApplyingEditProposal &&
+            !isRollingBackEditProposal &&
             !isGeneratingValidationRepairProposal &&
             !isRejectingEditProposal
     }
@@ -3001,6 +3077,26 @@ private struct ReviewPanel: View {
         return "Apply Edit Proposal"
     }
 
+    private var canRollbackEditProposal: Bool {
+        task.editProposal?.status == "Applied" &&
+            task.editProposal?.appliedFileChanges?.isEmpty == false &&
+            !isApplyingEditProposal &&
+            !isRollingBackEditProposal &&
+            !isGeneratingValidationRepairProposal
+    }
+
+    private var rollbackEditProposalButtonTitle: String {
+        if isRollingBackEditProposal {
+            return "Rolling Back"
+        }
+
+        if task.editProposal?.status == "RolledBack" {
+            return "Edit Proposal Rolled Back"
+        }
+
+        return "Rollback Edit Proposal"
+    }
+
     private var validationAllowsApply: Bool {
         task.editProposal?.validation?.status != "Blocked"
     }
@@ -3008,6 +3104,7 @@ private struct ReviewPanel: View {
     private var canRejectEditProposal: Bool {
         task.editProposal?.status == "Proposed" &&
             !isApplyingEditProposal &&
+            !isRollingBackEditProposal &&
             !isGeneratingValidationRepairProposal &&
             !isRejectingEditProposal
     }
@@ -3028,6 +3125,7 @@ private struct ReviewPanel: View {
         task.editProposal?.status == "Applied" &&
             task.status != "Testing" &&
             !isRunningValidation &&
+            !isRollingBackEditProposal &&
             !isGeneratingValidationRepairProposal
     }
 

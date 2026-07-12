@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { appendFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { URL } from "node:url";
 import { fileURLToPath } from "node:url";
@@ -70,6 +70,7 @@ const eventClients = new Set<ServerResponse>();
 const runtimeDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolveRepoRoot(runtimeDir);
 const repoRootSource = process.env.FORGE_REPO_ROOT?.trim() ? "FORGE_REPO_ROOT" : "runtime parent";
+const rollbackSnapshotRoot = path.join(repoRoot, ".forge", "rollback-snapshots");
 const taskStore = new SqliteTaskStore(resolveDatabasePath());
 const tasks = new Map<string, ForgeTask>(taskStore.loadTasks().map((task) => [task.id, task]));
 let modelProviderSettings = loadModelProviderRuntimeSettings();
@@ -602,6 +603,14 @@ const server = createServer(async (request, response) => {
     if (request.method === "POST" && applyEditProposalTaskID) {
       const input = await readJson<EditProposalDecisionRequest>(request);
       const task = await applyEditProposal(applyEditProposalTaskID, input);
+      writeJson(response, 200, task);
+      return;
+    }
+
+    const rollbackEditProposalTaskID = taskIDFromActionPath(url.pathname, "rollback-edit-proposal");
+    if (request.method === "POST" && rollbackEditProposalTaskID) {
+      const input = await readJson<EditProposalDecisionRequest>(request);
+      const task = await rollbackEditProposal(rollbackEditProposalTaskID, input);
       writeJson(response, 200, task);
       return;
     }
@@ -5725,7 +5734,7 @@ async function applyEditProposal(
   try {
     const appliedFileChanges: AppliedFileChange[] = [];
     for (const change of task.editProposal.fileChanges) {
-      const appliedChange = await applyProposedFileChange(change);
+      const appliedChange = await applyProposedFileChange(task.editProposal.id, change);
       appliedFileChanges.push(appliedChange);
     }
 
@@ -5781,6 +5790,107 @@ async function applyEditProposal(
     });
 
     const failed = event("edit.proposal.apply.failed", message);
+    failed.createdAt = new Date().toISOString();
+    saveAndBroadcast(task, failed);
+    throw error;
+  }
+}
+
+async function rollbackEditProposal(
+  taskID: string,
+  input: EditProposalDecisionRequest
+): Promise<ForgeTask> {
+  const task = tasks.get(taskID);
+  if (!task) {
+    throw new HttpError(404, `Task not found: ${taskID}`);
+  }
+
+  if (task.editProposal?.status !== "Applied") {
+    throw new HttpError(409, "An applied edit proposal is required before rollback.");
+  }
+
+  const appliedFileChanges = task.editProposal.appliedFileChanges ?? [];
+  if (appliedFileChanges.length === 0) {
+    throw new HttpError(409, "Applied proposal does not include rollback metadata.");
+  }
+
+  task.status = "Running";
+  task.currentPhase = "Rolling Back Edit Proposal";
+  task.reviewSummary = "Rolling back the applied edit proposal after verifying current file hashes.";
+  setAgent(task, "Coder", "Active", "Rolling back the applied edit proposal.");
+  setAgent(task, "Reviewer", "Active", "Watching the guarded rollback step.");
+  upsertPlanStep(task, {
+    id: "rollback-edit-proposal",
+    title: "Rollback edit proposal",
+    status: "Active",
+    summary: "Verifying apply hashes and restoring rollback snapshots."
+  });
+
+  const started = event("edit.proposal.rollback.started", "Rolling back applied edit proposal.");
+  started.createdAt = new Date().toISOString();
+  saveAndBroadcast(task, started);
+
+  try {
+    const rollbackOperations = [];
+    for (const appliedChange of appliedFileChanges) {
+      rollbackOperations.push(await prepareAppliedFileRollback(appliedChange));
+    }
+
+    for (const operation of rollbackOperations) {
+      await operation.rollback();
+    }
+
+    const now = new Date().toISOString();
+    for (const appliedChange of appliedFileChanges) {
+      appliedChange.rolledBackAt = now;
+    }
+
+    const rolledBackFiles = [...new Set(rollbackOperations.map((operation) => operation.relativePath))];
+    task.editProposal.status = "RolledBack";
+    task.editProposal.rolledBackAt = now;
+    task.editProposal.rollbackNote = input.note?.trim() || undefined;
+    task.status = "Human Review";
+    task.currentPhase = "Rollback Applied";
+    task.changedFiles = rolledBackFiles;
+    task.approvals.push({
+      id: randomUUID(),
+      action: "Rollback Edit Proposal",
+      decision: "Approved",
+      summary: `Rolled back ${rolledBackFiles.length} applied file change(s).`,
+      targetID: task.editProposal.id,
+      decidedAt: now,
+      userNote: input.note?.trim() || undefined
+    });
+    task.reviewSummary = `Rollback applied for ${rolledBackFiles.join(", ")}. Review the working tree before continuing.`;
+    setAgent(task, "Coder", "Done", "Rolled back the applied edit proposal.");
+    setAgent(task, "Tester", "Idle", "Waiting for a validation request after rollback.");
+    setAgent(task, "Reviewer", "Active", "Review the rolled-back working tree.");
+    upsertPlanStep(task, {
+      id: "rollback-edit-proposal",
+      title: "Rollback edit proposal",
+      status: "Done",
+      summary: `Rolled back ${rolledBackFiles.join(", ")}.`
+    });
+
+    const rolledBack = event("edit.proposal.rolled_back", "Applied edit proposal was rolled back.");
+    rolledBack.createdAt = now;
+    saveAndBroadcast(task, rolledBack);
+    return task;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    task.status = "Failed";
+    task.currentPhase = "Rollback Failed";
+    task.reviewSummary = message;
+    setAgent(task, "Coder", "Blocked", "Could not roll back the applied edit proposal.");
+    setAgent(task, "Reviewer", "Active", "Review the rollback failure before retrying.");
+    upsertPlanStep(task, {
+      id: "rollback-edit-proposal",
+      title: "Rollback edit proposal",
+      status: "Blocked",
+      summary: message
+    });
+
+    const failed = event("edit.proposal.rollback.failed", message);
     failed.createdAt = new Date().toISOString();
     saveAndBroadcast(task, failed);
     throw error;
@@ -6462,7 +6572,10 @@ function latestValidationRepairBriefForRun(
   return [...task.validationRepairBriefs].reverse().find((brief) => brief.validationRunID === validationRunID);
 }
 
-async function applyProposedFileChange(change: ProposedFileChange): Promise<AppliedFileChange> {
+async function applyProposedFileChange(
+  proposalID: string,
+  change: ProposedFileChange
+): Promise<AppliedFileChange> {
   const operation = change.applyOperation;
   if (!operation) {
     throw new HttpError(409, `No apply operation was provided: ${change.path}`);
@@ -6514,6 +6627,7 @@ async function applyProposedFileChange(change: ProposedFileChange): Promise<Appl
     const afterContent = await readFile(absolutePath, "utf8");
     return buildAppliedFileChange({
       relativePath,
+      proposalFileChangeID: change.id,
       operationKind: operation.kind,
       appliedAt,
       afterContent,
@@ -6558,14 +6672,17 @@ async function applyProposedFileChange(change: ProposedFileChange): Promise<Appl
       throw new HttpError(409, `Proposed append text is already present at the end of ${relativePath}.`);
     }
 
+    const rollbackSnapshotPath = await writeRollbackSnapshot(proposalID, change.id, currentContent);
     await appendFile(absolutePath, operation.text, "utf8");
     const afterContent = await readFile(absolutePath, "utf8");
     return buildAppliedFileChange({
       relativePath,
+      proposalFileChangeID: change.id,
       operationKind: operation.kind,
       appliedAt,
       beforeContent: currentContent,
       afterContent,
+      rollbackSnapshotPath,
       rollbackKind: "RestorePreviousContent",
       rollbackSummary: `Restore the previous full contents of ${relativePath}.`
     });
@@ -6596,14 +6713,17 @@ async function applyProposedFileChange(change: ProposedFileChange): Promise<Appl
     }
 
     const nextContent = currentContent.replace(operation.findText, operation.replaceWith);
+    const rollbackSnapshotPath = await writeRollbackSnapshot(proposalID, change.id, currentContent);
     await writeFile(absolutePath, nextContent, "utf8");
     const afterContent = await readFile(absolutePath, "utf8");
     return buildAppliedFileChange({
       relativePath,
+      proposalFileChangeID: change.id,
       operationKind: operation.kind,
       appliedAt,
       beforeContent: currentContent,
       afterContent,
+      rollbackSnapshotPath,
       rollbackKind: "RestorePreviousContent",
       rollbackSummary: `Restore the previous full contents of ${relativePath}.`
     });
@@ -6612,12 +6732,131 @@ async function applyProposedFileChange(change: ProposedFileChange): Promise<Appl
   throw new HttpError(409, `Unsupported apply operation for ${relativePath}.`);
 }
 
+type PreparedRollbackOperation = {
+  relativePath: string;
+  rollback: () => Promise<void>;
+};
+
+async function prepareAppliedFileRollback(appliedChange: AppliedFileChange): Promise<PreparedRollbackOperation> {
+  if (appliedChange.rolledBackAt) {
+    throw new HttpError(409, `Applied file change has already been rolled back: ${appliedChange.path}`);
+  }
+
+  if (appliedChange.rollbackKind === "DeleteCreatedFile") {
+    const { absolutePath, relativePath } = resolveMarkdownWorkspacePath(appliedChange.path);
+    const currentContent = await readFile(absolutePath, "utf8");
+    verifyCurrentContentForRollback(appliedChange, currentContent, relativePath);
+
+    return {
+      relativePath,
+      rollback: async () => {
+        await unlink(absolutePath);
+      }
+    };
+  }
+
+  if (appliedChange.rollbackKind === "RestorePreviousContent") {
+    const { absolutePath, relativePath } = resolveEditableWorkspacePath(appliedChange.path);
+    const snapshotPath = appliedChange.rollbackSnapshotPath;
+    if (!snapshotPath) {
+      throw new HttpError(409, `Rollback snapshot is missing for ${relativePath}.`);
+    }
+
+    const currentContent = await readFile(absolutePath, "utf8");
+    verifyCurrentContentForRollback(appliedChange, currentContent, relativePath);
+
+    const snapshot = await readFile(resolveRollbackSnapshotPath(snapshotPath), "utf8");
+    if (appliedChange.beforeSha256 && sha256Text(snapshot) !== appliedChange.beforeSha256) {
+      throw new HttpError(409, `Rollback snapshot hash does not match recorded before hash for ${relativePath}.`);
+    }
+
+    return {
+      relativePath,
+      rollback: async () => {
+        await writeFile(absolutePath, snapshot, "utf8");
+      }
+    };
+  }
+
+  throw new HttpError(409, `Unsupported rollback kind for ${appliedChange.path}: ${appliedChange.rollbackKind}`);
+}
+
+function verifyCurrentContentForRollback(
+  appliedChange: AppliedFileChange,
+  currentContent: string,
+  relativePath: string
+): void {
+  if (!appliedChange.afterSha256) {
+    throw new HttpError(409, `Applied change is missing after hash: ${relativePath}`);
+  }
+
+  const currentSha = sha256Text(currentContent);
+  if (currentSha !== appliedChange.afterSha256) {
+    throw new HttpError(
+      409,
+      `Current file hash for ${relativePath} no longer matches the applied proposal; rollback would overwrite later changes.`
+    );
+  }
+}
+
+async function writeRollbackSnapshot(
+  proposalID: string,
+  fileChangeID: string,
+  content: string
+): Promise<string> {
+  const directory = path.join(rollbackSnapshotRoot, safeSnapshotSegment(proposalID));
+  await mkdir(directory, { recursive: true });
+
+  const absolutePath = path.join(directory, `${safeSnapshotSegment(fileChangeID)}.before`);
+  await writeFile(absolutePath, content, { encoding: "utf8", flag: "wx" });
+  return repoRelativePath(absolutePath);
+}
+
+function resolveRollbackSnapshotPath(inputPath: string): string {
+  if (inputPath.includes("\0") || path.isAbsolute(inputPath)) {
+    throw new HttpError(409, `Unsafe rollback snapshot path: ${inputPath}`);
+  }
+
+  const normalized = path.posix.normalize(inputPath.replaceAll("\\", "/"));
+  if (
+    normalized === "." ||
+    normalized === ".." ||
+    normalized.startsWith("../") ||
+    normalized.startsWith("/") ||
+    !normalized.startsWith(".forge/rollback-snapshots/")
+  ) {
+    throw new HttpError(409, `Unsafe rollback snapshot path: ${inputPath}`);
+  }
+
+  const absolutePath = path.resolve(repoRoot, normalized);
+  if (!absolutePath.startsWith(`${rollbackSnapshotRoot}${path.sep}`)) {
+    throw new HttpError(409, `Unsafe rollback snapshot path: ${inputPath}`);
+  }
+
+  return absolutePath;
+}
+
+function safeSnapshotSegment(value: string): string {
+  const safe = value.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 80);
+  if (!safe) {
+    throw new HttpError(409, "Rollback snapshot id is empty.");
+  }
+
+  return safe;
+}
+
+function repoRelativePath(absolutePath: string): string {
+  return path.relative(repoRoot, absolutePath).split(path.sep).join("/");
+}
+
 function buildAppliedFileChange(input: {
   relativePath: string;
+  proposalFileChangeID: string;
   operationKind: AppliedFileChange["operationKind"];
   appliedAt: string;
   beforeContent?: string;
   afterContent?: string;
+  rollbackSnapshotPath?: string;
   rollbackKind: AppliedFileChange["rollbackKind"];
   rollbackSummary: string;
 }): AppliedFileChange {
@@ -6627,10 +6866,12 @@ function buildAppliedFileChange(input: {
     rollbackKind: input.rollbackKind,
     rollbackSummary: input.rollbackSummary,
     appliedAt: input.appliedAt,
+    proposalFileChangeID: input.proposalFileChangeID,
     beforeSha256: input.beforeContent === undefined ? undefined : sha256Text(input.beforeContent),
     afterSha256: input.afterContent === undefined ? undefined : sha256Text(input.afterContent),
     beforeByteLength: input.beforeContent === undefined ? undefined : Buffer.byteLength(input.beforeContent, "utf8"),
-    afterByteLength: input.afterContent === undefined ? undefined : Buffer.byteLength(input.afterContent, "utf8")
+    afterByteLength: input.afterContent === undefined ? undefined : Buffer.byteLength(input.afterContent, "utf8"),
+    rollbackSnapshotPath: input.rollbackSnapshotPath
   };
 }
 
@@ -7565,6 +7806,7 @@ function renderRuntimeHome(): string {
       <li><code>POST /tasks/:taskID/generate-validation-repair-proposal</code></li>
       <li><code>POST /tasks/:taskID/validate-edit-proposal</code></li>
       <li><code>POST /tasks/:taskID/apply-edit-proposal</code></li>
+      <li><code>POST /tasks/:taskID/rollback-edit-proposal</code></li>
       <li><code>POST /tasks/:taskID/reject-edit-proposal</code></li>
       <li><code>POST /tasks/:taskID/approve-validation-preset</code></li>
       <li><code>POST /tasks/:taskID/run-validation</code></li>

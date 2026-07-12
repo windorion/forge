@@ -3,7 +3,7 @@
 Document role: maintain the active backlog, priority order, and next concrete
 engineering tasks for Forge.
 
-Last updated: 2026-07-11
+Last updated: 2026-07-12
 
 ## Rule
 
@@ -22,8 +22,9 @@ dashboard.
   behavior, keyboard shortcuts, file-level approval persistence, and stronger
   tests-covering-this-file evidence.
 - Broaden source-file patch proposals beyond exact single-match replacements:
-  add a richer patch format, user-facing rollback, and multi-file source
-  repair flows while keeping strict path validation and pre-apply checks.
+  add a richer patch format, rollback revalidation/recovery, and multi-file
+  source repair flows while keeping strict path validation and pre-apply
+  checks.
 - Add approved task-scoped command execution with streamed output, status,
   exit code, timeout, and cancellation hooks.
 - Connect command failures to the existing repair-brief/proposal loop so Forge
@@ -100,6 +101,9 @@ dashboard.
   lengths, operation kind, timestamp, and rollback strategy.
 - Extended `npm run smoke:core` with a temporary TypeScript source replacement
   fixture and assertions for applied-file rollback metadata.
+- Added an explicit rollback endpoint and macOS action for applied edit
+  proposals, with current-file hash checks and local restore snapshots.
+- Extended `npm run smoke:core` to apply and roll back a source replacement.
 - Added a first-pass macOS coding-agent session shell in `WorkspaceView.swift`:
   neo-brutalist visual tokens, `1a`-style empty task composer, task queue,
   live agent stream, plan progress strip, Log/Diff/Tests tabs, compact plan

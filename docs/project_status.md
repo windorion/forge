@@ -3,7 +3,7 @@
 Document role: record the current product state, objective completion estimate,
 major gaps, and what "finished" means at each product horizon.
 
-Last updated: 2026-07-11
+Last updated: 2026-07-12
 
 ## One-Line Status
 
@@ -59,6 +59,10 @@ Implemented:
 - Applied edit proposals now record per-file rollback metadata: operation kind,
   before/after SHA-256 hashes, byte lengths, applied timestamp, and rollback
   strategy.
+- Explicit edit proposal rollback endpoint and macOS action. The runtime stores
+  restore snapshots under `.forge/rollback-snapshots/`, verifies current file
+  hashes before rollback, restores prior contents or deletes created files, and
+  marks the proposal `RolledBack`.
 - Bounded validation-feedback repair loop for blocked edit proposals.
 - Request-changes revision loop for rejected edit proposals.
 - Post-apply validation runs.
@@ -130,10 +134,11 @@ Implemented:
 - Core runtime smoke regression command covering create task, file-reference
   messages, plan revision, plan approval, edit proposal generation,
   validation, apply, built-in post-apply validation, append/replace operations,
-  exact source-file replace, applied-file rollback metadata, restricted docs
-  create-file apply, SQLite restart recovery, runtime health diagnostics,
-  model-provider settings GET/POST, fake-key handling without secret
-  persistence, a mock OpenAI model-guided context loop,
+  exact source-file replace, applied-file rollback metadata, explicit source
+  replace rollback, restricted docs create-file apply, SQLite restart
+  recovery, runtime health diagnostics, model-provider settings GET/POST,
+  fake-key handling without secret persistence, a mock OpenAI model-guided
+  context loop,
   blocked-to-repaired proposal handling, and bounded blocked preview-only
   proposal handling, plus failed project validation repair brief generation
   and follow-up repair proposal generation.
@@ -197,8 +202,8 @@ Remaining V0 gaps:
 - polish the first-pass `1a`/`1b`/`14a` shell toward the exact handoff
 - polish the first usable `10a` full-screen diff review toward exact handoff
   behavior and durable per-file decisions
-- broaden source-file patch proposals beyond exact replace and add
-  user-facing rollback
+- broaden source-file patch proposals beyond exact replace and harden rollback
+  revalidation/recovery
 - add approved task-scoped command execution with streamed output
 - wire provider-driven read/search/patch/run/repair into the normal flow
 - implement full diff review with per-file reasoning and request-change loop

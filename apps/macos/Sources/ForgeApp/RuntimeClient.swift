@@ -390,6 +390,21 @@ struct RuntimeClient {
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
 
+    func rollbackEditProposal(taskID: ForgeTask.ID, note: String? = nil) async throws -> ForgeTask {
+        let url = baseURL
+            .appending(path: "tasks")
+            .appending(path: taskID)
+            .appending(path: "rollback-edit-proposal")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(EditProposalDecisionRequest(note: note))
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response, data: data)
+        return try JSONDecoder().decode(ForgeTask.self, from: data)
+    }
+
     func rejectEditProposal(taskID: ForgeTask.ID, note: String? = nil) async throws -> ForgeTask {
         let url = baseURL
             .appending(path: "tasks")

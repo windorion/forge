@@ -40,6 +40,8 @@ const smokeFiles = [
   }
 ];
 
+const rollbackSnapshotDirectories = new Set();
+
 let runtime;
 let mockOpenAI;
 
@@ -230,6 +232,26 @@ async function runSourceReplaceFlow() {
   assert(after.includes("SOURCE_NEW"), "Source replace smoke did not write the replacement text.");
   assert(!after.includes("SOURCE_OLD"), "Source replace smoke left the original find text behind.");
   assertAppliedChangeMetadata(current, sourceReplaceSmokePath, "ReplaceText");
+
+  current = await post(`/tasks/${task.id}/rollback-edit-proposal`, {
+    note: "Core smoke test rolls back the source replace proposal."
+  });
+  assertState(current, "Human Review", "Rollback Applied");
+  assert(current.editProposal?.status === "RolledBack", "Source replace rollback did not mark proposal RolledBack.");
+  assert(
+    current.approvals?.some((approval) => approval.action === "Rollback Edit Proposal"),
+    "Source replace rollback did not record a rollback approval."
+  );
+  assert(
+    current.events?.some((event) => event.type === "edit.proposal.rolled_back"),
+    "Source replace rollback did not record a rolled-back event."
+  );
+  const rolledBackChange = assertAppliedChangeMetadata(current, sourceReplaceSmokePath, "ReplaceText");
+  assert(rolledBackChange.rolledBackAt, "Source replace rollback did not timestamp the applied change metadata.");
+
+  const restored = await readFile(join(repoRoot, sourceReplaceSmokePath), "utf8");
+  assert(restored.includes("SOURCE_OLD"), "Source replace rollback did not restore the original text.");
+  assert(!restored.includes("SOURCE_NEW"), "Source replace rollback left the replacement text behind.");
 
   return current;
 }
@@ -995,6 +1017,9 @@ async function cleanupSmokeFiles() {
   await rm(join(repoRoot, largeDiffSmokePath), { force: true });
   await rm(join(repoRoot, createSmokePath), { force: true });
   await rm(join(repoRoot, brokenTypeScriptSmokePath), { force: true });
+  for (const directory of rollbackSnapshotDirectories) {
+    await rm(join(repoRoot, directory), { recursive: true, force: true });
+  }
 }
 
 async function startRuntime(options = {}) {
@@ -1592,11 +1617,15 @@ function assertAppliedChangeMetadata(task, expectedChangedFile, expectedOperatio
       typeof appliedChange.beforeByteLength === "number" && appliedChange.beforeByteLength > 0,
       "Restore rollback metadata did not include a before byte length."
     );
+    assert(appliedChange.rollbackSnapshotPath, "Restore rollback metadata did not include a snapshot path.");
+    rollbackSnapshotDirectories.add(dirname(appliedChange.rollbackSnapshotPath));
     assert(
       appliedChange.beforeSha256 !== appliedChange.afterSha256,
       "Restore rollback metadata should show different before and after hashes."
     );
   }
+
+  return appliedChange;
 }
 
 function assertExecutionProposalContext(task, expectedPath) {

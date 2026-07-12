@@ -291,7 +291,10 @@ and `Request Changes`. It also exposes `Validate Proposal`, which calls
 without writing files. Applying calls `POST /tasks/:taskID/apply-edit-proposal`,
 revalidates the current workspace, runs the restricted v0 edit operation,
 records the changed file plus before/after rollback metadata, and marks the
-task completed.
+task completed. Applied proposals with rollback metadata can be explicitly
+rolled back with `POST /tasks/:taskID/rollback-edit-proposal`; the runtime
+checks current file hashes before restoring snapshots or deleting files created
+by the proposal.
 Requesting changes calls `POST /tasks/:taskID/reject-edit-proposal`, records
 the rejection, leaves files unchanged, and allows another edit proposal to be
 generated. After a rejection, the same Review action area exposes
@@ -386,7 +389,7 @@ It covers:
 - built-in post-apply validation
 - SQLite restart recovery
 - `AppendText`, Markdown exact `ReplaceText`, source-file exact `ReplaceText`,
-  and applied-file rollback metadata
+  applied-file rollback metadata, and explicit rollback for a source replace
 - runtime home page, health diagnostics, persistence metadata, and model
   provider settings GET/POST paths
 - provider settings key handling with a fake OpenAI key, including verification
@@ -454,6 +457,11 @@ cd runtime && npm run smoke:git-remote
   OpenAI proposals can include unsupported preview-only operations for review,
   but those proposals are blocked from apply until revised to an apply-ready
   subset.
+- Rollback is explicit and guarded. The runtime stores restore snapshots under
+  `.forge/rollback-snapshots/`, verifies the current file still matches the
+  recorded post-apply hash, and then restores prior contents or deletes a
+  created file. Rollback does not yet run a dedicated post-rollback validation
+  preset automatically.
 - Proposal repair is bounded and proposal-only. It can ask the provider to
   revise a blocked artifact from runtime validation feedback, but it does not
   apply files or run commands.

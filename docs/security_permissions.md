@@ -86,7 +86,9 @@ May run automatically based on settings, but should be logged and visible.
 Current v0 edit application is medium risk and requires explicit human apply.
 It supports Markdown append/create operations and exact single-match
 replacements for allowlisted source/text files, then records applied-file
-metadata for audit and future rollback.
+metadata for audit and rollback. Rollback is also an explicit medium-risk
+mutation: Forge verifies the current file still matches the recorded
+post-apply hash before restoring a local snapshot or deleting a created file.
 
 Current v0 post-apply validation defaults to built-in `forge:` checks. It can
 also run allowlisted project validation presets, such as runtime `npm run

@@ -39,7 +39,7 @@ should no longer feel like a generic workflow dashboard.
 
 ## Current Status
 
-Last updated: 2026-07-11
+Last updated: 2026-07-12
 
 Direction reset: the trust/runtime foundation is strong, but the next milestone
 is a redesigned coding-agent demo based on `design_handoff_forge/`, especially
@@ -68,7 +68,8 @@ Implemented today:
 - Safe edit proposals with multi-file OpenAI proposal artifacts, including
   blocked preview-only operations. Apply supports Markdown `AppendText`,
   exact `ReplaceText` for Markdown and allowlisted source/text files, new
-  `docs/*.md` `CreateFile` changes, and applied-file rollback metadata.
+  `docs/*.md` `CreateFile` changes, applied-file rollback metadata, and an
+  explicit rollback action.
 - Edit proposal validation, bounded validation-feedback repair, apply/reject
   flow, revision loop, and post-apply validation.
 - Validation failure repair briefs that turn failed command output into a
@@ -127,8 +128,8 @@ Not finished yet:
   file-level review persistence, decision prompts, and polished live-run
   states.
 - Real autonomous model-backed read/search/patch/run/repair loop.
-- General source-code patch engine, user-facing rollback, and richer diff
-  review.
+- General source-code patch engine, richer rollback/revalidation, and richer
+  diff review.
 - Streamed task-scoped command/test output and self-fix loops.
 - Actual PR creation/publication after explicit review.
 - Durable repository index with symbols and semantic search.
@@ -156,8 +157,8 @@ Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
 
 - polish the first-pass macOS coding-agent session UI toward the exact
   `design_handoff_forge` screens
-- broaden source-file patch proposal/apply beyond exact replace and add a
-  user-facing rollback action
+- broaden source-file patch proposal/apply beyond exact replace and harden
+  rollback/revalidation
 - add approved task-scoped command execution with streamed logs
 - wire provider-driven read/search/patch/run/repair into the normal task flow
 - connect full diff review to durable file-level decisions once the review

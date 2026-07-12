@@ -2732,3 +2732,53 @@ Next:
 - Add a user-facing rollback endpoint backed by the recorded apply metadata.
 - Add task-scoped command execution with streamed logs and connect failures to
   the repair proposal loop.
+
+### 2026-07-12 10:42:26 CEST +0200
+
+Conversation summary:
+
+- User asked to commit and push local code, then continue the next
+  implementation step.
+
+Done:
+
+- Confirmed local `main` was ahead of `origin/main` by two commits and the
+  worktree was clean.
+- Attempted `git push origin main`, but the sandbox security review rejected
+  pushing the default branch to an external GitHub remote without a fresh
+  explicit risk acceptance.
+- Continued local development with a safer next step: explicit rollback for
+  applied edit proposals.
+- Added `POST /tasks/:taskID/rollback-edit-proposal`.
+- Added restore snapshots under `.forge/rollback-snapshots/` during apply for
+  append/replace operations.
+- Added rollback preflight checks that block rollback when the current file no
+  longer matches the recorded post-apply SHA-256 hash.
+- Added rollback support for restoring previous file contents and deleting
+  files created by an applied proposal.
+- Added `RolledBack` proposal state, rollback approval records, rollback
+  events, and rollback timestamps in applied-file metadata.
+- Added macOS RuntimeClient, WorkspaceModel, action-card, legacy Review panel,
+  and full-screen diff review buttons for rollback.
+- Extended `npm run smoke:core` to apply and roll back a TypeScript source
+  replacement, including snapshot cleanup.
+- Updated README and focused docs to move rollback endpoint/action from future
+  work into current implementation while keeping revalidation/recovery as a
+  remaining gap.
+- Verified `npm run check`, `npm run smoke:core`, and `swift build`.
+
+Not done:
+
+- Did not push to GitHub because the push was rejected by security review.
+- Did not add a broader multi-hunk patch format.
+- Did not add dedicated post-rollback validation presets or partial rollback
+  recovery UI.
+- Did not add streamed task-scoped command execution yet.
+
+Next:
+
+- If the user explicitly accepts the risk, push `main` to
+  `https://github.com/windorion/forge.git`.
+- Broaden patch proposals beyond exact single-match replace.
+- Add task-scoped command execution with streamed output and connect failures
+  to the repair proposal loop.

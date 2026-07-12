@@ -82,7 +82,7 @@ It should not feel like:
 - Log/Diff/Tests tabs
 - model-provider-backed normal run path
 - source-file patch proposal format beyond exact single-match replacements
-- controlled patch apply with user-facing rollback/revalidation
+- controlled patch apply with rollback, revalidation, and recovery states
 - approved task-scoped command runner for checks/tests
 - command output streaming into the task
 - failed-check self-fix loop
@@ -118,7 +118,7 @@ V0 is complete when:
 - Approving the plan starts an agent run.
 - The live run shows chronological read/search/edit/test/self-fix events.
 - The patch engine can propose and apply a real source-file change inside the
-  repo, with rollback metadata and revalidation.
+  repo, with rollback action and revalidation.
 - The command runner can run an approved project check and stream output.
 - A failed check can produce a bounded repair attempt and rerun evidence.
 - Diff and Tests tabs update during or immediately after the run.
@@ -162,8 +162,8 @@ Major gaps:
 
 ## Next Implementation Order
 
-1. Broaden source-file patch proposal/apply beyond exact replace and add a
-   user-facing rollback action.
+1. Broaden source-file patch proposal/apply beyond exact replace and harden
+   rollback revalidation/recovery.
 2. Add task-scoped command execution and streamed logs.
 3. Connect provider-driven run loop to patch/run/repair.
 4. Implement request-change revision from full diff review.

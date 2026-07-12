@@ -25,6 +25,7 @@ export interface ApprovalRecord {
   action:
     | "Approve Plan"
     | "Apply Edit Proposal"
+    | "Rollback Edit Proposal"
     | "Reject Edit Proposal"
     | "Approve Validation Preset"
     | "Create Git Commit"
@@ -207,10 +208,13 @@ export interface AppliedFileChange {
   rollbackKind: "RestorePreviousContent" | "DeleteCreatedFile";
   rollbackSummary: string;
   appliedAt: string;
+  proposalFileChangeID?: string;
   beforeSha256?: string;
   afterSha256?: string;
   beforeByteLength?: number;
   afterByteLength?: number;
+  rollbackSnapshotPath?: string;
+  rolledBackAt?: string;
 }
 
 export interface EditProposal {
@@ -223,10 +227,12 @@ export interface EditProposal {
   summary: string;
   fileChanges: ProposedFileChange[];
   riskLevel: "Low" | "Medium" | "High";
-  status: "Proposed" | "Rejected" | "Superseded" | "Applied";
+  status: "Proposed" | "Rejected" | "Superseded" | "Applied" | "RolledBack";
   generatedAt: string;
   decidedAt?: string;
   decisionNote?: string;
+  rolledBackAt?: string;
+  rollbackNote?: string;
   validation?: EditProposalValidation;
   appliedFileChanges?: AppliedFileChange[];
 }

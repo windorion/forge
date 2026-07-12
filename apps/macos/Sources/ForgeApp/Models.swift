@@ -666,21 +666,26 @@ struct EditProposal: Identifiable, Codable, Hashable {
     var generatedAt: String
     var decidedAt: String?
     var decisionNote: String?
+    var rolledBackAt: String?
+    var rollbackNote: String?
     var validation: EditProposalValidation?
     var appliedFileChanges: [AppliedFileChange]?
 }
 
 struct AppliedFileChange: Identifiable, Codable, Hashable {
-    var id: String { "\(path)-\(appliedAt)" }
+    var id: String { proposalFileChangeID ?? "\(path)-\(appliedAt)" }
     var path: String
     var operationKind: String
     var rollbackKind: String
     var rollbackSummary: String
     var appliedAt: String
+    var proposalFileChangeID: String?
     var beforeSha256: String?
     var afterSha256: String?
     var beforeByteLength: Int?
     var afterByteLength: Int?
+    var rollbackSnapshotPath: String?
+    var rolledBackAt: String?
 }
 
 struct EditProposalValidation: Codable, Hashable {

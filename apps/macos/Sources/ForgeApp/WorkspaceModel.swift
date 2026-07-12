@@ -38,6 +38,7 @@ final class WorkspaceModel: ObservableObject {
     @Published private var generatingValidationRepairProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var validatingEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var applyingEditProposalTaskIDs = Set<ForgeTask.ID>()
+    @Published private var rollingBackEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var rejectingEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var runningValidationTaskIDs = Set<ForgeTask.ID>()
     @Published private var approvingValidationPresetTaskIDs = Set<String>()
@@ -461,6 +462,30 @@ final class WorkspaceModel: ObservableObject {
 
     func isApplyingEditProposal(taskID: ForgeTask.ID) -> Bool {
         applyingEditProposalTaskIDs.contains(taskID)
+    }
+
+    func rollbackEditProposal(for task: ForgeTask) {
+        rollingBackEditProposalTaskIDs.insert(task.id)
+
+        Task {
+            do {
+                let updatedTask = try await runtime.rollbackEditProposal(taskID: task.id)
+                upsert(updatedTask)
+                selectedTaskID = updatedTask.id
+                statusMessage = "Edit proposal rolled back. Review the working tree."
+                await refreshGitStatusSnapshot()
+                await refreshValidationPermissionSnapshotIfPossible(for: updatedTask.id)
+                startEventStream()
+            } catch {
+                statusMessage = "Rollback edit proposal failed: \(error.localizedDescription)"
+            }
+
+            rollingBackEditProposalTaskIDs.remove(task.id)
+        }
+    }
+
+    func isRollingBackEditProposal(taskID: ForgeTask.ID) -> Bool {
+        rollingBackEditProposalTaskIDs.contains(taskID)
     }
 
     func rejectEditProposal(for task: ForgeTask) {
