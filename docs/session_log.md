@@ -3389,3 +3389,34 @@ Next:
   the coordinated proposal limits and optimistic workspace revalidation.
 - Then add restart recovery for interrupted apply attempts and durable
   file-level review decisions.
+
+## 2026-07-13 21:54:22 CEST
+
+Conversation summary:
+
+- User asked to submit the completed Agent Run and coordinated multi-file work
+  as a pull request.
+
+Done:
+
+- Reconfirmed authenticated GitHub access, the current branch scope, clean
+  patch formatting, and that no pull request already existed for the branch.
+- Committed the coordinated multi-file apply/recovery increment as `460766e`
+  (`Add coordinated multi-file apply recovery`).
+- Pushed the updated `codex/agent-run-loop-controls` branch to `origin`.
+- Created Draft PR #1, `Add agent run controls and coordinated apply recovery`,
+  from `codex/agent-run-loop-controls` into `main`:
+  https://github.com/windorion/forge/pull/1
+- The PR description records the product reason, user/developer impact, trust
+  boundaries, and the completed TypeScript, core smoke, Swift, and diff checks.
+
+Not done:
+
+- Did not mark the pull request ready for review or merge it.
+- Did not inspect hosted CI results or address review feedback yet.
+
+Next:
+
+- Watch PR checks and address actionable failures or review comments.
+- After the PR checkpoint, continue with content-aware reviewed source patches
+  and interrupted-apply restart recovery.
