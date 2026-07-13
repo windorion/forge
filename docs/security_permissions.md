@@ -122,20 +122,38 @@ command ID already captured in `commandRerunEvidence`; it does not accept raw
 shell text, arbitrary command IDs from the caller, or arbitrary PIDs.
 
 `POST /tasks/:taskID/run-agent-step` does not grant new permissions. The model
-provider can choose only one enum action, and the runtime reuses the existing
-proposal, command, validation repair, and rerun-evidence gates before any side
-effect. A provider-selected `RunTaskCommand` is accepted only for a
-runtime-known command whose task-command permission snapshot is already
-runnable. A provider-selected `RerunRepairCommand` is accepted only for stored
-ready/failed rerun evidence. Waiting for human review and requesting plan
-approval are explicit blocked states, not silent no-ops.
+provider can choose only one enum action. A provider-selected
+`GatherRepositoryContext` may supply bounded search terms and repo-relative
+read paths, but the runtime filters those paths through the existing safe
+repository file list, executes only logged read-only list/search/read tools,
+stores inspected paths and newly discovered paths for audit, and blocks
+repeated requests. Inside `run-agent-loop`, the runtime also owns a separate
+zero-to-three-step context budget, rejects over-budget model choices before
+running repository tools, and pauses when a context request finds no new
+files. The runtime reuses the existing proposal, command, validation repair,
+and rerun-evidence gates before any side effect. A provider-selected
+`RunTaskCommand` is accepted only for a runtime-known command whose
+task-command permission snapshot is already runnable. A provider-selected
+`RerunRepairCommand` is accepted only for stored ready/failed rerun evidence.
+Waiting for human review and requesting plan approval are explicit blocked
+states, not silent no-ops.
 
 `POST /tasks/:taskID/run-agent-loop` does not add a broader autonomy tier. It
 repeats the same `run-agent-step` boundary under a runtime-enforced step limit
-and stops at review gates, passed commands, verified self-fix reruns,
-blocked/failed steps, busy-task guards, no-progress guards, or max-step
-protection. It cannot apply a proposed patch, invent raw shell commands,
-commit, push, or publish anything.
+plus a smaller repository-context limit and stops at review gates, passed
+commands, verified self-fix reruns, context-budget exhaustion, blocked/failed
+steps, busy-task guards, no-progress guards, or max-step protection. It cannot
+apply a proposed patch, invent raw shell commands, commit, push, or publish
+anything.
+
+Agent Loop controls do not broaden permissions. Pause and abort require an
+exact task-local loop ID and only set runtime-owned cooperative stop intent;
+they do not kill arbitrary processes or roll back completed work. Resume is
+accepted only for a loop stopped with `UserPaused`, with remaining steps, no
+busy validation/command, and no proposed edit waiting for review. It reuses
+the stored provider, preferred command ID, step/context budgets, and every
+existing action gate. Cancelling a command remains a separate exact-run-ID
+operation.
 
 ### High Risk
 

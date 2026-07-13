@@ -10,11 +10,13 @@ import {
   createModelProvider,
   defaultModelProviderRuntimeSettings,
   getModelProviderConfiguration,
+  type AgentRunStepRequest,
   type PlanContextRequestResult
 } from "./modelProvider.js";
 import { SqliteTaskStore } from "./taskStore.js";
 import type {
   AgentRunLoop,
+  AgentRunLoopControlRequest,
   AgentRunStep,
   AgentRunStepDecision,
   AgentState,
@@ -99,6 +101,8 @@ const repositorySearchMaxFiles = 240;
 const repositoryContextMaxFiles = 6;
 const modelGuidedContextMaxRounds = 3;
 const modelGuidedContextMaxStoredFiles = 8;
+const agentRunLoopDefaultMaxContextSteps = 2;
+const agentRunLoopMaxContextSteps = 3;
 const editProposalRepairMaxAttempts = 2;
 const repositoryContextMaxFileBytes = 220_000;
 const editProposalTextOperationMaxChars = 10_000;
@@ -657,6 +661,30 @@ const server = createServer(async (request, response) => {
     if (request.method === "POST" && runAgentLoopTaskID) {
       const input = await readJson<RunAgentLoopRequest>(request);
       const task = await runAgentLoop(runAgentLoopTaskID, input);
+      writeJson(response, 200, task);
+      return;
+    }
+
+    const pauseAgentRunLoopTaskID = taskIDFromActionPath(url.pathname, "pause-agent-loop");
+    if (request.method === "POST" && pauseAgentRunLoopTaskID) {
+      const input = await readJson<AgentRunLoopControlRequest>(request);
+      const task = pauseAgentRunLoop(pauseAgentRunLoopTaskID, input);
+      writeJson(response, 200, task);
+      return;
+    }
+
+    const abortAgentRunLoopTaskID = taskIDFromActionPath(url.pathname, "abort-agent-loop");
+    if (request.method === "POST" && abortAgentRunLoopTaskID) {
+      const input = await readJson<AgentRunLoopControlRequest>(request);
+      const task = abortAgentRunLoop(abortAgentRunLoopTaskID, input);
+      writeJson(response, 200, task);
+      return;
+    }
+
+    const resumeAgentRunLoopTaskID = taskIDFromActionPath(url.pathname, "resume-agent-loop");
+    if (request.method === "POST" && resumeAgentRunLoopTaskID) {
+      const input = await readJson<AgentRunLoopControlRequest>(request);
+      const task = await resumeAgentRunLoop(resumeAgentRunLoopTaskID, input);
       writeJson(response, 200, task);
       return;
     }
@@ -5576,17 +5604,38 @@ async function runAgentLoop(taskID: string, input: RunAgentLoopRequest = {}): Pr
   }
 
   const loop = createAgentRunLoop(task, input, "Starting bounded provider-selected agent loop.");
+  saveAndBroadcast(
+    task,
+    withCreatedAt(
+      event(
+        "agent.run_loop.started",
+        `Agent loop started with up to ${loop.maxSteps} step(s) and ${loop.maxContextSteps} repository context step(s).`
+      ),
+      loop.startedAt
+    )
+  );
+  return executeAgentRunLoop(taskID, loop.id);
+}
+
+async function executeAgentRunLoop(taskID: string, loopID: string): Promise<ForgeTask> {
   activeAgentRunLoopTaskIDs.add(taskID);
   try {
-    saveAndBroadcast(
-      task,
-      withCreatedAt(event("agent.run_loop.started", `Agent loop started with up to ${loop.maxSteps} step(s).`), loop.startedAt)
-    );
+    let current = requireTask(taskID);
+    let loop = requireAgentRunLoop(current, loopID);
+    for (let index = loop.stepsRun; index < loop.maxSteps; index += 1) {
+      const controlStopBeforeStep = agentRunLoopControlStop(loop);
+      if (controlStopBeforeStep) {
+        return finishAgentRunLoop(
+          current,
+          loop.id,
+          controlStopBeforeStep.status,
+          controlStopBeforeStep.reason,
+          controlStopBeforeStep.summary
+        );
+      }
 
-    let current = task;
-    for (let index = 0; index < loop.maxSteps; index += 1) {
       const beforeStepIDs = new Set(current.agentRunSteps.map((step) => step.id));
-      current = await runAgentStep(taskID, { preferredCommandID: input.preferredCommandID }, { loopID: loop.id });
+      current = await runAgentStep(taskID, { preferredCommandID: loop.preferredCommandID }, { loopID: loop.id });
       const updatedLoop = requireAgentRunLoop(current, loop.id);
       const newSteps = current.agentRunSteps.filter((step) => !beforeStepIDs.has(step.id));
       for (const step of newSteps) {
@@ -5595,17 +5644,30 @@ async function runAgentLoop(taskID: string, input: RunAgentLoopRequest = {}): Pr
         }
       }
       updatedLoop.stepsRun = updatedLoop.stepIDs.length;
+      updateAgentRunLoopContextProgress(current, updatedLoop);
       updatedLoop.summary = summarizeAgentRunLoopProgress(current, updatedLoop);
 
       const stop = agentRunLoopStopAfterStep(current, newSteps.at(-1));
       if (stop) {
         return finishAgentRunLoop(current, loop.id, stop.status, stop.reason, stop.summary);
       }
+
+      const controlStopAfterStep = agentRunLoopControlStop(updatedLoop);
+      if (controlStopAfterStep) {
+        return finishAgentRunLoop(
+          current,
+          loop.id,
+          controlStopAfterStep.status,
+          controlStopAfterStep.reason,
+          controlStopAfterStep.summary
+        );
+      }
+      loop = updatedLoop;
     }
 
     return finishAgentRunLoop(
       current,
-      loop.id,
+      loopID,
       "Paused",
       "MaxStepsReached",
       `Agent loop paused after reaching the ${loop.maxSteps}-step limit.`
@@ -5614,7 +5676,7 @@ async function runAgentLoop(taskID: string, input: RunAgentLoopRequest = {}): Pr
     const failedTask = requireTask(taskID);
     return finishAgentRunLoop(
       failedTask,
-      loop.id,
+      loopID,
       "Failed",
       "StepFailed",
       error instanceof Error ? error.message : String(error)
@@ -5624,15 +5686,174 @@ async function runAgentLoop(taskID: string, input: RunAgentLoopRequest = {}): Pr
   }
 }
 
+function pauseAgentRunLoop(taskID: string, input: AgentRunLoopControlRequest): ForgeTask {
+  const task = requireTask(taskID);
+  const loop = requireAgentRunLoopControlTarget(task, input);
+  if (loop.status === "Paused" && loop.stopReason === "UserPaused") {
+    return task;
+  }
+  if (loop.status === "Running" && loop.pauseRequestedAt) {
+    return task;
+  }
+  if (loop.status !== "Running") {
+    throw new HttpError(409, `Agent loop ${loop.id} cannot be paused from status ${loop.status}.`);
+  }
+  if (loop.abortRequestedAt) {
+    throw new HttpError(409, "The agent loop already has an abort request.");
+  }
+
+  const requestedAt = new Date().toISOString();
+  loop.pauseRequestedAt = requestedAt;
+  loop.controlNote = optionalAgentRunLoopControlNote(input.note);
+  loop.summary = "Pause requested; Forge will stop before the next agent step.";
+  task.reviewSummary = loop.summary;
+  setAgent(task, "Manager", "Active", "Pause requested; waiting for the current safe step to finish.");
+  setAgent(task, "Coder", "Active", "Finishing the current step before pausing.");
+
+  if (!activeAgentRunLoopTaskIDs.has(taskID)) {
+    return finishAgentRunLoop(task, loop.id, "Paused", "UserPaused", "Agent loop paused by the user before the next step.");
+  }
+
+  saveAndBroadcast(
+    task,
+    withCreatedAt(event("agent.run_loop.pause_requested", loop.summary), requestedAt)
+  );
+  return task;
+}
+
+function abortAgentRunLoop(taskID: string, input: AgentRunLoopControlRequest): ForgeTask {
+  const task = requireTask(taskID);
+  const loop = requireAgentRunLoopControlTarget(task, input);
+  if (loop.status === "Aborted") {
+    return task;
+  }
+  if (loop.status === "Running" && loop.abortRequestedAt) {
+    return task;
+  }
+  if (loop.status !== "Running" && loop.status !== "Paused") {
+    throw new HttpError(409, `Agent loop ${loop.id} cannot be aborted from status ${loop.status}.`);
+  }
+
+  const requestedAt = new Date().toISOString();
+  loop.abortRequestedAt = requestedAt;
+  loop.controlNote = optionalAgentRunLoopControlNote(input.note);
+  loop.summary = loop.status === "Running"
+    ? "Abort requested; Forge will stop before the next agent step."
+    : "Agent loop aborted by the user.";
+  task.reviewSummary = loop.summary;
+
+  if (loop.status === "Paused" || !activeAgentRunLoopTaskIDs.has(taskID)) {
+    return finishAgentRunLoop(task, loop.id, "Aborted", "UserAborted", "Agent loop aborted by the user.");
+  }
+
+  setAgent(task, "Manager", "Active", "Abort requested; waiting for the current safe step to finish.");
+  setAgent(task, "Coder", "Active", "Finishing the current step before aborting the loop.");
+  saveAndBroadcast(
+    task,
+    withCreatedAt(event("agent.run_loop.abort_requested", loop.summary), requestedAt)
+  );
+  return task;
+}
+
+async function resumeAgentRunLoop(taskID: string, input: AgentRunLoopControlRequest): Promise<ForgeTask> {
+  const task = requireTask(taskID);
+  const loop = requireAgentRunLoopControlTarget(task, input);
+  if (activeAgentRunLoopTaskIDs.has(taskID)) {
+    throw new HttpError(409, "An agent run loop is already active for this task.");
+  }
+  if (loop.status !== "Paused" || loop.stopReason !== "UserPaused") {
+    throw new HttpError(409, "Only a user-paused agent loop can be resumed.");
+  }
+  if (hasRunningValidationRun(task) || hasRunningTaskCommandRun(task) || task.status === "Testing") {
+    throw new HttpError(409, "The task is currently running another operation.");
+  }
+  if (task.editProposal?.status === "Proposed") {
+    throw new HttpError(409, "Review the proposed edit before resuming the agent loop.");
+  }
+  if (loop.stepsRun >= loop.maxSteps) {
+    throw new HttpError(409, "The agent loop has no remaining steps to resume.");
+  }
+
+  const resumedAt = new Date().toISOString();
+  loop.status = "Running";
+  loop.stopReason = undefined;
+  loop.completedAt = undefined;
+  loop.pauseRequestedAt = undefined;
+  loop.resumedAt = resumedAt;
+  loop.resumeCount += 1;
+  loop.controlNote = optionalAgentRunLoopControlNote(input.note);
+  loop.summary = `Agent loop resumed with ${loop.maxSteps - loop.stepsRun} step(s) remaining.`;
+  task.status = "Running";
+  task.currentPhase = "Agent Loop";
+  task.reviewSummary = loop.summary;
+  setAgent(task, "Manager", "Active", "Resuming the existing bounded agent loop.");
+  setAgent(task, "Coder", "Active", "Continuing with the next safe agent step.");
+  setAgent(task, "Reviewer", "Idle", "Waiting for the resumed loop stop condition.");
+  upsertPlanStep(task, {
+    id: "run-agent-loop",
+    title: "Run agent loop",
+    status: "Active",
+    summary: loop.summary
+  });
+  saveAndBroadcast(task, withCreatedAt(event("agent.run_loop.resumed", loop.summary), resumedAt));
+  return executeAgentRunLoop(taskID, loop.id);
+}
+
+function requireAgentRunLoopControlTarget(task: ForgeTask, input: AgentRunLoopControlRequest): AgentRunLoop {
+  const loopID = input.agentRunLoopID?.trim();
+  if (!loopID) {
+    throw new HttpError(400, "agentRunLoopID is required.");
+  }
+
+  const loop = task.agentRunLoops.find((candidate) => candidate.id === loopID);
+  if (!loop) {
+    throw new HttpError(404, `Agent run loop not found: ${loopID}`);
+  }
+  return loop;
+}
+
+function optionalAgentRunLoopControlNote(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  return value.trim().slice(0, 500) || undefined;
+}
+
+function agentRunLoopControlStop(
+  loop: AgentRunLoop
+): { status: AgentRunLoop["status"]; reason: AgentRunLoop["stopReason"]; summary: string } | undefined {
+  if (loop.abortRequestedAt) {
+    return {
+      status: "Aborted",
+      reason: "UserAborted",
+      summary: "Agent loop aborted by the user before the next step."
+    };
+  }
+  if (loop.pauseRequestedAt) {
+    return {
+      status: "Paused",
+      reason: "UserPaused",
+      summary: "Agent loop paused by the user before the next step."
+    };
+  }
+  return undefined;
+}
+
 function createAgentRunLoop(task: ForgeTask, input: RunAgentLoopRequest, summary: string): AgentRunLoop {
   const maxSteps = normalizeAgentRunLoopMaxSteps(input.maxSteps);
+  const maxContextSteps = normalizeAgentRunLoopMaxContextSteps(input.maxContextSteps, maxSteps);
   const loop: AgentRunLoop = {
     id: randomUUID(),
     provider: modelProvider.info,
     status: "Running",
     maxSteps,
     stepsRun: 0,
+    maxContextSteps,
+    contextStepsRun: 0,
+    contextPaths: [],
     stepIDs: [],
+    preferredCommandID: input.preferredCommandID?.trim() || undefined,
+    resumeCount: 0,
     summary,
     startedAt: new Date().toISOString()
   };
@@ -5668,6 +5889,38 @@ function normalizeAgentRunLoopMaxSteps(value: unknown): number {
   return value;
 }
 
+function normalizeAgentRunLoopMaxContextSteps(value: unknown, maxSteps: number): number {
+  if (value === undefined || value === null) {
+    return Math.min(agentRunLoopDefaultMaxContextSteps, maxSteps);
+  }
+
+  if (typeof value !== "number" || !Number.isInteger(value)) {
+    throw new HttpError(400, "maxContextSteps must be an integer.");
+  }
+
+  if (value < 0 || value > agentRunLoopMaxContextSteps) {
+    throw new HttpError(400, `maxContextSteps must be between 0 and ${agentRunLoopMaxContextSteps}.`);
+  }
+
+  if (value > maxSteps) {
+    throw new HttpError(400, "maxContextSteps must not exceed maxSteps.");
+  }
+
+  return value;
+}
+
+function updateAgentRunLoopContextProgress(task: ForgeTask, loop: AgentRunLoop): void {
+  const contextSteps = loop.stepIDs
+    .map((stepID) => task.agentRunSteps.find((step) => step.id === stepID))
+    .filter((step): step is AgentRunStep =>
+      step?.action === "GatherRepositoryContext" && step.status === "Completed"
+    );
+  loop.contextStepsRun = contextSteps.length;
+  loop.contextPaths = [
+    ...new Set(contextSteps.flatMap((step) => step.contextPaths ?? []))
+  ].slice(0, agentRunLoopMaxContextSteps * repositoryContextMaxFiles);
+}
+
 function agentRunLoopStopAfterStep(
   task: ForgeTask,
   step: AgentRunStep | undefined
@@ -5678,6 +5931,24 @@ function agentRunLoopStopAfterStep(
 
   if (step.status === "Failed") {
     return { status: "Failed", reason: "StepFailed", summary: step.resultSummary ?? step.error ?? "Agent step failed." };
+  }
+
+  if (step.action === "GatherRepositoryContext" && step.status === "Blocked") {
+    if (step.contextOutcome === "BudgetReached") {
+      return {
+        status: "Paused",
+        reason: "ContextBudgetReached",
+        summary: step.resultSummary ?? "Agent loop paused after exhausting its repository context budget."
+      };
+    }
+
+    if (step.contextOutcome === "RepeatedRequest" || step.contextOutcome === "NoProgress") {
+      return {
+        status: "Paused",
+        reason: "NoProgress",
+        summary: step.resultSummary ?? "Agent loop paused because repository context gathering made no progress."
+      };
+    }
   }
 
   if (step.status === "Blocked") {
@@ -5743,6 +6014,12 @@ function finishAgentRunLoop(
   loop.stopReason = stopReason;
   loop.summary = summary;
   loop.completedAt = completedAt;
+  if (status === "Paused") {
+    loop.pausedAt = completedAt;
+  }
+  if (status === "Aborted") {
+    loop.abortedAt = completedAt;
+  }
   task.reviewSummary = summary;
   if (status === "Failed") {
     task.status = "Failed";
@@ -5750,6 +6027,12 @@ function finishAgentRunLoop(
     setAgent(task, "Manager", "Blocked", summary);
     setAgent(task, "Coder", "Blocked", "Agent loop failed before reaching a safe stop.");
     setAgent(task, "Reviewer", "Active", "Review the failed agent loop before continuing.");
+  } else if (status === "Aborted") {
+    task.status = "Human Review";
+    task.currentPhase = "Agent Loop Aborted";
+    setAgent(task, "Manager", "Ready", "Agent loop was aborted at a safe step boundary.");
+    setAgent(task, "Coder", "Idle", summary);
+    setAgent(task, "Reviewer", "Active", "Review retained context, proposals, and command evidence before continuing.");
   } else if (status === "Completed") {
     task.status = "Human Review";
     task.currentPhase = stopReason === "RepairVerified"
@@ -5772,15 +6055,17 @@ function finishAgentRunLoop(
   upsertPlanStep(task, {
     id: "run-agent-loop",
     title: "Run agent loop",
-    status: status === "Completed" ? "Done" : status === "Failed" ? "Blocked" : "Active",
+    status: status === "Completed" ? "Done" : status === "Failed" || status === "Aborted" ? "Blocked" : "Active",
     summary
   });
 
   const type = status === "Completed"
     ? "agent.run_loop.completed"
-    : status === "Failed"
-      ? "agent.run_loop.failed"
-      : "agent.run_loop.paused";
+    : status === "Aborted"
+      ? "agent.run_loop.aborted"
+      : status === "Failed"
+        ? "agent.run_loop.failed"
+        : "agent.run_loop.paused";
   saveAndBroadcast(task, withCreatedAt(event(type, summary), completedAt));
   return task;
 }
@@ -5829,7 +6114,10 @@ async function runAgentStep(
   const decision = await modelProvider.createAgentRunStep({
     task,
     taskCommands,
-    commandRerunEvidence: runnableRerunEvidence
+    commandRerunEvidence: runnableRerunEvidence,
+    contextBudget: options.loopID
+      ? agentRunStepContextBudget(requireAgentRunLoop(task, options.loopID))
+      : undefined
   });
   if (input.preferredCommandID?.trim() && decision.action === "RunTaskCommand") {
     decision.commandID = input.preferredCommandID.trim();
@@ -5856,6 +6144,15 @@ async function runAgentStep(
   return executeAgentRunStep(task.id, step.id, taskCommands);
 }
 
+function agentRunStepContextBudget(loop: AgentRunLoop): NonNullable<AgentRunStepRequest["contextBudget"]> {
+  return {
+    loopID: loop.id,
+    maxContextSteps: loop.maxContextSteps,
+    contextStepsRun: loop.contextStepsRun,
+    remainingContextSteps: Math.max(0, loop.maxContextSteps - loop.contextStepsRun)
+  };
+}
+
 function createAgentRunStep(
   task: ForgeTask,
   decision: AgentRunStepDecision,
@@ -5877,6 +6174,8 @@ function createAgentRunStep(
     status: "Running",
     summary: decision.summary,
     rationale: decision.rationale,
+    searchTerms: decision.searchTerms,
+    readPaths: decision.readPaths,
     commandID: decision.commandID,
     commandName: commandPermission?.command.name ?? evidence?.commandName,
     commandRerunEvidenceID: decision.commandRerunEvidenceID,
@@ -5896,6 +6195,8 @@ async function executeAgentRunStep(
 
   try {
     switch (step.action) {
+    case "GatherRepositoryContext":
+      return await gatherAgentRunContext(task, step);
     case "GenerateEditProposal":
       return completeAgentRunStepAfterAction(
         await generateEditProposal(taskID),
@@ -5958,6 +6259,112 @@ async function executeAgentRunStep(
 
     return failAgentRunStep(task, step, error instanceof Error ? error.message : String(error));
   }
+}
+
+async function gatherAgentRunContext(task: ForgeTask, step: AgentRunStep): Promise<ForgeTask> {
+  if (step.loopID) {
+    const loop = requireAgentRunLoop(task, step.loopID);
+    if (loop.contextStepsRun >= loop.maxContextSteps) {
+      step.contextPaths = [];
+      step.newContextPaths = [];
+      step.contextOutcome = "BudgetReached";
+      return blockAgentRunStep(
+        task,
+        step,
+        `Agent repository context budget is exhausted (${loop.contextStepsRun}/${loop.maxContextSteps} completed context steps).`
+      );
+    }
+  }
+
+  const projectFiles = await runTool(
+    task,
+    "list_repo_files",
+    "Agent-selected bounded repo scan excluding private and generated directories",
+    listRepositoryFiles
+  );
+  const contextRequest: PlanContextRequestResult = {
+    status: "SearchAndRead",
+    rationale: step.rationale,
+    searchTerms: step.searchTerms ?? [],
+    readPaths: step.readPaths ?? []
+  };
+  const searchTerms = normalizeProviderSearchTerms(contextRequest, task);
+  const requestedReadPaths = normalizeProviderReadPaths(contextRequest.readPaths, projectFiles);
+  const requestSignature = agentRunContextRequestSignature(searchTerms, requestedReadPaths);
+  const repeatedRequest = task.agentRunSteps.some((candidate) =>
+    candidate.id !== step.id &&
+      candidate.loopID === step.loopID &&
+      candidate.action === "GatherRepositoryContext" &&
+      candidate.status === "Completed" &&
+      agentRunContextRequestSignature(candidate.searchTerms ?? [], candidate.readPaths ?? []) === requestSignature
+  );
+  if (repeatedRequest) {
+    step.searchTerms = searchTerms;
+    step.readPaths = requestedReadPaths;
+    step.contextPaths = [];
+    step.newContextPaths = [];
+    step.contextOutcome = "RepeatedRequest";
+    return blockAgentRunStep(task, step, "Agent repeated a repository context request that already completed; review or choose a different next action.");
+  }
+
+  const previousContextPaths = new Set(
+    task.agentRunSteps
+      .filter((candidate) =>
+        candidate.id !== step.id &&
+        candidate.loopID === step.loopID &&
+        candidate.action === "GatherRepositoryContext" &&
+        candidate.status === "Completed"
+      )
+      .flatMap((candidate) => candidate.contextPaths ?? [])
+  );
+  const contextMatches = await runTool(
+    task,
+    "search_repo_context",
+    searchTerms.join(", "),
+    () => searchRepositoryContext(
+      projectFiles,
+      searchTerms,
+      [...explicitContextPathsForTask(task), ...requestedReadPaths]
+    )
+  );
+  const contextFiles = await buildContextFiles(task, projectFiles, contextMatches, requestedReadPaths);
+  task.contextFiles = mergeContextFiles(task.contextFiles, contextFiles);
+  const newContextPaths = contextFiles
+    .map((file) => file.path)
+    .filter((contextPath) => !previousContextPaths.has(contextPath));
+
+  step.searchTerms = searchTerms;
+  step.readPaths = requestedReadPaths;
+  step.contextPaths = contextFiles.map((file) => file.path);
+  step.newContextPaths = newContextPaths;
+  if (newContextPaths.length === 0) {
+    step.contextOutcome = "NoProgress";
+    return blockAgentRunStep(
+      task,
+      step,
+      "Agent repository context gathering inspected no new files; review the evidence or choose a different next action."
+    );
+  }
+  step.contextOutcome = "Expanded";
+  task.status = step.loopID ? "Running" : "Human Review";
+  task.currentPhase = "Agent Context Ready";
+  task.reviewSummary = `Agent inspected ${contextFiles.length} bounded context file(s); ${newContextPaths.length} were new to this run.`;
+  setAgent(task, "Coder", step.loopID ? "Active" : "Ready", "Repository context is ready for the next provider-selected action.");
+  setAgent(task, "Reviewer", step.loopID ? "Idle" : "Active", "Review the selected read/search evidence or continue the agent run.");
+
+  return completeAgentRunStepAfterAction(
+    task,
+    step.id,
+    `Agent searched for ${searchTerms.join(", ")} and inspected ${contextFiles.length} file(s): ${formatPathList(contextFiles.map((file) => file.path))}.`,
+    () => undefined
+  );
+}
+
+function agentRunContextRequestSignature(searchTerms: string[], readPaths: string[]): string {
+  return JSON.stringify({
+    searchTerms: [...searchTerms].map((term) => term.toLowerCase()).sort(),
+    readPaths: [...readPaths].sort()
+  });
 }
 
 function completeAgentRunStepAfterAction(
@@ -9443,6 +9850,9 @@ function renderRuntimeHome(): string {
       <li><code>POST /tasks/:taskID/approve-plan</code></li>
       <li><code>POST /tasks/:taskID/run-agent-step</code></li>
       <li><code>POST /tasks/:taskID/run-agent-loop</code></li>
+      <li><code>POST /tasks/:taskID/pause-agent-loop</code></li>
+      <li><code>POST /tasks/:taskID/abort-agent-loop</code></li>
+      <li><code>POST /tasks/:taskID/resume-agent-loop</code></li>
       <li><code>POST /tasks/:taskID/generate-edit-proposal</code></li>
       <li><code>POST /tasks/:taskID/revise-edit-proposal</code></li>
       <li><code>POST /tasks/:taskID/generate-validation-repair-proposal</code></li>

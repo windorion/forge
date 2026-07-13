@@ -3124,3 +3124,213 @@ Next:
 - Broaden source patch proposal/apply beyond exact text hunks and harden
   rollback revalidation/recovery.
 - Add pause/abort/resume and stuck-task recovery controls for bounded loops.
+
+## 2026-07-13 20:18:56 CEST
+
+Conversation summary:
+
+- User asked for a full-document review of current Forge progress, an
+  assessment of distance to Coding-Agent Demo V0, and a recommendation for
+  the next implementation step.
+
+Done:
+
+- Read the complete project documentation set, including the root/runtime/
+  design-handoff READMEs, all focused `docs/*.md` files, and the full session
+  history.
+- Cross-checked V0 completion criteria against the current TypeScript runtime,
+  SwiftUI app, provider contract, patch engine, command runner, review UI, and
+  test coverage.
+- Confirmed the documented trust/runtime foundation is real and stable, while
+  identifying that the current 76-80% V0 estimate is more optimistic than a
+  strict end-to-end product-experience score.
+- Verified `npm run check`, `npm run build`, `swift build`,
+  `npm run smoke:core`, `npm run smoke:git-remote`, and `git diff --check`.
+- Confirmed the working tree was clean before this session-log entry.
+
+Not done:
+
+- Did not change runtime, macOS app, product scope, completion estimates, or
+  backlog priorities.
+- Did not run a live OpenAI API task or an interactive GUI walkthrough.
+- Did not implement broader patching, real clarification states,
+  pause/abort/resume, or durable file-level review decisions.
+
+Next:
+
+- Build one V0 vertical slice around a normal small source task: provider-led
+  read/search, structured multi-file patch generation, reviewed apply,
+  approved command execution, one repair attempt, rerun evidence, and final
+  full-diff review.
+- Add real clarification/decision checkpoints and pause/abort/resume to that
+  same run state machine instead of treating them as separate UI polish.
+- After the vertical slice succeeds repeatedly, finish durable per-file diff
+  decisions and exact `10a` interaction polish.
+
+## 2026-07-13 20:36:43 CEST
+
+Conversation summary:
+
+- User asked to begin the recommended next step after the V0 progress review.
+  This session implemented the first provider-selected repository-context
+  action inside the normal Agent Run Step/Loop.
+
+Done:
+
+- Added `GatherRepositoryContext` to the provider/runtime action contract with
+  bounded search terms, repo-relative read paths, and persisted inspected
+  context paths.
+- Reused the existing logged list/search/read tools, safe repository file
+  boundary, context storage caps, and task audit events; unsafe paths are
+  filtered and repeated identical context requests are blocked.
+- Let a bounded Agent Run Loop gather context and continue into edit-proposal
+  generation without adding any side-effect permission.
+- Added macOS model decoding and Log-tab display for inspected context paths.
+- Extended the mock OpenAI core smoke flow to cover standalone context
+  gathering and context-to-proposal loop continuation.
+- Updated README, project status, TODO, development, runtime architecture,
+  model provider, security, runtime README, and V0 scope documentation. The
+  Coding-Agent Demo V0 component estimate is now 78-82%.
+- Verified runtime type checking/build, macOS `swift build`, core runtime
+  smoke, and `git diff --check`.
+
+Not done:
+
+- Did not add repeated/finer-grained model tool selection beyond the first
+  combined context pass.
+- Did not add pause/abort/resume or stuck-task recovery controls.
+- Did not broaden patch application beyond the current exact replace and
+  multi-hunk patch operations.
+- Did not run a live OpenAI API task or an interactive macOS GUI walkthrough.
+
+Next:
+
+- Extend the context action into a small runtime-owned read/search loop with
+  explicit budgets and no-progress protection.
+- Add pause/abort/resume to the same run state machine.
+- Continue the V0 vertical slice with broader multi-file patch generation,
+  reviewed apply, validation, one repair attempt, and final full-diff review.
+
+## 2026-07-13 20:50:45 CEST
+
+Conversation summary:
+
+- User asked to continue the next V0 implementation step. This session
+  upgraded the first Agent Run repository-context action into a bounded
+  multi-round context loop with explicit progress and stop evidence.
+
+Done:
+
+- Added a separate `maxContextSteps` Agent Run Loop request budget from zero
+  to three, never greater than the overall `maxSteps` limit.
+- Persisted completed context-step count and aggregate inspected paths on each
+  `AgentRunLoop`, with snapshot defaults for older stored loop records.
+- Exposed remaining context budget plus recent search/read outcomes to the
+  model provider while keeping both counters runtime-owned.
+- Recorded `newContextPaths` and `contextOutcome` on context steps, including
+  `Expanded`, `RepeatedRequest`, `NoProgress`, and `BudgetReached`.
+- Scoped duplicate detection and progress comparison to the current loop so a
+  later run may intentionally reread changed repository state.
+- Added explicit `ContextBudgetReached` and `NoProgress` loop stops; over-budget
+  choices are rejected before any repository tool runs.
+- Updated the macOS Log with context-step budget, aggregate inspected paths,
+  and per-step context outcome/new-file counts.
+- Extended core smoke coverage for two productive context rounds followed by
+  proposal generation, a no-progress round, and an over-budget model choice.
+- Updated the project/runtime/provider/security/persistence/local-first/V0
+  documents and raised the Coding-Agent Demo V0 component estimate to 80-84%.
+- Verified runtime type checking/build, the full core runtime smoke, macOS
+  `swift build`, and `git diff --check`.
+
+Not done:
+
+- Did not split `GatherRepositoryContext` into separate model-selected search
+  and read actions.
+- Did not add pause/abort/resume controls for an active or paused Agent Run
+  Loop.
+- Did not broaden provider patch generation or apply beyond the current exact
+  replace and multi-hunk operations.
+- Did not run a live OpenAI API task or interactive macOS GUI walkthrough.
+
+Next:
+
+- Add runtime-owned pause, abort, and resume state transitions with persisted
+  loop intent and cooperative stop checks between agent steps.
+- Surface those controls and stop states in the macOS live-session action rail.
+- Then continue the V0 vertical slice with broader multi-file patch
+  orchestration, validation, one repair attempt, and final full-diff review.
+
+## 2026-07-13 21:06:40 CEST
+
+Conversation summary:
+
+- User asked to continue the next V0 implementation step. This session added
+  persisted, runtime-owned pause, abort, and resume controls to the bounded
+  Agent Run Loop and surfaced them in the native macOS action rail.
+
+Done:
+
+- Added exact-loop-ID pause, abort, and resume endpoints with persisted control
+  intent, timestamps, optional audit notes, resume count, and an explicit
+  `Aborted` state.
+- Made pause and abort cooperative at safe agent-step boundaries. Forge retains
+  completed context and proposal evidence and does not force-kill an active
+  validation or task command; command cancellation remains a separate action.
+- Resumed a user-paused loop in place with the same loop ID, remaining step and
+  context budgets, prior evidence, and provider preference.
+- Added runtime events for pause requested, abort requested, resumed, paused,
+  and aborted transitions, including snapshot compatibility for older stored
+  loops.
+- Added macOS Pause, Abort, and Resume controls with shared loading state and
+  guards against starting competing agent activity while a loop is resumable.
+- Extended the mock OpenAI core smoke flow to verify cooperative pause after a
+  delayed step, same-loop resume into human review, and cooperative abort with
+  retained evidence.
+- Updated the project, runtime, security, persistence, provider, macOS,
+  workspace, user-flow, development, and V0 documentation. The Coding-Agent
+  Demo V0 component estimate is now 82-86%.
+- Verified runtime type checking/build, the full core runtime smoke, macOS
+  `swift build`, and `git diff --check`.
+
+Not done:
+
+- Did not split repository context gathering into separate model-selected
+  search and read actions.
+- Did not add timeout detection or automatic restart recovery for stalled
+  provider steps.
+- Did not broaden provider patch generation and apply beyond the current exact
+  replace and multi-hunk operations.
+- Did not run a live OpenAI API task or an interactive macOS GUI walkthrough.
+
+Next:
+
+- Broaden multi-file patch orchestration while preserving per-file review,
+  rollback, validation, one repair attempt, and final full-diff review.
+- Then add timeout/restart recovery and finer model-selected search/read tools
+  without expanding the existing filesystem or command permission boundary.
+
+## 2026-07-13 21:08:43 CEST
+
+Conversation summary:
+
+- User asked to commit and push the completed Agent Run context/control work,
+  then continue with the next V0 implementation step.
+
+Done:
+
+- Reviewed the complete working-tree scope, current `main` branch, GitHub
+  remote, recent history, and the intended publication diff.
+- Confirmed the current changes form one coherent Agent Run context-budget and
+  pause/abort/resume increment, including its tests and documentation.
+- Reconfirmed the runtime TypeScript check before publication.
+
+Not done:
+
+- Did not create a publication branch, commit, push, or begin the next code
+  increment because the configured GitHub CLI account token is invalid.
+
+Next:
+
+- Re-authenticate GitHub CLI with `gh auth login -h github.com`, confirm with
+  `gh auth status`, then create a `codex/` branch, commit the scoped changes,
+  push it, and continue into broader multi-file patch orchestration.

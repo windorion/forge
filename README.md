@@ -66,17 +66,22 @@ Implemented today:
   plus inspected context files.
 - Provider-selected Agent Run Step v0: `POST /tasks/:taskID/run-agent-step`
   asks the active model provider for one safe next action, then the runtime
-  enforces existing gates while it generates an edit proposal, runs an
+  can execute model-selected bounded repository context passes through logged
+  read-only list/search/read tools, or enforce existing gates while it
+  generates an edit proposal, runs an
   approved task command, generates a validation repair proposal, reruns
   reviewed self-fix evidence, or waits for human review. The macOS action rail
   exposes `Run Agent Step`, and the Log tab shows recent agent step decisions,
   rationale, status, linked command/proposal targets, and result summaries.
 - Bounded Agent Run Loop v0: `POST /tasks/:taskID/run-agent-loop` repeatedly
   runs provider-selected safe steps up to a small runtime-enforced limit and
-  stops at review gates, passed commands, verified self-fixes, blocked steps,
-  failures, or max-step protection. The macOS action rail now exposes
-  `Run Agent Loop`, and the Log tab shows loop summaries plus the linked step
-  trail.
+  has a separate zero-to-three-step repository-context budget. It stops at
+  review gates, passed commands, verified self-fixes, blocked steps, context
+  budget exhaustion, no-progress detection, failures, or max-step protection.
+  Runtime-owned pause, abort, and resume endpoints cooperatively stop between
+  safe steps and resume the same persisted loop without bypassing review
+  gates. The macOS action rail exposes these controls, and the Log tab shows
+  loop summaries plus the linked step trail.
 - Explicit human review gates for plans and edits.
 - Safe edit proposals with multi-file OpenAI proposal artifacts, including
   blocked preview-only operations. Apply supports Markdown `AppendText`,
@@ -172,7 +177,7 @@ Product-readiness estimate:
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 76-80% | Has a first-pass session UI shell, full-screen diff review surface, exact source replace, multi-hunk source patches, streamed/cancellable selectable task commands, failed-command self-fix rerun evidence, and a bounded provider-selected multi-step loop, but still needs richer read/search/patch orchestration and UI polish before it feels like Codex or Claude Code. |
+| Coding-agent demo V0 | 82-86% | Has a first-pass session UI shell, full-screen diff review surface, exact source replace, multi-hunk source patches, streamed/cancellable selectable task commands, failed-command self-fix rerun evidence, and a bounded provider-selected loop with multi-round context budgets plus pause/abort/resume controls, but still needs broader patch orchestration, finer-grained tools, and UI polish before it feels like Codex or Claude Code. |
 | Useful developer alpha | 35-45% | A developer cannot yet rely on Forge like Codex or Claude Code for normal coding tasks. It needs real patching, command execution, recovery, and a stronger model-backed run loop. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, memory, MCP/GitHub, and product polish. |
@@ -188,8 +193,8 @@ Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
   `design_handoff_forge` screens
 - broaden source-file patch proposal/apply beyond exact multi-hunk text patches
   and harden rollback/revalidation
-- extend the bounded agent loop with richer read/search tool choices,
-  pause/abort/resume controls, and broader patch/recovery behavior
+- split the combined repository-context action into finer-grained search/read
+  choices and broaden patch/recovery behavior
 - connect full diff review to durable file-level decisions once the review
   model supports them
 - return to PR/GitHub publication after the agent coding loop feels real

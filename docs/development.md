@@ -29,10 +29,14 @@ The proposal stores the inspected context files and concise tool evidence so
 the app can show what informed the proposed next action.
 The latest slice adds Agent Run Step v0: the runtime can ask the active model
 provider for one safe next action, then enforce existing gates while it
-generates an edit proposal, runs an approved task command, generates a
-validation repair proposal, reruns reviewed self-fix evidence, or pauses for
-human review. Agent Run Loop v0 wraps that step runner with a small
-runtime-enforced step limit and safe stop reasons.
+gathers provider-selected bounded repository context, generates an edit
+proposal, runs an approved task command, generates a validation repair
+proposal, reruns reviewed self-fix evidence, or pauses for human review. The
+context action carries search terms and repo-relative read paths, while the
+runtime filters paths, logs list/search/read tools, stores inspected paths,
+and blocks repeated requests. Agent Run Loop v0 wraps that step runner with a
+small runtime-enforced step limit, a separate zero-to-three-step context
+budget, newly discovered-path tracking, and safe budget/no-progress stops.
 
 The runtime core has an automated smoke regression that exercises the main
 task lifecycle without using real project memory or provider settings.
@@ -373,12 +377,16 @@ The action rail exposes Agent Run Step v0 and Agent Run Loop v0:
 ```text
 POST /tasks/:taskID/run-agent-step
 POST /tasks/:taskID/run-agent-loop
+POST /tasks/:taskID/pause-agent-loop
+POST /tasks/:taskID/abort-agent-loop
+POST /tasks/:taskID/resume-agent-loop
 ```
 
 The request can include an optional `preferredCommandID`, but the runtime only
 uses it when the provider-selected action is `RunTaskCommand` and the command
 is already approved/runnable in the runtime permission snapshot. The provider
-chooses exactly one action from `GenerateEditProposal`, `RunTaskCommand`,
+chooses exactly one action from `GatherRepositoryContext`,
+`GenerateEditProposal`, `RunTaskCommand`,
 `GenerateValidationRepairProposal`, `RerunRepairCommand`,
 `WaitForHumanReview`, and `RequestPlanApproval`. The runtime then rechecks
 the same proposal, command, repair, and review gates used by the manual
@@ -389,13 +397,18 @@ timestamps. SSE emits `agent.run_step.started`, `agent.run_step.completed`,
 `agent.run_step.blocked`, or `agent.run_step.failed`.
 
 `run-agent-loop` repeatedly invokes the same step boundary up to a bounded
-`maxSteps` value. It stops at edit-proposal review gates, passed commands,
-verified self-fix reruns, blocked/failed steps, busy-task guards, no-progress
-guards, or max-step protection. It does not add new permissions; it only
-chains existing step actions until the runtime reaches a safe stop. A complete
-V0 agent still needs pause/resume/abort and richer read/search/patch tool
-choices.
-choices.
+`maxSteps` value. It also accepts `maxContextSteps` from 0 to 3, never greater
+than `maxSteps`. It stops at edit-proposal review gates, passed commands,
+verified self-fix reruns, context-budget exhaustion, blocked/failed steps,
+busy-task guards, no-progress guards, or max-step protection. It does not add
+new permissions; it only chains existing step actions until the runtime
+reaches a safe stop. The loop can now gather multiple distinct runtime-owned
+read/search context passes and continue to proposal generation in one request.
+Pause and abort persist cooperative stop intent and take effect before the
+next agent step; resume continues only the same `UserPaused` loop with its
+remaining step/context budgets. These controls do not cancel an active command
+or bypass review gates. A complete V0 agent still needs finer-grained separate
+read/search choices and broader patch behavior.
 
 Current validation presets:
 

@@ -106,6 +106,18 @@ Purpose:
 - generate tests
 - start a task from a repository
 
+### Live Agent Controls
+
+Current implementation:
+
+- the task action rail exposes state-specific Pause, Abort, and Resume buttons
+- controls are owned by the shared workspace model rather than view-local
+  network state
+- pending cooperative stop requests remain visible until the current safe
+  step finishes
+- resume continues the same persisted loop instead of silently creating a new
+  run
+
 ### Quick Look
 
 Purpose:

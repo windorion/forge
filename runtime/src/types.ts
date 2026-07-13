@@ -148,6 +148,7 @@ export interface ExecutionProposal {
 }
 
 export type AgentRunStepAction =
+  | "GatherRepositoryContext"
   | "GenerateEditProposal"
   | "RunTaskCommand"
   | "GenerateValidationRepairProposal"
@@ -155,10 +156,18 @@ export type AgentRunStepAction =
   | "WaitForHumanReview"
   | "RequestPlanApproval";
 
+export type AgentRunContextOutcome =
+  | "Expanded"
+  | "RepeatedRequest"
+  | "NoProgress"
+  | "BudgetReached";
+
 export interface AgentRunStepDecision {
   action: AgentRunStepAction;
   summary: string;
   rationale: string;
+  searchTerms?: string[];
+  readPaths?: string[];
   commandID?: string;
   commandRerunEvidenceID?: string;
 }
@@ -171,6 +180,11 @@ export interface AgentRunStep {
   status: "Running" | "Completed" | "Blocked" | "Failed";
   summary: string;
   rationale: string;
+  searchTerms?: string[];
+  readPaths?: string[];
+  contextPaths?: string[];
+  newContextPaths?: string[];
+  contextOutcome?: AgentRunContextOutcome;
   commandID?: string;
   commandName?: string;
   commandRerunEvidenceID?: string;
@@ -189,15 +203,29 @@ export type AgentRunLoopStopReason =
   | "StepFailed"
   | "MaxStepsReached"
   | "TaskBusy"
-  | "NoProgress";
+  | "NoProgress"
+  | "ContextBudgetReached"
+  | "UserPaused"
+  | "UserAborted";
 
 export interface AgentRunLoop {
   id: string;
   provider: ModelProviderInfo;
-  status: "Running" | "Completed" | "Paused" | "Failed";
+  status: "Running" | "Completed" | "Paused" | "Aborted" | "Failed";
   maxSteps: number;
   stepsRun: number;
+  maxContextSteps: number;
+  contextStepsRun: number;
+  contextPaths: string[];
   stepIDs: string[];
+  preferredCommandID?: string;
+  pauseRequestedAt?: string;
+  pausedAt?: string;
+  abortRequestedAt?: string;
+  abortedAt?: string;
+  resumedAt?: string;
+  resumeCount: number;
+  controlNote?: string;
   stopReason?: AgentRunLoopStopReason;
   summary: string;
   startedAt: string;
@@ -859,6 +887,12 @@ export interface RunAgentStepRequest {
 export interface RunAgentLoopRequest {
   preferredCommandID?: string;
   maxSteps?: number;
+  maxContextSteps?: number;
+}
+
+export interface AgentRunLoopControlRequest {
+  agentRunLoopID?: string;
+  note?: string;
 }
 
 export interface CancelTaskCommandRequest {

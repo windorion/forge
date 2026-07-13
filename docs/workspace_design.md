@@ -76,6 +76,11 @@ This is the most important surface. When a task is running, the user should
 see the agent doing engineering work: reading files, matching conventions,
 editing code, running tests, and explaining skips.
 
+Current implementation: the action rail shows Pause and Abort only for an
+active Agent Run Loop, shows pending cooperative-stop feedback while the
+current step finishes, and replaces them with Resume/Abort for a user-paused
+loop. Loop Log cards show resume count and requested control state.
+
 ### New Session Surface
 
 Responsibilities:

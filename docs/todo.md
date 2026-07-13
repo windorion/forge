@@ -30,16 +30,16 @@ dashboard.
 
 ## P1: Real Agent Behavior
 
-- Extend the bounded Agent Run Loop with richer runtime-owned read/search tool
-  choices, pause/abort/resume controls, and visible stuck-task recovery.
+- Split the combined `GatherRepositoryContext` action into finer-grained
+  search/read choices and add timeout/restart recovery beyond the new manual
+  loop controls.
 - Extend the bounded read-only planning/execution context loops into a
   runtime-owned tool-call loop with strict allowed tools and stop conditions.
 - Add stricter model output normalization, retry rules, and failure recovery
   for malformed tool calls or patch artifacts.
 - Add request-change revision loops that operate from full diff review, not
   only the current review stack.
-- Make pause, abort, resume, and stuck-task recovery visible in the live
-  session.
+- Make timeout and runtime-restart recovery visible in the live session.
 
 ## P2: Review, Diff, And Git
 
@@ -90,6 +90,29 @@ dashboard.
 
 ## Done Recently
 
+- Added persisted Agent Run Loop pause, abort, and resume controls. Pause and
+  abort requests are cooperative between safe steps, carry an exact loop ID,
+  persist request/stop/resume timestamps and notes, emit SSE control events,
+  and keep completed evidence. Resume is limited to the same user-paused loop
+  with remaining steps and cannot bypass proposal review or busy-task gates.
+  The macOS action rail exposes state-specific controls and Log cards show
+  pending control requests/resume counts. Core smoke covers concurrent pause,
+  same-loop resume, and active-loop abort.
+- Added bounded multi-round repository context inside Agent Run Loop. The
+  request now accepts a separate `maxContextSteps` budget from zero to three;
+  each loop persists completed context rounds and aggregate inspected paths,
+  exposes the remaining budget to the provider, and pauses with explicit
+  `ContextBudgetReached` or `NoProgress` reasons. Context steps record newly
+  discovered paths and outcomes, the macOS Log shows the budget/evidence, and
+  core smoke covers two distinct context rounds, a no-progress round, and an
+  over-budget attempt.
+- Added provider-selected repository context gathering inside the normal Agent
+  Run Step/Loop. `GatherRepositoryContext` accepts bounded search terms and
+  repo-relative read paths, while the runtime filters unsafe paths, runs the
+  existing logged list/search/read tools, stores inspected paths on the step,
+  blocks repeated requests, and lets the loop continue into proposal
+  generation. The macOS Log tab shows inspected context paths and
+  `npm run smoke:core` covers standalone and continuous-loop paths.
 - Added bounded Agent Run Loop v0. `POST /tasks/:taskID/run-agent-loop`
   repeatedly runs provider-selected safe steps up to a runtime-enforced limit,
   links each step to an `AgentRunLoop`, and stops at review gates, passed
