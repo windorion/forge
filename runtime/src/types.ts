@@ -314,6 +314,17 @@ export interface AppliedFileChange {
   rolledBackAt?: string;
 }
 
+export interface EditProposalApplyAttempt {
+  status: "Running" | "Applied" | "Reverted" | "Failed";
+  plannedPaths: string[];
+  appliedPaths: string[];
+  revertedPaths: string[];
+  summary: string;
+  startedAt: string;
+  endedAt?: string;
+  error?: string;
+}
+
 export interface EditProposal {
   id: string;
   provider: ModelProviderInfo;
@@ -332,6 +343,7 @@ export interface EditProposal {
   rollbackNote?: string;
   validation?: EditProposalValidation;
   appliedFileChanges?: AppliedFileChange[];
+  lastApplyAttempt?: EditProposalApplyAttempt;
 }
 
 export interface ToolCall {

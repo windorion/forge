@@ -431,12 +431,12 @@ class OpenAIResponsesModelProvider implements ModelProvider {
       editProposalSchema,
       [
         "Create a Forge edit proposal review artifact.",
-        "You may propose multiple file changes, but the runtime will validate all of them before any apply.",
+        "You may propose up to eight coordinated file changes, but the runtime will validate the complete set before any apply.",
         "Use AppendText only for bounded appends to README.md or docs/*.md.",
         "Use ReplaceText only when the task explicitly asks for an exact quoted replacement and you can provide the exact find text. It may target README.md, docs/*.md, or normal allowlisted source/text files such as .ts, .swift, .js, .json, .css, .html, .yml, .toml, .py, .go, .rs, .java, .kt, .c, .cpp, .h, and .hpp.",
-        "Use PatchText only when the task explicitly asks for multiple exact quoted replacements in one existing allowlisted Markdown/source/text file. Every patchHunks item must include exact findText and replaceWith text that should appear once in the original target file.",
-        "Use CreateFile only for new docs/*.md files with bounded Markdown content.",
-        "Use PreviewOnly for broad code patches, fuzzy patches, line-number-only diffs, deletes, new source files, unsupported paths, overwrite attempts, or anything that should be reviewed but not applied by the current v0 engine.",
+        "Use PatchText for bounded exact replacements in an existing allowlisted Markdown/source/text file when every patchHunks item includes findText that should appear exactly once in the current file.",
+        "Use CreateFile for bounded new Markdown or allowlisted source/text files. Never use it to overwrite an existing path.",
+        "Use PreviewOnly for fuzzy patches, line-number-only diffs, deletes, unsupported paths, overwrite attempts, or anything that should be reviewed but not applied by the current v0 engine.",
         request.validationFeedback
           ? "The previous proposal failed runtime validation. Generate a corrected proposal that addresses every blocked check while staying inside the supported operation boundary."
           : request.validationRepairBrief
@@ -1128,7 +1128,7 @@ function normalizeRichEditProposalOutput(
 
   const rawChanges = Array.isArray(output.fileChanges) ? output.fileChanges : [];
   const fileChanges = rawChanges
-    .slice(0, 4)
+    .slice(0, 8)
     .map(normalizeRichEditProposalFileChange)
     .filter((change): change is RichEditProposalFileChange => change !== undefined);
 

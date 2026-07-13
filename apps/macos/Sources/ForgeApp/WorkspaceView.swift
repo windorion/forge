@@ -3481,6 +3481,27 @@ private struct ReviewPanel: View {
                                     .font(.caption2)
                                     .foregroundStyle(.tertiary)
                             }
+                            if let attempt = editProposal.lastApplyAttempt {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Label("Last apply: \(attempt.status)", systemImage: applyAttemptSystemImage(attempt.status))
+                                        .font(.caption.weight(.semibold))
+                                    Text(attempt.summary)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                    Text("Planned \(attempt.plannedPaths.count) · Applied \(attempt.appliedPaths.count) · Restored \(attempt.revertedPaths.count)")
+                                        .font(.caption2.monospacedDigit())
+                                        .foregroundStyle(.tertiary)
+                                    if let error = attempt.error {
+                                        Text(error)
+                                            .font(.caption2)
+                                            .foregroundStyle(.orange)
+                                    }
+                                }
+                                .padding(8)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(.quaternary)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                            }
                         }
 
                         if let validation = editProposal.validation {
@@ -3848,6 +3869,19 @@ private struct ReviewPanel: View {
     ) -> FileChangeValidation? {
         proposal.validation?.fileResults.first { result in
             result.id == change.id || result.path == change.path
+        }
+    }
+
+    private func applyAttemptSystemImage(_ status: String) -> String {
+        switch status {
+        case "Applied":
+            return "checkmark.circle.fill"
+        case "Reverted":
+            return "arrow.uturn.backward.circle.fill"
+        case "Failed":
+            return "exclamationmark.triangle.fill"
+        default:
+            return "arrow.triangle.2.circlepath.circle.fill"
         }
     }
 
@@ -6818,7 +6852,7 @@ private struct OperationSummaryRow: View {
         case "PatchText":
             return "Apply-ready only when every hunk has one exact match in the original file."
         case "CreateFile":
-            return "Apply-ready only for new docs/*.md files after runtime validation."
+            return "Apply-ready only for new allowlisted source/text files after runtime validation."
         case "PreviewOnly":
             return "Review artifact only; revise or wait for a future patch engine before applying."
         default:

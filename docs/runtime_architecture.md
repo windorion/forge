@@ -208,12 +208,13 @@ all later file changes.
 
 Checks proposed file changes against the current workspace before apply. The
 v0 validator confirms supported operation type, safe Markdown paths for append
-and create operations, safe allowlisted source/text paths for exact replace and
-patch operations, existing target file for modify operations, non-existing docs
+operations, safe allowlisted source/text paths for create, exact replace, and
+patch operations, existing target file for modify operations, non-existing
 target for create operations, operation size, whether append text is already
 present at the file end, whether exact replace text appears exactly once, and
 whether every patch hunk appears exactly once in the original file and applies
-cleanly in order.
+cleanly in order. Proposal-level validation also blocks more than eight targets,
+duplicate normalized paths, and oversized total operation payloads.
 
 ### Edit Proposal Applier
 
@@ -222,9 +223,11 @@ The v0 implementation supports append-text edits to existing Markdown files in
 `README.md` or `docs/`, exact replace-text edits to existing Markdown or
 allowlisted source/text files, multi-hunk exact patch-text edits to one
 existing Markdown or allowlisted source/text file, plus create-file edits for
-new `docs/*.md` files. It revalidates before writing, records before/after
-apply metadata for rollback, and records rejected or superseded proposals
-without touching files.
+new allowlisted Markdown/source/text files. It revalidates the complete set
+before writing, records before/after apply metadata for rollback, and persists
+planned/applied/restored paths for the latest attempt. If a later operation
+fails, Forge attempts reverse-order restoration of completed writes before
+returning to review. Rejected or superseded proposals do not touch files.
 
 ### Edit Proposal Rollback
 

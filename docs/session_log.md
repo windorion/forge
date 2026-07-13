@@ -3334,3 +3334,58 @@ Next:
 - Re-authenticate GitHub CLI with `gh auth login -h github.com`, confirm with
   `gh auth status`, then create a `codex/` branch, commit the scoped changes,
   push it, and continue into broader multi-file patch orchestration.
+
+## 2026-07-13 21:32:44 CEST
+
+Conversation summary:
+
+- User asked to continue after GitHub authentication. This session published
+  the completed Agent Run context/control checkpoint, then implemented the next
+  V0 increment for coordinated multi-file proposal apply and recovery.
+
+Done:
+
+- Re-authenticated GitHub CLI, created branch
+  `codex/agent-run-loop-controls`, committed the prior Agent Run increment as
+  `426869d`, and pushed the branch to `origin`.
+- Expanded restricted `CreateFile` from new `docs/*.md` files to new bounded
+  allowlisted Markdown/source/text files without enabling overwrite or delete.
+- Raised OpenAI proposal orchestration to eight file changes and broadened
+  exact `PatchText` guidance while keeping all mutations runtime-owned.
+- Added proposal-level validation for duplicate normalized targets, an
+  eight-file limit, and a 120,000-character total operation budget before any
+  workspace write.
+- Persisted the latest apply attempt with planned, applied, and restored paths,
+  timestamps, status, summary, and error evidence. Completed writes are saved
+  incrementally for crash evidence.
+- Added reverse-order automatic recovery when a later coordinated file write
+  fails. Complete recovery returns the task to human review; incomplete
+  recovery leaves an explicit failed state.
+- Added macOS Review evidence for the latest coordinated apply/recovery attempt
+  using the existing proposal surface and shared task state.
+- Extended core smoke coverage for a three-file Markdown/source apply and
+  rollback, normalized duplicate-target blocking, and a real second-file
+  failure that automatically restores the first created file.
+- Updated project status, TODO, V0, runtime, provider, security, persistence,
+  edit-proposal, macOS, workspace, and development documentation. The
+  Coding-Agent Demo V0 component estimate is now 84-88%.
+- Verified runtime TypeScript build/check through the full core smoke, macOS
+  `swift build`, and `git diff --check`.
+
+Not done:
+
+- Did not add a content-aware or fuzzy source patch format beyond exact
+  `ReplaceText`/`PatchText` operations.
+- Did not add automatic restart recovery for an apply attempt left `Running`
+  by a process crash.
+- Did not add durable per-file approval decisions or exact split-diff polish.
+- Did not run a live OpenAI API task or an interactive macOS GUI walkthrough.
+- Did not commit or push the new coordinated multi-file increment; it remains
+  as the working tree after the published Agent Run checkpoint.
+
+Next:
+
+- Add a content-aware reviewed source patch artifact that remains bounded by
+  the coordinated proposal limits and optimistic workspace revalidation.
+- Then add restart recovery for interrupted apply attempts and durable
+  file-level review decisions.

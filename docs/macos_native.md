@@ -118,6 +118,16 @@ Current implementation:
 - resume continues the same persisted loop instead of silently creating a new
   run
 
+### Coordinated Apply Evidence
+
+Current implementation:
+
+- the existing Review surface shows the latest proposal apply attempt without
+  creating another window or view-local runtime state
+- planned, applied, and automatically restored file counts make partial-write
+  recovery visible alongside the proposal
+- an incomplete recovery error remains visible for explicit human follow-up
+
 ### Quick Look
 
 Purpose:

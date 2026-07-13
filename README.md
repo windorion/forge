@@ -86,8 +86,10 @@ Implemented today:
 - Safe edit proposals with multi-file OpenAI proposal artifacts, including
   blocked preview-only operations. Apply supports Markdown `AppendText`,
   exact `ReplaceText` and multi-hunk `PatchText` for Markdown and allowlisted
-  source/text files, new `docs/*.md` `CreateFile` changes, applied-file
-  rollback metadata, and an explicit rollback action.
+  source/text files, and bounded `CreateFile` changes for new allowlisted
+  source/text files. Coordinated proposals are capped at eight unique targets
+  and a total operation budget; apply attempts persist planned/applied/restored
+  paths and automatically restore completed writes if a later file fails.
 - Edit proposal validation, bounded validation-feedback repair, apply/reject
   flow, revision loop, and post-apply validation.
 - Approved task-scoped command execution for runtime-known command IDs. The
@@ -177,7 +179,7 @@ Product-readiness estimate:
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 82-86% | Has a first-pass session UI shell, full-screen diff review surface, exact source replace, multi-hunk source patches, streamed/cancellable selectable task commands, failed-command self-fix rerun evidence, and a bounded provider-selected loop with multi-round context budgets plus pause/abort/resume controls, but still needs broader patch orchestration, finer-grained tools, and UI polish before it feels like Codex or Claude Code. |
+| Coding-agent demo V0 | 84-88% | Has a first-pass session UI shell, full-screen diff review surface, coordinated multi-file source/text create and exact patch apply with recovery evidence, streamed/cancellable selectable task commands, failed-command self-fix rerun evidence, and a bounded provider-selected loop with multi-round context budgets plus pause/abort/resume controls, but still needs more general patch generation, finer-grained tools, and UI polish before it feels like Codex or Claude Code. |
 | Useful developer alpha | 35-45% | A developer cannot yet rely on Forge like Codex or Claude Code for normal coding tasks. It needs real patching, command execution, recovery, and a stronger model-backed run loop. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, memory, MCP/GitHub, and product polish. |
@@ -191,8 +193,8 @@ Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
 
 - polish the first-pass macOS coding-agent session UI toward the exact
   `design_handoff_forge` screens
-- broaden source-file patch proposal/apply beyond exact multi-hunk text patches
-  and harden rollback/revalidation
+- broaden source-file patch generation beyond exact text hunks while retaining
+  the new coordinated apply budgets and automatic partial-write recovery
 - split the combined repository-context action into finer-grained search/read
   choices and broaden patch/recovery behavior
 - connect full diff review to durable file-level decisions once the review

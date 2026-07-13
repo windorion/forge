@@ -161,8 +161,10 @@ Major gaps:
 - UI has a first-pass shell but does not yet fully match `design_handoff_forge`.
 - Full-screen diff review exists but still needs exact split-diff polish,
   keyboard shortcuts, and durable file-level review decisions.
-- Patch apply now has exact source replacement and multi-hunk text patch
-  paths, but it is still too narrow for normal source-code tasks.
+- Patch apply now has coordinated multi-file exact source patches, new
+  allowlisted source/text file creation, proposal-level budgets, and partial-
+  write recovery evidence, but generation is still too exact-text-dependent
+  for normal source-code tasks.
 - Command output now has a streamed, cancellable, selectable task-scoped
   surface with reviewed self-fix rerun evidence after apply.
 - Provider-backed run loop now has bounded multi-step orchestration and
@@ -172,8 +174,8 @@ Major gaps:
 
 ## Next Implementation Order
 
-1. Broaden source-file patch proposal/apply beyond exact text hunks and harden
-   rollback revalidation/recovery.
+1. Broaden provider patch generation beyond exact text hunks while preserving
+   coordinated budgets, per-file review, and partial-write recovery.
 2. Split the combined agent-selected repository context action into
    finer-grained search/read choices.
 3. Implement request-change revision from full diff review.

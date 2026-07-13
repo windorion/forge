@@ -117,6 +117,8 @@ Responsibilities:
 - per-file reasoning: why this change, convention matched, tests covering it
 - per-file approve/request-change actions
 - final approve/apply/commit/PR handoff
+- latest coordinated apply-attempt evidence: planned, applied, and
+  automatically restored file counts plus any recovery error
 
 The diff review should follow `10a`. It is the trust surface, not an
 afterthought inside a scroll stack.

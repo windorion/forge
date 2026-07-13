@@ -287,9 +287,11 @@ For the OpenAI provider, edit proposals can now include multiple file changes.
 `AppendText` remains limited to existing Markdown files in `README.md` or
 `docs/*.md`, exact `ReplaceText` and multi-hunk `PatchText` can validate for
 existing allowlisted source/text files when every find text appears exactly
-once, and restricted `CreateFile` remains limited to new `docs/*.md` files.
-Delete, broad patch, unsupported path, or preview-only operations remain
-review artifacts and block apply until revised.
+once, and restricted `CreateFile` can create new allowlisted Markdown/source/
+text files. Coordinated proposals allow up to eight unique normalized targets
+and a bounded total operation payload. Delete, fuzzy patch, unsupported path,
+overwrite-create, or preview-only operations remain review artifacts and block
+apply until revised.
 If generated validation is blocked, the runtime can run a bounded repair loop:
 it archives the blocked proposal as `Superseded`, sends the failed checks back
 to the provider, and validates the repaired proposal before returning to human
@@ -300,9 +302,12 @@ and `Request Changes`. It also exposes `Validate Proposal`, which calls
 `POST /tasks/:taskID/validate-edit-proposal` to refresh applicability checks
 without writing files. Applying calls `POST /tasks/:taskID/apply-edit-proposal`,
 revalidates the current workspace, runs the restricted v0 edit operation,
-records the changed file plus before/after rollback metadata, and marks the
-task completed. Applied proposals with rollback metadata can be explicitly
-rolled back with `POST /tasks/:taskID/rollback-edit-proposal`; the runtime
+records each changed file plus before/after rollback metadata, and marks the
+task completed. The latest apply attempt stores planned/applied/restored paths;
+if a later file write fails, completed writes are restored in reverse order
+before Forge returns to review. Applied proposals with rollback metadata can
+be explicitly rolled back with `POST
+/tasks/:taskID/rollback-edit-proposal`; the runtime
 checks current file hashes before restoring snapshots or deleting files created
 by the proposal.
 Requesting changes calls `POST /tasks/:taskID/reject-edit-proposal`, records
@@ -545,10 +550,11 @@ cd runtime && npm run smoke:git-remote
 - Edit proposal application is intentionally narrow: v0 supports append-text
   operations on existing Markdown files in `README.md` or `docs/`, exact
   replace-text and multi-hunk patch-text operations on existing Markdown or
-  allowlisted source/text files, and create-file operations for new `docs/*.md`
-  files only. Validation blocks unsupported paths, generated directories,
-  lockfiles, secret-like files, unsupported operations, oversized edits,
-  missing files, existing create targets, duplicate append text at the file
+  allowlisted source/text files, and create-file operations for new allowlisted
+  Markdown/source/text files. Validation blocks unsupported paths, generated
+  directories, lockfiles, secret-like files, unsupported operations, oversized edits,
+  missing files, existing create targets, duplicate coordinated target paths,
+  over-budget coordinated operation payloads, duplicate append text at the file
   end, replace operations whose find text is missing or appears more than
   once, and patch hunks that cannot be matched exactly once in the original
   file and applied in order. Richer OpenAI proposals can include unsupported

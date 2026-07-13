@@ -21,6 +21,10 @@ const replaceSmokePath = `docs/${smokeID}-replace.md`;
 const sourceReplaceSmokePath = `runtime/src/${smokeID}-source-replace.ts`;
 const sourcePatchSmokePath = `runtime/src/${smokeID}-source-patch.ts`;
 const createSmokePath = `docs/${smokeID}-openai-created.md`;
+const sourceCreateSmokePath = `runtime/src/${smokeID}-openai-created.ts`;
+const partialRecoveryDirectory = `runtime/src/${smokeID}-partial-recovery`;
+const partialRecoveryParentPath = `${partialRecoveryDirectory}/Makefile`;
+const partialRecoveryChildPath = `${partialRecoveryParentPath}/child.ts`;
 const binarySmokePath = `docs/${smokeID}-binary.bin`;
 const largeDiffSmokePath = `docs/${smokeID}-large-diff.txt`;
 const brokenTypeScriptSmokePath = `runtime/src/${smokeID}-broken.ts`;
@@ -93,6 +97,8 @@ try {
   const openAIAutoRepairTask = await runOpenAIAutoRepairFlow();
   const openAIValidationRepairTask = await runOpenAIValidationFailureRepairFlow();
   const openAITaskCommandRepairTask = await runOpenAITaskCommandFailureRepairFlow();
+  const openAIPartialRecoveryTask = await runOpenAIPartialRecoveryFlow();
+  const openAIDuplicateTargetTask = await runOpenAIDuplicateTargetFlow();
   const openAIPreviewBlockedTask = await runOpenAIPreviewBlockedFlow();
 
   console.log("Core runtime smoke passed.");
@@ -112,6 +118,8 @@ try {
   console.log(`- OpenAI auto-repair task: ${openAIAutoRepairTask.id}`);
   console.log(`- OpenAI validation repair task: ${openAIValidationRepairTask.id}`);
   console.log(`- OpenAI task command repair task: ${openAITaskCommandRepairTask.id}`);
+  console.log(`- OpenAI partial apply recovery task: ${openAIPartialRecoveryTask.id}`);
+  console.log(`- OpenAI duplicate-target task: ${openAIDuplicateTargetTask.id}`);
   console.log(`- OpenAI preview-blocked task: ${openAIPreviewBlockedTask.id}`);
   console.log(`- Temporary database: ${dbPath}`);
 } finally {
@@ -642,8 +650,8 @@ async function runOpenAIContextFlow() {
   assertState(current, "Human Review", "Edit Proposal Review");
   assert(current.editProposal?.status === "Proposed", "OpenAI context flow did not create an edit proposal.");
   assert(
-    current.editProposal.fileChanges?.length === 2,
-    `Expected 2 rich OpenAI proposal changes, got ${current.editProposal.fileChanges?.length ?? 0}.`
+    current.editProposal.fileChanges?.length === 3,
+    `Expected 3 coordinated OpenAI proposal changes, got ${current.editProposal.fileChanges?.length ?? 0}.`
   );
   assert(
     current.editProposal.validation?.status === "Ready",
@@ -657,6 +665,14 @@ async function runOpenAIContextFlow() {
     ),
     "Rich OpenAI proposal did not retain the create-file operation."
   );
+  assert(
+    current.editProposal.fileChanges?.some((change) =>
+      change.path === sourceCreateSmokePath &&
+        change.changeType === "Create" &&
+        change.applyOperation?.kind === "CreateFile"
+    ),
+    "Rich OpenAI proposal did not retain the allowlisted source create-file operation."
+  );
 
   current = await post(`/tasks/${task.id}/apply-edit-proposal`, {
     note: "Core smoke test applies the OpenAI append/create proposal."
@@ -666,8 +682,28 @@ async function runOpenAIContextFlow() {
     current.changedFiles?.includes(createSmokePath),
     `Changed files did not include created file ${createSmokePath}.`
   );
+  assert(
+    current.changedFiles?.includes(sourceCreateSmokePath),
+    `Changed files did not include created source file ${sourceCreateSmokePath}.`
+  );
   const created = await readFile(join(repoRoot, createSmokePath), "utf8");
   assert(created.includes("Preview created by the OpenAI smoke flow."), "CreateFile smoke did not write expected content.");
+  const createdSource = await readFile(join(repoRoot, sourceCreateSmokePath), "utf8");
+  assert(createdSource.includes("forgeOpenAICreatedSmoke"), "Source CreateFile smoke did not write expected content.");
+  assert(
+    current.editProposal.lastApplyAttempt?.status === "Applied" &&
+      current.editProposal.lastApplyAttempt.appliedPaths?.length === 3,
+    "Coordinated apply attempt did not persist all applied paths."
+  );
+  assertAppliedChangeMetadata(current, sourceCreateSmokePath, "CreateFile");
+
+  current = await post(`/tasks/${task.id}/rollback-edit-proposal`, {
+    note: "Core smoke test rolls back the coordinated Markdown/source proposal."
+  });
+  assertState(current, "Human Review", "Rollback Applied");
+  assert(current.editProposal?.status === "RolledBack", "Coordinated rollback did not mark the proposal RolledBack.");
+  await assertFileMissing(createSmokePath);
+  await assertFileMissing(sourceCreateSmokePath);
 
   return current;
 }
@@ -1094,6 +1130,91 @@ async function runOpenAIPreviewBlockedFlow() {
     current.events?.filter((event) => event.type === "edit.proposal.repair.started").length >= 2,
     "Preview-only proposal did not record repair attempt events."
   );
+
+  return current;
+}
+
+async function runOpenAIDuplicateTargetFlow() {
+  const task = await createTask({
+    title: "Smoke duplicate-target proposal",
+    objective: `Generate a coordinated proposal that repeats @${appendSmokePath}.`
+  });
+
+  await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "OpenAI duplicate-target task to reach initial plan review"
+  );
+
+  const before = await readFile(join(repoRoot, appendSmokePath), "utf8");
+  let current = await post(`/tasks/${task.id}/approve-plan`, {
+    note: "Core smoke test approves the duplicate-target validation plan."
+  });
+  assert(current.executionProposal, "OpenAI duplicate-target flow did not create an execution proposal.");
+
+  current = await post(`/tasks/${task.id}/generate-edit-proposal`, {});
+  assertState(current, "Human Review", "Edit Proposal Validation Blocked");
+  assert(current.editProposal?.validation?.status === "Blocked", "Duplicate targets should block coordinated apply.");
+  assert(current.editProposal?.fileChanges?.length === 2, "Duplicate-target proposal should retain both review artifacts.");
+  assert(
+    current.editProposal.validation.fileResults?.every((result) =>
+      result.status === "Blocked" && result.summary.includes("more than once")
+    ),
+    "Duplicate-target validation did not block every repeated normalized path."
+  );
+  assert(!current.editProposal.lastApplyAttempt, "Blocked duplicate-target proposal unexpectedly started apply.");
+  const after = await readFile(join(repoRoot, appendSmokePath), "utf8");
+  assert(after === before, "Duplicate-target validation changed the workspace before apply.");
+
+  return current;
+}
+
+async function runOpenAIPartialRecoveryFlow() {
+  const task = await createTask({
+    title: "Smoke partial-recovery proposal",
+    objective: "Force the second file in a coordinated create proposal to fail after the first write."
+  });
+
+  await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "OpenAI partial-recovery task to reach initial plan review"
+  );
+
+  let current = await post(`/tasks/${task.id}/approve-plan`, {
+    note: "Core smoke test approves the partial apply recovery plan."
+  });
+  current = await post(`/tasks/${task.id}/generate-edit-proposal`, {});
+  assertState(current, "Human Review", "Edit Proposal Review");
+  assert(current.editProposal?.validation?.status === "Ready", "Partial-recovery proposal should pass preflight validation.");
+
+  const failedApply = await postExpectError(`/tasks/${task.id}/apply-edit-proposal`, {
+    note: "Core smoke test forces a later coordinated write failure."
+  });
+  assert(failedApply.status === 500, `Expected coordinated apply to fail with 500, got ${failedApply.status}.`);
+
+  current = await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Apply Reverted",
+    "partial coordinated apply to record automatic recovery"
+  );
+  assertState(current, "Human Review", "Apply Reverted");
+  assert(current.editProposal?.status === "Proposed", "Recovered partial apply should remain a reviewable proposal.");
+  assert(current.editProposal.lastApplyAttempt?.status === "Reverted", "Partial apply did not record Reverted status.");
+  assert(
+    current.editProposal.lastApplyAttempt.appliedPaths?.includes(partialRecoveryParentPath),
+    "Partial apply did not record the completed first write."
+  );
+  assert(
+    current.editProposal.lastApplyAttempt.revertedPaths?.includes(partialRecoveryParentPath),
+    "Partial apply did not record restoration of the first write."
+  );
+  assert(
+    current.events?.some((event) => event.type === "edit.proposal.apply.reverted"),
+    "Partial apply recovery did not record the reverted event."
+  );
+  await assertFileMissing(partialRecoveryParentPath);
+  await assertFileMissing(partialRecoveryChildPath);
 
   return current;
 }
@@ -1878,6 +1999,8 @@ async function cleanupSmokeFiles() {
   await rm(join(repoRoot, binarySmokePath), { force: true });
   await rm(join(repoRoot, largeDiffSmokePath), { force: true });
   await rm(join(repoRoot, createSmokePath), { force: true });
+  await rm(join(repoRoot, sourceCreateSmokePath), { force: true });
+  await rm(join(repoRoot, partialRecoveryDirectory), { recursive: true, force: true });
   await rm(join(repoRoot, brokenTypeScriptSmokePath), { force: true });
   for (const directory of rollbackSnapshotDirectories) {
     await rm(join(repoRoot, directory), { recursive: true, force: true });
@@ -2521,8 +2644,70 @@ function mockOpenAIOutput(name, requests, body) {
       };
     }
 
+    if (bodyText.includes("duplicate-target proposal")) {
+      return {
+        summary: "Propose two operations against the same normalized target so runtime validation blocks the set.",
+        riskLevel: "Medium",
+        fileChanges: [
+          {
+            path: appendSmokePath,
+            changeType: "Modify",
+            rationale: "First duplicate target operation.",
+            diffPreview: `--- a/${appendSmokePath}\n+++ b/${appendSmokePath}\n+duplicate one`,
+            operationKind: "AppendText",
+            appendText: "\nDuplicate coordinated change one.\n",
+            findText: "",
+            replaceWith: "",
+            content: ""
+          },
+          {
+            path: `./${appendSmokePath}`,
+            changeType: "Modify",
+            rationale: "Second duplicate target operation using an equivalent normalized path.",
+            diffPreview: `--- a/${appendSmokePath}\n+++ b/${appendSmokePath}\n+duplicate two`,
+            operationKind: "AppendText",
+            appendText: "\nDuplicate coordinated change two.\n",
+            findText: "",
+            replaceWith: "",
+            content: ""
+          }
+        ]
+      };
+    }
+
+    if (bodyText.includes("partial-recovery proposal")) {
+      return {
+        summary: "Create one allowlisted file, then force the next coordinated create to fail so recovery can be verified.",
+        riskLevel: "Medium",
+        fileChanges: [
+          {
+            path: partialRecoveryParentPath,
+            changeType: "Create",
+            rationale: "Create an allowlisted Makefile that will make the next parent-directory creation fail.",
+            diffPreview: `--- /dev/null\n+++ b/${partialRecoveryParentPath}\n+partial recovery parent`,
+            operationKind: "CreateFile",
+            appendText: "",
+            findText: "",
+            replaceWith: "",
+            content: "# Partial recovery smoke parent.\n"
+          },
+          {
+            path: partialRecoveryChildPath,
+            changeType: "Create",
+            rationale: "This path passes preflight while its parent is absent, then fails after the first write makes the parent a file.",
+            diffPreview: `--- /dev/null\n+++ b/${partialRecoveryChildPath}\n+export const child = true;`,
+            operationKind: "CreateFile",
+            appendText: "",
+            findText: "",
+            replaceWith: "",
+            content: "export const child = true;\n"
+          }
+        ]
+      };
+    }
+
     return {
-      summary: "Propose a safe append plus a safe Markdown create-file change.",
+      summary: "Propose a coordinated append plus Markdown and source create-file changes.",
       riskLevel: "Medium",
       fileChanges: [
         {
@@ -2561,6 +2746,22 @@ function mockOpenAIOutput(name, requests, body) {
           findText: "",
           replaceWith: "",
           content: "# OpenAI Created Smoke\n\nPreview created by the OpenAI smoke flow.\n"
+        },
+        {
+          path: sourceCreateSmokePath,
+          changeType: "Create",
+          rationale: "Create a new allowlisted TypeScript source fixture inside the runtime source boundary.",
+          diffPreview: [
+            "--- /dev/null",
+            `+++ b/${sourceCreateSmokePath}`,
+            "@@ create source file @@",
+            "+export const forgeOpenAICreatedSmoke = true;"
+          ].join("\n"),
+          operationKind: "CreateFile",
+          appendText: "",
+          findText: "",
+          replaceWith: "",
+          content: "export const forgeOpenAICreatedSmoke = true;\n"
         }
       ]
     };
@@ -2823,6 +3024,18 @@ function assertProposal(task, expectedPath, expectedOperation) {
     task.editProposal.validation.fileResults?.every((result) => result.status === "Ready"),
     "Expected every proposal file validation result to be Ready."
   );
+}
+
+async function assertFileMissing(relativePath) {
+  try {
+    await readFile(join(repoRoot, relativePath), "utf8");
+    throw new Error(`Expected ${relativePath} to be absent.`);
+  } catch (error) {
+    if (error instanceof Error && error.message === `Expected ${relativePath} to be absent.`) {
+      throw error;
+    }
+    assert(error?.code === "ENOENT", `Expected ${relativePath} to be missing, got ${error}.`);
+  }
 }
 
 function assertCompletedTask(task, expectedChangedFile) {

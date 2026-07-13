@@ -84,12 +84,15 @@ Examples:
 May run automatically based on settings, but should be logged and visible.
 
 Current v0 edit application is medium risk and requires explicit human apply.
-It supports Markdown append/create operations plus exact single-match
-replacements and multi-hunk exact text patches for allowlisted source/text
-files, then records applied-file metadata for audit and rollback. Rollback is
-also an explicit medium-risk mutation: Forge verifies the current file still
-matches the recorded post-apply hash before restoring a local snapshot or
-deleting a created file.
+It supports Markdown append operations, new allowlisted Markdown/source/text
+files, exact single-match replacements, and multi-hunk exact text patches. A
+coordinated proposal is limited to eight unique normalized targets and a
+bounded total operation payload; duplicate or over-budget sets are blocked
+before mutation. Apply records planned/applied/restored paths, and a later
+write failure triggers best-effort reverse-order restoration of completed
+writes. Rollback remains a separate explicit medium-risk mutation: Forge
+verifies the current file still matches the recorded post-apply hash before
+restoring a local snapshot or deleting a created file.
 
 Current v0 post-apply validation defaults to built-in `forge:` checks. It can
 also run allowlisted project validation presets, such as runtime `npm run

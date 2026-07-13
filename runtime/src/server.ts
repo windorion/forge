@@ -29,6 +29,7 @@ import type {
   CreateTaskMessageRequest,
   CreateTaskRequest,
   EditProposal,
+  EditProposalApplyAttempt,
   EditProposalDecisionRequest,
   EditProposalValidation,
   FileChangeValidation,
@@ -110,6 +111,8 @@ const editProposalPatchMaxHunks = 8;
 const editProposalPatchMaxTotalChars = 40_000;
 const editProposalCreateFileMaxChars = 20_000;
 const editProposalEditableFileMaxBytes = 220_000;
+const editProposalMaxFileChanges = 8;
+const editProposalMaxTotalOperationChars = 120_000;
 const gitDiffMaxBytes = 48_000;
 const gitDiffAppPreviewLineLimit = 260;
 const enableSmokeCommands = process.env.FORGE_ENABLE_SMOKE_COMMANDS === "1";
@@ -6831,8 +6834,10 @@ async function applyEditProposal(
     throw new HttpError(409, "A proposed edit is required before applying changes.");
   }
 
-  const validation = await buildEditProposalValidation(task.editProposal.fileChanges);
-  task.editProposal.validation = validation;
+  const proposal = task.editProposal;
+
+  const validation = await buildEditProposalValidation(proposal.fileChanges);
+  proposal.validation = validation;
   if (validation.status !== "Ready") {
     task.status = "Human Review";
     task.currentPhase = "Edit Proposal Validation Blocked";
@@ -6870,23 +6875,38 @@ async function applyEditProposal(
     summary: validation.summary
   });
 
-  const started = event("edit.proposal.apply.started", "Applying approved edit proposal.");
-  started.createdAt = new Date().toISOString();
+  const applyStartedAt = new Date().toISOString();
+  const applyAttempt: EditProposalApplyAttempt = {
+    status: "Running",
+    plannedPaths: proposal.fileChanges.map((change) => change.path),
+    appliedPaths: [],
+    revertedPaths: [],
+    summary: `Applying ${proposal.fileChanges.length} validated file change(s) as one reviewed proposal.`,
+    startedAt: applyStartedAt
+  };
+  proposal.lastApplyAttempt = applyAttempt;
+  const started = event("edit.proposal.apply.started", applyAttempt.summary);
+  started.createdAt = applyStartedAt;
   saveAndBroadcast(task, started);
 
+  const appliedFileChanges: AppliedFileChange[] = [];
   try {
-    const appliedFileChanges: AppliedFileChange[] = [];
-    for (const change of task.editProposal.fileChanges) {
-      const appliedChange = await applyProposedFileChange(task.editProposal.id, change);
+    for (const change of proposal.fileChanges) {
+      const appliedChange = await applyProposedFileChange(proposal.id, change);
       appliedFileChanges.push(appliedChange);
+      applyAttempt.appliedPaths.push(appliedChange.path);
+      saveTask(task);
     }
 
     const now = new Date().toISOString();
-    task.editProposal.status = "Applied";
-    task.editProposal.decidedAt = now;
-    task.editProposal.decisionNote = input.note?.trim() || undefined;
-    task.editProposal.appliedFileChanges = appliedFileChanges;
-    const rerunEvidence = createOrUpdateCommandRerunEvidenceForAppliedProposal(task, task.editProposal, now);
+    proposal.status = "Applied";
+    proposal.decidedAt = now;
+    proposal.decisionNote = input.note?.trim() || undefined;
+    proposal.appliedFileChanges = appliedFileChanges;
+    applyAttempt.status = "Applied";
+    applyAttempt.summary = `Applied all ${appliedFileChanges.length} validated file change(s).`;
+    applyAttempt.endedAt = now;
+    const rerunEvidence = createOrUpdateCommandRerunEvidenceForAppliedProposal(task, proposal, now);
     task.status = "Testing";
     task.currentPhase = "Awaiting Validation";
     task.changedFiles = [...new Set(appliedFileChanges.map((change) => change.path))];
@@ -6928,12 +6948,29 @@ async function applyEditProposal(
     }
     return runValidation(task.id, "PostApply");
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    task.status = "Failed";
-    task.currentPhase = "Apply Failed";
+    const applyError = error instanceof Error ? error.message : String(error);
+    const recovery = await revertPartiallyAppliedProposal(appliedFileChanges);
+    const endedAt = new Date().toISOString();
+    applyAttempt.status = recovery.complete ? "Reverted" : "Failed";
+    applyAttempt.revertedPaths = recovery.revertedPaths;
+    applyAttempt.endedAt = endedAt;
+    applyAttempt.error = applyError;
+    applyAttempt.summary = recovery.complete
+      ? `Apply stopped after ${appliedFileChanges.length} file(s); Forge restored every completed write.`
+      : `Apply stopped after ${appliedFileChanges.length} file(s), and automatic recovery was incomplete: ${recovery.error}`;
+    const message = `${applyError} ${applyAttempt.summary}`;
+    task.status = recovery.complete ? "Human Review" : "Failed";
+    task.currentPhase = recovery.complete ? "Apply Reverted" : "Apply Recovery Failed";
     task.reviewSummary = message;
-    setAgent(task, "Coder", "Blocked", "Could not apply the approved edit proposal.");
-    setAgent(task, "Reviewer", "Active", "Review the apply failure before retrying.");
+    setAgent(
+      task,
+      "Coder",
+      "Blocked",
+      recovery.complete
+        ? "Apply failed; completed writes were automatically restored."
+        : "Apply failed and automatic recovery could not restore every completed write."
+    );
+    setAgent(task, "Reviewer", "Active", "Review the apply attempt and recovery evidence before retrying.");
     upsertPlanStep(task, {
       id: "apply-edit-proposal",
       title: "Apply edit proposal",
@@ -6941,8 +6978,11 @@ async function applyEditProposal(
       summary: message
     });
 
-    const failed = event("edit.proposal.apply.failed", message);
-    failed.createdAt = new Date().toISOString();
+    const failed = event(
+      recovery.complete ? "edit.proposal.apply.reverted" : "edit.proposal.apply.failed",
+      message
+    );
+    failed.createdAt = endedAt;
     saveAndBroadcast(task, failed);
     throw error;
   }
@@ -8147,6 +8187,43 @@ async function validateReadyProposalValidation(task: ForgeTask): Promise<string>
 
 async function buildEditProposalValidation(fileChanges: ProposedFileChange[]): Promise<EditProposalValidation> {
   const fileResults = await Promise.all(fileChanges.map(validateProposedFileChange));
+  const pathCounts = new Map<string, number>();
+  for (const change of fileChanges) {
+    const key = proposalTargetPathKey(change.path);
+    pathCounts.set(key, (pathCounts.get(key) ?? 0) + 1);
+  }
+
+  for (const [index, change] of fileChanges.entries()) {
+    if ((pathCounts.get(proposalTargetPathKey(change.path)) ?? 0) > 1) {
+      blockProposalFileResult(
+        fileResults[index],
+        `Proposal targets ${change.path} more than once; coordinated changes require one operation per normalized path.`
+      );
+    }
+  }
+
+  if (fileChanges.length > editProposalMaxFileChanges) {
+    for (const result of fileResults) {
+      blockProposalFileResult(
+        result,
+        `Proposal has ${fileChanges.length} file changes; the coordinated apply limit is ${editProposalMaxFileChanges}.`
+      );
+    }
+  }
+
+  const totalOperationChars = fileChanges.reduce(
+    (total, change) => total + proposedFileOperationCharacterCount(change.applyOperation),
+    0
+  );
+  if (totalOperationChars > editProposalMaxTotalOperationChars) {
+    for (const result of fileResults) {
+      blockProposalFileResult(
+        result,
+        `Proposal operation payload is ${totalOperationChars} characters; the coordinated apply limit is ${editProposalMaxTotalOperationChars}.`
+      );
+    }
+  }
+
   const blockedCount = fileResults.filter((result) => result.status === "Blocked").length;
   const status: EditProposalValidation["status"] = blockedCount > 0 ? "Blocked" : "Ready";
   const summary =
@@ -8162,6 +8239,39 @@ async function buildEditProposalValidation(fileChanges: ProposedFileChange[]): P
     checkedAt: new Date().toISOString(),
     fileResults
   };
+}
+
+function proposalTargetPathKey(inputPath: string): string {
+  return path.posix
+    .normalize(inputPath.replaceAll("\\", "/").replace(/^@/, "").replace(/^\.\/+/, ""))
+    .toLowerCase();
+}
+
+function proposedFileOperationCharacterCount(operation: ProposedFileChange["applyOperation"]): number {
+  if (!operation || operation.kind === "PreviewOnly") {
+    return 0;
+  }
+  if (operation.kind === "AppendText") {
+    return operation.text.length;
+  }
+  if (operation.kind === "ReplaceText") {
+    return operation.findText.length + operation.replaceWith.length;
+  }
+  if (operation.kind === "PatchText") {
+    return operation.hunks.reduce(
+      (total, hunk) => total + hunk.findText.length + hunk.replaceWith.length,
+      0
+    );
+  }
+  return operation.content.length;
+}
+
+function blockProposalFileResult(result: FileChangeValidation, summary: string): void {
+  result.status = "Blocked";
+  result.summary = summary;
+  if (!result.checks.includes(summary)) {
+    result.checks.push(summary);
+  }
 }
 
 async function validateProposedFileChange(change: ProposedFileChange): Promise<FileChangeValidation> {
@@ -8180,11 +8290,8 @@ async function validateProposedFileChange(change: ProposedFileChange): Promise<F
         return blockedValidation(change, `Create changes require a CreateFile operation in v0: ${change.path}`, checks);
       }
 
-      const { absolutePath, relativePath } = resolveMarkdownWorkspacePath(change.path);
-      if (!relativePath.startsWith("docs/")) {
-        return blockedValidation(change, `CreateFile can only create docs/*.md files in v0: ${relativePath}`, checks);
-      }
-      checks.push("Path is inside the createable docs Markdown boundary.");
+      const { absolutePath, relativePath } = resolveCreateFileWorkspacePath(change.path);
+      checks.push("Path is inside the allowlisted source/text create boundary.");
 
       if (operation.content.length === 0) {
         return blockedValidation(change, `CreateFile content is empty: ${relativePath}`, checks);
@@ -8217,7 +8324,7 @@ async function validateProposedFileChange(change: ProposedFileChange): Promise<F
         id: change.id,
         path: relativePath,
         status: "Ready",
-        summary: `${relativePath} is ready for restricted Markdown file creation.`,
+        summary: `${relativePath} is ready for restricted source/text file creation.`,
         checks
       };
     }
@@ -8534,10 +8641,7 @@ async function applyProposedFileChange(
       throw new HttpError(409, `Create changes require a CreateFile operation in v0: ${change.path}`);
     }
 
-    const { absolutePath, relativePath } = resolveMarkdownWorkspacePath(change.path);
-    if (!relativePath.startsWith("docs/")) {
-      throw new HttpError(409, `CreateFile can only create docs/*.md files in v0: ${relativePath}`);
-    }
+    const { absolutePath, relativePath } = resolveCreateFileWorkspacePath(change.path);
 
     if (operation.content.length === 0) {
       throw new HttpError(409, `CreateFile content is empty: ${relativePath}`);
@@ -8705,13 +8809,36 @@ type PreparedRollbackOperation = {
   rollback: () => Promise<void>;
 };
 
+async function revertPartiallyAppliedProposal(
+  appliedFileChanges: AppliedFileChange[]
+): Promise<{ complete: boolean; revertedPaths: string[]; error?: string }> {
+  const revertedPaths: string[] = [];
+  const errors: string[] = [];
+
+  for (const appliedChange of [...appliedFileChanges].reverse()) {
+    try {
+      const operation = await prepareAppliedFileRollback(appliedChange);
+      await operation.rollback();
+      revertedPaths.push(operation.relativePath);
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  return {
+    complete: errors.length === 0,
+    revertedPaths,
+    error: errors.length > 0 ? errors.join(" ") : undefined
+  };
+}
+
 async function prepareAppliedFileRollback(appliedChange: AppliedFileChange): Promise<PreparedRollbackOperation> {
   if (appliedChange.rolledBackAt) {
     throw new HttpError(409, `Applied file change has already been rolled back: ${appliedChange.path}`);
   }
 
   if (appliedChange.rollbackKind === "DeleteCreatedFile") {
-    const { absolutePath, relativePath } = resolveMarkdownWorkspacePath(appliedChange.path);
+    const { absolutePath, relativePath } = resolveCreateFileWorkspacePath(appliedChange.path);
     const currentContent = await readFile(absolutePath, "utf8");
     verifyCurrentContentForRollback(appliedChange, currentContent, relativePath);
 
@@ -8944,13 +9071,8 @@ function validatePatchTextOperation(
   return nextContent;
 }
 
-function resolveMarkdownWorkspacePath(inputPath: string): { absolutePath: string; relativePath: string } {
-  const resolved = resolveWorkspaceEditPath(inputPath);
-  if (!isEditableMarkdownWorkspacePath(resolved.relativePath)) {
-    throw new HttpError(409, `Only README.md and docs/*.md paths can be edited with Markdown operations in v0: ${inputPath}`);
-  }
-
-  return resolved;
+function resolveCreateFileWorkspacePath(inputPath: string): { absolutePath: string; relativePath: string } {
+  return resolveEditableWorkspacePath(inputPath);
 }
 
 function resolveEditableWorkspacePath(inputPath: string): { absolutePath: string; relativePath: string } {

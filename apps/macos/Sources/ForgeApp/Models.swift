@@ -798,6 +798,18 @@ struct EditProposal: Identifiable, Codable, Hashable {
     var rollbackNote: String?
     var validation: EditProposalValidation?
     var appliedFileChanges: [AppliedFileChange]?
+    var lastApplyAttempt: EditProposalApplyAttempt?
+}
+
+struct EditProposalApplyAttempt: Codable, Hashable {
+    var status: String
+    var plannedPaths: [String]
+    var appliedPaths: [String]
+    var revertedPaths: [String]
+    var summary: String
+    var startedAt: String
+    var endedAt: String?
+    var error: String?
 }
 
 struct AppliedFileChange: Identifiable, Codable, Hashable {

@@ -21,10 +21,9 @@ dashboard.
 - Polish the first usable `10a` full-screen diff review: exact split-diff
   behavior, keyboard shortcuts, file-level approval persistence, and stronger
   tests-covering-this-file evidence.
-- Broaden source-file patch proposals beyond exact text hunks: add cross-file
-  patch orchestration, rollback revalidation/recovery, and provider-driven
-  source repair flows while keeping strict path validation and pre-apply
-  checks.
+- Broaden source-file patch generation beyond exact text hunks while retaining
+  coordinated apply budgets, per-file review, partial-write recovery, strict
+  path validation, and pre-apply checks.
 - Keep the current trust gates: plan approval before mutation, human review
   before apply, explicit command approval, and explicit git actions.
 
@@ -90,6 +89,15 @@ dashboard.
 
 ## Done Recently
 
+- Added coordinated multi-file proposal/apply safeguards. OpenAI proposals can
+  now carry up to eight unique target files, including new allowlisted source
+  and text files through restricted `CreateFile`. Proposal validation blocks
+  duplicate normalized targets and oversized total operation payloads before
+  any write. Each apply attempt persists planned/applied/restored paths, and a
+  later write failure triggers reverse-order recovery of completed writes.
+  macOS Review shows the latest apply/recovery evidence, while core smoke covers
+  a three-file Markdown/source apply and rollback, duplicate-target blocking,
+  and a real second-file failure that restores the first write.
 - Added persisted Agent Run Loop pause, abort, and resume controls. Pause and
   abort requests are cooperative between safe steps, carry an exact loop ID,
   persist request/stop/resume timestamps and notes, emit SSE control events,

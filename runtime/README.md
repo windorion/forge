@@ -94,8 +94,11 @@ apply path revalidates against the current workspace before writing. The
 current apply path is intentionally narrow: it supports append-text on
 existing Markdown files, exact replace and multi-hunk exact patch operations
 on existing Markdown and allowlisted source/text files, plus create-file
-operations for new `docs/*.md` files. Exact replace and patch hunks require
-the find text to appear once.
+operations for new allowlisted Markdown/source/text files. Coordinated apply
+allows up to eight unique normalized targets and a bounded total operation
+payload. Exact replace and patch hunks require the find text to appear once.
+Every apply attempt records planned/applied/restored paths, and a later write
+failure triggers reverse-order restoration of completed writes.
 After apply, the runtime runs controlled built-in validation commands and only
 marks the task completed if validation passes.
 If validation fails, the runtime asks the model provider for a repair brief

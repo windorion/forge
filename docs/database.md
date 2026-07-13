@@ -22,6 +22,9 @@ preferred command intent, pause/abort request timestamps, pause/abort result
 timestamps, optional control note, resume timestamp/count, and stop reason.
 Snapshot loading supplies defaults for older Agent Run Loop records that
 predate context-budget and resume-count fields.
+Edit proposal snapshots also retain the latest coordinated apply attempt,
+including planned, applied, and automatically restored paths, terminal status,
+timestamps, summary, and any apply error.
 
 This is intentionally smaller than the full conceptual schema below. Future
 migrations should split runs, messages, tool calls, commands, file changes,
@@ -141,6 +144,7 @@ Fields:
 - proposed file changes
 - diff previews
 - validation result
+- latest coordinated apply attempt
 - status
 - decided at
 - decision note

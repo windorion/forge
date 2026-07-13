@@ -19,8 +19,10 @@ locally. The loop can now select multiple bounded read-only repository context
 passes during the normal run, with a separate context-step budget and
 no-progress stops, before proposing edits. The user can now request a
 cooperative pause or abort between safe steps and resume the same persisted
-user-paused loop. The next milestone is finer-grained search/read choices and
-broader patch recovery.
+user-paused loop. Multi-file proposals can now create new allowlisted source
+files, reject duplicate targets and oversized coordinated operation sets, and
+automatically restore completed writes after a later apply failure. The next
+milestone is more general patch generation and finer-grained search/read choices.
 
 ## Current Implementation
 
@@ -93,7 +95,12 @@ Implemented:
   source/text files. Each hunk must have exact find/replace text, the find
   text must appear exactly once in the original file, and hunks are simulated
   in order before apply.
-- Restricted `CreateFile` apply for new Markdown files under `docs/`.
+- Restricted `CreateFile` apply for new allowlisted Markdown/source/text files.
+- Coordinated apply policy for up to eight unique normalized target paths and
+  a bounded total operation payload. Every apply attempt records its planned,
+  applied, and restored paths. If a later file write fails, Forge attempts to
+  restore completed writes in reverse order and surfaces the recovery evidence
+  in the macOS Review pane.
 - Edit proposal validation before apply and immediate revalidation during
   apply.
 - Applied edit proposals now record per-file rollback metadata: operation kind,
@@ -235,7 +242,7 @@ These percentages are product-readiness estimates, not calendar estimates.
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 82-86% | Has a first-pass session UI shell, full-screen diff review surface, exact source replace, multi-hunk source patches, streamed/cancellable selectable task commands, failed-command self-fix rerun evidence, and a bounded provider-selected loop with multi-round context budgets plus pause/abort/resume controls, but still needs broader patch orchestration, finer-grained tools, and UI polish before it feels like Codex or Claude Code. |
+| Coding-agent demo V0 | 84-88% | Has a first-pass session UI shell, full-screen diff review surface, coordinated multi-file source/text create and exact patch apply with recovery evidence, streamed/cancellable selectable task commands, failed-command self-fix rerun evidence, and a bounded provider-selected loop with multi-round context budgets plus pause/abort/resume controls, but still needs more general patch generation, finer-grained tools, and UI polish before it feels like Codex or Claude Code. |
 | Useful developer alpha | 35-45% | A developer cannot yet rely on Forge like Codex or Claude Code for normal coding tasks. It needs real patching, command execution, recovery, and a stronger model-backed run loop. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
@@ -272,8 +279,8 @@ Remaining V0 gaps:
 - polish the first-pass `1a`/`1b`/`14a` shell toward the exact handoff
 - polish the first usable `10a` full-screen diff review toward exact handoff
   behavior and durable per-file decisions
-- broaden source-file patch proposals beyond exact text hunks and harden
-  rollback revalidation/recovery
+- broaden source-file patch generation beyond exact text hunks while retaining
+  coordinated apply budgets and automatic partial-write recovery
 - split the combined agent-selected repository context action into
   finer-grained search/read choices and broaden patch/recovery behavior
 - implement full diff review with per-file reasoning and request-change loop
