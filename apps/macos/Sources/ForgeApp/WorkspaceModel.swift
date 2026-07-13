@@ -41,6 +41,7 @@ final class WorkspaceModel: ObservableObject {
     @Published private var applyingEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var rollingBackEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var rejectingEditProposalTaskIDs = Set<ForgeTask.ID>()
+    @Published private var runningAgentStepTaskIDs = Set<ForgeTask.ID>()
     @Published private var runningValidationTaskIDs = Set<ForgeTask.ID>()
     @Published private var runningTaskCommandTaskIDs = Set<ForgeTask.ID>()
     @Published private var rerunningRepairCommandEvidenceIDs = Set<CommandRerunEvidence.ID>()
@@ -586,6 +587,33 @@ final class WorkspaceModel: ObservableObject {
 
     func isRunningTaskCommand(taskID: ForgeTask.ID) -> Bool {
         runningTaskCommandTaskIDs.contains(taskID)
+    }
+
+    func runAgentStep(for task: ForgeTask, preferredCommandID: String? = nil) {
+        runningAgentStepTaskIDs.insert(task.id)
+
+        Task {
+            do {
+                let updatedTask = try await runtime.runAgentStep(
+                    taskID: task.id,
+                    preferredCommandID: preferredCommandID
+                )
+                upsert(updatedTask)
+                selectedTaskID = updatedTask.id
+                statusMessage = "Agent step completed."
+                await refreshGitStatusSnapshot()
+                await refreshValidationPermissionSnapshotIfPossible(for: updatedTask.id)
+                startEventStream()
+            } catch {
+                statusMessage = "Run agent step failed: \(error.localizedDescription)"
+            }
+
+            runningAgentStepTaskIDs.remove(task.id)
+        }
+    }
+
+    func isRunningAgentStep(taskID: ForgeTask.ID) -> Bool {
+        runningAgentStepTaskIDs.contains(taskID)
     }
 
     func rerunRepairCommand(for task: ForgeTask, evidence: CommandRerunEvidence) {

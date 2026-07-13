@@ -3041,3 +3041,45 @@ Next:
   on deterministic demo steps.
 - Broaden source patching and recovery so real coding tasks are less dependent
   on exact text hunk matches.
+
+## 2026-07-13 07:45:39 CEST
+
+Conversation summary:
+
+- User asked for the next extra-long task. The session added the first
+  provider-selected normal agent step so Forge can progress one safe coding
+  action at a time instead of relying only on manual action buttons.
+
+Done:
+
+- Added `AgentRunStep` runtime state, persistence defaults, provider decision
+  types, and `POST /tasks/:taskID/run-agent-step`.
+- Added OpenAI Structured Output support and local deterministic fallback for
+  choosing one safe action: generate edit proposal, run approved task command,
+  generate validation repair proposal, rerun reviewed self-fix evidence, wait
+  for human review, or request plan approval.
+- Kept runtime enforcement in control: command IDs must already be runnable,
+  rerun evidence must already be ready/failed, and existing proposal/repair/
+  review gates are rechecked before side effects.
+- Added macOS model/client/workspace support, a `Run Agent Step` action-rail
+  button, loading state, and a Log-tab decision trail for recent agent steps.
+- Extended `npm run smoke:core` with a mock OpenAI agent-step flow that first
+  generates a proposal and then runs the approved `runtime-npm-check` command.
+- Updated README, project status, TODO, development, runtime architecture,
+  model provider, security, runtime README, and V0 scope docs. V0 estimate is
+  now 72-76% for the coding-agent demo.
+
+Not done:
+
+- Did not implement a continuous autonomous multi-step loop; the runner is
+  still one provider-selected action per request.
+- Did not add richer read/search/patch tool calls inside the run-step loop.
+- Did not polish the full `design_handoff_forge` diff/session UI to exact
+  fidelity.
+
+Next:
+
+- Wrap Agent Run Step v0 in a bounded continuous loop with clear stop
+  conditions, pause/abort/resume, and visible live-run progress.
+- Broaden source patch proposal/apply beyond exact text hunks and harden
+  rollback revalidation/recovery.

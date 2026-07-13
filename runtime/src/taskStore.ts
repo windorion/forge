@@ -102,6 +102,7 @@ function parseTaskPayload(payload: unknown): ForgeTask {
   return {
     ...parsed,
     approvals: parsed.approvals ?? [],
+    agentRunSteps: parsed.agentRunSteps ?? [],
     taskCommandRuns: (parsed.taskCommandRuns ?? []).map((run) => ({
       ...run,
       outputChunks: run.outputChunks ?? []

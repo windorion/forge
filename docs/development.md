@@ -27,21 +27,26 @@ After a plan is approved, the runtime now runs another bounded read-only
 execution-context pass before asking the provider for an execution proposal.
 The proposal stores the inspected context files and concise tool evidence so
 the app can show what informed the proposed next action.
+The latest slice adds Agent Run Step v0: the runtime can ask the active model
+provider for one safe next action, then enforce existing gates while it
+generates an edit proposal, runs an approved task command, generates a
+validation repair proposal, reruns reviewed self-fix evidence, or pauses for
+human review.
 
 The runtime core has an automated smoke regression that exercises the main
 task lifecycle without using real project memory or provider settings.
 
-Product-direction note: this development slice proves the trust/runtime
-foundation. It does not yet represent the new Coding-Agent Demo V0. The next
-app/runtime work should make the local walkthrough look like a live coding
-agent session with source patches, streamed tests, self-fix, and full diff
-review.
+Product-direction note: this development slice now has the first real
+provider-selected agent step, but it still is not a full Codex/Claude Code
+style autonomous loop. The next app/runtime work should make the local
+walkthrough feel continuous: repeated read/search/patch/run/repair steps,
+source patches, streamed tests, self-fix, and full diff review.
 
 The macOS app now has a first-pass coding-agent session shell: a task queue,
 `1a`-style empty composer, live agent stream, plan progress strip,
 Log/Diff/Tests tabs, compact plan gate, and action rail. The runtime still
-needs broader source patching and streamed command execution before the shell
-behaves like the finished V0.
+needs continuous agent-step orchestration and broader source patching before
+the shell behaves like the finished V0.
 
 The shell also includes a first usable `10a`-style full-screen diff review
 surface. It opens from the Diff tab or review state card, shows a file tree,
@@ -102,9 +107,9 @@ FORGE_OPENAI_MAX_OUTPUT_TOKENS=1800
 ```
 
 When enabled, the provider uses Responses API Structured Outputs for intent
-briefs, plan revisions, execution proposals, and edit proposal guidance. The
-runtime still owns validation, approvals, IDs, timestamps, and restricted file
-operations.
+briefs, plan revisions, execution proposals, agent run step decisions, and
+edit proposal guidance. The runtime still owns validation, approvals, IDs,
+timestamps, and restricted file operations.
 
 The runtime health endpoint exposes provider configuration status through
 `modelProviderConfiguration`. The macOS Settings window shows the active
@@ -362,6 +367,30 @@ action rail exposes `Rerun Self-Fix`. That action calls
 ID through the same approval/cwd/no-shell path, attaches the new command run to
 the evidence, and moves the task to `Repair Verified` when it passes.
 
+The action rail also exposes Agent Run Step v0:
+
+```text
+POST /tasks/:taskID/run-agent-step
+```
+
+The request can include an optional `preferredCommandID`, but the runtime only
+uses it when the provider-selected action is `RunTaskCommand` and the command
+is already approved/runnable in the runtime permission snapshot. The provider
+chooses exactly one action from `GenerateEditProposal`, `RunTaskCommand`,
+`GenerateValidationRepairProposal`, `RerunRepairCommand`,
+`WaitForHumanReview`, and `RequestPlanApproval`. The runtime then rechecks
+the same proposal, command, repair, and review gates used by the manual
+endpoints before doing any side effect. Each decision is stored in
+`agentRunSteps` with provider metadata, action, summary, rationale, command or
+rerun evidence IDs, linked proposal/command target, status, result, and
+timestamps. SSE emits `agent.run_step.started`, `agent.run_step.completed`,
+`agent.run_step.blocked`, or `agent.run_step.failed`.
+
+This is the first provider-driven normal run path, but it is intentionally one
+step at a time. A complete V0 agent still needs a continuous bounded loop over
+these same actions with clearer stop conditions, pause/resume/abort, and richer
+read/search/patch tool choices.
+
 Current validation presets:
 
 - `forge-post-apply`: low-risk built-in audit checks.
@@ -440,6 +469,8 @@ It covers:
 - read-only git status and bounded git diff endpoints, including text,
   binary, and oversized untracked file previews
 - mock OpenAI plan-context loop before a plan revision
+- mock OpenAI provider-selected agent run step that generates a proposal, then
+  another step that runs an approved runtime command
 - read-only branch, branch-publish, commit, push, and PR handoff preview
   endpoints plus stale-head rejection checks for high-risk git actions
 - commit preview preflight metadata for author identity, staged/unstaged/
@@ -539,5 +570,6 @@ cd runtime && npm run smoke:git-remote
   index. It does not use Tree-sitter, symbols, embeddings, dependency graphs,
   or semantic search yet.
 - Agent Loop v0 is still bounded and proposal-first. It now gathers read-only
-  context before planning and before execution proposals, but it does not run
-  autonomous write/command/git tools.
+  context before planning and before execution proposals, and Agent Run Step v0
+  can choose one safe proposal/command/repair action at a time. It still does
+  not run a continuous autonomous write/command/git loop.

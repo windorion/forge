@@ -405,6 +405,38 @@ system output chunk, emits `task.command.cancel.requested` and
 `task.command.cancelled`, and marks the run `Cancelled` instead of `Failed`.
 Cancelled commands return to human review and do not generate repair briefs.
 
+### Agent Run Step
+
+Agent Run Step v0 is the first provider-driven normal run path. The endpoint
+`POST /tasks/:taskID/run-agent-step` asks the active `ModelProvider` for one
+safe next action from a bounded enum:
+
+- `GenerateEditProposal`
+- `RunTaskCommand`
+- `GenerateValidationRepairProposal`
+- `RerunRepairCommand`
+- `WaitForHumanReview`
+- `RequestPlanApproval`
+
+The provider receives compact task state, task-command permission snapshots,
+and runnable command-rerun evidence. It returns only an action, summary,
+rationale, optional command ID, and optional rerun evidence ID. The runtime
+then rechecks the existing gates before doing anything: proposed edit review,
+plan approval, validation/command concurrency, command approval, command
+catalog membership, repair brief readiness, and rerun evidence readiness.
+
+Each executed decision is appended to `agentRunSteps` with provider metadata,
+action, status, summary, rationale, command/evidence IDs, linked proposal or
+command target, result, error, and timestamps. The runtime emits
+`agent.run_step.started`, `agent.run_step.completed`,
+`agent.run_step.blocked`, or `agent.run_step.failed`, so the macOS Log tab can
+show a chronological decision trail.
+
+This runner intentionally performs one step per request. The next architecture
+step is to wrap it in a bounded continuous loop with explicit stop conditions,
+pause/abort/resume controls, and richer read/search/patch tool choices while
+preserving the same runtime-owned safety gates.
+
 ### Permission Manager
 
 Decides whether an action can run automatically or requires user approval.

@@ -85,6 +85,7 @@ try {
     openAIAPIKey: "sk-forge-smoke"
   });
   const openAIContextTask = await runOpenAIContextFlow();
+  const openAIAgentRunStepTask = await runOpenAIAgentRunStepFlow();
   const openAIAutoRepairTask = await runOpenAIAutoRepairFlow();
   const openAIValidationRepairTask = await runOpenAIValidationFailureRepairFlow();
   const openAITaskCommandRepairTask = await runOpenAITaskCommandFailureRepairFlow();
@@ -99,6 +100,7 @@ try {
   console.log(`- Task command task: ${taskCommandTask.id}`);
   console.log(`- Cancelled task command task: ${cancelledTaskCommandTask.id}`);
   console.log(`- OpenAI context task: ${openAIContextTask.id}`);
+  console.log(`- OpenAI agent run step task: ${openAIAgentRunStepTask.id}`);
   console.log(`- OpenAI auto-repair task: ${openAIAutoRepairTask.id}`);
   console.log(`- OpenAI validation repair task: ${openAIValidationRepairTask.id}`);
   console.log(`- OpenAI task command repair task: ${openAITaskCommandRepairTask.id}`);
@@ -662,6 +664,89 @@ async function runOpenAIContextFlow() {
   return current;
 }
 
+async function runOpenAIAgentRunStepFlow() {
+  const task = await createTask({
+    title: "Smoke OpenAI agent run step",
+    objective: `Run an agent run step smoke against @${appendSmokePath}.`
+  });
+
+  await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "OpenAI agent run step task to reach initial plan review"
+  );
+
+  let current = await post(`/tasks/${task.id}/approve-plan`, {
+    note: "Core smoke test approves the agent run step plan."
+  });
+  assert(current.executionProposal, "OpenAI agent run step flow did not create an execution proposal.");
+
+  const proposalStep = await collectRuntimeEventsDuring(
+    () => post(`/tasks/${task.id}/run-agent-step`, {}),
+    (event, result) => event.type === "agent.run_step.completed" && event.data?.taskID === result.id
+  );
+  current = proposalStep.result;
+  assertState(current, "Human Review", "Edit Proposal Review");
+  assert(current.editProposal?.status === "Proposed", "Agent run step did not create an edit proposal.");
+  const generatedStep = current.agentRunSteps?.at(-1);
+  assert(generatedStep?.action === "GenerateEditProposal", `Expected GenerateEditProposal, got ${generatedStep?.action}.`);
+  assert(generatedStep.status === "Completed", `Expected generated step Completed, got ${generatedStep.status}.`);
+  assert(generatedStep.targetID === current.editProposal.id, "Agent run step did not link the generated edit proposal.");
+  assert(
+    proposalStep.events.some((event) => event.type === "agent.run_step.started" && event.data?.taskID === current.id),
+    "Agent run step flow did not stream the started event for proposal generation."
+  );
+  assert(
+    proposalStep.events.some((event) => event.type === "agent.run_step.completed" && event.data?.taskID === current.id),
+    "Agent run step flow did not stream the completed event for proposal generation."
+  );
+
+  current = await post(`/tasks/${task.id}/apply-edit-proposal`, {
+    note: "Core smoke test applies the agent-generated proposal."
+  });
+  assertCompletedTask(current, appendSmokePath);
+
+  current = await post(`/tasks/${task.id}/approve-validation-preset`, {
+    presetID: "runtime-typescript",
+    note: "Core smoke test approves the agent-selected runtime command."
+  });
+  assert(
+    current.approvals?.some((approval) => approval.action === "Approve Validation Preset" && approval.targetID === "runtime-typescript"),
+    "Agent run step flow did not approve the runtime-typescript preset."
+  );
+
+  const commandStep = await collectRuntimeEventsDuring(
+    () => post(`/tasks/${task.id}/run-agent-step`, {
+      preferredCommandID: "runtime-npm-check"
+    }),
+    (event, result) => event.type === "agent.run_step.completed" && event.data?.taskID === result.id
+  );
+  current = commandStep.result;
+  assertState(current, "Human Review", "Command Passed");
+  const commandRun = current.taskCommandRuns?.at(-1);
+  assert(commandRun?.commandID === "runtime-npm-check", `Expected runtime-npm-check, got ${commandRun?.commandID}.`);
+  assert(commandRun.status === "Passed", `Expected agent-selected command to pass, got ${commandRun.status}.`);
+  const commandAgentStep = current.agentRunSteps?.at(-1);
+  assert(commandAgentStep?.action === "RunTaskCommand", `Expected RunTaskCommand, got ${commandAgentStep?.action}.`);
+  assert(commandAgentStep.status === "Completed", `Expected command step Completed, got ${commandAgentStep.status}.`);
+  assert(commandAgentStep.commandID === "runtime-npm-check", "Agent run step did not retain the selected command id.");
+  assert(commandAgentStep.targetID === commandRun.id, "Agent run step did not link the task command run.");
+  assert(
+    commandStep.events.some((event) => event.type === "agent.run_step.started" && event.data?.taskID === current.id),
+    "Agent run step flow did not stream the started event for command execution."
+  );
+  assert(
+    commandStep.events.some((event) => event.type === "task.command.completed" && event.data?.taskID === current.id),
+    "Agent run step flow did not stream the nested task command completion event."
+  );
+  assert(
+    commandStep.events.some((event) => event.type === "agent.run_step.completed" && event.data?.taskID === current.id),
+    "Agent run step flow did not stream the completed event for command execution."
+  );
+
+  return current;
+}
+
 async function runOpenAIPreviewBlockedFlow() {
   const task = await createTask({
     title: "Smoke preview-only blocked proposal",
@@ -1020,6 +1105,10 @@ async function assertRuntimeDiagnosticsAndSettings() {
   assert(
     home.includes("GET /git/branch-publish-preview"),
     "Runtime home page did not link the branch publish preview endpoint."
+  );
+  assert(
+    home.includes("POST /tasks/:taskID/run-agent-step"),
+    "Runtime home page did not link the agent run step endpoint."
   );
 
   const initialHealth = await get("/health");
@@ -1673,6 +1762,37 @@ function mockOpenAIOutput(name, requests, body) {
     };
   }
 
+  if (name === "forge_agent_run_step") {
+    const runStepCount = requests.filter((request) => request.name === "forge_agent_run_step").length;
+    if (runStepCount === 1) {
+      return {
+        action: "GenerateEditProposal",
+        summary: "Generate the first reviewed implementation proposal.",
+        rationale: "The plan has been approved and no proposal is waiting for human review.",
+        commandID: "",
+        commandRerunEvidenceID: ""
+      };
+    }
+
+    if (runStepCount === 2) {
+      return {
+        action: "RunTaskCommand",
+        summary: "Run the approved TypeScript/runtime check.",
+        rationale: "The reviewed edit has been applied and runtime-typescript is approved for this task.",
+        commandID: "runtime-npm-check",
+        commandRerunEvidenceID: ""
+      };
+    }
+
+    return {
+      action: "WaitForHumanReview",
+      summary: "Wait for the next human decision.",
+      rationale: "The smoke flow has already exercised the provider-driven proposal and command paths.",
+      commandID: "",
+      commandRerunEvidenceID: ""
+    };
+  }
+
   if (name === "forge_validation_repair_brief") {
     return {
       summary: "Runtime TypeScript validation failed after the reviewed edit; inspect the temporary syntax error before retrying.",
@@ -1688,6 +1808,34 @@ function mockOpenAIOutput(name, requests, body) {
   }
 
   if (name === "forge_edit_proposal") {
+    if (bodyText.includes("agent run step smoke")) {
+      return {
+        summary: "Propose the implementation selected by the agent run step.",
+        riskLevel: "Low",
+        fileChanges: [
+          {
+            path: appendSmokePath,
+            changeType: "Modify",
+            rationale: "Add a distinct note proving the provider-selected agent step can generate a reviewed edit.",
+            diffPreview: [
+              `--- a/${appendSmokePath}`,
+              `+++ b/${appendSmokePath}`,
+              "@@ agent run step append @@",
+              "+",
+              "+## OpenAI Agent Run Step Smoke",
+              "+",
+              "+- Generated a reviewed proposal from a provider-selected agent step."
+            ].join("\n"),
+            operationKind: "AppendText",
+            appendText: "\n## OpenAI Agent Run Step Smoke\n\n- Generated a reviewed proposal from a provider-selected agent step.\n",
+            findText: "",
+            replaceWith: "",
+            content: ""
+          }
+        ]
+      };
+    }
+
     if (bodyText.includes("validation failure repair brief") || bodyText.includes("Validation repair brief")) {
       if (bodyText.includes("TaskCommandRun")) {
         return {
@@ -1975,7 +2123,10 @@ async function postExpectError(path, body) {
   return requestExpectError("POST", path, body);
 }
 
-async function collectRuntimeEventsDuring(action) {
+async function collectRuntimeEventsDuring(
+  action,
+  done = (event, result) => event.type === "task.command.completed" && event.data?.taskID === result.id
+) {
   const controller = new AbortController();
   const events = [];
   const streamPromise = collectRuntimeEvents(controller, events);
@@ -1985,7 +2136,7 @@ async function collectRuntimeEventsDuring(action) {
   const deadline = Date.now() + 2_000;
   while (
     Date.now() < deadline &&
-    !events.some((event) => event.type === "task.command.completed" && event.data?.taskID === result.id)
+    !events.some((event) => done(event, result))
   ) {
     await sleep(50);
   }

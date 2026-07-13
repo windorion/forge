@@ -39,7 +39,7 @@ should no longer feel like a generic workflow dashboard.
 
 ## Current Status
 
-Last updated: 2026-07-12
+Last updated: 2026-07-13
 
 Direction reset: the trust/runtime foundation is strong, but the next milestone
 is a redesigned coding-agent demo based on `design_handoff_forge/`, especially
@@ -64,6 +64,13 @@ Implemented today:
 - Plan approval triggers a bounded read-only execution-context pass before the
   provider drafts the execution proposal, and the proposal keeps tool evidence
   plus inspected context files.
+- Provider-selected Agent Run Step v0: `POST /tasks/:taskID/run-agent-step`
+  asks the active model provider for one safe next action, then the runtime
+  enforces existing gates while it generates an edit proposal, runs an
+  approved task command, generates a validation repair proposal, reruns
+  reviewed self-fix evidence, or waits for human review. The macOS action rail
+  exposes `Run Agent Step`, and the Log tab shows recent agent step decisions,
+  rationale, status, linked command/proposal targets, and result summaries.
 - Explicit human review gates for plans and edits.
 - Safe edit proposals with multi-file OpenAI proposal artifacts, including
   blocked preview-only operations. Apply supports Markdown `AppendText`,
@@ -131,9 +138,9 @@ Implemented today:
   rejection through real runtime HTTP endpoints.
 - Core runtime smoke regression for the main task lifecycle, restricted
   append/replace/create edits, post-apply validation, restart recovery, and a
-  mock OpenAI model-guided context/repair loop plus validation failure
-  diagnosis. The smoke also covers runtime health diagnostics and provider
-  settings GET/POST without persisting API keys.
+  mock OpenAI model-guided context/agent-step/repair loop plus validation
+  failure diagnosis. The smoke also covers runtime health diagnostics and
+  provider settings GET/POST without persisting API keys.
 - Local foundation walkthrough in `docs/development.md`.
 - App-visible runtime state and diagnostics for endpoint, version, provider
   configuration, SSE stream, and copy/open diagnostics actions.
@@ -143,7 +150,8 @@ Not finished yet:
 - Full-fidelity `design_handoff_forge` UI, especially exact split-diff polish,
   file-level review persistence, decision prompts, and polished live-run
   states.
-- Real autonomous model-backed read/search/patch/run/repair loop.
+- Continuous autonomous model-backed read/search/patch/run/repair loop beyond
+  the current provider-selected single-step runner.
 - General source-code patch engine, richer rollback/revalidation, and richer
   diff review.
 - Actual PR creation/publication after explicit review.
@@ -158,7 +166,7 @@ Product-readiness estimate:
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 68-72% | Has a first-pass session UI shell, full-screen diff review surface, exact source replace, multi-hunk source patches, streamed/cancellable selectable task commands, and failed-command self-fix rerun evidence, but still needs provider-driven autonomous patch/run/repair orchestration. |
+| Coding-agent demo V0 | 72-76% | Has a first-pass session UI shell, full-screen diff review surface, exact source replace, multi-hunk source patches, streamed/cancellable selectable task commands, failed-command self-fix rerun evidence, and a provider-selected single-step agent runner, but still needs continuous autonomous multi-step patch/run/repair orchestration. |
 | Useful developer alpha | 35-45% | A developer cannot yet rely on Forge like Codex or Claude Code for normal coding tasks. It needs real patching, command execution, recovery, and a stronger model-backed run loop. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, memory, MCP/GitHub, and product polish. |
@@ -174,7 +182,8 @@ Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
   `design_handoff_forge` screens
 - broaden source-file patch proposal/apply beyond exact multi-hunk text patches
   and harden rollback/revalidation
-- wire provider-driven read/search/patch/run/repair into the normal task flow
+- extend the provider-selected agent step into a continuous bounded
+  read/search/patch/run/repair loop
 - connect full diff review to durable file-level decisions once the review
   model supports them
 - return to PR/GitHub publication after the agent coding loop feels real

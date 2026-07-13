@@ -147,6 +147,39 @@ export interface ExecutionProposal {
   generatedAt: string;
 }
 
+export type AgentRunStepAction =
+  | "GenerateEditProposal"
+  | "RunTaskCommand"
+  | "GenerateValidationRepairProposal"
+  | "RerunRepairCommand"
+  | "WaitForHumanReview"
+  | "RequestPlanApproval";
+
+export interface AgentRunStepDecision {
+  action: AgentRunStepAction;
+  summary: string;
+  rationale: string;
+  commandID?: string;
+  commandRerunEvidenceID?: string;
+}
+
+export interface AgentRunStep {
+  id: string;
+  provider: ModelProviderInfo;
+  action: AgentRunStepAction;
+  status: "Running" | "Completed" | "Blocked" | "Failed";
+  summary: string;
+  rationale: string;
+  commandID?: string;
+  commandName?: string;
+  commandRerunEvidenceID?: string;
+  targetID?: string;
+  resultSummary?: string;
+  error?: string;
+  createdAt: string;
+  completedAt?: string;
+}
+
 export interface ProposedFileChange {
   id: string;
   path: string;
@@ -757,6 +790,7 @@ export interface ForgeTask {
   events: RuntimeEvent[];
   approvals: ApprovalRecord[];
   toolCalls: ToolCall[];
+  agentRunSteps: AgentRunStep[];
   taskCommandRuns: TaskCommandRun[];
   commandRerunEvidence: CommandRerunEvidence[];
   validationRuns: ValidationRun[];
@@ -791,6 +825,10 @@ export interface RunValidationRequest {
 
 export interface RunTaskCommandRequest {
   commandID?: string;
+}
+
+export interface RunAgentStepRequest {
+  preferredCommandID?: string;
 }
 
 export interface CancelTaskCommandRequest {

@@ -121,6 +121,15 @@ execution. After a reviewed command-sourced self-fix is applied,
 command ID already captured in `commandRerunEvidence`; it does not accept raw
 shell text, arbitrary command IDs from the caller, or arbitrary PIDs.
 
+`POST /tasks/:taskID/run-agent-step` does not grant new permissions. The model
+provider can choose only one enum action, and the runtime reuses the existing
+proposal, command, validation repair, and rerun-evidence gates before any side
+effect. A provider-selected `RunTaskCommand` is accepted only for a
+runtime-known command whose task-command permission snapshot is already
+runnable. A provider-selected `RerunRepairCommand` is accepted only for stored
+ready/failed rerun evidence. Waiting for human review and requesting plan
+approval are explicit blocked states, not silent no-ops.
+
 ### High Risk
 
 Examples:

@@ -40,6 +40,12 @@ conversation while preserving the same review and validation boundary. The
 provider still does not apply changes itself; validating, applying, rejecting,
 or archiving proposals remains a runtime-owned approval step.
 
+The local provider can also choose a deterministic Agent Run Step v0 action
+from current task state: rerun reviewed self-fix evidence, generate a repair
+proposal from the latest repair brief, wait for human review, generate the
+next edit proposal from an execution proposal, run the first approved command
+after an applied proposal, or request plan approval.
+
 The optional OpenAI provider:
 
 - provider id: `openai`
@@ -49,8 +55,9 @@ The optional OpenAI provider:
 
 It uses the Responses API with Structured Outputs (`text.format` JSON schema)
 for intent briefs, model-guided plan-context requests, plan revisions,
-execution proposals, and edit proposal guidance. Before a plan revision, the
-provider can run a bounded context loop: each round returns `SearchAndRead`
+execution proposals, agent run step decisions, and edit proposal guidance.
+Before a plan revision, the provider can run a bounded context loop: each
+round returns `SearchAndRead`
 with search terms/read paths or `ReadyForPlan` to stop. The runtime validates
 and executes those requests through logged read-only tools before calling the
 model again for the revision. After plan approval, the runtime runs a bounded
@@ -61,9 +68,13 @@ to the provider for a bounded repair loop. When validation commands or
 task-scoped commands fail, the runtime can ask the provider for a repair brief
 from compact command summaries. A later edit proposal request can include that
 repair brief so the provider proposes a narrow follow-up repair artifact. The
-runtime still generates IDs, timestamps, validation state, execution proposal
-evidence, and restricted apply operations locally. The remote provider never
-directly edits files, runs commands, commits, pushes, or executes tools.
+provider can also choose one Agent Run Step v0 action from a bounded enum:
+generate an edit proposal, run an already-approved task command, generate a
+validation repair proposal, rerun reviewed self-fix evidence, wait for human
+review, or request plan approval. The runtime still generates IDs, timestamps,
+validation state, execution proposal evidence, command execution, and
+restricted apply operations locally. The remote provider never directly edits
+files, runs commands, commits, pushes, or executes tools.
 
 ## Configuration
 
@@ -158,6 +169,7 @@ A provider receives task state and returns structured output. Current output:
 - validation feedback for bounded proposal repair attempts
 - validation and task-command failure repair brief summaries
 - validation repair brief context for follow-up proposals
+- agent run step action, summary, rationale, command id, and rerun evidence id
 - risk level
 - generated timestamp
 

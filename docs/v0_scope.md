@@ -3,7 +3,7 @@
 Document role: define the first end-to-end product target for Forge so early
 implementation has a clear finish line.
 
-Last updated: 2026-07-12
+Last updated: 2026-07-13
 
 ## Scope Reset
 
@@ -142,6 +142,9 @@ Built foundation:
 - validation presets and repair briefs
 - approved task-scoped command runner with streamed stdout/stderr chunks
 - failed task-command repair briefs and review-only self-fix proposals
+- provider-selected single-step agent runner for proposal generation,
+  approved command execution, validation repair proposal generation, reviewed
+  self-fix reruns, and human-review pauses
 - git status/diff/commit/push/branch/PR handoff preflights
 - app-managed runtime diagnostics
 - local smoke coverage
@@ -160,12 +163,13 @@ Major gaps:
   paths, but it is still too narrow for normal source-code tasks.
 - Command output now has a streamed, cancellable, selectable task-scoped
   surface with reviewed self-fix rerun evidence after apply.
-- Provider-backed run loop is not yet a real read/search/patch/run/repair
-  agent.
+- Provider-backed run loop now has a single-step decision runner, but it is
+  not yet a continuous read/search/patch/run/repair agent.
 
 ## Next Implementation Order
 
-1. Connect provider-driven run loop to read/search/patch/run/repair.
+1. Extend Agent Run Step v0 into a continuous bounded read/search/patch/run/
+   repair loop.
 2. Broaden source-file patch proposal/apply beyond exact text hunks and harden
    rollback revalidation/recovery.
 3. Implement request-change revision from full diff review.

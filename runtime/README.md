@@ -26,6 +26,7 @@ This first slice is intentionally small:
 - `POST /tasks/:taskID/messages`
 - `POST /tasks/:taskID/generate-plan-revision`
 - `POST /tasks/:taskID/approve-plan`
+- `POST /tasks/:taskID/run-agent-step`
 - `POST /tasks/:taskID/generate-edit-proposal`
 - `POST /tasks/:taskID/revise-edit-proposal`
 - `POST /tasks/:taskID/generate-validation-repair-proposal`
@@ -106,6 +107,16 @@ evidence but does not rerun the command automatically. The explicit
 `POST /tasks/:taskID/rerun-repair-command` endpoint reruns the original failed
 command through the same approved command runner and links the new command run
 to the failed source run, repair brief, and applied proposal.
+
+`POST /tasks/:taskID/run-agent-step` asks the active model provider for one
+safe next action and then lets the runtime enforce the same gates as the
+manual endpoints. The current action enum can generate an edit proposal, run
+an approved task command, generate a validation repair proposal, rerun reviewed
+self-fix evidence, wait for human review, or request plan approval. Every
+decision is stored in `agentRunSteps` with provider metadata, rationale,
+status, linked target IDs, result summaries, and timestamps. This is one step
+at a time; it is not yet a continuous autonomous loop.
+
 OpenAI-backed edit proposals can include multiple file changes and
 preview-only unsupported operations. Unsupported changes are kept as review
 artifacts; validation blocks apply until every proposed change fits the current

@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type {
+  AgentRunStepDecision,
+  CommandRerunEvidence,
   EditProposal,
   EditProposalValidation,
   ExecutionProposal,
@@ -11,6 +13,7 @@ import type {
   PlanRevision,
   PlanStep,
   ProposedFileOperation,
+  TaskCommandPermission,
   TaskCommandRun,
   TaskFileReference,
   TaskMessage,
@@ -57,6 +60,12 @@ export interface EditProposalRequest {
   validationRepairBrief?: ValidationRepairBrief;
 }
 
+export interface AgentRunStepRequest {
+  task: ForgeTask;
+  taskCommands: TaskCommandPermission[];
+  commandRerunEvidence: CommandRerunEvidence[];
+}
+
 export interface IntentBriefRequest {
   task: ForgeTask;
   latestUserMessage: TaskMessage;
@@ -68,6 +77,7 @@ export interface ModelProvider {
   createPlanContextRequest?(request: PlanContextRequest): Promise<PlanContextRequestResult>;
   createPlanRevision(request: PlanRevisionRequest): Promise<PlanRevision>;
   createExecutionProposal(request: ExecutionProposalRequest): Promise<ExecutionProposal>;
+  createAgentRunStep(request: AgentRunStepRequest): Promise<AgentRunStepDecision>;
   createEditProposal(request: EditProposalRequest): Promise<EditProposal>;
   createValidationRepairBrief(request: ValidationRepairBriefRequest): Promise<ValidationRepairBrief>;
 }
@@ -282,6 +292,10 @@ class UnavailableModelProvider implements ModelProvider {
     throw new Error(this.message);
   }
 
+  async createAgentRunStep(): Promise<AgentRunStepDecision> {
+    throw new Error(this.message);
+  }
+
   async createEditProposal(): Promise<EditProposal> {
     throw new Error(this.message);
   }
@@ -379,6 +393,28 @@ class OpenAIResponsesModelProvider implements ModelProvider {
       riskLevel: normalized.riskLevel,
       generatedAt: new Date().toISOString()
     };
+  }
+
+  async createAgentRunStep(request: AgentRunStepRequest): Promise<AgentRunStepDecision> {
+    const output = await this.createStructuredOutput(
+      "forge_agent_run_step",
+      agentRunStepDecisionSchema,
+      [
+        "Choose exactly one safe next action for Forge's live coding-agent run.",
+        "You are selecting the next runtime-owned action; you are not executing tools yourself.",
+        "Use GenerateEditProposal when an execution proposal exists and there is no proposed edit awaiting review.",
+        "Use RunTaskCommand only when one of the provided taskCommands has canRun true; commandID must exactly match that command id.",
+        "Use GenerateValidationRepairProposal when a failed validation or task command has a repair brief and no repair proposal is currently awaiting review.",
+        "Use RerunRepairCommand only when one of the provided commandRerunEvidence items is ready or failed; commandRerunEvidenceID must exactly match that evidence id.",
+        "Use WaitForHumanReview when a proposal, plan, command approval, or user decision is needed.",
+        "Use RequestPlanApproval when the current plan has not been approved.",
+        "Never ask to apply edits, commit, push, install dependencies, or run arbitrary shell text.",
+        taskProviderContext(request.task),
+        agentRunStepRequestContext(request)
+      ].join("\n\n")
+    );
+
+    return normalizeAgentRunStepDecisionOutput(output, request);
   }
 
   async createEditProposal(request: EditProposalRequest): Promise<EditProposal> {
@@ -583,6 +619,29 @@ const executionProposalSchema: JsonSchema = {
   required: ["summary", "proposedActions", "riskLevel"]
 };
 
+const agentRunStepDecisionSchema: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    action: {
+      type: "string",
+      enum: [
+        "GenerateEditProposal",
+        "RunTaskCommand",
+        "GenerateValidationRepairProposal",
+        "RerunRepairCommand",
+        "WaitForHumanReview",
+        "RequestPlanApproval"
+      ]
+    },
+    summary: { type: "string" },
+    rationale: { type: "string" },
+    commandID: { type: "string" },
+    commandRerunEvidenceID: { type: "string" }
+  },
+  required: ["action", "summary", "rationale", "commandID", "commandRerunEvidenceID"]
+};
+
 const editProposalGuidanceSchema: JsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -777,6 +836,10 @@ class LocalDeterministicModelProvider implements ModelProvider {
     };
   }
 
+  async createAgentRunStep(request: AgentRunStepRequest): Promise<AgentRunStepDecision> {
+    return chooseDeterministicAgentRunStep(request);
+  }
+
   async createEditProposal(request: EditProposalRequest): Promise<EditProposal> {
     const draft = buildRestrictedEditDraft(request);
     const operationLabel = editOperationLabel(draft.applyOperation);
@@ -959,6 +1022,60 @@ function normalizeExecutionProposalOutput(
     proposedActions: boundedStringArray(output.proposedActions, "proposedActions", 8),
     riskLevel: normalizeRiskLevel(output.riskLevel)
   };
+}
+
+function normalizeAgentRunStepDecisionOutput(
+  output: unknown,
+  request: AgentRunStepRequest
+): AgentRunStepDecision {
+  if (!isRecord(output)) {
+    throw new Error("OpenAI agent run step output was not an object.");
+  }
+
+  const fallback = chooseDeterministicAgentRunStep(request);
+  const action = normalizeAgentRunStepAction(output.action) ?? fallback.action;
+  const commandID = optionalString(output.commandID);
+  const commandRerunEvidenceID = optionalString(output.commandRerunEvidenceID);
+  const runnableCommandIDs = new Set(request.taskCommands.filter((permission) => permission.canRun).map((permission) => permission.command.id));
+  const runnableRerunEvidenceIDs = new Set(request.commandRerunEvidence.map((evidence) => evidence.id));
+
+  if (action === "RunTaskCommand" && !runnableCommandIDs.has(commandID)) {
+    return {
+      ...fallback,
+      summary: "Model selected a task command that is not currently runnable, so Forge will wait for review.",
+      rationale: "Runtime validation rejected the model-selected command id before execution."
+    };
+  }
+
+  if (action === "RerunRepairCommand" && !runnableRerunEvidenceIDs.has(commandRerunEvidenceID)) {
+    return {
+      ...fallback,
+      summary: "Model selected rerun evidence that is not currently runnable, so Forge will wait for review.",
+      rationale: "Runtime validation rejected the model-selected rerun evidence id before execution."
+    };
+  }
+
+  return {
+    action,
+    summary: requiredString(output.summary, "summary"),
+    rationale: requiredString(output.rationale, "rationale"),
+    commandID: action === "RunTaskCommand" ? commandID : undefined,
+    commandRerunEvidenceID: action === "RerunRepairCommand" ? commandRerunEvidenceID : undefined
+  };
+}
+
+function normalizeAgentRunStepAction(value: unknown): AgentRunStepDecision["action"] | undefined {
+  switch (value) {
+  case "GenerateEditProposal":
+  case "RunTaskCommand":
+  case "GenerateValidationRepairProposal":
+  case "RerunRepairCommand":
+  case "WaitForHumanReview":
+  case "RequestPlanApproval":
+    return value;
+  default:
+    return undefined;
+  }
 }
 
 function normalizeEditProposalGuidanceOutput(
@@ -1223,6 +1340,119 @@ function forgeProviderSystemPrompt(): string {
   ].join(" ");
 }
 
+function chooseDeterministicAgentRunStep(request: AgentRunStepRequest): AgentRunStepDecision {
+  const task = request.task;
+  const runnableRerunEvidence = request.commandRerunEvidence.find((evidence) =>
+    evidence.status === "Ready" || evidence.status === "Failed"
+  );
+  if (runnableRerunEvidence) {
+    return {
+      action: "RerunRepairCommand",
+      summary: `Rerun ${runnableRerunEvidence.commandName} to verify the reviewed self-fix.`,
+      rationale: "A command-sourced repair proposal has been applied and has pending rerun evidence.",
+      commandRerunEvidenceID: runnableRerunEvidence.id
+    };
+  }
+
+  const latestRepairBrief = task.validationRepairBriefs.at(-1);
+  if (
+    latestRepairBrief &&
+    task.editProposal?.status !== "Proposed" &&
+    task.editProposal?.validationRepairBriefID !== latestRepairBrief.id
+  ) {
+    return {
+      action: "GenerateValidationRepairProposal",
+      summary: "Generate a reviewed self-fix proposal from the latest repair brief.",
+      rationale: "A failed validation or task command has a repair brief and no current proposal is awaiting review."
+    };
+  }
+
+  if (task.editProposal?.status === "Proposed") {
+    return {
+      action: "WaitForHumanReview",
+      summary: "Wait for the user to review the proposed diff.",
+      rationale: "Forge must not apply or revise a proposed edit without a human decision."
+    };
+  }
+
+  if (task.executionProposal && (!task.editProposal || task.editProposal.status === "Rejected")) {
+    return {
+      action: "GenerateEditProposal",
+      summary: task.editProposal?.status === "Rejected"
+        ? "Revise the rejected edit proposal from the latest task context."
+        : "Generate the next reviewed edit proposal from the approved plan.",
+      rationale: "The plan has an execution proposal and no proposed diff is currently awaiting review."
+    };
+  }
+
+  const runnableCommand = request.taskCommands.find((permission) => permission.canRun);
+  if (runnableCommand && task.editProposal?.status === "Applied") {
+    return {
+      action: "RunTaskCommand",
+      summary: `Run approved command ${runnableCommand.command.name}.`,
+      rationale: "The latest proposal is applied and an approved project command is available for agent-run validation.",
+      commandID: runnableCommand.command.id
+    };
+  }
+
+  if (!task.executionProposal) {
+    return {
+      action: "RequestPlanApproval",
+      summary: "Wait for plan approval before agent execution.",
+      rationale: "Forge needs an approved plan and execution proposal before generating implementation work."
+    };
+  }
+
+  return {
+    action: "WaitForHumanReview",
+    summary: "Wait for a human decision before continuing.",
+    rationale: "No safe autonomous next action is currently available inside the v0 runtime boundaries."
+  };
+}
+
+function agentRunStepRequestContext(request: AgentRunStepRequest): string {
+  const runnableCommands = request.taskCommands.filter((permission) => permission.canRun);
+  const commandSummaries = request.taskCommands.slice(0, 8).map((permission) => ({
+    commandID: permission.command.id,
+    name: permission.command.name,
+    command: permission.command.command,
+    canRun: permission.canRun,
+    executionState: permission.executionState,
+    approvalState: permission.approvalState,
+    blockedReasons: permission.blockedReasons,
+    lastRun: permission.lastRun
+      ? {
+          status: permission.lastRun.status,
+          summary: permission.lastRun.summary
+        }
+      : undefined
+  }));
+  const rerunEvidence = request.commandRerunEvidence.map((evidence) => ({
+    id: evidence.id,
+    commandID: evidence.commandID,
+    commandName: evidence.commandName,
+    status: evidence.status,
+    summary: evidence.summary,
+    repairProposalID: evidence.repairProposalID
+  }));
+
+  return JSON.stringify({
+    allowedActions: [
+      "GenerateEditProposal",
+      "RunTaskCommand",
+      "GenerateValidationRepairProposal",
+      "RerunRepairCommand",
+      "WaitForHumanReview",
+      "RequestPlanApproval"
+    ],
+    taskCommandPolicy: "RunTaskCommand can only use commandID values where canRun is true.",
+    rerunPolicy: "RerunRepairCommand can only use commandRerunEvidenceID values listed in commandRerunEvidence.",
+    runnableCommandIDs: runnableCommands.map((permission) => permission.command.id),
+    taskCommands: commandSummaries,
+    commandRerunEvidence: rerunEvidence
+  });
+}
+
 function taskProviderContext(task: ForgeTask, sourceMessage?: TaskMessage): string {
   return JSON.stringify({
     task: {
@@ -1253,6 +1483,13 @@ function taskProviderContext(task: ForgeTask, sourceMessage?: TaskMessage): stri
       summary: brief.summary,
       likelyCause: brief.likelyCause,
       recommendedActions: brief.recommendedActions
+    })) ?? [],
+    agentRunSteps: task.agentRunSteps?.slice(-5).map((step) => ({
+      action: step.action,
+      status: step.status,
+      summary: step.summary,
+      resultSummary: step.resultSummary,
+      error: step.error
     })) ?? [],
     existingEditProposal: task.editProposal
       ? {

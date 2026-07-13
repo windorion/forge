@@ -3,7 +3,7 @@
 Document role: maintain the active backlog, priority order, and next concrete
 engineering tasks for Forge.
 
-Last updated: 2026-07-12
+Last updated: 2026-07-13
 
 ## Rule
 
@@ -30,8 +30,9 @@ dashboard.
 
 ## P1: Real Agent Behavior
 
-- Wire the OpenAI provider into the normal read/search/patch/run/repair task
-  flow beyond deterministic fallback demos.
+- Extend Agent Run Step v0 into a continuous bounded read/search/patch/run/
+  repair loop with stop conditions, pause/abort/resume, and visible live-run
+  progress.
 - Extend the bounded read-only planning/execution context loops into a
   runtime-owned tool-call loop with strict allowed tools and stop conditions.
 - Add stricter model output normalization, retry rules, and failure recovery
@@ -90,6 +91,15 @@ dashboard.
 
 ## Done Recently
 
+- Added provider-selected Agent Run Step v0. `POST
+  /tasks/:taskID/run-agent-step` asks the active model provider for one safe
+  next action, then the runtime enforces existing gates while it generates an
+  edit proposal, runs an approved task command, generates a validation repair
+  proposal, reruns reviewed self-fix evidence, or pauses for human review. The
+  macOS action rail now has `Run Agent Step`, the Log tab shows recent
+  decisions/rationale/results, and `npm run smoke:core` covers a mock OpenAI
+  step that generates a proposal followed by a step that runs
+  `runtime-npm-check`.
 - Added first-class rerun evidence after reviewed task-command self-fixes.
   Applying a command-sourced repair proposal records the failed command,
   repair brief, and applied proposal; `POST /tasks/:taskID/rerun-repair-command`

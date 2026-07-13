@@ -13,6 +13,7 @@ struct ForgeTask: Identifiable, Codable, Hashable {
     var events: [RuntimeEvent]
     var approvals: [ApprovalRecord]
     var toolCalls: [ToolCall]
+    var agentRunSteps: [AgentRunStep]
     var taskCommandRuns: [TaskCommandRun]
     var commandRerunEvidence: [CommandRerunEvidence]
     var validationRuns: [ValidationRun]
@@ -52,6 +53,7 @@ struct ForgeTask: Identifiable, Codable, Hashable {
         ],
         approvals: [],
         toolCalls: [],
+        agentRunSteps: [],
         taskCommandRuns: [],
         commandRerunEvidence: [],
         validationRuns: [],
@@ -128,6 +130,23 @@ struct ToolCall: Identifiable, Codable, Hashable {
     var outputSummary: String
     var startedAt: String
     var endedAt: String?
+}
+
+struct AgentRunStep: Identifiable, Codable, Hashable {
+    var id: String
+    var provider: ModelProviderInfo
+    var action: String
+    var status: String
+    var summary: String
+    var rationale: String
+    var commandID: String?
+    var commandName: String?
+    var commandRerunEvidenceID: String?
+    var targetID: String?
+    var resultSummary: String?
+    var error: String?
+    var createdAt: String
+    var completedAt: String?
 }
 
 struct ValidationCommandResult: Identifiable, Codable, Hashable {
@@ -851,6 +870,10 @@ struct RunValidationRequest: Encodable {
 
 struct RunTaskCommandRequest: Encodable {
     var commandID: String
+}
+
+struct RunAgentStepRequest: Encodable {
+    var preferredCommandID: String?
 }
 
 struct CancelTaskCommandRequest: Encodable {
