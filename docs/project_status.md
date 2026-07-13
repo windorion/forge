@@ -14,9 +14,10 @@ safe edit proposals, apply restricted Markdown edits, exact source/text
 replacements, and multi-hunk source/text patches, validate work, expose
 guarded git actions, run approved task-scoped commands with streamed output,
 record rerun evidence after reviewed self-fixes, let a model provider choose
-one safe next agent step, and persist task state locally. The next milestone is
-to make that single-step runner feel continuous: bounded provider-driven
-multi-step patch/run/repair orchestration.
+safe next agent steps inside a bounded multi-step loop, and persist task state
+locally. The next milestone is to make that loop more capable: richer
+read/search/patch orchestration, pause/abort/resume, and broader patch
+recovery.
 
 ## Current Implementation
 
@@ -57,6 +58,13 @@ Implemented:
   proposal or command targets, status, result, timestamps, and SSE events.
   The macOS action rail exposes `Run Agent Step`, and the Log tab shows the
   recent decision trail.
+- Bounded Agent Run Loop v0. `POST /tasks/:taskID/run-agent-loop` repeatedly
+  runs provider-selected safe steps up to a runtime-enforced step limit, links
+  each `AgentRunStep` back to the loop, and stops at edit-proposal review
+  gates, passed commands, verified self-fix reruns, blocked/failed steps,
+  busy-task guards, no-progress guards, or max-step protection. The macOS
+  action rail exposes `Run Agent Loop`, and the Log tab shows recent loop
+  status, step counts, stop reason, and summaries.
 - Safe edit proposal review flow with multi-file OpenAI proposal artifacts,
   including blocked preview-only unsupported operations.
 - `AppendText` and exact `ReplaceText` restricted edit operations for
@@ -182,7 +190,8 @@ Implemented:
   metadata, explicit source replace/patch rollback, restricted docs create-file
   apply, SQLite restart recovery, runtime health diagnostics, model-provider
   settings GET/POST, fake-key handling without secret persistence, a mock
-  OpenAI model-guided context loop, provider-selected agent run step,
+  OpenAI model-guided context loop, provider-selected agent run step and
+  bounded agent run loop,
   blocked-to-repaired proposal handling, and bounded blocked preview-only
   proposal handling, plus failed project validation repair brief generation
   and follow-up repair proposal generation.
@@ -209,7 +218,7 @@ These percentages are product-readiness estimates, not calendar estimates.
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 72-76% | Has a first-pass session UI shell, full-screen diff review surface, exact source replace, multi-hunk source patches, streamed/cancellable selectable task commands, failed-command self-fix rerun evidence, and a provider-selected single-step runner, but still needs continuous autonomous multi-step patch/run/repair orchestration. |
+| Coding-agent demo V0 | 76-80% | Has a first-pass session UI shell, full-screen diff review surface, exact source replace, multi-hunk source patches, streamed/cancellable selectable task commands, failed-command self-fix rerun evidence, and a bounded provider-selected multi-step loop, but still needs richer read/search/patch orchestration and UI polish before it feels like Codex or Claude Code. |
 | Useful developer alpha | 35-45% | A developer cannot yet rely on Forge like Codex or Claude Code for normal coding tasks. It needs real patching, command execution, recovery, and a stronger model-backed run loop. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
@@ -222,7 +231,8 @@ making the first demo feel like an agent coding app.
 
 The hardest remaining work is not the app shell. The hardest remaining work is:
 
-- a continuous model-backed coding run loop, not only single safe agent steps
+- a richer model-backed coding loop with read/search tool choices and broader
+  patch/recovery behavior
 - a polished UI that fully matches the handoff, especially exact split-diff,
   durable file-level review state, and decision prompts
 - a useful source-code patch engine beyond exact text-based hunks
@@ -247,8 +257,8 @@ Remaining V0 gaps:
   behavior and durable per-file decisions
 - broaden source-file patch proposals beyond exact text hunks and harden
   rollback revalidation/recovery
-- extend provider-selected agent steps into continuous read/search/patch/run/
-  repair flow
+- extend the bounded agent loop with richer read/search tool choices,
+  pause/abort/resume, and broader patch/recovery behavior
 - implement full diff review with per-file reasoning and request-change loop
 - keep git/preflight work as supporting infrastructure rather than the main
   demo
@@ -260,7 +270,7 @@ with a model provider while preserving human review.
 
 Alpha requires:
 
-- continuous provider-backed patch/run/repair in normal flows
+- richer provider-backed read/search/patch/run/repair in normal flows
 - a richer patch format and rollback/recovery
 - full diff review matching the design handoff
 - streamed terminal/test output in the task

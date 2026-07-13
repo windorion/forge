@@ -71,6 +71,12 @@ Implemented today:
   reviewed self-fix evidence, or waits for human review. The macOS action rail
   exposes `Run Agent Step`, and the Log tab shows recent agent step decisions,
   rationale, status, linked command/proposal targets, and result summaries.
+- Bounded Agent Run Loop v0: `POST /tasks/:taskID/run-agent-loop` repeatedly
+  runs provider-selected safe steps up to a small runtime-enforced limit and
+  stops at review gates, passed commands, verified self-fixes, blocked steps,
+  failures, or max-step protection. The macOS action rail now exposes
+  `Run Agent Loop`, and the Log tab shows loop summaries plus the linked step
+  trail.
 - Explicit human review gates for plans and edits.
 - Safe edit proposals with multi-file OpenAI proposal artifacts, including
   blocked preview-only operations. Apply supports Markdown `AppendText`,
@@ -150,8 +156,8 @@ Not finished yet:
 - Full-fidelity `design_handoff_forge` UI, especially exact split-diff polish,
   file-level review persistence, decision prompts, and polished live-run
   states.
-- Continuous autonomous model-backed read/search/patch/run/repair loop beyond
-  the current provider-selected single-step runner.
+- Rich autonomous model-backed read/search/patch/run/repair beyond the current
+  bounded loop and exact-text patch engine.
 - General source-code patch engine, richer rollback/revalidation, and richer
   diff review.
 - Actual PR creation/publication after explicit review.
@@ -166,7 +172,7 @@ Product-readiness estimate:
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 72-76% | Has a first-pass session UI shell, full-screen diff review surface, exact source replace, multi-hunk source patches, streamed/cancellable selectable task commands, failed-command self-fix rerun evidence, and a provider-selected single-step agent runner, but still needs continuous autonomous multi-step patch/run/repair orchestration. |
+| Coding-agent demo V0 | 76-80% | Has a first-pass session UI shell, full-screen diff review surface, exact source replace, multi-hunk source patches, streamed/cancellable selectable task commands, failed-command self-fix rerun evidence, and a bounded provider-selected multi-step loop, but still needs richer read/search/patch orchestration and UI polish before it feels like Codex or Claude Code. |
 | Useful developer alpha | 35-45% | A developer cannot yet rely on Forge like Codex or Claude Code for normal coding tasks. It needs real patching, command execution, recovery, and a stronger model-backed run loop. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, memory, MCP/GitHub, and product polish. |
@@ -182,8 +188,8 @@ Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
   `design_handoff_forge` screens
 - broaden source-file patch proposal/apply beyond exact multi-hunk text patches
   and harden rollback/revalidation
-- extend the provider-selected agent step into a continuous bounded
-  read/search/patch/run/repair loop
+- extend the bounded agent loop with richer read/search tool choices,
+  pause/abort/resume controls, and broader patch/recovery behavior
 - connect full diff review to durable file-level decisions once the review
   model supports them
 - return to PR/GitHub publication after the agent coding loop feels real

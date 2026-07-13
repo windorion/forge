@@ -142,9 +142,9 @@ Built foundation:
 - validation presets and repair briefs
 - approved task-scoped command runner with streamed stdout/stderr chunks
 - failed task-command repair briefs and review-only self-fix proposals
-- provider-selected single-step agent runner for proposal generation,
-  approved command execution, validation repair proposal generation, reviewed
-  self-fix reruns, and human-review pauses
+- provider-selected bounded agent loop for proposal generation, approved
+  command execution, validation repair proposal generation, reviewed self-fix
+  reruns, human-review pauses, and max-step protection
 - git status/diff/commit/push/branch/PR handoff preflights
 - app-managed runtime diagnostics
 - local smoke coverage
@@ -163,15 +163,16 @@ Major gaps:
   paths, but it is still too narrow for normal source-code tasks.
 - Command output now has a streamed, cancellable, selectable task-scoped
   surface with reviewed self-fix rerun evidence after apply.
-- Provider-backed run loop now has a single-step decision runner, but it is
-  not yet a continuous read/search/patch/run/repair agent.
+- Provider-backed run loop now has bounded multi-step orchestration, but it
+  still lacks richer read/search tool choice, broader patch generation, and
+  pause/abort/resume controls.
 
 ## Next Implementation Order
 
-1. Extend Agent Run Step v0 into a continuous bounded read/search/patch/run/
-   repair loop.
-2. Broaden source-file patch proposal/apply beyond exact text hunks and harden
+1. Broaden source-file patch proposal/apply beyond exact text hunks and harden
    rollback revalidation/recovery.
+2. Extend the bounded agent loop with richer read/search tool choices and
+   pause/abort/resume controls.
 3. Implement request-change revision from full diff review.
 4. Polish `10a` with durable file-level decisions and exact split-diff behavior.
 5. Add `32a` chat-to-task polish once the live run works.

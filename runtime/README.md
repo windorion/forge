@@ -27,6 +27,7 @@ This first slice is intentionally small:
 - `POST /tasks/:taskID/generate-plan-revision`
 - `POST /tasks/:taskID/approve-plan`
 - `POST /tasks/:taskID/run-agent-step`
+- `POST /tasks/:taskID/run-agent-loop`
 - `POST /tasks/:taskID/generate-edit-proposal`
 - `POST /tasks/:taskID/revise-edit-proposal`
 - `POST /tasks/:taskID/generate-validation-repair-proposal`
@@ -114,8 +115,16 @@ manual endpoints. The current action enum can generate an edit proposal, run
 an approved task command, generate a validation repair proposal, rerun reviewed
 self-fix evidence, wait for human review, or request plan approval. Every
 decision is stored in `agentRunSteps` with provider metadata, rationale,
-status, linked target IDs, result summaries, and timestamps. This is one step
-at a time; it is not yet a continuous autonomous loop.
+status, linked target IDs, result summaries, and timestamps. This endpoint is
+one step at a time; the bounded loop endpoint chains the same safe boundary.
+
+`POST /tasks/:taskID/run-agent-loop` wraps the same runtime-owned step
+boundary in a bounded loop. The request can include `maxSteps` from 1 to 8 and
+an optional `preferredCommandID` for already-runnable command steps. The loop
+records `agentRunLoops`, links each step by ID, and stops at edit-proposal
+review gates, passed commands, verified self-fix reruns, blocked/failed
+steps, busy-task guards, no-progress guards, or max-step protection. It does
+not add new permissions and does not apply patches automatically.
 
 OpenAI-backed edit proposals can include multiple file changes and
 preview-only unsupported operations. Unsupported changes are kept as review

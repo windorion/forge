@@ -877,6 +877,7 @@ private struct AgentLogTab: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 TaskConversationPanel(task: task)
+                AgentRunLoopPanel(task: task)
                 AgentRunStepPanel(task: task)
                 ContextPanel(task: task)
                 ToolCallPanel(task: task)
@@ -885,6 +886,87 @@ private struct AgentLogTab: View {
             .padding(14)
         }
         .forgeCard(shadow: false)
+    }
+}
+
+private struct AgentRunLoopPanel: View {
+    var task: ForgeTask
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack {
+                Text("AGENT LOOPS")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(ForgeDesign.muted)
+                Spacer()
+                Text("\(task.agentRunLoops.count)")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(ForgeDesign.muted)
+            }
+
+            if task.agentRunLoops.isEmpty {
+                Text("Bounded multi-step runs will appear here after the agent starts looping through safe actions.")
+                    .font(.caption)
+                    .foregroundStyle(ForgeDesign.muted)
+            } else {
+                ForEach(task.agentRunLoops.reversed().prefix(4)) { loop in
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Label(loop.status, systemImage: statusSystemImage(loop.status))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(statusColor(loop.status))
+                            Spacer(minLength: 8)
+                            Text("\(loop.stepsRun)/\(loop.maxSteps)")
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Text(loop.summary)
+                            .font(.caption)
+                            .foregroundStyle(ForgeDesign.ink)
+                        if let stopReason = loop.stopReason {
+                            Text(stopReason)
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(ForgeDesign.muted)
+                        }
+                        Text(loop.completedAt ?? loop.startedAt)
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(10)
+                    .background(Color.white)
+                    .overlay(Rectangle().stroke(ForgeDesign.divider, lineWidth: 1))
+                }
+            }
+        }
+        .padding(12)
+        .forgeCard()
+    }
+
+    private func statusSystemImage(_ status: String) -> String {
+        switch status {
+        case "Completed":
+            return "checkmark.circle"
+        case "Paused":
+            return "pause.circle"
+        case "Failed":
+            return "exclamationmark.triangle"
+        default:
+            return "sparkles"
+        }
+    }
+
+    private func statusColor(_ status: String) -> Color {
+        switch status {
+        case "Completed":
+            return ForgeDesign.success
+        case "Paused":
+            return ForgeDesign.warning
+        case "Failed":
+            return ForgeDesign.danger
+        default:
+            return ForgeDesign.accent
+        }
     }
 }
 
@@ -2025,12 +2107,21 @@ private struct AgentRunActionsCard: View {
                 .foregroundStyle(ForgeDesign.muted)
 
             Button {
+                workspace.runAgentLoop(for: task, preferredCommandID: selectedTaskCommandPermission?.command.id, maxSteps: 4)
+            } label: {
+                Label(runAgentLoopTitle, systemImage: "repeat")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.accent, foreground: ForgeDesign.ink))
+            .disabled(!canRunAgentLoop)
+
+            Button {
                 workspace.runAgentStep(for: task, preferredCommandID: selectedTaskCommandPermission?.command.id)
             } label: {
                 Label(runAgentStepTitle, systemImage: "sparkles")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(ForgePrimaryButtonStyle())
+            .buttonStyle(ForgeSecondaryButtonStyle())
             .disabled(!canRunAgentStep)
 
             Button {
@@ -2093,7 +2184,7 @@ private struct AgentRunActionsCard: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(ForgeSecondaryButtonStyle())
-            .disabled(taskCommandPermissions.isEmpty || isRunningTaskCommand || isCancellingTaskCommand || isRerunningRepairCommand || isRunningAgentStep)
+            .disabled(taskCommandPermissions.isEmpty || isRunningTaskCommand || isCancellingTaskCommand || isRerunningRepairCommand || isRunningAgentActivity)
 
             if let selectedTaskCommandPermission {
                 Text(selectedTaskCommandPermission.command.command)
@@ -2190,8 +2281,16 @@ private struct AgentRunActionsCard: View {
         workspace.isRunningTaskCommand(taskID: task.id)
     }
 
+    private var isRunningAgentLoop: Bool {
+        workspace.isRunningAgentLoop(taskID: task.id)
+    }
+
     private var isRunningAgentStep: Bool {
         workspace.isRunningAgentStep(taskID: task.id)
+    }
+
+    private var isRunningAgentActivity: Bool {
+        isRunningAgentLoop || isRunningAgentStep
     }
 
     private var latestCommandRerunEvidence: CommandRerunEvidence? {
@@ -2243,7 +2342,7 @@ private struct AgentRunActionsCard: View {
 
         return selectedTaskCommandPermission.canRun &&
             task.status != "Testing" &&
-            !isRunningAgentStep &&
+            !isRunningAgentActivity &&
             !isRunningTaskCommand &&
             !isRunningValidation &&
             !isRollingBackEditProposal &&
@@ -2305,7 +2404,7 @@ private struct AgentRunActionsCard: View {
             !isApplyingEditProposal &&
             !isRollingBackEditProposal &&
             !isRejectingEditProposal &&
-            !isRunningAgentStep &&
+            !isRunningAgentActivity &&
             !isRunningTaskCommand &&
             !isCancellingTaskCommand &&
             !isRerunningRepairCommand
@@ -2331,7 +2430,7 @@ private struct AgentRunActionsCard: View {
             !isRollingBackEditProposal &&
             !isGeneratingValidationRepairProposal &&
             !isRejectingEditProposal &&
-            !isRunningAgentStep &&
+            !isRunningAgentActivity &&
             !isRunningTaskCommand &&
             !isCancellingTaskCommand &&
             !isRerunningRepairCommand
@@ -2349,7 +2448,7 @@ private struct AgentRunActionsCard: View {
             !isRollingBackEditProposal &&
             !isGeneratingValidationRepairProposal &&
             !isRejectingEditProposal &&
-            !isRunningAgentStep &&
+            !isRunningAgentActivity &&
             !isRunningTaskCommand &&
             !isCancellingTaskCommand &&
             !isRerunningRepairCommand
@@ -2371,7 +2470,7 @@ private struct AgentRunActionsCard: View {
             !isApplyingEditProposal &&
             !isRollingBackEditProposal &&
             !isGeneratingValidationRepairProposal &&
-            !isRunningAgentStep &&
+            !isRunningAgentActivity &&
             !isRunningTaskCommand &&
             !isCancellingTaskCommand &&
             !isRerunningRepairCommand
@@ -2393,7 +2492,7 @@ private struct AgentRunActionsCard: View {
             !isRollingBackEditProposal &&
             !isGeneratingValidationRepairProposal &&
             !isRejectingEditProposal &&
-            !isRunningAgentStep &&
+            !isRunningAgentActivity &&
             !isRunningTaskCommand &&
             !isCancellingTaskCommand &&
             !isRerunningRepairCommand
@@ -2409,7 +2508,7 @@ private struct AgentRunActionsCard: View {
             !isRunningValidation &&
             !isRollingBackEditProposal &&
             !isGeneratingValidationRepairProposal &&
-            !isRunningAgentStep &&
+            !isRunningAgentActivity &&
             !isRunningTaskCommand &&
             !isCancellingTaskCommand &&
             !isRerunningRepairCommand
@@ -2478,7 +2577,7 @@ private struct AgentRunActionsCard: View {
             !isApplyingEditProposal &&
             !isRejectingEditProposal &&
             !isRunningValidation &&
-            !isRunningAgentStep &&
+            !isRunningAgentActivity &&
             !isRunningTaskCommand &&
             !isCancellingTaskCommand &&
             !isRerunningRepairCommand
@@ -2505,7 +2604,7 @@ private struct AgentRunActionsCard: View {
             !isRollingBackEditProposal &&
             !isGeneratingValidationRepairProposal &&
             !isGeneratingEditProposal &&
-            !isRunningAgentStep
+            !isRunningAgentActivity
     }
 
     private var rerunRepairCommandTitle: String {
@@ -2533,7 +2632,7 @@ private struct AgentRunActionsCard: View {
         hasAgentStepCandidate &&
             task.status != "Testing" &&
             task.editProposal?.status != "Proposed" &&
-            !isRunningAgentStep &&
+            !isRunningAgentActivity &&
             !isGeneratingEditProposal &&
             !isGeneratingValidationRepairProposal &&
             !isValidatingEditProposal &&
@@ -2546,6 +2645,10 @@ private struct AgentRunActionsCard: View {
             !isRerunningRepairCommand
     }
 
+    private var canRunAgentLoop: Bool {
+        canRunAgentStep
+    }
+
     private var hasAgentStepCandidate: Bool {
         task.executionProposal != nil ||
             latestRunnableCommandRerunEvidence != nil ||
@@ -2553,8 +2656,8 @@ private struct AgentRunActionsCard: View {
     }
 
     private var runAgentStepTitle: String {
-        if isRunningAgentStep {
-            return "Agent Working"
+        if isRunningAgentActivity {
+            return "Agent Busy"
         }
         if task.editProposal?.status == "Proposed" {
             return "Review Proposal First"
@@ -2563,6 +2666,19 @@ private struct AgentRunActionsCard: View {
             return "Approve Plan First"
         }
         return "Run Agent Step"
+    }
+
+    private var runAgentLoopTitle: String {
+        if isRunningAgentLoop {
+            return "Agent Looping"
+        }
+        if task.editProposal?.status == "Proposed" {
+            return "Review Proposal First"
+        }
+        if !hasAgentStepCandidate {
+            return "Approve Plan First"
+        }
+        return "Run Agent Loop"
     }
 }
 

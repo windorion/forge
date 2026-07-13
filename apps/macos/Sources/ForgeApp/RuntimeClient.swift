@@ -484,6 +484,23 @@ struct RuntimeClient {
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
 
+    func runAgentLoop(taskID: ForgeTask.ID, preferredCommandID: String? = nil, maxSteps: Int? = nil) async throws -> ForgeTask {
+        let url = baseURL
+            .appending(path: "tasks")
+            .appending(path: taskID)
+            .appending(path: "run-agent-loop")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(
+            RunAgentLoopRequest(preferredCommandID: preferredCommandID, maxSteps: maxSteps)
+        )
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response, data: data)
+        return try JSONDecoder().decode(ForgeTask.self, from: data)
+    }
+
     func rerunRepairCommand(
         taskID: ForgeTask.ID,
         commandRerunEvidenceID: CommandRerunEvidence.ID?

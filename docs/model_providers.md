@@ -45,6 +45,8 @@ from current task state: rerun reviewed self-fix evidence, generate a repair
 proposal from the latest repair brief, wait for human review, generate the
 next edit proposal from an execution proposal, run the first approved command
 after an applied proposal, or request plan approval.
+Agent Run Loop v0 is runtime-owned; the provider still chooses one step at a
+time and never receives permission to execute tools directly.
 
 The optional OpenAI provider:
 
@@ -75,6 +77,9 @@ review, or request plan approval. The runtime still generates IDs, timestamps,
 validation state, execution proposal evidence, command execution, and
 restricted apply operations locally. The remote provider never directly edits
 files, runs commands, commits, pushes, or executes tools.
+Agent Run Loop v0 repeats these provider step decisions under runtime-owned
+stop conditions; the provider does not control the loop counter or bypass
+review gates.
 
 ## Configuration
 

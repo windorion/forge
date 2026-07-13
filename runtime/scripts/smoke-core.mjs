@@ -86,6 +86,7 @@ try {
   });
   const openAIContextTask = await runOpenAIContextFlow();
   const openAIAgentRunStepTask = await runOpenAIAgentRunStepFlow();
+  const openAIAgentRunLoopTask = await runOpenAIAgentRunLoopFlow();
   const openAIAutoRepairTask = await runOpenAIAutoRepairFlow();
   const openAIValidationRepairTask = await runOpenAIValidationFailureRepairFlow();
   const openAITaskCommandRepairTask = await runOpenAITaskCommandFailureRepairFlow();
@@ -101,6 +102,7 @@ try {
   console.log(`- Cancelled task command task: ${cancelledTaskCommandTask.id}`);
   console.log(`- OpenAI context task: ${openAIContextTask.id}`);
   console.log(`- OpenAI agent run step task: ${openAIAgentRunStepTask.id}`);
+  console.log(`- OpenAI agent run loop task: ${openAIAgentRunLoopTask.id}`);
   console.log(`- OpenAI auto-repair task: ${openAIAutoRepairTask.id}`);
   console.log(`- OpenAI validation repair task: ${openAIValidationRepairTask.id}`);
   console.log(`- OpenAI task command repair task: ${openAITaskCommandRepairTask.id}`);
@@ -747,6 +749,104 @@ async function runOpenAIAgentRunStepFlow() {
   return current;
 }
 
+async function runOpenAIAgentRunLoopFlow() {
+  const task = await createTask({
+    title: "Smoke OpenAI agent run loop",
+    objective: `Run an agent run loop smoke against @${appendSmokePath}.`
+  });
+
+  await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "OpenAI agent run loop task to reach initial plan review"
+  );
+
+  let current = await post(`/tasks/${task.id}/approve-plan`, {
+    note: "Core smoke test approves the agent run loop plan."
+  });
+  assert(current.executionProposal, "OpenAI agent run loop flow did not create an execution proposal.");
+
+  const proposalLoop = await collectRuntimeEventsDuring(
+    () => post(`/tasks/${task.id}/run-agent-loop`, { maxSteps: 4 }),
+    (event, result) => event.type === "agent.run_loop.paused" && event.data?.taskID === result.id
+  );
+  current = proposalLoop.result;
+  assertState(current, "Human Review", "Edit Proposal Review");
+  assert(current.editProposal?.status === "Proposed", "Agent run loop did not create an edit proposal.");
+  const firstLoop = current.agentRunLoops?.at(-1);
+  assert(firstLoop?.status === "Paused", `Expected first agent loop Paused, got ${firstLoop?.status}.`);
+  assert(firstLoop.stopReason === "HumanReviewRequired", `Expected HumanReviewRequired, got ${firstLoop.stopReason}.`);
+  assert(firstLoop.stepsRun === 1, `Expected one loop step before proposal review, got ${firstLoop.stepsRun}.`);
+  const firstLoopStep = current.agentRunSteps?.find((step) => step.id === firstLoop.stepIDs.at(-1));
+  assert(firstLoopStep?.action === "GenerateEditProposal", `Expected loop GenerateEditProposal, got ${firstLoopStep?.action}.`);
+  assert(firstLoopStep.loopID === firstLoop.id, "Agent loop did not link its generated proposal step.");
+  assert(
+    proposalLoop.events.some((event) => event.type === "agent.run_loop.started" && event.data?.taskID === current.id),
+    "Agent run loop did not stream the started event for proposal loop."
+  );
+  assert(
+    proposalLoop.events.some((event) => event.type === "agent.run_loop.paused" && event.data?.taskID === current.id),
+    "Agent run loop did not stream the paused event for proposal loop."
+  );
+
+  current = await post(`/tasks/${task.id}/apply-edit-proposal`, {
+    note: "Core smoke test applies the loop-generated proposal."
+  });
+  assertCompletedTask(current, appendSmokePath);
+
+  current = await post(`/tasks/${task.id}/approve-validation-preset`, {
+    presetID: "runtime-typescript",
+    note: "Core smoke test approves the agent loop runtime command."
+  });
+  assert(
+    current.approvals?.some((approval) => approval.action === "Approve Validation Preset" && approval.targetID === "runtime-typescript"),
+    "Agent run loop flow did not approve the runtime-typescript preset."
+  );
+
+  const brokenPath = join(repoRoot, brokenTypeScriptSmokePath);
+  await mkdir(dirname(brokenPath), { recursive: true });
+  await writeFile(brokenPath, "export const forgeSmokeBroken: string = ;\n", "utf8");
+
+  const repairLoop = await collectRuntimeEventsDuring(
+    () => post(`/tasks/${task.id}/run-agent-loop`, {
+      preferredCommandID: "runtime-npm-check",
+      maxSteps: 4
+    }),
+    (event, result) => event.type === "agent.run_loop.paused" && event.data?.taskID === result.id
+  );
+  current = repairLoop.result;
+  assertState(current, "Human Review", "Edit Proposal Review");
+  const secondLoop = current.agentRunLoops?.at(-1);
+  assert(secondLoop?.status === "Paused", `Expected repair loop Paused, got ${secondLoop?.status}.`);
+  assert(secondLoop.stopReason === "HumanReviewRequired", `Expected repair loop HumanReviewRequired, got ${secondLoop.stopReason}.`);
+  assert(secondLoop.stepsRun === 2, `Expected repair loop to run command and repair proposal, got ${secondLoop.stepsRun}.`);
+  const loopSteps = secondLoop.stepIDs.map((id) => current.agentRunSteps?.find((step) => step.id === id));
+  assert(loopSteps[0]?.action === "RunTaskCommand", `Expected first repair loop action RunTaskCommand, got ${loopSteps[0]?.action}.`);
+  assert(loopSteps[1]?.action === "GenerateValidationRepairProposal", `Expected second repair loop action GenerateValidationRepairProposal, got ${loopSteps[1]?.action}.`);
+  assert(loopSteps.every((step) => step?.loopID === secondLoop.id), "Repair loop steps did not retain the loop id.");
+  const failedCommandRun = current.taskCommandRuns?.at(-1);
+  assert(failedCommandRun?.status === "Failed", "Repair loop did not record the failed runtime command.");
+  const repairBrief = current.validationRepairBriefs?.at(-1);
+  assert(repairBrief?.taskCommandRunID === failedCommandRun.id, "Repair loop did not create a task-command repair brief.");
+  assert(current.editProposal?.validationRepairBriefID === repairBrief.id, "Repair loop did not link the generated self-fix proposal.");
+  assert(
+    current.editProposal.fileChanges?.some((change) =>
+      change.path === brokenTypeScriptSmokePath && change.applyOperation?.kind === "ReplaceText"
+    ),
+    "Repair loop proposal did not include the expected broken TypeScript replacement."
+  );
+  assert(
+    repairLoop.events.some((event) => event.type === "task.command.completed" && event.data?.taskID === current.id),
+    "Agent repair loop did not stream nested command completion."
+  );
+  assert(
+    repairLoop.events.some((event) => event.type === "agent.run_loop.paused" && event.data?.taskID === current.id),
+    "Agent repair loop did not stream the paused event."
+  );
+
+  return current;
+}
+
 async function runOpenAIPreviewBlockedFlow() {
   const task = await createTask({
     title: "Smoke preview-only blocked proposal",
@@ -1109,6 +1209,10 @@ async function assertRuntimeDiagnosticsAndSettings() {
   assert(
     home.includes("POST /tasks/:taskID/run-agent-step"),
     "Runtime home page did not link the agent run step endpoint."
+  );
+  assert(
+    home.includes("POST /tasks/:taskID/run-agent-loop"),
+    "Runtime home page did not link the agent run loop endpoint."
   );
 
   const initialHealth = await get("/health");
@@ -1763,6 +1867,36 @@ function mockOpenAIOutput(name, requests, body) {
   }
 
   if (name === "forge_agent_run_step") {
+    if (bodyText.includes("agent run loop smoke")) {
+      if (bodyText.includes("Command Failed")) {
+        return {
+          action: "GenerateValidationRepairProposal",
+          summary: "Generate a reviewed self-fix proposal from the failed command output.",
+          rationale: "The approved runtime command failed and the runtime produced a repair brief.",
+          commandID: "",
+          commandRerunEvidenceID: ""
+        };
+      }
+
+      if (bodyText.includes("Applied")) {
+        return {
+          action: "RunTaskCommand",
+          summary: "Run the approved TypeScript/runtime check from the loop.",
+          rationale: "The reviewed loop proposal has been applied and runtime-typescript is approved.",
+          commandID: "runtime-npm-check",
+          commandRerunEvidenceID: ""
+        };
+      }
+
+      return {
+        action: "GenerateEditProposal",
+        summary: "Generate the first loop-managed implementation proposal.",
+        rationale: "The plan has been approved and no proposal is waiting for review.",
+        commandID: "",
+        commandRerunEvidenceID: ""
+      };
+    }
+
     const runStepCount = requests.filter((request) => request.name === "forge_agent_run_step").length;
     if (runStepCount === 1) {
       return {
@@ -1794,6 +1928,20 @@ function mockOpenAIOutput(name, requests, body) {
   }
 
   if (name === "forge_validation_repair_brief") {
+    if (bodyText.includes("agent run loop")) {
+      return {
+        summary: "Agent run loop smoke command repair: runtime type-check failed on the temporary syntax fixture.",
+        likelyCause: "The loop-created task command output reports a TypeScript syntax error in the temporary smoke fixture.",
+        recommendedActions: [
+          "Replace the invalid TypeScript assignment with a fixed string literal.",
+          "Keep the repair as a review-only proposal.",
+          "Rerun the approved runtime-typescript command after the repair is applied."
+        ],
+        followUpPrompt: "Agent run loop smoke command repair: fix the temporary TypeScript syntax fixture, then rerun runtime-npm-check.",
+        riskLevel: "Medium"
+      };
+    }
+
     return {
       summary: "Runtime TypeScript validation failed after the reviewed edit; inspect the temporary syntax error before retrying.",
       likelyCause: "The validation output reports a TypeScript syntax error in the temporary smoke fixture.",
@@ -1808,6 +1956,60 @@ function mockOpenAIOutput(name, requests, body) {
   }
 
   if (name === "forge_edit_proposal") {
+    if (bodyText.includes("Agent run loop smoke command repair")) {
+      return {
+        summary: "Fix the broken TypeScript fixture from the agent run loop command failure.",
+        riskLevel: "Medium",
+        fileChanges: [
+          {
+            path: brokenTypeScriptSmokePath,
+            changeType: "Modify",
+            rationale: "The agent loop repair brief points to a syntax error in this temporary TypeScript fixture.",
+            diffPreview: [
+              `--- a/${brokenTypeScriptSmokePath}`,
+              `+++ b/${brokenTypeScriptSmokePath}`,
+              "@@ agent loop command repair @@",
+              "-export const forgeSmokeBroken: string = ;",
+              "+export const forgeSmokeBroken: string = \"fixed\";"
+            ].join("\n"),
+            operationKind: "ReplaceText",
+            appendText: "",
+            findText: "export const forgeSmokeBroken: string = ;\n",
+            replaceWith: "export const forgeSmokeBroken: string = \"fixed\";\n",
+            content: ""
+          }
+        ]
+      };
+    }
+
+    if (bodyText.includes("agent run loop smoke") && !bodyText.includes("TaskCommandRun")) {
+      return {
+        summary: "Propose the implementation selected by the agent run loop.",
+        riskLevel: "Low",
+        fileChanges: [
+          {
+            path: appendSmokePath,
+            changeType: "Modify",
+            rationale: "Add a distinct note proving the provider-selected loop can generate a reviewed edit.",
+            diffPreview: [
+              `--- a/${appendSmokePath}`,
+              `+++ b/${appendSmokePath}`,
+              "@@ agent run loop append @@",
+              "+",
+              "+## OpenAI Agent Run Loop Smoke",
+              "+",
+              "+- Generated a reviewed proposal from a provider-selected bounded loop."
+            ].join("\n"),
+            operationKind: "AppendText",
+            appendText: "\n## OpenAI Agent Run Loop Smoke\n\n- Generated a reviewed proposal from a provider-selected bounded loop.\n",
+            findText: "",
+            replaceWith: "",
+            content: ""
+          }
+        ]
+      };
+    }
+
     if (bodyText.includes("agent run step smoke")) {
       return {
         summary: "Propose the implementation selected by the agent run step.",
@@ -1837,7 +2039,7 @@ function mockOpenAIOutput(name, requests, body) {
     }
 
     if (bodyText.includes("validation failure repair brief") || bodyText.includes("Validation repair brief")) {
-      if (bodyText.includes("TaskCommandRun")) {
+      if (bodyText.includes("TaskCommandRun") || bodyText.includes("taskCommandRunID")) {
         return {
           summary: "Fix the broken TypeScript fixture from the failed task command.",
           riskLevel: "Medium",

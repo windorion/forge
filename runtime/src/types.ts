@@ -166,6 +166,7 @@ export interface AgentRunStepDecision {
 export interface AgentRunStep {
   id: string;
   provider: ModelProviderInfo;
+  loopID?: string;
   action: AgentRunStepAction;
   status: "Running" | "Completed" | "Blocked" | "Failed";
   summary: string;
@@ -177,6 +178,29 @@ export interface AgentRunStep {
   resultSummary?: string;
   error?: string;
   createdAt: string;
+  completedAt?: string;
+}
+
+export type AgentRunLoopStopReason =
+  | "HumanReviewRequired"
+  | "CommandPassed"
+  | "RepairVerified"
+  | "StepBlocked"
+  | "StepFailed"
+  | "MaxStepsReached"
+  | "TaskBusy"
+  | "NoProgress";
+
+export interface AgentRunLoop {
+  id: string;
+  provider: ModelProviderInfo;
+  status: "Running" | "Completed" | "Paused" | "Failed";
+  maxSteps: number;
+  stepsRun: number;
+  stepIDs: string[];
+  stopReason?: AgentRunLoopStopReason;
+  summary: string;
+  startedAt: string;
   completedAt?: string;
 }
 
@@ -790,6 +814,7 @@ export interface ForgeTask {
   events: RuntimeEvent[];
   approvals: ApprovalRecord[];
   toolCalls: ToolCall[];
+  agentRunLoops: AgentRunLoop[];
   agentRunSteps: AgentRunStep[];
   taskCommandRuns: TaskCommandRun[];
   commandRerunEvidence: CommandRerunEvidence[];
@@ -829,6 +854,11 @@ export interface RunTaskCommandRequest {
 
 export interface RunAgentStepRequest {
   preferredCommandID?: string;
+}
+
+export interface RunAgentLoopRequest {
+  preferredCommandID?: string;
+  maxSteps?: number;
 }
 
 export interface CancelTaskCommandRequest {

@@ -432,10 +432,30 @@ command target, result, error, and timestamps. The runtime emits
 `agent.run_step.blocked`, or `agent.run_step.failed`, so the macOS Log tab can
 show a chronological decision trail.
 
-This runner intentionally performs one step per request. The next architecture
-step is to wrap it in a bounded continuous loop with explicit stop conditions,
-pause/abort/resume controls, and richer read/search/patch tool choices while
-preserving the same runtime-owned safety gates.
+This runner intentionally performs one step per request so the same boundary
+can be reused by manual actions, smoke tests, and the bounded loop.
+
+### Agent Run Loop
+
+Agent Run Loop v0 wraps Agent Run Step with a runtime-enforced `maxSteps`
+limit. The endpoint `POST /tasks/:taskID/run-agent-loop` accepts an optional
+`preferredCommandID` and optional `maxSteps` between 1 and 8. The loop creates
+an `AgentRunLoop` record, invokes provider-selected steps, links each step ID
+back to the loop, and stops at explicit safe conditions:
+
+- human review required for a proposed edit
+- approved command passed
+- reviewed self-fix rerun passed
+- step blocked or failed
+- task already busy with validation or a command
+- no progress recorded
+- max-step limit reached
+
+The loop does not introduce new tool permissions. It reuses `run-agent-step`
+and therefore inherits the same command catalog, approval, repair brief,
+rerun-evidence, validation, and review gates. The next architecture step is to
+add pause/abort/resume controls and richer read/search/patch tool choices
+inside the same runtime-owned safety model.
 
 ### Permission Manager
 

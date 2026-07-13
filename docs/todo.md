@@ -30,9 +30,8 @@ dashboard.
 
 ## P1: Real Agent Behavior
 
-- Extend Agent Run Step v0 into a continuous bounded read/search/patch/run/
-  repair loop with stop conditions, pause/abort/resume, and visible live-run
-  progress.
+- Extend the bounded Agent Run Loop with richer runtime-owned read/search tool
+  choices, pause/abort/resume controls, and visible stuck-task recovery.
 - Extend the bounded read-only planning/execution context loops into a
   runtime-owned tool-call loop with strict allowed tools and stop conditions.
 - Add stricter model output normalization, retry rules, and failure recovery
@@ -91,6 +90,14 @@ dashboard.
 
 ## Done Recently
 
+- Added bounded Agent Run Loop v0. `POST /tasks/:taskID/run-agent-loop`
+  repeatedly runs provider-selected safe steps up to a runtime-enforced limit,
+  links each step to an `AgentRunLoop`, and stops at review gates, passed
+  commands, verified self-fix reruns, blocked/failed steps, busy-task guards,
+  no-progress guards, or max-step protection. The macOS action rail now has
+  `Run Agent Loop`, the Log tab shows loop status/stop reason/step counts, and
+  `npm run smoke:core` covers proposal generation plus command failure ->
+  repair brief -> self-fix proposal inside one loop.
 - Added provider-selected Agent Run Step v0. `POST
   /tasks/:taskID/run-agent-step` asks the active model provider for one safe
   next action, then the runtime enforces existing gates while it generates an

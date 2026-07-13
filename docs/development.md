@@ -31,22 +31,23 @@ The latest slice adds Agent Run Step v0: the runtime can ask the active model
 provider for one safe next action, then enforce existing gates while it
 generates an edit proposal, runs an approved task command, generates a
 validation repair proposal, reruns reviewed self-fix evidence, or pauses for
-human review.
+human review. Agent Run Loop v0 wraps that step runner with a small
+runtime-enforced step limit and safe stop reasons.
 
 The runtime core has an automated smoke regression that exercises the main
 task lifecycle without using real project memory or provider settings.
 
 Product-direction note: this development slice now has the first real
-provider-selected agent step, but it still is not a full Codex/Claude Code
-style autonomous loop. The next app/runtime work should make the local
-walkthrough feel continuous: repeated read/search/patch/run/repair steps,
-source patches, streamed tests, self-fix, and full diff review.
+provider-selected bounded loop, but it still is not a full Codex/Claude Code
+style autonomous agent. The next app/runtime work should make the local
+walkthrough stronger with richer read/search choices, broader source patches,
+pause/abort/resume, self-fix, and full diff review.
 
 The macOS app now has a first-pass coding-agent session shell: a task queue,
 `1a`-style empty composer, live agent stream, plan progress strip,
-Log/Diff/Tests tabs, compact plan gate, and action rail. The runtime still
-needs continuous agent-step orchestration and broader source patching before
-the shell behaves like the finished V0.
+Log/Diff/Tests tabs, compact plan gate, and action rail. The first continuous
+orchestration slice is now present; broader source patching and richer loop
+controls remain the main gap before the shell behaves like the finished V0.
 
 The shell also includes a first usable `10a`-style full-screen diff review
 surface. It opens from the Diff tab or review state card, shows a file tree,
@@ -367,10 +368,11 @@ action rail exposes `Rerun Self-Fix`. That action calls
 ID through the same approval/cwd/no-shell path, attaches the new command run to
 the evidence, and moves the task to `Repair Verified` when it passes.
 
-The action rail also exposes Agent Run Step v0:
+The action rail exposes Agent Run Step v0 and Agent Run Loop v0:
 
 ```text
 POST /tasks/:taskID/run-agent-step
+POST /tasks/:taskID/run-agent-loop
 ```
 
 The request can include an optional `preferredCommandID`, but the runtime only
@@ -386,10 +388,14 @@ rerun evidence IDs, linked proposal/command target, status, result, and
 timestamps. SSE emits `agent.run_step.started`, `agent.run_step.completed`,
 `agent.run_step.blocked`, or `agent.run_step.failed`.
 
-This is the first provider-driven normal run path, but it is intentionally one
-step at a time. A complete V0 agent still needs a continuous bounded loop over
-these same actions with clearer stop conditions, pause/resume/abort, and richer
-read/search/patch tool choices.
+`run-agent-loop` repeatedly invokes the same step boundary up to a bounded
+`maxSteps` value. It stops at edit-proposal review gates, passed commands,
+verified self-fix reruns, blocked/failed steps, busy-task guards, no-progress
+guards, or max-step protection. It does not add new permissions; it only
+chains existing step actions until the runtime reaches a safe stop. A complete
+V0 agent still needs pause/resume/abort and richer read/search/patch tool
+choices.
+choices.
 
 Current validation presets:
 
@@ -471,6 +477,9 @@ It covers:
 - mock OpenAI plan-context loop before a plan revision
 - mock OpenAI provider-selected agent run step that generates a proposal, then
   another step that runs an approved runtime command
+- mock OpenAI bounded agent run loop that generates a proposal, applies it
+  after review, then runs an approved command, creates a repair brief from the
+  failed command, and generates a self-fix proposal inside one loop
 - read-only branch, branch-publish, commit, push, and PR handoff preview
   endpoints plus stale-head rejection checks for high-risk git actions
 - commit preview preflight metadata for author identity, staged/unstaged/
@@ -570,6 +579,7 @@ cd runtime && npm run smoke:git-remote
   index. It does not use Tree-sitter, symbols, embeddings, dependency graphs,
   or semantic search yet.
 - Agent Loop v0 is still bounded and proposal-first. It now gathers read-only
-  context before planning and before execution proposals, and Agent Run Step v0
-  can choose one safe proposal/command/repair action at a time. It still does
-  not run a continuous autonomous write/command/git loop.
+  context before planning and before execution proposals. Agent Run Step v0
+  can choose one safe proposal/command/repair action at a time, and Agent Run
+  Loop v0 can chain those actions until a safe stop condition. It still does
+  not provide arbitrary autonomous write/command/git execution.

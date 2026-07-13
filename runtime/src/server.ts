@@ -14,6 +14,7 @@ import {
 } from "./modelProvider.js";
 import { SqliteTaskStore } from "./taskStore.js";
 import type {
+  AgentRunLoop,
   AgentRunStep,
   AgentRunStepDecision,
   AgentState,
@@ -54,6 +55,7 @@ import type {
   ProposedFileChange,
   RuntimeEvent,
   RerunRepairCommandRequest,
+  RunAgentLoopRequest,
   RunAgentStepRequest,
   RunTaskCommandRequest,
   RunValidationRequest,
@@ -84,6 +86,7 @@ const rollbackSnapshotRoot = path.join(repoRoot, ".forge", "rollback-snapshots")
 const taskStore = new SqliteTaskStore(resolveDatabasePath());
 const tasks = new Map<string, ForgeTask>(taskStore.loadTasks().map((task) => [task.id, task]));
 const activeTaskCommands = new Map<string, ActiveTaskCommand>();
+const activeAgentRunLoopTaskIDs = new Set<string>();
 let modelProviderSettings = loadModelProviderRuntimeSettings();
 let modelProvider = createModelProvider(modelProviderSettings);
 const validationCommandTimeoutMs = 60_000;
@@ -646,6 +649,14 @@ const server = createServer(async (request, response) => {
     if (request.method === "POST" && runAgentStepTaskID) {
       const input = await readJson<RunAgentStepRequest>(request);
       const task = await runAgentStep(runAgentStepTaskID, input);
+      writeJson(response, 200, task);
+      return;
+    }
+
+    const runAgentLoopTaskID = taskIDFromActionPath(url.pathname, "run-agent-loop");
+    if (request.method === "POST" && runAgentLoopTaskID) {
+      const input = await readJson<RunAgentLoopRequest>(request);
+      const task = await runAgentLoop(runAgentLoopTaskID, input);
       writeJson(response, 200, task);
       return;
     }
@@ -4901,6 +4912,7 @@ async function createTask(input: CreateTaskRequest): Promise<ForgeTask> {
     events: [createdEvent],
     approvals: [],
     toolCalls: [],
+    agentRunLoops: [],
     agentRunSteps: [],
     taskCommandRuns: [],
     commandRerunEvidence: [],
@@ -5544,7 +5556,254 @@ async function prepareExecutionContext(
   };
 }
 
-async function runAgentStep(taskID: string, input: RunAgentStepRequest = {}): Promise<ForgeTask> {
+interface RunAgentStepOptions {
+  loopID?: string;
+}
+
+async function runAgentLoop(taskID: string, input: RunAgentLoopRequest = {}): Promise<ForgeTask> {
+  const task = tasks.get(taskID);
+  if (!task) {
+    throw new HttpError(404, `Task not found: ${taskID}`);
+  }
+
+  if (activeAgentRunLoopTaskIDs.has(taskID)) {
+    throw new HttpError(409, "An agent run loop is already active for this task.");
+  }
+
+  if (hasRunningValidationRun(task) || hasRunningTaskCommandRun(task) || task.status === "Testing") {
+    const loop = createAgentRunLoop(task, input, "Task is currently busy.");
+    return finishAgentRunLoop(task, loop.id, "Paused", "TaskBusy", "Task is currently running another operation.");
+  }
+
+  const loop = createAgentRunLoop(task, input, "Starting bounded provider-selected agent loop.");
+  activeAgentRunLoopTaskIDs.add(taskID);
+  try {
+    saveAndBroadcast(
+      task,
+      withCreatedAt(event("agent.run_loop.started", `Agent loop started with up to ${loop.maxSteps} step(s).`), loop.startedAt)
+    );
+
+    let current = task;
+    for (let index = 0; index < loop.maxSteps; index += 1) {
+      const beforeStepIDs = new Set(current.agentRunSteps.map((step) => step.id));
+      current = await runAgentStep(taskID, { preferredCommandID: input.preferredCommandID }, { loopID: loop.id });
+      const updatedLoop = requireAgentRunLoop(current, loop.id);
+      const newSteps = current.agentRunSteps.filter((step) => !beforeStepIDs.has(step.id));
+      for (const step of newSteps) {
+        if (!updatedLoop.stepIDs.includes(step.id)) {
+          updatedLoop.stepIDs.push(step.id);
+        }
+      }
+      updatedLoop.stepsRun = updatedLoop.stepIDs.length;
+      updatedLoop.summary = summarizeAgentRunLoopProgress(current, updatedLoop);
+
+      const stop = agentRunLoopStopAfterStep(current, newSteps.at(-1));
+      if (stop) {
+        return finishAgentRunLoop(current, loop.id, stop.status, stop.reason, stop.summary);
+      }
+    }
+
+    return finishAgentRunLoop(
+      current,
+      loop.id,
+      "Paused",
+      "MaxStepsReached",
+      `Agent loop paused after reaching the ${loop.maxSteps}-step limit.`
+    );
+  } catch (error) {
+    const failedTask = requireTask(taskID);
+    return finishAgentRunLoop(
+      failedTask,
+      loop.id,
+      "Failed",
+      "StepFailed",
+      error instanceof Error ? error.message : String(error)
+    );
+  } finally {
+    activeAgentRunLoopTaskIDs.delete(taskID);
+  }
+}
+
+function createAgentRunLoop(task: ForgeTask, input: RunAgentLoopRequest, summary: string): AgentRunLoop {
+  const maxSteps = normalizeAgentRunLoopMaxSteps(input.maxSteps);
+  const loop: AgentRunLoop = {
+    id: randomUUID(),
+    provider: modelProvider.info,
+    status: "Running",
+    maxSteps,
+    stepsRun: 0,
+    stepIDs: [],
+    summary,
+    startedAt: new Date().toISOString()
+  };
+  task.agentRunLoops.push(loop);
+  task.status = "Running";
+  task.currentPhase = "Agent Loop";
+  task.reviewSummary = summary;
+  setAgent(task, "Manager", "Active", "Coordinating a bounded provider-selected run loop.");
+  setAgent(task, "Coder", "Active", "Running safe agent steps until a review gate or stop condition.");
+  setAgent(task, "Reviewer", "Idle", "Waiting for the agent loop stop condition.");
+  upsertPlanStep(task, {
+    id: "run-agent-loop",
+    title: "Run agent loop",
+    status: "Active",
+    summary
+  });
+  return loop;
+}
+
+function normalizeAgentRunLoopMaxSteps(value: unknown): number {
+  if (value === undefined || value === null) {
+    return 4;
+  }
+
+  if (typeof value !== "number" || !Number.isInteger(value)) {
+    throw new HttpError(400, "maxSteps must be an integer.");
+  }
+
+  if (value < 1 || value > 8) {
+    throw new HttpError(400, "maxSteps must be between 1 and 8.");
+  }
+
+  return value;
+}
+
+function agentRunLoopStopAfterStep(
+  task: ForgeTask,
+  step: AgentRunStep | undefined
+): { status: AgentRunLoop["status"]; reason: AgentRunLoop["stopReason"]; summary: string } | undefined {
+  if (!step) {
+    return { status: "Paused", reason: "NoProgress", summary: "Agent loop paused because no step was recorded." };
+  }
+
+  if (step.status === "Failed") {
+    return { status: "Failed", reason: "StepFailed", summary: step.resultSummary ?? step.error ?? "Agent step failed." };
+  }
+
+  if (step.status === "Blocked") {
+    return { status: "Paused", reason: "StepBlocked", summary: step.resultSummary ?? "Agent loop paused at a review gate." };
+  }
+
+  if (task.editProposal?.status === "Proposed") {
+    return {
+      status: "Paused",
+      reason: "HumanReviewRequired",
+      summary: "Agent loop paused with an edit proposal ready for human review."
+    };
+  }
+
+  if (step.action === "RunTaskCommand" && task.currentPhase === "Command Passed") {
+    return { status: "Completed", reason: "CommandPassed", summary: "Agent loop stopped after the approved command passed." };
+  }
+
+  if (step.action === "RunTaskCommand" && task.currentPhase === "Command Cancelled") {
+    return { status: "Paused", reason: "HumanReviewRequired", summary: "Agent loop paused after the command was cancelled." };
+  }
+
+  if (step.action === "RunTaskCommand" && task.currentPhase === "Command Failed" && !latestRepairBriefForTask(task)) {
+    return { status: "Failed", reason: "StepFailed", summary: "Agent loop stopped after a command failed without repair guidance." };
+  }
+
+  if (step.action === "RerunRepairCommand") {
+    if (task.currentPhase === "Repair Verified") {
+      return { status: "Completed", reason: "RepairVerified", summary: "Agent loop stopped after the reviewed self-fix was verified." };
+    }
+
+    return { status: "Paused", reason: "HumanReviewRequired", summary: "Agent loop paused after rerunning self-fix evidence." };
+  }
+
+  return undefined;
+}
+
+function latestRepairBriefForTask(task: ForgeTask): ValidationRepairBrief | undefined {
+  return task.validationRepairBriefs.at(-1);
+}
+
+function summarizeAgentRunLoopProgress(task: ForgeTask, loop: AgentRunLoop): string {
+  const latestStep = loop.stepIDs.at(-1)
+    ? task.agentRunSteps.find((step) => step.id === loop.stepIDs.at(-1))
+    : undefined;
+  if (!latestStep) {
+    return `Agent loop has run ${loop.stepsRun} step(s).`;
+  }
+
+  return `Agent loop ran ${loop.stepsRun} step(s); latest action ${latestStep.action} is ${latestStep.status}.`;
+}
+
+function finishAgentRunLoop(
+  task: ForgeTask,
+  loopID: string,
+  status: AgentRunLoop["status"],
+  stopReason: AgentRunLoop["stopReason"],
+  summary: string
+): ForgeTask {
+  const loop = requireAgentRunLoop(task, loopID);
+  const completedAt = new Date().toISOString();
+  loop.status = status;
+  loop.stopReason = stopReason;
+  loop.summary = summary;
+  loop.completedAt = completedAt;
+  task.reviewSummary = summary;
+  if (status === "Failed") {
+    task.status = "Failed";
+    task.currentPhase = "Agent Loop Failed";
+    setAgent(task, "Manager", "Blocked", summary);
+    setAgent(task, "Coder", "Blocked", "Agent loop failed before reaching a safe stop.");
+    setAgent(task, "Reviewer", "Active", "Review the failed agent loop before continuing.");
+  } else if (status === "Completed") {
+    task.status = "Human Review";
+    task.currentPhase = stopReason === "RepairVerified"
+      ? "Repair Verified"
+      : stopReason === "CommandPassed"
+        ? "Command Passed"
+        : "Agent Loop Complete";
+    setAgent(task, "Manager", "Done", "Agent loop reached a safe completion condition.");
+    setAgent(task, "Coder", "Done", summary);
+    setAgent(task, "Reviewer", "Active", "Review the completed loop output.");
+  } else {
+    task.status = "Human Review";
+    if (stopReason !== "HumanReviewRequired" && stopReason !== "StepBlocked") {
+      task.currentPhase = "Agent Loop Paused";
+    }
+    setAgent(task, "Manager", "Ready", "Agent loop paused at a safe stop condition.");
+    setAgent(task, "Coder", "Idle", summary);
+    setAgent(task, "Reviewer", "Active", "Review the agent loop stop condition before continuing.");
+  }
+  upsertPlanStep(task, {
+    id: "run-agent-loop",
+    title: "Run agent loop",
+    status: status === "Completed" ? "Done" : status === "Failed" ? "Blocked" : "Active",
+    summary
+  });
+
+  const type = status === "Completed"
+    ? "agent.run_loop.completed"
+    : status === "Failed"
+      ? "agent.run_loop.failed"
+      : "agent.run_loop.paused";
+  saveAndBroadcast(task, withCreatedAt(event(type, summary), completedAt));
+  return task;
+}
+
+function requireAgentRunLoop(task: ForgeTask, loopID: string): AgentRunLoop {
+  const loop = task.agentRunLoops.find((candidate) => candidate.id === loopID);
+  if (!loop) {
+    throw new Error(`Agent run loop not found: ${loopID}`);
+  }
+
+  return loop;
+}
+
+function withCreatedAt(runtimeEvent: RuntimeEvent, createdAt: string): RuntimeEvent {
+  runtimeEvent.createdAt = createdAt;
+  return runtimeEvent;
+}
+
+async function runAgentStep(
+  taskID: string,
+  input: RunAgentStepRequest = {},
+  options: RunAgentStepOptions = {}
+): Promise<ForgeTask> {
   const task = tasks.get(taskID);
   if (!task) {
     throw new HttpError(404, `Task not found: ${taskID}`);
@@ -5576,7 +5835,7 @@ async function runAgentStep(taskID: string, input: RunAgentStepRequest = {}): Pr
     decision.commandID = input.preferredCommandID.trim();
   }
 
-  const step = createAgentRunStep(task, decision, taskCommands, runnableRerunEvidence);
+  const step = createAgentRunStep(task, decision, taskCommands, runnableRerunEvidence, options);
   task.status = "Running";
   task.currentPhase = "Agent Step";
   task.reviewSummary = step.summary;
@@ -5601,7 +5860,8 @@ function createAgentRunStep(
   task: ForgeTask,
   decision: AgentRunStepDecision,
   taskCommands: TaskCommandPermission[],
-  commandRerunEvidence: CommandRerunEvidence[]
+  commandRerunEvidence: CommandRerunEvidence[],
+  options: RunAgentStepOptions = {}
 ): AgentRunStep {
   const commandPermission = decision.commandID
     ? taskCommands.find((permission) => permission.command.id === decision.commandID)
@@ -5612,6 +5872,7 @@ function createAgentRunStep(
   const step: AgentRunStep = {
     id: randomUUID(),
     provider: modelProvider.info,
+    loopID: options.loopID,
     action: decision.action,
     status: "Running",
     summary: decision.summary,
@@ -9181,6 +9442,7 @@ function renderRuntimeHome(): string {
       <li><code>POST /tasks/:taskID/generate-plan-revision</code></li>
       <li><code>POST /tasks/:taskID/approve-plan</code></li>
       <li><code>POST /tasks/:taskID/run-agent-step</code></li>
+      <li><code>POST /tasks/:taskID/run-agent-loop</code></li>
       <li><code>POST /tasks/:taskID/generate-edit-proposal</code></li>
       <li><code>POST /tasks/:taskID/revise-edit-proposal</code></li>
       <li><code>POST /tasks/:taskID/generate-validation-repair-proposal</code></li>

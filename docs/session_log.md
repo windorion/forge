@@ -3083,3 +3083,44 @@ Next:
   conditions, pause/abort/resume, and visible live-run progress.
 - Broaden source patch proposal/apply beyond exact text hunks and harden
   rollback revalidation/recovery.
+
+## 2026-07-13 20:05:23 CEST
+
+Conversation summary:
+
+- User asked to continue the next step. The session wrapped the existing
+  provider-selected agent step into a bounded multi-step agent loop while
+  preserving the same runtime-owned safety gates.
+
+Done:
+
+- Added `AgentRunLoop` task state, persistence defaults, and
+  `POST /tasks/:taskID/run-agent-loop`.
+- Implemented bounded loop execution with `maxSteps`, active-loop reentry
+  guard, linked step IDs, stop reasons, and SSE events for started, paused,
+  completed, and failed loops.
+- Reused `run-agent-step` for every loop action so command approval,
+  proposal review, validation repair, rerun evidence, busy-task, and blocked
+  states remain enforced by existing runtime gates.
+- Added macOS models, runtime client call, workspace loading state,
+  `Run Agent Loop` action-rail button, and Log-tab loop history cards.
+- Extended `npm run smoke:core` with a mock OpenAI loop path: proposal
+  generation pauses for review; after apply and command approval, the loop
+  runs `runtime-npm-check`, creates a repair brief from failure output, and
+  generates a review-only self-fix proposal.
+- Updated README, project status, TODO, development, runtime architecture,
+  model provider, security, runtime README, and V0 scope docs. Coding-Agent
+  Demo V0 estimate is now 76-80%.
+
+Not done:
+
+- Did not add pause/abort/resume controls for a running loop.
+- Did not add richer model-selected read/search tool calls inside the loop.
+- Did not broaden patch application beyond exact text replace/patch
+  operations.
+
+Next:
+
+- Broaden source patch proposal/apply beyond exact text hunks and harden
+  rollback revalidation/recovery.
+- Add pause/abort/resume and stuck-task recovery controls for bounded loops.

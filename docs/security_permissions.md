@@ -130,6 +130,13 @@ runnable. A provider-selected `RerunRepairCommand` is accepted only for stored
 ready/failed rerun evidence. Waiting for human review and requesting plan
 approval are explicit blocked states, not silent no-ops.
 
+`POST /tasks/:taskID/run-agent-loop` does not add a broader autonomy tier. It
+repeats the same `run-agent-step` boundary under a runtime-enforced step limit
+and stops at review gates, passed commands, verified self-fix reruns,
+blocked/failed steps, busy-task guards, no-progress guards, or max-step
+protection. It cannot apply a proposed patch, invent raw shell commands,
+commit, push, or publish anything.
+
 ### High Risk
 
 Examples:
