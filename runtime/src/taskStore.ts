@@ -99,11 +99,26 @@ function parseTaskPayload(payload: unknown): ForgeTask {
   }
 
   const parsed = JSON.parse(payload) as ForgeTask;
+  const agentRunSteps = parsed.agentRunSteps ?? [];
+  const agentRunLoops = (parsed.agentRunLoops ?? []).map((loop) => {
+    const linkedContextSteps = agentRunSteps.filter((step) =>
+      loop.stepIDs.includes(step.id) &&
+      step.action === "GatherRepositoryContext" &&
+      step.status === "Completed"
+    );
+    return {
+      ...loop,
+      maxContextSteps: loop.maxContextSteps ?? Math.min(2, loop.maxSteps),
+      contextStepsRun: loop.contextStepsRun ?? linkedContextSteps.length,
+      contextPaths: loop.contextPaths ?? [...new Set(linkedContextSteps.flatMap((step) => step.contextPaths ?? []))],
+      resumeCount: loop.resumeCount ?? 0
+    };
+  });
   return {
     ...parsed,
     approvals: parsed.approvals ?? [],
-    agentRunLoops: parsed.agentRunLoops ?? [],
-    agentRunSteps: parsed.agentRunSteps ?? [],
+    agentRunLoops,
+    agentRunSteps,
     taskCommandRuns: (parsed.taskCommandRuns ?? []).map((run) => ({
       ...run,
       outputChunks: run.outputChunks ?? []

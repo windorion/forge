@@ -29,10 +29,14 @@ The proposal stores the inspected context files and concise tool evidence so
 the app can show what informed the proposed next action.
 The latest slice adds Agent Run Step v0: the runtime can ask the active model
 provider for one safe next action, then enforce existing gates while it
-generates an edit proposal, runs an approved task command, generates a
-validation repair proposal, reruns reviewed self-fix evidence, or pauses for
-human review. Agent Run Loop v0 wraps that step runner with a small
-runtime-enforced step limit and safe stop reasons.
+gathers provider-selected bounded repository context, generates an edit
+proposal, runs an approved task command, generates a validation repair
+proposal, reruns reviewed self-fix evidence, or pauses for human review. The
+context action carries search terms and repo-relative read paths, while the
+runtime filters paths, logs list/search/read tools, stores inspected paths,
+and blocks repeated requests. Agent Run Loop v0 wraps that step runner with a
+small runtime-enforced step limit, a separate zero-to-three-step context
+budget, newly discovered-path tracking, and safe budget/no-progress stops.
 
 The runtime core has an automated smoke regression that exercises the main
 task lifecycle without using real project memory or provider settings.
@@ -283,9 +287,11 @@ For the OpenAI provider, edit proposals can now include multiple file changes.
 `AppendText` remains limited to existing Markdown files in `README.md` or
 `docs/*.md`, exact `ReplaceText` and multi-hunk `PatchText` can validate for
 existing allowlisted source/text files when every find text appears exactly
-once, and restricted `CreateFile` remains limited to new `docs/*.md` files.
-Delete, broad patch, unsupported path, or preview-only operations remain
-review artifacts and block apply until revised.
+once, and restricted `CreateFile` can create new allowlisted Markdown/source/
+text files. Coordinated proposals allow up to eight unique normalized targets
+and a bounded total operation payload. Delete, fuzzy patch, unsupported path,
+overwrite-create, or preview-only operations remain review artifacts and block
+apply until revised.
 If generated validation is blocked, the runtime can run a bounded repair loop:
 it archives the blocked proposal as `Superseded`, sends the failed checks back
 to the provider, and validates the repaired proposal before returning to human
@@ -296,9 +302,12 @@ and `Request Changes`. It also exposes `Validate Proposal`, which calls
 `POST /tasks/:taskID/validate-edit-proposal` to refresh applicability checks
 without writing files. Applying calls `POST /tasks/:taskID/apply-edit-proposal`,
 revalidates the current workspace, runs the restricted v0 edit operation,
-records the changed file plus before/after rollback metadata, and marks the
-task completed. Applied proposals with rollback metadata can be explicitly
-rolled back with `POST /tasks/:taskID/rollback-edit-proposal`; the runtime
+records each changed file plus before/after rollback metadata, and marks the
+task completed. The latest apply attempt stores planned/applied/restored paths;
+if a later file write fails, completed writes are restored in reverse order
+before Forge returns to review. Applied proposals with rollback metadata can
+be explicitly rolled back with `POST
+/tasks/:taskID/rollback-edit-proposal`; the runtime
 checks current file hashes before restoring snapshots or deleting files created
 by the proposal.
 Requesting changes calls `POST /tasks/:taskID/reject-edit-proposal`, records
@@ -373,12 +382,16 @@ The action rail exposes Agent Run Step v0 and Agent Run Loop v0:
 ```text
 POST /tasks/:taskID/run-agent-step
 POST /tasks/:taskID/run-agent-loop
+POST /tasks/:taskID/pause-agent-loop
+POST /tasks/:taskID/abort-agent-loop
+POST /tasks/:taskID/resume-agent-loop
 ```
 
 The request can include an optional `preferredCommandID`, but the runtime only
 uses it when the provider-selected action is `RunTaskCommand` and the command
 is already approved/runnable in the runtime permission snapshot. The provider
-chooses exactly one action from `GenerateEditProposal`, `RunTaskCommand`,
+chooses exactly one action from `GatherRepositoryContext`,
+`GenerateEditProposal`, `RunTaskCommand`,
 `GenerateValidationRepairProposal`, `RerunRepairCommand`,
 `WaitForHumanReview`, and `RequestPlanApproval`. The runtime then rechecks
 the same proposal, command, repair, and review gates used by the manual
@@ -389,13 +402,18 @@ timestamps. SSE emits `agent.run_step.started`, `agent.run_step.completed`,
 `agent.run_step.blocked`, or `agent.run_step.failed`.
 
 `run-agent-loop` repeatedly invokes the same step boundary up to a bounded
-`maxSteps` value. It stops at edit-proposal review gates, passed commands,
-verified self-fix reruns, blocked/failed steps, busy-task guards, no-progress
-guards, or max-step protection. It does not add new permissions; it only
-chains existing step actions until the runtime reaches a safe stop. A complete
-V0 agent still needs pause/resume/abort and richer read/search/patch tool
-choices.
-choices.
+`maxSteps` value. It also accepts `maxContextSteps` from 0 to 3, never greater
+than `maxSteps`. It stops at edit-proposal review gates, passed commands,
+verified self-fix reruns, context-budget exhaustion, blocked/failed steps,
+busy-task guards, no-progress guards, or max-step protection. It does not add
+new permissions; it only chains existing step actions until the runtime
+reaches a safe stop. The loop can now gather multiple distinct runtime-owned
+read/search context passes and continue to proposal generation in one request.
+Pause and abort persist cooperative stop intent and take effect before the
+next agent step; resume continues only the same `UserPaused` loop with its
+remaining step/context budgets. These controls do not cancel an active command
+or bypass review gates. A complete V0 agent still needs finer-grained separate
+read/search choices and broader patch behavior.
 
 Current validation presets:
 
@@ -532,10 +550,11 @@ cd runtime && npm run smoke:git-remote
 - Edit proposal application is intentionally narrow: v0 supports append-text
   operations on existing Markdown files in `README.md` or `docs/`, exact
   replace-text and multi-hunk patch-text operations on existing Markdown or
-  allowlisted source/text files, and create-file operations for new `docs/*.md`
-  files only. Validation blocks unsupported paths, generated directories,
-  lockfiles, secret-like files, unsupported operations, oversized edits,
-  missing files, existing create targets, duplicate append text at the file
+  allowlisted source/text files, and create-file operations for new allowlisted
+  Markdown/source/text files. Validation blocks unsupported paths, generated
+  directories, lockfiles, secret-like files, unsupported operations, oversized edits,
+  missing files, existing create targets, duplicate coordinated target paths,
+  over-budget coordinated operation payloads, duplicate append text at the file
   end, replace operations whose find text is missing or appears more than
   once, and patch hunks that cannot be matched exactly once in the original
   file and applied in order. Richer OpenAI proposals can include unsupported

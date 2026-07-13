@@ -28,6 +28,9 @@ This first slice is intentionally small:
 - `POST /tasks/:taskID/approve-plan`
 - `POST /tasks/:taskID/run-agent-step`
 - `POST /tasks/:taskID/run-agent-loop`
+- `POST /tasks/:taskID/pause-agent-loop`
+- `POST /tasks/:taskID/abort-agent-loop`
+- `POST /tasks/:taskID/resume-agent-loop`
 - `POST /tasks/:taskID/generate-edit-proposal`
 - `POST /tasks/:taskID/revise-edit-proposal`
 - `POST /tasks/:taskID/generate-validation-repair-proposal`
@@ -91,8 +94,11 @@ apply path revalidates against the current workspace before writing. The
 current apply path is intentionally narrow: it supports append-text on
 existing Markdown files, exact replace and multi-hunk exact patch operations
 on existing Markdown and allowlisted source/text files, plus create-file
-operations for new `docs/*.md` files. Exact replace and patch hunks require
-the find text to appear once.
+operations for new allowlisted Markdown/source/text files. Coordinated apply
+allows up to eight unique normalized targets and a bounded total operation
+payload. Exact replace and patch hunks require the find text to appear once.
+Every apply attempt records planned/applied/restored paths, and a later write
+failure triggers reverse-order restoration of completed writes.
 After apply, the runtime runs controlled built-in validation commands and only
 marks the task completed if validation passes.
 If validation fails, the runtime asks the model provider for a repair brief
@@ -111,20 +117,34 @@ to the failed source run, repair brief, and applied proposal.
 
 `POST /tasks/:taskID/run-agent-step` asks the active model provider for one
 safe next action and then lets the runtime enforce the same gates as the
-manual endpoints. The current action enum can generate an edit proposal, run
-an approved task command, generate a validation repair proposal, rerun reviewed
-self-fix evidence, wait for human review, or request plan approval. Every
+manual endpoints. The current action enum can gather a bounded repository
+context pass through logged list/search/read tools, generate an edit proposal,
+run an approved task command, generate a validation repair proposal, rerun
+reviewed self-fix evidence, wait for human review, or request plan approval.
+Context requests carry model-selected search terms and repo-relative read
+paths; the runtime filters unsafe paths, records inspected and newly
+discovered context paths plus an outcome, and blocks repeated requests. Every
 decision is stored in `agentRunSteps` with provider metadata, rationale,
 status, linked target IDs, result summaries, and timestamps. This endpoint is
 one step at a time; the bounded loop endpoint chains the same safe boundary.
 
 `POST /tasks/:taskID/run-agent-loop` wraps the same runtime-owned step
-boundary in a bounded loop. The request can include `maxSteps` from 1 to 8 and
+boundary in a bounded loop. The request can include `maxSteps` from 1 to 8,
+`maxContextSteps` from 0 to 3 (never above `maxSteps`), and
 an optional `preferredCommandID` for already-runnable command steps. The loop
 records `agentRunLoops`, links each step by ID, and stops at edit-proposal
-review gates, passed commands, verified self-fix reruns, blocked/failed
-steps, busy-task guards, no-progress guards, or max-step protection. It does
-not add new permissions and does not apply patches automatically.
+review gates, passed commands, verified self-fix reruns, context-budget
+exhaustion, blocked/failed steps, busy-task guards, no-progress guards, or
+max-step protection. It does not add new permissions and does not apply
+patches automatically.
+
+Pause and abort take an exact `agentRunLoopID`, persist cooperative stop
+intent, and stop before the next provider-selected step. Resume accepts only
+the same user-paused loop with remaining steps and no unresolved proposal or
+busy command/validation gate. It preserves linked steps, budgets, context,
+provider, and preferred command intent. Loop control does not terminate an
+active command; use the existing exact-run-ID command cancellation endpoint
+for that.
 
 OpenAI-backed edit proposals can include multiple file changes and
 preview-only unsupported operations. Unsupported changes are kept as review

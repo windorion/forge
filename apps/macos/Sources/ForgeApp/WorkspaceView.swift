@@ -924,6 +924,32 @@ private struct AgentRunLoopPanel: View {
                         Text(loop.summary)
                             .font(.caption)
                             .foregroundStyle(ForgeDesign.ink)
+                        Label(
+                            "Context \(loop.contextStepsRun)/\(loop.maxContextSteps)",
+                            systemImage: "doc.text.magnifyingglass"
+                        )
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(ForgeDesign.muted)
+                        if !loop.contextPaths.isEmpty {
+                            Text(loop.contextPaths.prefix(4).joined(separator: ", "))
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(ForgeDesign.muted)
+                                .lineLimit(2)
+                        }
+                        if loop.status == "Running", loop.abortRequestedAt != nil {
+                            Label("Abort requested — finishing current step", systemImage: "stop.circle")
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(ForgeDesign.danger)
+                        } else if loop.status == "Running", loop.pauseRequestedAt != nil {
+                            Label("Pause requested — finishing current step", systemImage: "pause.circle")
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(ForgeDesign.warning)
+                        }
+                        if loop.resumeCount > 0 {
+                            Text("Resumed \(loop.resumeCount)×")
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(ForgeDesign.muted)
+                        }
                         if let stopReason = loop.stopReason {
                             Text(stopReason)
                                 .font(.caption2.monospaced())
@@ -949,6 +975,8 @@ private struct AgentRunLoopPanel: View {
             return "checkmark.circle"
         case "Paused":
             return "pause.circle"
+        case "Aborted":
+            return "stop.circle"
         case "Failed":
             return "exclamationmark.triangle"
         default:
@@ -962,6 +990,8 @@ private struct AgentRunLoopPanel: View {
             return ForgeDesign.success
         case "Paused":
             return ForgeDesign.warning
+        case "Aborted":
+            return ForgeDesign.danger
         case "Failed":
             return ForgeDesign.danger
         default:
@@ -1020,6 +1050,19 @@ private struct AgentRunStepPanel: View {
                         if let commandName = step.commandName {
                             Label(commandName, systemImage: "terminal")
                                 .font(.caption2.weight(.medium))
+                                .foregroundStyle(ForgeDesign.muted)
+                        }
+
+                        if let contextPaths = step.contextPaths, !contextPaths.isEmpty {
+                            Label(contextPaths.prefix(3).joined(separator: ", "), systemImage: "doc.text.magnifyingglass")
+                                .font(.caption2.weight(.medium))
+                                .foregroundStyle(ForgeDesign.muted)
+                                .lineLimit(2)
+                        }
+
+                        if let contextOutcome = step.contextOutcome {
+                            Text("\(contextOutcome) · +\(step.newContextPaths?.count ?? 0) new")
+                                .font(.caption2.monospaced())
                                 .foregroundStyle(ForgeDesign.muted)
                         }
                     }
@@ -2107,13 +2150,60 @@ private struct AgentRunActionsCard: View {
                 .foregroundStyle(ForgeDesign.muted)
 
             Button {
-                workspace.runAgentLoop(for: task, preferredCommandID: selectedTaskCommandPermission?.command.id, maxSteps: 4)
+                workspace.runAgentLoop(
+                    for: task,
+                    preferredCommandID: selectedTaskCommandPermission?.command.id,
+                    maxSteps: 4,
+                    maxContextSteps: 2
+                )
             } label: {
                 Label(runAgentLoopTitle, systemImage: "repeat")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.accent, foreground: ForgeDesign.ink))
             .disabled(!canRunAgentLoop)
+
+            if let activeAgentRunLoop {
+                HStack(spacing: 8) {
+                    Button {
+                        workspace.pauseAgentRunLoop(for: task, loop: activeAgentRunLoop)
+                    } label: {
+                        Label(pauseAgentRunLoopTitle, systemImage: "pause.circle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(ForgeSecondaryButtonStyle())
+                    .disabled(!canPauseAgentRunLoop)
+
+                    Button {
+                        workspace.abortAgentRunLoop(for: task, loop: activeAgentRunLoop)
+                    } label: {
+                        Label(abortAgentRunLoopTitle, systemImage: "stop.circle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.danger))
+                    .disabled(!canAbortAgentRunLoop)
+                }
+            } else if let resumableAgentRunLoop {
+                HStack(spacing: 8) {
+                    Button {
+                        workspace.resumeAgentRunLoop(for: task, loop: resumableAgentRunLoop)
+                    } label: {
+                        Label(resumeAgentRunLoopTitle, systemImage: "play.circle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.accent, foreground: ForgeDesign.ink))
+                    .disabled(!canResumeAgentRunLoop)
+
+                    Button {
+                        workspace.abortAgentRunLoop(for: task, loop: resumableAgentRunLoop)
+                    } label: {
+                        Label(abortAgentRunLoopTitle, systemImage: "stop.circle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(ForgeSecondaryButtonStyle())
+                    .disabled(!canAbortAgentRunLoop)
+                }
+            }
 
             Button {
                 workspace.runAgentStep(for: task, preferredCommandID: selectedTaskCommandPermission?.command.id)
@@ -2287,6 +2377,36 @@ private struct AgentRunActionsCard: View {
 
     private var isRunningAgentStep: Bool {
         workspace.isRunningAgentStep(taskID: task.id)
+    }
+
+    private var activeAgentRunLoop: AgentRunLoop? {
+        task.agentRunLoops.reversed().first { loop in
+            loop.status == "Running"
+        }
+    }
+
+    private var resumableAgentRunLoop: AgentRunLoop? {
+        task.agentRunLoops.reversed().first { loop in
+            loop.status == "Paused" &&
+                loop.stopReason == "UserPaused" &&
+                loop.stepsRun < loop.maxSteps
+        }
+    }
+
+    private var controlledAgentRunLoop: AgentRunLoop? {
+        activeAgentRunLoop ?? resumableAgentRunLoop
+    }
+
+    private var isPausingAgentRunLoop: Bool {
+        workspace.isPausingAgentRunLoop(loopID: controlledAgentRunLoop?.id)
+    }
+
+    private var isAbortingAgentRunLoop: Bool {
+        workspace.isAbortingAgentRunLoop(loopID: controlledAgentRunLoop?.id)
+    }
+
+    private var isResumingAgentRunLoop: Bool {
+        workspace.isResumingAgentRunLoop(loopID: controlledAgentRunLoop?.id)
     }
 
     private var isRunningAgentActivity: Bool {
@@ -2630,6 +2750,7 @@ private struct AgentRunActionsCard: View {
 
     private var canRunAgentStep: Bool {
         hasAgentStepCandidate &&
+            resumableAgentRunLoop == nil &&
             task.status != "Testing" &&
             task.editProposal?.status != "Proposed" &&
             !isRunningAgentActivity &&
@@ -2646,7 +2767,45 @@ private struct AgentRunActionsCard: View {
     }
 
     private var canRunAgentLoop: Bool {
-        canRunAgentStep
+        canRunAgentStep && activeAgentRunLoop == nil
+    }
+
+    private var canPauseAgentRunLoop: Bool {
+        guard let activeAgentRunLoop else {
+            return false
+        }
+        return activeAgentRunLoop.pauseRequestedAt == nil &&
+            activeAgentRunLoop.abortRequestedAt == nil &&
+            !isPausingAgentRunLoop &&
+            !isAbortingAgentRunLoop
+    }
+
+    private var canAbortAgentRunLoop: Bool {
+        guard let controlledAgentRunLoop else {
+            return false
+        }
+        return (controlledAgentRunLoop.status == "Paused" || controlledAgentRunLoop.abortRequestedAt == nil) &&
+            !isAbortingAgentRunLoop
+    }
+
+    private var canResumeAgentRunLoop: Bool {
+        resumableAgentRunLoop != nil &&
+            task.editProposal?.status != "Proposed" &&
+            !isRunningAgentActivity &&
+            !isResumingAgentRunLoop &&
+            !isAbortingAgentRunLoop
+    }
+
+    private var pauseAgentRunLoopTitle: String {
+        isPausingAgentRunLoop || activeAgentRunLoop?.pauseRequestedAt != nil ? "Pausing" : "Pause"
+    }
+
+    private var abortAgentRunLoopTitle: String {
+        isAbortingAgentRunLoop || activeAgentRunLoop?.abortRequestedAt != nil ? "Aborting" : "Abort"
+    }
+
+    private var resumeAgentRunLoopTitle: String {
+        isResumingAgentRunLoop ? "Resuming" : "Resume"
     }
 
     private var hasAgentStepCandidate: Bool {
@@ -2674,6 +2833,9 @@ private struct AgentRunActionsCard: View {
         }
         if task.editProposal?.status == "Proposed" {
             return "Review Proposal First"
+        }
+        if resumableAgentRunLoop != nil {
+            return "Paused Loop Pending"
         }
         if !hasAgentStepCandidate {
             return "Approve Plan First"
@@ -3319,6 +3481,27 @@ private struct ReviewPanel: View {
                                     .font(.caption2)
                                     .foregroundStyle(.tertiary)
                             }
+                            if let attempt = editProposal.lastApplyAttempt {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Label("Last apply: \(attempt.status)", systemImage: applyAttemptSystemImage(attempt.status))
+                                        .font(.caption.weight(.semibold))
+                                    Text(attempt.summary)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                    Text("Planned \(attempt.plannedPaths.count) · Applied \(attempt.appliedPaths.count) · Restored \(attempt.revertedPaths.count)")
+                                        .font(.caption2.monospacedDigit())
+                                        .foregroundStyle(.tertiary)
+                                    if let error = attempt.error {
+                                        Text(error)
+                                            .font(.caption2)
+                                            .foregroundStyle(.orange)
+                                    }
+                                }
+                                .padding(8)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(.quaternary)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                            }
                         }
 
                         if let validation = editProposal.validation {
@@ -3686,6 +3869,19 @@ private struct ReviewPanel: View {
     ) -> FileChangeValidation? {
         proposal.validation?.fileResults.first { result in
             result.id == change.id || result.path == change.path
+        }
+    }
+
+    private func applyAttemptSystemImage(_ status: String) -> String {
+        switch status {
+        case "Applied":
+            return "checkmark.circle.fill"
+        case "Reverted":
+            return "arrow.uturn.backward.circle.fill"
+        case "Failed":
+            return "exclamationmark.triangle.fill"
+        default:
+            return "arrow.triangle.2.circlepath.circle.fill"
         }
     }
 
@@ -6656,7 +6852,7 @@ private struct OperationSummaryRow: View {
         case "PatchText":
             return "Apply-ready only when every hunk has one exact match in the original file."
         case "CreateFile":
-            return "Apply-ready only for new docs/*.md files after runtime validation."
+            return "Apply-ready only for new allowlisted source/text files after runtime validation."
         case "PreviewOnly":
             return "Review artifact only; revise or wait for a future patch engine before applying."
         default:

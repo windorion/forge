@@ -91,6 +91,7 @@ An edit proposal stores:
 - optional restricted apply operation
 - optional validation result
 - optional applied-file rollback metadata
+- optional latest coordinated apply-attempt evidence
 - optional rollback timestamp and rollback note
 
 Task state also stores previous edit proposals in `editProposalRevisions`.
@@ -123,8 +124,8 @@ Current restricted operation kinds:
   non-empty find and replacement text, each find text must appear exactly once
   in the original target file, and the runtime simulates the ordered patch
   before applying it.
-- `CreateFile`: creates a new bounded Markdown file under `docs/` only; it
-  never overwrites an existing target.
+- `CreateFile`: creates a new bounded file at an allowlisted Markdown,
+  source, or text path; it never overwrites an existing target.
 - `PreviewOnly`: review artifact only; validation blocks apply.
 
 After apply, the proposal records `appliedFileChanges` metadata for every
@@ -134,6 +135,14 @@ before/after byte lengths when available, and the rollback strategy
 a local snapshot path under `.forge/rollback-snapshots/`. The runtime exposes
 `POST /tasks/:taskID/rollback-edit-proposal` to apply that rollback after
 current-file hash verification.
+
+Coordinated proposals are limited to eight unique normalized target paths and
+120,000 total operation characters. The runtime validates these proposal-level
+limits before any write. Each apply stores `lastApplyAttempt` with planned,
+applied, and restored paths. If a later file operation fails after earlier
+writes completed, Forge uses their rollback metadata in reverse order to
+restore them and emits `edit.proposal.apply.reverted`. Incomplete automatic
+recovery is recorded as a failed attempt and requires human review.
 
 Validation stores:
 
@@ -175,7 +184,10 @@ Post-apply validation stores:
 - Current v0 patch behavior can write existing allowlisted source/text files
   after strict path, size, hunk-count, original single-occurrence, and ordered
   simulation checks.
-- Current v0 create behavior only writes new `docs/*.md` files.
+- Current v0 create behavior only writes new allowlisted Markdown/source/text
+  files and never overwrites an existing target.
+- A coordinated proposal may target at most eight unique normalized paths and
+  must remain inside the proposal-level operation-character budget.
 - Preview-only, delete, unsupported path, overwrite-create, or broad patch
   proposals may be shown for review but must validate as `Blocked`.
 - Absolute paths, parent-directory traversal, `.git`, and `.forge` paths are
@@ -190,8 +202,12 @@ Post-apply validation stores:
 - Apply is blocked for source/text targets outside the allowlist, generated
   directories, lockfiles, secret-like files, oversized files, or binary-looking
   content.
-- Apply is blocked if create-file content is empty, oversized, outside
-  `docs/*.md`, or targets an existing file.
+- Apply is blocked if create-file content is empty, oversized, outside the
+  allowlisted source/text boundary, or targets an existing file.
+- Apply is blocked before mutation when coordinated changes repeat a normalized
+  target path or exceed the proposal-level file/operation budget.
+- If a later coordinated write fails, Forge attempts reverse-order restoration
+  of completed writes and records whether recovery was complete.
 - Applying a proposal moves the task into `Testing` and runs built-in
   validation commands before completion.
 - Medium-risk project validation presets require explicit approval before they
@@ -212,9 +228,7 @@ Post-apply validation stores:
 
 ## Future Work
 
-- Add richer cross-file patch orchestration after exact text-hunk validation is
-  mature.
-- Generate broader model-backed patch content while keeping runtime-owned
-  validation and review gates.
+- Generate broader model-backed patch content beyond exact text hunks while
+  keeping runtime-owned validation, coordinated budgets, and review gates.
 - Add richer rollback revalidation and recovery UI for partially failed or
   user-modified rollback attempts.

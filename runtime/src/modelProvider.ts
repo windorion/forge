@@ -64,6 +64,12 @@ export interface AgentRunStepRequest {
   task: ForgeTask;
   taskCommands: TaskCommandPermission[];
   commandRerunEvidence: CommandRerunEvidence[];
+  contextBudget?: {
+    loopID: string;
+    maxContextSteps: number;
+    contextStepsRun: number;
+    remainingContextSteps: number;
+  };
 }
 
 export interface IntentBriefRequest {
@@ -402,6 +408,8 @@ class OpenAIResponsesModelProvider implements ModelProvider {
       [
         "Choose exactly one safe next action for Forge's live coding-agent run.",
         "You are selecting the next runtime-owned action; you are not executing tools yourself.",
+        "Use GatherRepositoryContext when another bounded repository search/read pass would materially improve the next proposal. Supply short searchTerms and safe repo-relative readPaths; the runtime validates and executes them read-only.",
+        "When contextBudget is present, do not choose GatherRepositoryContext after remainingContextSteps reaches zero. Use prior agentRunSteps and context paths to avoid repeating searches or rereading the same file set.",
         "Use GenerateEditProposal when an execution proposal exists and there is no proposed edit awaiting review.",
         "Use RunTaskCommand only when one of the provided taskCommands has canRun true; commandID must exactly match that command id.",
         "Use GenerateValidationRepairProposal when a failed validation or task command has a repair brief and no repair proposal is currently awaiting review.",
@@ -423,12 +431,12 @@ class OpenAIResponsesModelProvider implements ModelProvider {
       editProposalSchema,
       [
         "Create a Forge edit proposal review artifact.",
-        "You may propose multiple file changes, but the runtime will validate all of them before any apply.",
+        "You may propose up to eight coordinated file changes, but the runtime will validate the complete set before any apply.",
         "Use AppendText only for bounded appends to README.md or docs/*.md.",
         "Use ReplaceText only when the task explicitly asks for an exact quoted replacement and you can provide the exact find text. It may target README.md, docs/*.md, or normal allowlisted source/text files such as .ts, .swift, .js, .json, .css, .html, .yml, .toml, .py, .go, .rs, .java, .kt, .c, .cpp, .h, and .hpp.",
-        "Use PatchText only when the task explicitly asks for multiple exact quoted replacements in one existing allowlisted Markdown/source/text file. Every patchHunks item must include exact findText and replaceWith text that should appear once in the original target file.",
-        "Use CreateFile only for new docs/*.md files with bounded Markdown content.",
-        "Use PreviewOnly for broad code patches, fuzzy patches, line-number-only diffs, deletes, new source files, unsupported paths, overwrite attempts, or anything that should be reviewed but not applied by the current v0 engine.",
+        "Use PatchText for bounded exact replacements in an existing allowlisted Markdown/source/text file when every patchHunks item includes findText that should appear exactly once in the current file.",
+        "Use CreateFile for bounded new Markdown or allowlisted source/text files. Never use it to overwrite an existing path.",
+        "Use PreviewOnly for fuzzy patches, line-number-only diffs, deletes, unsupported paths, overwrite attempts, or anything that should be reviewed but not applied by the current v0 engine.",
         request.validationFeedback
           ? "The previous proposal failed runtime validation. Generate a corrected proposal that addresses every blocked check while staying inside the supported operation boundary."
           : request.validationRepairBrief
@@ -626,6 +634,7 @@ const agentRunStepDecisionSchema: JsonSchema = {
     action: {
       type: "string",
       enum: [
+        "GatherRepositoryContext",
         "GenerateEditProposal",
         "RunTaskCommand",
         "GenerateValidationRepairProposal",
@@ -636,10 +645,12 @@ const agentRunStepDecisionSchema: JsonSchema = {
     },
     summary: { type: "string" },
     rationale: { type: "string" },
+    searchTerms: { type: "array", items: { type: "string" } },
+    readPaths: { type: "array", items: { type: "string" } },
     commandID: { type: "string" },
     commandRerunEvidenceID: { type: "string" }
   },
-  required: ["action", "summary", "rationale", "commandID", "commandRerunEvidenceID"]
+  required: ["action", "summary", "rationale", "searchTerms", "readPaths", "commandID", "commandRerunEvidenceID"]
 };
 
 const editProposalGuidanceSchema: JsonSchema = {
@@ -1036,6 +1047,12 @@ function normalizeAgentRunStepDecisionOutput(
   const action = normalizeAgentRunStepAction(output.action) ?? fallback.action;
   const commandID = optionalString(output.commandID);
   const commandRerunEvidenceID = optionalString(output.commandRerunEvidenceID);
+  const searchTerms = Array.isArray(output.searchTerms)
+    ? boundedStringArray(output.searchTerms, "searchTerms", 10)
+    : [];
+  const readPaths = Array.isArray(output.readPaths)
+    ? boundedStringArray(output.readPaths, "readPaths", 6)
+    : [];
   const runnableCommandIDs = new Set(request.taskCommands.filter((permission) => permission.canRun).map((permission) => permission.command.id));
   const runnableRerunEvidenceIDs = new Set(request.commandRerunEvidence.map((evidence) => evidence.id));
 
@@ -1055,10 +1072,16 @@ function normalizeAgentRunStepDecisionOutput(
     };
   }
 
+  if (action === "GatherRepositoryContext" && searchTerms.length === 0 && readPaths.length === 0) {
+    return fallback;
+  }
+
   return {
     action,
     summary: requiredString(output.summary, "summary"),
     rationale: requiredString(output.rationale, "rationale"),
+    searchTerms: action === "GatherRepositoryContext" ? searchTerms : undefined,
+    readPaths: action === "GatherRepositoryContext" ? readPaths : undefined,
     commandID: action === "RunTaskCommand" ? commandID : undefined,
     commandRerunEvidenceID: action === "RerunRepairCommand" ? commandRerunEvidenceID : undefined
   };
@@ -1066,6 +1089,7 @@ function normalizeAgentRunStepDecisionOutput(
 
 function normalizeAgentRunStepAction(value: unknown): AgentRunStepDecision["action"] | undefined {
   switch (value) {
+  case "GatherRepositoryContext":
   case "GenerateEditProposal":
   case "RunTaskCommand":
   case "GenerateValidationRepairProposal":
@@ -1104,7 +1128,7 @@ function normalizeRichEditProposalOutput(
 
   const rawChanges = Array.isArray(output.fileChanges) ? output.fileChanges : [];
   const fileChanges = rawChanges
-    .slice(0, 4)
+    .slice(0, 8)
     .map(normalizeRichEditProposalFileChange)
     .filter((change): change is RichEditProposalFileChange => change !== undefined);
 
@@ -1376,6 +1400,21 @@ function chooseDeterministicAgentRunStep(request: AgentRunStepRequest): AgentRun
   }
 
   if (task.executionProposal && (!task.editProposal || task.editProposal.status === "Rejected")) {
+    const alreadyGatheredRunContext = request.contextBudget
+      ? request.contextBudget.contextStepsRun > 0 || request.contextBudget.remainingContextSteps === 0
+      : task.agentRunSteps.some((step) =>
+          !step.loopID && step.action === "GatherRepositoryContext" && step.status === "Completed"
+        );
+    if (!alreadyGatheredRunContext) {
+      return {
+        action: "GatherRepositoryContext",
+        summary: "Gather one more bounded repository context pass before drafting the edit proposal.",
+        rationale: "The approved plan is ready, but the normal agent run has not yet selected its own read/search context.",
+        searchTerms: deterministicAgentContextSearchTerms(task),
+        readPaths: deterministicAgentContextReadPaths(task)
+      };
+    }
+
     return {
       action: "GenerateEditProposal",
       summary: task.editProposal?.status === "Rejected"
@@ -1410,6 +1449,31 @@ function chooseDeterministicAgentRunStep(request: AgentRunStepRequest): AgentRun
   };
 }
 
+function deterministicAgentContextSearchTerms(task: ForgeTask): string[] {
+  const stopWords = new Set(["about", "after", "agent", "build", "code", "forge", "from", "into", "make", "plan", "task", "that", "this", "with"]);
+  const terms = new Set<string>();
+  const source = [task.title, task.objective, ...task.messages.slice(-4).map((message) => message.content)].join(" ").toLowerCase();
+  for (const match of source.matchAll(/[a-z][a-z0-9_-]{2,}/g)) {
+    const term = match[0].replaceAll("_", "-");
+    if (!stopWords.has(term)) {
+      terms.add(term.slice(0, 64));
+    }
+  }
+
+  return [...terms].slice(0, 8);
+}
+
+function deterministicAgentContextReadPaths(task: ForgeTask): string[] {
+  return [
+    ...new Set(
+      task.messages
+        .flatMap((message) => message.fileReferences)
+        .filter((reference) => reference.status === "Resolved" && reference.path)
+        .map((reference) => reference.path as string)
+    )
+  ].slice(0, 6);
+}
+
 function agentRunStepRequestContext(request: AgentRunStepRequest): string {
   const runnableCommands = request.taskCommands.filter((permission) => permission.canRun);
   const commandSummaries = request.taskCommands.slice(0, 8).map((permission) => ({
@@ -1438,6 +1502,7 @@ function agentRunStepRequestContext(request: AgentRunStepRequest): string {
 
   return JSON.stringify({
     allowedActions: [
+      "GatherRepositoryContext",
       "GenerateEditProposal",
       "RunTaskCommand",
       "GenerateValidationRepairProposal",
@@ -1445,6 +1510,8 @@ function agentRunStepRequestContext(request: AgentRunStepRequest): string {
       "WaitForHumanReview",
       "RequestPlanApproval"
     ],
+    repositoryContextPolicy: "GatherRepositoryContext accepts bounded searchTerms and safe repo-relative readPaths. The runtime owns filtering, reads, storage caps, and audit events.",
+    contextBudget: request.contextBudget,
     taskCommandPolicy: "RunTaskCommand can only use commandID values where canRun is true.",
     rerunPolicy: "RerunRepairCommand can only use commandRerunEvidenceID values listed in commandRerunEvidence.",
     runnableCommandIDs: runnableCommands.map((permission) => permission.command.id),
@@ -1485,9 +1552,15 @@ function taskProviderContext(task: ForgeTask, sourceMessage?: TaskMessage): stri
       recommendedActions: brief.recommendedActions
     })) ?? [],
     agentRunSteps: task.agentRunSteps?.slice(-5).map((step) => ({
+      loopID: step.loopID,
       action: step.action,
       status: step.status,
       summary: step.summary,
+      searchTerms: step.searchTerms,
+      readPaths: step.readPaths,
+      contextPaths: step.contextPaths,
+      newContextPaths: step.newContextPaths,
+      contextOutcome: step.contextOutcome,
       resultSummary: step.resultSummary,
       error: step.error
     })) ?? [],

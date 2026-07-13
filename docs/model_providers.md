@@ -42,11 +42,13 @@ or archiving proposals remains a runtime-owned approval step.
 
 The local provider can also choose a deterministic Agent Run Step v0 action
 from current task state: rerun reviewed self-fix evidence, generate a repair
-proposal from the latest repair brief, wait for human review, generate the
-next edit proposal from an execution proposal, run the first approved command
-after an applied proposal, or request plan approval.
+proposal from the latest repair brief, wait for human review, gather one
+runtime-owned repository context pass, generate the next edit proposal from
+an execution proposal, run the first approved command after an applied
+proposal, or request plan approval.
 Agent Run Loop v0 is runtime-owned; the provider still chooses one step at a
-time and never receives permission to execute tools directly.
+time, sees only a runtime-calculated remaining repository-context budget, and
+never receives permission to execute tools directly.
 
 The optional OpenAI provider:
 
@@ -66,20 +68,29 @@ model again for the revision. After plan approval, the runtime runs a bounded
 read-only execution-context pass before asking for the execution proposal, so
 the provider sees updated context without directly running tools. During edit
 proposal generation, the runtime can also feed blocked validation checks back
-to the provider for a bounded repair loop. When validation commands or
+to the provider for a bounded repair loop. OpenAI structured output may carry
+up to eight coordinated changes and request restricted creation of new
+allowlisted Markdown/source/text files; the runtime still rejects duplicate
+targets, over-budget operation sets, overwrites, deletes, and unsupported paths
+before mutation. When validation commands or
 task-scoped commands fail, the runtime can ask the provider for a repair brief
 from compact command summaries. A later edit proposal request can include that
 repair brief so the provider proposes a narrow follow-up repair artifact. The
 provider can also choose one Agent Run Step v0 action from a bounded enum:
-generate an edit proposal, run an already-approved task command, generate a
-validation repair proposal, rerun reviewed self-fix evidence, wait for human
-review, or request plan approval. The runtime still generates IDs, timestamps,
-validation state, execution proposal evidence, command execution, and
-restricted apply operations locally. The remote provider never directly edits
-files, runs commands, commits, pushes, or executes tools.
+gather repository context from bounded search terms and repo-relative read
+paths, generate an edit proposal, run an already-approved task command,
+generate a validation repair proposal, rerun reviewed self-fix evidence, wait
+for human review, or request plan approval. The runtime still generates IDs,
+timestamps, validation state, execution proposal evidence, command execution,
+and restricted apply operations locally. The remote provider never directly
+edits files, runs commands, commits, pushes, or executes tools.
 Agent Run Loop v0 repeats these provider step decisions under runtime-owned
-stop conditions; the provider does not control the loop counter or bypass
-review gates.
+stop conditions. It may choose multiple distinct repository-context rounds,
+but it cannot exceed the separate zero-to-three-step context budget, repeat an
+identical request, control either loop counter, or bypass review gates.
+Pause, abort, and resume are also runtime/user controls; providers cannot emit
+them as model-selected actions. Resuming calls the provider only for the next
+normal bounded step and preserves every existing action gate.
 
 ## Configuration
 
@@ -175,6 +186,10 @@ A provider receives task state and returns structured output. Current output:
 - validation and task-command failure repair brief summaries
 - validation repair brief context for follow-up proposals
 - agent run step action, summary, rationale, command id, and rerun evidence id
+- agent-selected search terms, requested safe read paths, and inspected
+  context paths for repository-context steps
+- newly discovered context paths, context outcome, and the loop's remaining
+  repository-context budget
 - risk level
 - generated timestamp
 

@@ -208,12 +208,13 @@ all later file changes.
 
 Checks proposed file changes against the current workspace before apply. The
 v0 validator confirms supported operation type, safe Markdown paths for append
-and create operations, safe allowlisted source/text paths for exact replace and
-patch operations, existing target file for modify operations, non-existing docs
+operations, safe allowlisted source/text paths for create, exact replace, and
+patch operations, existing target file for modify operations, non-existing
 target for create operations, operation size, whether append text is already
 present at the file end, whether exact replace text appears exactly once, and
 whether every patch hunk appears exactly once in the original file and applies
-cleanly in order.
+cleanly in order. Proposal-level validation also blocks more than eight targets,
+duplicate normalized paths, and oversized total operation payloads.
 
 ### Edit Proposal Applier
 
@@ -222,9 +223,11 @@ The v0 implementation supports append-text edits to existing Markdown files in
 `README.md` or `docs/`, exact replace-text edits to existing Markdown or
 allowlisted source/text files, multi-hunk exact patch-text edits to one
 existing Markdown or allowlisted source/text file, plus create-file edits for
-new `docs/*.md` files. It revalidates before writing, records before/after
-apply metadata for rollback, and records rejected or superseded proposals
-without touching files.
+new allowlisted Markdown/source/text files. It revalidates the complete set
+before writing, records before/after apply metadata for rollback, and persists
+planned/applied/restored paths for the latest attempt. If a later operation
+fails, Forge attempts reverse-order restoration of completed writes before
+returning to review. Rejected or superseded proposals do not touch files.
 
 ### Edit Proposal Rollback
 
@@ -411,6 +414,7 @@ Agent Run Step v0 is the first provider-driven normal run path. The endpoint
 `POST /tasks/:taskID/run-agent-step` asks the active `ModelProvider` for one
 safe next action from a bounded enum:
 
+- `GatherRepositoryContext`
 - `GenerateEditProposal`
 - `RunTaskCommand`
 - `GenerateValidationRepairProposal`
@@ -420,10 +424,15 @@ safe next action from a bounded enum:
 
 The provider receives compact task state, task-command permission snapshots,
 and runnable command-rerun evidence. It returns only an action, summary,
-rationale, optional command ID, and optional rerun evidence ID. The runtime
-then rechecks the existing gates before doing anything: proposed edit review,
-plan approval, validation/command concurrency, command approval, command
-catalog membership, repair brief readiness, and rerun evidence readiness.
+rationale, optional bounded search terms/read paths, optional command ID, and
+optional rerun evidence ID. `GatherRepositoryContext` executes the existing
+repo-local list/search/read tools, filters unsafe or unavailable read paths,
+stores normalized search/read evidence, newly discovered paths, inspected
+context paths, and a context outcome on the step, and blocks repeated
+identical requests. The runtime then rechecks the existing gates before every
+other action: proposed edit review, plan approval, validation/command
+concurrency, command approval, command catalog membership, repair brief
+readiness, and rerun evidence readiness.
 
 Each executed decision is appended to `agentRunSteps` with provider metadata,
 action, status, summary, rationale, command/evidence IDs, linked proposal or
@@ -439,23 +448,48 @@ can be reused by manual actions, smoke tests, and the bounded loop.
 
 Agent Run Loop v0 wraps Agent Run Step with a runtime-enforced `maxSteps`
 limit. The endpoint `POST /tasks/:taskID/run-agent-loop` accepts an optional
-`preferredCommandID` and optional `maxSteps` between 1 and 8. The loop creates
-an `AgentRunLoop` record, invokes provider-selected steps, links each step ID
-back to the loop, and stops at explicit safe conditions:
+`preferredCommandID`, optional `maxSteps` between 1 and 8, and a separate
+optional `maxContextSteps` between 0 and 3 that cannot exceed `maxSteps`. The
+loop creates an `AgentRunLoop` record, invokes provider-selected steps, links
+each step ID back to the loop, persists completed context-step counts plus
+aggregate inspected paths, and stops at explicit safe conditions:
 
 - human review required for a proposed edit
 - approved command passed
 - reviewed self-fix rerun passed
 - step blocked or failed
 - task already busy with validation or a command
+- context-step budget exhausted
+- repeated context request or no newly inspected context paths
 - no progress recorded
 - max-step limit reached
 
-The loop does not introduce new tool permissions. It reuses `run-agent-step`
-and therefore inherits the same command catalog, approval, repair brief,
-rerun-evidence, validation, and review gates. The next architecture step is to
-add pause/abort/resume controls and richer read/search/patch tool choices
-inside the same runtime-owned safety model.
+The provider sees the current context budget and recent search/read outcomes,
+but the runtime owns the counter and rejects over-budget choices before any
+repository tool runs. The loop does not introduce new tool permissions. It
+reuses `run-agent-step` and therefore inherits the same command catalog,
+approval, repair brief, rerun-evidence, validation, and review gates.
+
+Loop control is runtime-owned through three exact-loop-ID endpoints:
+
+- `POST /tasks/:taskID/pause-agent-loop`
+- `POST /tasks/:taskID/abort-agent-loop`
+- `POST /tasks/:taskID/resume-agent-loop`
+
+Pause and abort are cooperative: a step already in progress may finish, then
+the runtime checks the persisted request before choosing another provider
+action. The loop records request/stop timestamps, optional control note,
+resume timestamp/count, and `UserPaused` or `UserAborted`. Resume is allowed
+only for the same `UserPaused` loop when steps remain, no command/validation is
+busy, and no proposed edit is waiting for review. It retains step IDs, context
+budget usage, inspected paths, provider, and preferred command intent. Events
+include `pause_requested`, `abort_requested`, `resumed`, `paused`, and
+`aborted`. Commands are not force-killed by loop control; active commands keep
+their separate explicit cancellation path.
+
+The next architecture step is to split the combined context action into
+finer-grained search/read choices and broaden patch behavior inside the same
+runtime-owned safety model.
 
 ### Permission Manager
 

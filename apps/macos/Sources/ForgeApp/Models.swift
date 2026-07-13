@@ -142,6 +142,11 @@ struct AgentRunStep: Identifiable, Codable, Hashable {
     var status: String
     var summary: String
     var rationale: String
+    var searchTerms: [String]?
+    var readPaths: [String]?
+    var contextPaths: [String]?
+    var newContextPaths: [String]?
+    var contextOutcome: String?
     var commandID: String?
     var commandName: String?
     var commandRerunEvidenceID: String?
@@ -158,7 +163,18 @@ struct AgentRunLoop: Identifiable, Codable, Hashable {
     var status: String
     var maxSteps: Int
     var stepsRun: Int
+    var maxContextSteps: Int
+    var contextStepsRun: Int
+    var contextPaths: [String]
     var stepIDs: [String]
+    var preferredCommandID: String?
+    var pauseRequestedAt: String?
+    var pausedAt: String?
+    var abortRequestedAt: String?
+    var abortedAt: String?
+    var resumedAt: String?
+    var resumeCount: Int
+    var controlNote: String?
     var stopReason: String?
     var summary: String
     var startedAt: String
@@ -782,6 +798,18 @@ struct EditProposal: Identifiable, Codable, Hashable {
     var rollbackNote: String?
     var validation: EditProposalValidation?
     var appliedFileChanges: [AppliedFileChange]?
+    var lastApplyAttempt: EditProposalApplyAttempt?
+}
+
+struct EditProposalApplyAttempt: Codable, Hashable {
+    var status: String
+    var plannedPaths: [String]
+    var appliedPaths: [String]
+    var revertedPaths: [String]
+    var summary: String
+    var startedAt: String
+    var endedAt: String?
+    var error: String?
 }
 
 struct AppliedFileChange: Identifiable, Codable, Hashable {
@@ -895,6 +923,12 @@ struct RunAgentStepRequest: Encodable {
 struct RunAgentLoopRequest: Encodable {
     var preferredCommandID: String?
     var maxSteps: Int?
+    var maxContextSteps: Int?
+}
+
+struct AgentRunLoopControlRequest: Encodable {
+    var agentRunLoopID: String
+    var note: String?
 }
 
 struct CancelTaskCommandRequest: Encodable {
