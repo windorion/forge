@@ -402,6 +402,8 @@ class OpenAIResponsesModelProvider implements ModelProvider {
       [
         "Choose exactly one safe next action for Forge's live coding-agent run.",
         "You are selecting the next runtime-owned action; you are not executing tools yourself.",
+        "Use InspectRepository when more read-only codebase evidence is needed before proposing or repairing an edit. Provide bounded searchTerms and optional repo-relative readPaths. The runtime validates and executes them.",
+        "Do not request repository evidence already present in task context or recent InspectRepository steps; wait for human review when no new safe context is needed.",
         "Use GenerateEditProposal when an execution proposal exists and there is no proposed edit awaiting review.",
         "Use RunTaskCommand only when one of the provided taskCommands has canRun true; commandID must exactly match that command id.",
         "Use GenerateValidationRepairProposal when a failed validation or task command has a repair brief and no repair proposal is currently awaiting review.",
@@ -632,15 +634,18 @@ const agentRunStepDecisionSchema: JsonSchema = {
         "GenerateValidationRepairProposal",
         "RerunRepairCommand",
         "WaitForHumanReview",
-        "RequestPlanApproval"
+        "RequestPlanApproval",
+        "InspectRepository"
       ]
     },
     summary: { type: "string" },
     rationale: { type: "string" },
     commandID: { type: "string" },
-    commandRerunEvidenceID: { type: "string" }
+    commandRerunEvidenceID: { type: "string" },
+    searchTerms: { type: "array", items: { type: "string" } },
+    readPaths: { type: "array", items: { type: "string" } }
   },
-  required: ["action", "summary", "rationale", "commandID", "commandRerunEvidenceID"]
+  required: ["action", "summary", "rationale", "commandID", "commandRerunEvidenceID", "searchTerms", "readPaths"]
 };
 
 const editProposalGuidanceSchema: JsonSchema = {
@@ -1039,6 +1044,8 @@ function normalizeAgentRunStepDecisionOutput(
   const action = normalizeAgentRunStepAction(output.action) ?? fallback.action;
   const commandID = optionalString(output.commandID);
   const commandRerunEvidenceID = optionalString(output.commandRerunEvidenceID);
+  const searchTerms = normalizeAgentRunStepStringList(output.searchTerms, 10, 64);
+  const readPaths = normalizeAgentRunStepStringList(output.readPaths, 6, 240);
   const runnableCommandIDs = new Set(request.taskCommands.filter((permission) => permission.canRun).map((permission) => permission.command.id));
   const runnableRerunEvidenceIDs = new Set(request.commandRerunEvidence.map((evidence) => evidence.id));
 
@@ -1063,12 +1070,27 @@ function normalizeAgentRunStepDecisionOutput(
     summary: requiredString(output.summary, "summary"),
     rationale: requiredString(output.rationale, "rationale"),
     commandID: action === "RunTaskCommand" ? commandID : undefined,
-    commandRerunEvidenceID: action === "RerunRepairCommand" ? commandRerunEvidenceID : undefined
+    commandRerunEvidenceID: action === "RerunRepairCommand" ? commandRerunEvidenceID : undefined,
+    searchTerms: action === "InspectRepository" ? searchTerms : undefined,
+    readPaths: action === "InspectRepository" ? readPaths : undefined
   };
+}
+
+function normalizeAgentRunStepStringList(value: unknown, limit: number, itemLimit: number): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => optionalString(item).trim())
+    .filter((item, index, values) => item.length > 0 && values.indexOf(item) === index)
+    .slice(0, limit)
+    .map((item) => item.slice(0, itemLimit));
 }
 
 function normalizeAgentRunStepAction(value: unknown): AgentRunStepDecision["action"] | undefined {
   switch (value) {
+  case "InspectRepository":
   case "GenerateEditProposal":
   case "RunTaskCommand":
   case "GenerateValidationRepairProposal":
@@ -1446,6 +1468,7 @@ function agentRunStepRequestContext(request: AgentRunStepRequest): string {
 
   return JSON.stringify({
     allowedActions: [
+      "InspectRepository",
       "GenerateEditProposal",
       "RunTaskCommand",
       "GenerateValidationRepairProposal",
@@ -1455,6 +1478,7 @@ function agentRunStepRequestContext(request: AgentRunStepRequest): string {
     ],
     taskCommandPolicy: "RunTaskCommand can only use commandID values where canRun is true.",
     rerunPolicy: "RerunRepairCommand can only use commandRerunEvidenceID values listed in commandRerunEvidence.",
+    repositoryInspectionPolicy: "InspectRepository is read-only; searchTerms and readPaths are normalized and executed by runtime-owned bounded tools.",
     runnableCommandIDs: runnableCommands.map((permission) => permission.command.id),
     taskCommands: commandSummaries,
     commandRerunEvidence: rerunEvidence

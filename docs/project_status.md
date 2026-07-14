@@ -16,9 +16,9 @@ reviewed source files, validate work, expose guarded git actions, run approved
 task-scoped commands with streamed output,
 record rerun evidence after reviewed self-fixes, let a model provider choose
 safe next agent steps inside a bounded multi-step loop, and persist task state
-locally. The loop now has cooperative pause/abort/resume checkpoints; the next
-milestone is richer runtime-owned read/search orchestration, malformed-output
-recovery, and broader patch behavior.
+locally. The loop now has cooperative controls and a provider-selected,
+runtime-executed read-only repository inspection step; the next milestone is
+broader search/symbol choices, malformed-output recovery, and patch breadth.
 
 ## Current Implementation
 
@@ -59,6 +59,11 @@ Implemented:
   proposal or command targets, status, result, timestamps, and SSE events.
   The macOS action rail exposes `Run Agent Step`, and the Log tab shows the
   recent decision trail.
+- `InspectRepository` Agent Run Step action. The provider supplies only bounded
+  search terms and candidate repo-relative reads; the runtime normalizes them,
+  rejects unsafe paths, executes logged `list_repo_files`,
+  `search_repo_context`, and `read_context_file`, stores context/tool evidence,
+  and lets the bounded loop continue to its next provider decision.
 - Bounded Agent Run Loop v0. `POST /tasks/:taskID/run-agent-loop` repeatedly
   runs provider-selected safe steps up to a runtime-enforced step limit, links
   each `AgentRunStep` back to the loop, and stops at edit-proposal review
@@ -233,7 +238,7 @@ These percentages are product-readiness estimates, not calendar estimates.
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 82-86% | Has a first-pass session UI shell, full-screen diff review, context-anchored cross-file source patches with verified recovery, streamed/cancellable commands, self-fix rerun evidence, and a pause/abort/resume-capable bounded loop; richer read/search orchestration and UI polish remain. |
+| Coding-agent demo V0 | 84-88% | Has a first-pass session UI shell, full-screen diff review, verified cross-file source patches, streamed/cancellable commands, self-fix evidence, pause/abort/resume, and a provider-selected read/search→proposal loop; richer retries/tool breadth and UI polish remain. |
 | Useful developer alpha | 40-50% | Forge can now apply guarded normal source modifications, but still needs richer autonomous tool use, source create/delete, restart recovery, and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
@@ -272,8 +277,8 @@ Remaining V0 gaps:
   behavior and durable per-file decisions
 - extend the restricted Unified Diff engine to source-file create/delete and
   newline-marker edge cases after the modification path proves stable
-- extend the bounded agent loop with richer read/search tool choices,
-  malformed-output recovery, and broader patch/recovery behavior
+- extend `InspectRepository` with repeated-request suppression, explicit
+  ripgrep/symbol choices, and malformed-output recovery
 - implement full diff review with per-file reasoning and request-change loop
 - keep git/preflight work as supporting infrastructure rather than the main
   demo

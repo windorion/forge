@@ -29,8 +29,8 @@ dashboard.
 
 ## P1: Real Agent Behavior
 
-- Extend the bounded Agent Run Loop with richer runtime-owned read/search tool
-  choices and malformed-output retry/recovery.
+- Extend `InspectRepository` with repeated-request suppression, explicit
+  ripgrep-backed text/symbol search choices, and malformed-output retry.
 - Extend the bounded read-only planning/execution context loops into a
   runtime-owned tool-call loop with strict allowed tools and stop conditions.
 - Add stricter model output normalization, retry rules, and failure recovery
@@ -89,6 +89,12 @@ dashboard.
 
 ## Done Recently
 
+- Added provider-selected `InspectRepository` inside Agent Run Step/Loop. The
+  provider supplies bounded search terms and optional repo-relative paths;
+  the runtime filters unsafe paths, executes only logged read-only list/search/
+  read tools, stores step-level search/read evidence, and continues the loop.
+  The macOS Log tab shows searches and inspected paths. Smoke coverage verifies
+  `InspectRepository -> GenerateEditProposal` and rejects `../unsafe.txt`.
 - Added cooperative Agent Run Loop pause/abort/resume controls. Pause and abort
   requests are audited and take effect after the current safe step; resume
   creates a linked new loop from paused/aborted/failed checkpoints. The macOS

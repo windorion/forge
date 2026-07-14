@@ -9,8 +9,7 @@ import { fileURLToPath } from "node:url";
 import {
   createModelProvider,
   defaultModelProviderRuntimeSettings,
-  getModelProviderConfiguration,
-  type PlanContextRequestResult
+  getModelProviderConfiguration
 } from "./modelProvider.js";
 import { SqliteTaskStore } from "./taskStore.js";
 import type {
@@ -6087,6 +6086,8 @@ function createAgentRunStep(
     commandID: decision.commandID,
     commandName: commandPermission?.command.name ?? evidence?.commandName,
     commandRerunEvidenceID: decision.commandRerunEvidenceID,
+    searchTerms: decision.searchTerms,
+    readPaths: decision.readPaths,
     createdAt: new Date().toISOString()
   };
   task.agentRunSteps.push(step);
@@ -6103,6 +6104,8 @@ async function executeAgentRunStep(
 
   try {
     switch (step.action) {
+    case "InspectRepository":
+      return await executeRepositoryInspectionStep(task, step);
     case "GenerateEditProposal":
       return completeAgentRunStepAfterAction(
         await generateEditProposal(taskID),
@@ -6165,6 +6168,65 @@ async function executeAgentRunStep(
 
     return failAgentRunStep(task, step, error instanceof Error ? error.message : String(error));
   }
+}
+
+async function executeRepositoryInspectionStep(task: ForgeTask, step: AgentRunStep): Promise<ForgeTask> {
+  const existingPaths = new Set(task.contextFiles.map((file) => file.path));
+  const projectFiles = await runTool(
+    task,
+    "list_repo_files",
+    "Agent step bounded repo scan excluding private and generated directories",
+    listRepositoryFiles
+  );
+  const searchTerms = normalizeProviderSearchTerms({ searchTerms: step.searchTerms ?? [] }, task);
+  const requestedReadPaths = normalizeProviderReadPaths(step.readPaths ?? [], projectFiles);
+  const matches = await runTool(
+    task,
+    "search_repo_context",
+    searchTerms.join(", "),
+    () => searchRepositoryContext(
+      projectFiles,
+      searchTerms,
+      [...explicitContextPathsForTask(task), ...requestedReadPaths]
+    )
+  );
+  const inspectedFiles = await buildContextFiles(task, projectFiles, matches, requestedReadPaths);
+  const newFiles = inspectedFiles.filter((file) => !existingPaths.has(file.path));
+  step.searchTerms = searchTerms;
+  step.readPaths = requestedReadPaths;
+  step.contextFilePaths = inspectedFiles.map((file) => file.path);
+
+  if (newFiles.length === 0) {
+    return blockAgentRunStep(
+      task,
+      step,
+      `Repository inspection found no new safe context for ${searchTerms.join(", ") || "the task"}.`
+    );
+  }
+
+  task.contextFiles = mergeContextFiles(task.contextFiles, inspectedFiles);
+  const resultSummary = `Inspected ${inspectedFiles.length} file(s) and added ${newFiles.length} new context file(s): ${formatPathList(newFiles.map((file) => file.path))}.`;
+  if (!step.loopID) {
+    task.status = "Human Review";
+    task.currentPhase = "Repository Context Ready";
+    task.reviewSummary = resultSummary;
+    setAgent(task, "Manager", "Ready", "Repository inspection completed at a safe read-only checkpoint.");
+    setAgent(task, "Coder", "Ready", resultSummary);
+    setAgent(task, "Reviewer", "Active", "Review inspected context before the next agent step.");
+  } else {
+    setAgent(task, "Coder", "Active", resultSummary);
+  }
+
+  const updatedTask = completeAgentRunStepAfterAction(
+    task,
+    step.id,
+    resultSummary,
+    () => newFiles.at(-1)?.path
+  );
+  const inspected = event("agent.repository_inspection.completed", resultSummary);
+  inspected.createdAt = step.completedAt ?? new Date().toISOString();
+  saveAndBroadcast(updatedTask, inspected);
+  return updatedTask;
 }
 
 function completeAgentRunStepAfterAction(
@@ -9577,10 +9639,14 @@ async function buildContextFiles(
 }
 
 function mergeContextFiles(existing: ContextFile[], incoming: ContextFile[]): ContextFile[] {
-  const byPath = new Map(existing.map((file) => [file.path, file]));
-
+  const byPath = new Map<string, ContextFile>();
   for (const file of incoming) {
     byPath.set(file.path, file);
+  }
+  for (const file of existing) {
+    if (!byPath.has(file.path)) {
+      byPath.set(file.path, file);
+    }
   }
 
   return [...byPath.values()].slice(0, modelGuidedContextMaxStoredFiles);
@@ -9624,7 +9690,7 @@ function selectRepositoryContextPaths(
 }
 
 function normalizeProviderSearchTerms(
-  contextRequest: PlanContextRequestResult,
+  contextRequest: { searchTerms: string[] },
   task: ForgeTask
 ): string[] {
   const terms = new Set<string>();

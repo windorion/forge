@@ -74,12 +74,16 @@ task-scoped commands fail, the runtime can ask the provider for a repair brief
 from compact command summaries. A later edit proposal request can include that
 repair brief so the provider proposes a narrow follow-up repair artifact. The
 provider can also choose one Agent Run Step v0 action from a bounded enum:
-generate an edit proposal, run an already-approved task command, generate a
-validation repair proposal, rerun reviewed self-fix evidence, wait for human
-review, or request plan approval. The runtime still generates IDs, timestamps,
-validation state, execution proposal evidence, command execution, and
-restricted apply operations locally. The remote provider never directly edits
-files, runs commands, commits, pushes, or executes tools.
+inspect the repository, generate an edit proposal, run an already-approved
+task command, generate a validation repair proposal, rerun reviewed self-fix
+evidence, wait for human review, or request plan approval. For repository
+inspection the provider returns only bounded search terms and optional
+repo-relative read paths; the runtime filters unsafe paths and executes logged
+`list_repo_files`, `search_repo_context`, and `read_context_file` calls under
+existing budgets. The runtime still generates IDs, timestamps, validation
+state, execution proposal evidence, command execution, and restricted apply
+operations locally. The remote provider never directly edits files, runs
+commands, commits, pushes, or executes tools.
 Agent Run Loop v0 repeats these provider step decisions under runtime-owned
 stop conditions; the provider does not control the loop counter or bypass
 review gates.

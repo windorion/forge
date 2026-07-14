@@ -27,12 +27,12 @@ After a plan is approved, the runtime now runs another bounded read-only
 execution-context pass before asking the provider for an execution proposal.
 The proposal stores the inspected context files and concise tool evidence so
 the app can show what informed the proposed next action.
-The latest slice adds Agent Run Step v0: the runtime can ask the active model
-provider for one safe next action, then enforce existing gates while it
-generates an edit proposal, runs an approved task command, generates a
-validation repair proposal, reruns reviewed self-fix evidence, or pauses for
-human review. Agent Run Loop v0 wraps that step runner with a small
-runtime-enforced step limit and safe stop reasons.
+The latest slice extends Agent Run Step v0 with provider-selected repository
+inspection. A model can request bounded search terms and optional repo-relative
+paths, but the runtime filters them and performs only logged list/search/read
+tools before continuing to a reviewed edit or other gated action. Agent Run
+Loop v0 wraps the step runner with a small runtime-enforced step limit and safe
+stop reasons.
 
 The runtime core has an automated smoke regression that exercises the main
 task lifecycle without using real project memory or provider settings.
@@ -40,8 +40,8 @@ task lifecycle without using real project memory or provider settings.
 Product-direction note: this development slice now has the first real
 provider-selected bounded loop with cooperative pause/abort/resume checkpoints,
 but it still is not a full Codex/Claude Code style autonomous agent. The next
-app/runtime work should add richer runtime-owned read/search choices,
-malformed-output recovery, self-fix, and full diff review polish.
+app/runtime work should add explicit ripgrep/text-symbol inspection choices,
+malformed-output recovery, deeper self-fix, and full diff review polish.
 
 The macOS app now has a first-pass coding-agent session shell: a task queue,
 `1a`-style empty composer, live agent stream, plan progress strip,
@@ -387,9 +387,12 @@ uses it when the provider-selected action is `RunTaskCommand` and the command
 is already approved/runnable in the runtime permission snapshot. The provider
 chooses exactly one action from `GenerateEditProposal`, `RunTaskCommand`,
 `GenerateValidationRepairProposal`, `RerunRepairCommand`,
-`WaitForHumanReview`, and `RequestPlanApproval`. The runtime then rechecks
-the same proposal, command, repair, and review gates used by the manual
-endpoints before doing any side effect. Each decision is stored in
+`WaitForHumanReview`, `RequestPlanApproval`, and `InspectRepository`. The
+inspection action accepts bounded search terms and optional repo-relative read
+paths, then the runtime filters unsafe paths and executes only its logged
+read-only list/search/read tools. The runtime rechecks the same proposal,
+command, repair, and review gates used by the manual endpoints before any side
+effect. Each decision is stored in
 `agentRunSteps` with provider metadata, action, summary, rationale, command or
 rerun evidence IDs, linked proposal/command target, status, result, and
 timestamps. SSE emits `agent.run_step.started`, `agent.run_step.completed`,
@@ -402,8 +405,8 @@ guards, or max-step protection. Pause and abort requests are audited while the
 loop is active and stop it after the current safe step. Resume creates a new
 linked loop from a paused, aborted, or failed checkpoint. These controls do not
 kill in-flight commands or model calls and do not add permissions. A complete
-V0 agent still needs richer runtime-owned read/search choices and malformed-
-output recovery.
+V0 agent still needs explicit ripgrep/text-symbol choices, stronger repeated-
+request suppression, and malformed-output recovery.
 
 Current validation presets:
 
@@ -487,6 +490,9 @@ It covers:
 - mock OpenAI plan-context loop before a plan revision
 - mock OpenAI provider-selected agent run step that generates a proposal, then
   another step that runs an approved runtime command
+- mock OpenAI bounded loop that first selects `InspectRepository`, filters an
+  unsafe path, reads a safe macOS source file, then generates a proposal using
+  the newly persisted context
 - mock OpenAI bounded agent run loop that generates a proposal, applies it
   after review, then runs an approved command, creates a repair brief from the
   failed command, and generates a self-fix proposal inside one loop

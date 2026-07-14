@@ -150,6 +150,7 @@ export interface ExecutionProposal {
 }
 
 export type AgentRunStepAction =
+  | "InspectRepository"
   | "GenerateEditProposal"
   | "RunTaskCommand"
   | "GenerateValidationRepairProposal"
@@ -163,6 +164,8 @@ export interface AgentRunStepDecision {
   rationale: string;
   commandID?: string;
   commandRerunEvidenceID?: string;
+  searchTerms?: string[];
+  readPaths?: string[];
 }
 
 export interface AgentRunStep {
@@ -176,6 +179,9 @@ export interface AgentRunStep {
   commandID?: string;
   commandName?: string;
   commandRerunEvidenceID?: string;
+  searchTerms?: string[];
+  readPaths?: string[];
+  contextFilePaths?: string[];
   targetID?: string;
   resultSummary?: string;
   error?: string;

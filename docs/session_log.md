@@ -3209,3 +3209,44 @@ Next:
 - Add runtime-owned read/search actions inside the bounded loop with strict
   budgets and no mutation permissions.
 - Add malformed-output normalization/retry and crash-restart loop recovery.
+
+## 2026-07-14 08:01:30 CEST
+
+Conversation summary:
+
+- After committing and pushing the patch/recovery and loop-control slices, the
+  session continued with the next V0 orchestration task: provider-selected,
+  runtime-owned repository inspection inside Agent Run Step/Loop.
+
+Done:
+
+- Added `InspectRepository` to the bounded provider decision schema with
+  optional search terms and repo-relative read-path candidates.
+- Kept execution runtime-owned: the step uses logged `list_repo_files`,
+  `search_repo_context`, and `read_context_file` tools under existing budgets,
+  filters unsafe paths, and grants no command or mutation permissions.
+- Added no-progress blocking when an inspection produces no new safe context
+  and prioritized newly inspected files in the bounded task context.
+- Persisted search, requested-read, and inspected-file evidence on each agent
+  step and exposed it in the macOS Log tab.
+- Added a mock OpenAI two-step smoke flow that inspects a safe Keychain source
+  file, rejects an escaping path, then generates a reviewed proposal using the
+  newly recorded context.
+- Verified `npm run check`, `npm run smoke:core`, `swift build`, and
+  `git diff --check` during implementation and documentation closeout.
+
+Not done:
+
+- Inspection still reuses the existing bounded substring search instead of an
+  explicit ripgrep/text-symbol tool choice.
+- Repeated requests are stopped when they add no context, but do not yet have a
+  dedicated cross-step request fingerprint or suppression record.
+- Malformed provider-output retry and crash-restart loop recovery remain
+  outstanding.
+
+Next:
+
+- Add explicit ripgrep-backed text/symbol inspection choices with request
+  fingerprints and clearer budget evidence.
+- Add bounded malformed-output normalization/retry, then recover interrupted
+  persisted loops after runtime restart.

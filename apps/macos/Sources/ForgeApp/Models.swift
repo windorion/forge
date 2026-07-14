@@ -145,6 +145,9 @@ struct AgentRunStep: Identifiable, Codable, Hashable {
     var commandID: String?
     var commandName: String?
     var commandRerunEvidenceID: String?
+    var searchTerms: [String]?
+    var readPaths: [String]?
+    var contextFilePaths: [String]?
     var targetID: String?
     var resultSummary: String?
     var error: String?

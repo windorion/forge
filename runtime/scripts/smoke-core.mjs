@@ -110,6 +110,7 @@ try {
   const openAIUnifiedDiffTask = await runOpenAIUnifiedDiffTransactionFlow();
   const openAIApplyRecoveryTask = await runOpenAIApplyRecoveryFlow();
   const openAIAgentRunStepTask = await runOpenAIAgentRunStepFlow();
+  const openAIRepositoryInspectionTask = await runOpenAIRepositoryInspectionLoopFlow();
   const openAIAgentRunLoopTask = await runOpenAIAgentRunLoopFlow();
   const openAIAgentLoopControlsTask = await runOpenAIAgentLoopControlsFlow();
   const openAIAutoRepairTask = await runOpenAIAutoRepairFlow();
@@ -129,6 +130,7 @@ try {
   console.log(`- OpenAI unified diff task: ${openAIUnifiedDiffTask.id}`);
   console.log(`- OpenAI apply recovery task: ${openAIApplyRecoveryTask.id}`);
   console.log(`- OpenAI agent run step task: ${openAIAgentRunStepTask.id}`);
+  console.log(`- OpenAI repository inspection task: ${openAIRepositoryInspectionTask.id}`);
   console.log(`- OpenAI agent run loop task: ${openAIAgentRunLoopTask.id}`);
   console.log(`- OpenAI agent loop controls task: ${openAIAgentLoopControlsTask.id}`);
   console.log(`- OpenAI auto-repair task: ${openAIAutoRepairTask.id}`);
@@ -902,6 +904,53 @@ async function runOpenAIAgentRunStepFlow() {
   assert(
     commandStep.events.some((event) => event.type === "agent.run_step.completed" && event.data?.taskID === current.id),
     "Agent run step flow did not stream the completed event for command execution."
+  );
+
+  return current;
+}
+
+async function runOpenAIRepositoryInspectionLoopFlow() {
+  const task = await createTask({
+    title: "Smoke agent repository inspection",
+    objective: "Let the bounded agent loop choose one read-only repository inspection before proposing work."
+  });
+
+  await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "repository inspection task to reach initial plan review"
+  );
+
+  let current = await post(`/tasks/${task.id}/approve-plan`, {
+    note: "Core smoke test approves read-only inspection before proposal generation."
+  });
+  const contextBefore = new Set(current.contextFiles?.map((file) => file.path));
+  assert(!contextBefore.has("apps/macos/Sources/ForgeApp/KeychainStore.swift"), "Inspection fixture path was already in context.");
+
+  current = await post(`/tasks/${task.id}/run-agent-loop`, { maxSteps: 3 });
+  const loop = current.agentRunLoops?.at(-1);
+  const loopSteps = loop?.stepIDs?.map((stepID) => current.agentRunSteps.find((step) => step.id === stepID));
+  assert(loopSteps?.[0]?.action === "InspectRepository", `Expected InspectRepository first, got ${loopSteps?.[0]?.action}.`);
+  assert(loopSteps?.[0]?.status === "Completed", "Repository inspection step did not complete.");
+  assert(
+    loopSteps?.[0]?.contextFilePaths?.includes("apps/macos/Sources/ForgeApp/KeychainStore.swift"),
+    "Repository inspection did not record the provider-requested safe read path."
+  );
+  assert(loopSteps?.[1]?.action === "GenerateEditProposal", `Expected proposal second, got ${loopSteps?.[1]?.action}.`);
+  assert(current.editProposal?.status === "Proposed", "Repository inspection loop did not reach proposal review.");
+  assert(
+    current.contextFiles?.some((file) => file.path === "apps/macos/Sources/ForgeApp/KeychainStore.swift"),
+    "Repository inspection did not merge new context into task state."
+  );
+  assert(
+    current.toolCalls?.some((tool) => tool.name === "list_repo_files") &&
+      current.toolCalls?.some((tool) => tool.name === "search_repo_context") &&
+      current.toolCalls?.some((tool) => tool.name === "read_context_file"),
+    "Repository inspection did not execute the runtime-owned read-only tool chain."
+  );
+  assert(
+    current.events?.some((event) => event.type === "agent.repository_inspection.completed"),
+    "Repository inspection did not record its completion event."
   );
 
   return current;
@@ -2134,6 +2183,30 @@ function mockOpenAIOutput(name, requests, body) {
   }
 
   if (name === "forge_agent_run_step") {
+    if (bodyText.includes("agent repository inspection")) {
+      if (!bodyText.includes("KeychainStore.swift")) {
+        return {
+          action: "InspectRepository",
+          summary: "Inspect Keychain integration before proposing the next reviewed change.",
+          rationale: "The current task context does not yet include the macOS Keychain boundary.",
+          commandID: "",
+          commandRerunEvidenceID: "",
+          searchTerms: ["Keychain", "security", "provider"],
+          readPaths: ["apps/macos/Sources/ForgeApp/KeychainStore.swift", "../unsafe.txt"]
+        };
+      }
+
+      return {
+        action: "GenerateEditProposal",
+        summary: "Generate a reviewed proposal after the read-only inspection.",
+        rationale: "The requested Keychain context is now recorded in task state.",
+        commandID: "",
+        commandRerunEvidenceID: "",
+        searchTerms: [],
+        readPaths: []
+      };
+    }
+
     if (bodyText.includes("agent loop controls")) {
       return {
         action: "RunTaskCommand",
@@ -2233,6 +2306,36 @@ function mockOpenAIOutput(name, requests, body) {
   }
 
   if (name === "forge_edit_proposal") {
+    if (bodyText.includes("agent repository inspection")) {
+      return {
+        summary: "Propose a distinct note after runtime-owned repository inspection.",
+        riskLevel: "Low",
+        fileChanges: [
+          {
+            path: appendSmokePath,
+            changeType: "Modify",
+            rationale: "Record that the bounded loop inspected provider-requested repository context before proposing work.",
+            diffPreview: [
+              `--- a/${appendSmokePath}`,
+              `+++ b/${appendSmokePath}`,
+              "@@ repository inspection smoke @@",
+              "+",
+              "+## Agent Repository Inspection Smoke",
+              "+",
+              "+- Runtime-owned read/search tools completed before proposal generation."
+            ].join("\n"),
+            operationKind: "AppendText",
+            appendText: "\n## Agent Repository Inspection Smoke\n\n- Runtime-owned read/search tools completed before proposal generation.\n",
+            findText: "",
+            replaceWith: "",
+            patchHunks: [],
+            unifiedDiff: "",
+            content: ""
+          }
+        ]
+      };
+    }
+
     if (bodyText.includes("unified diff transaction smoke") || bodyText.includes("apply recovery smoke")) {
       const firstPatch = [
         `--- a/${unifiedDiffSmokePathOne}`,

@@ -72,6 +72,13 @@ The execution-context pass after plan approval uses the same low-risk
 `list_repo_files`, `search_repo_context`, and `read_context_file` tools. It
 does not mutate files, run commands, or perform git/network side effects.
 
+Agent Run Step/Loop may also select `InspectRepository`, but the provider only
+supplies bounded search terms and optional repo-relative candidate paths. The
+runtime rejects absolute, escaping, ignored, internal, generated, or otherwise
+unsafe paths and remains the sole executor of the logged read-only tools.
+Inspection adds no command, network, edit, or git permissions, and a request
+that produces no new safe context is blocked as no progress.
+
 ### Medium Risk
 
 Examples:

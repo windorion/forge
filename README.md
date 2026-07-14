@@ -71,6 +71,11 @@ Implemented today:
   reviewed self-fix evidence, or waits for human review. The macOS action rail
   exposes `Run Agent Step`, and the Log tab shows recent agent step decisions,
   rationale, status, linked command/proposal targets, and result summaries.
+- Runtime-owned repository inspection step: the provider may choose
+  `InspectRepository` with bounded search terms and candidate repo-relative
+  paths. Forge filters unsafe/repeated inputs, executes only its logged
+  read-only list/search/read tools, stores context evidence, and can continue
+  the bounded loop into proposal generation without granting arbitrary tools.
 - Bounded Agent Run Loop v0: `POST /tasks/:taskID/run-agent-loop` repeatedly
   runs provider-selected safe steps up to a small runtime-enforced limit and
   stops at review gates, passed commands, verified self-fixes, blocked steps,
@@ -179,7 +184,7 @@ Product-readiness estimate:
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 82-86% | Has a first-pass session UI shell, full-screen diff review, context-anchored cross-file source patches with verified recovery, streamed/cancellable commands, self-fix rerun evidence, and a pause/abort/resume-capable bounded loop; richer read/search orchestration and UI polish remain. |
+| Coding-agent demo V0 | 84-88% | Has a first-pass session UI shell, full-screen diff review, verified cross-file source patches, streamed/cancellable commands, self-fix evidence, pause/abort/resume, and a provider-selected read/search→proposal loop; richer retries/tool breadth and UI polish remain. |
 | Useful developer alpha | 40-50% | Forge can now apply guarded normal source modifications, but still needs richer autonomous tool use, source create/delete, restart recovery, and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, memory, MCP/GitHub, and product polish. |
@@ -193,8 +198,8 @@ Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
 
 - polish the first-pass macOS coding-agent session UI toward the exact
   `design_handoff_forge` screens
-- extend the bounded agent loop with richer read/search tool choices,
-  malformed-output recovery, and broader patch/recovery behavior
+- extend `InspectRepository` with repeated-request suppression, explicit
+  ripgrep/symbol choices, and malformed-output recovery
 - extend the restricted patch engine to source-file create/delete and
   no-newline edge cases after the new Unified Diff path proves stable
 - connect full diff review to durable file-level decisions once the review

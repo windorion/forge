@@ -117,12 +117,15 @@ to the failed source run, repair brief, and applied proposal.
 
 `POST /tasks/:taskID/run-agent-step` asks the active model provider for one
 safe next action and then lets the runtime enforce the same gates as the
-manual endpoints. The current action enum can generate an edit proposal, run
-an approved task command, generate a validation repair proposal, rerun reviewed
-self-fix evidence, wait for human review, or request plan approval. Every
-decision is stored in `agentRunSteps` with provider metadata, rationale,
-status, linked target IDs, result summaries, and timestamps. This endpoint is
-one step at a time; the bounded loop endpoint chains the same safe boundary.
+manual endpoints. The current action enum can inspect the repository, generate
+an edit proposal, run an approved task command, generate a validation repair
+proposal, rerun reviewed self-fix evidence, wait for human review, or request
+plan approval. Inspection accepts bounded provider search terms and optional
+repo-relative read paths, but the runtime filters paths and executes only its
+logged read-only list/search/read tools. Every decision is stored in
+`agentRunSteps` with provider metadata, rationale, inspection evidence, status,
+linked target IDs, result summaries, and timestamps. This endpoint is one step
+at a time; the bounded loop endpoint chains the same safe boundary.
 
 `POST /tasks/:taskID/run-agent-loop` wraps the same runtime-owned step
 boundary in a bounded loop. The request can include `maxSteps` from 1 to 8 and
@@ -326,6 +329,8 @@ before an OpenAI-backed plan
 revision, a richer edit proposal with append/create apply, and a blocked
 preview-only artifact. It also verifies a blocked-to-repaired proposal path and
 bounded stop behavior for proposals that remain preview-only. The smoke also
+verifies a provider-selected repository inspection followed by proposal
+generation, including rejection of an unsafe requested path. It then
 forces a temporary TypeScript validation failure and verifies provider-backed
 repair brief generation plus follow-up repair proposal generation before
 cleaning the temporary file.

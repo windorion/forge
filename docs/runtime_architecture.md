@@ -411,6 +411,7 @@ Agent Run Step v0 is the first provider-driven normal run path. The endpoint
 `POST /tasks/:taskID/run-agent-step` asks the active `ModelProvider` for one
 safe next action from a bounded enum:
 
+- `InspectRepository`
 - `GenerateEditProposal`
 - `RunTaskCommand`
 - `GenerateValidationRepairProposal`
@@ -419,15 +420,20 @@ safe next action from a bounded enum:
 - `RequestPlanApproval`
 
 The provider receives compact task state, task-command permission snapshots,
-and runnable command-rerun evidence. It returns only an action, summary,
-rationale, optional command ID, and optional rerun evidence ID. The runtime
-then rechecks the existing gates before doing anything: proposed edit review,
-plan approval, validation/command concurrency, command approval, command
-catalog membership, repair brief readiness, and rerun evidence readiness.
+and runnable command-rerun evidence. It returns an action, summary, rationale,
+optional command/rerun evidence ID, and—for `InspectRepository` only—bounded
+search terms plus optional repo-relative read paths. The runtime owns and logs
+the actual `list_repo_files`, `search_repo_context`, and `read_context_file`
+calls. It rejects unsafe or excluded paths, keeps existing read budgets, and
+blocks an inspection step that adds no new safe context. Inspection cannot run
+commands or mutate files. For every other action, the runtime rechecks the
+existing proposed-edit, plan, concurrency, command approval/catalog, repair
+brief, and rerun-evidence gates before doing anything.
 
 Each executed decision is appended to `agentRunSteps` with provider metadata,
-action, status, summary, rationale, command/evidence IDs, linked proposal or
-command target, result, error, and timestamps. The runtime emits
+action, status, summary, rationale, command/evidence IDs, inspection search and
+file evidence, linked proposal or command target, result, error, and
+timestamps. The runtime emits
 `agent.run_step.started`, `agent.run_step.completed`,
 `agent.run_step.blocked`, or `agent.run_step.failed`, so the macOS Log tab can
 show a chronological decision trail.
@@ -452,10 +458,11 @@ back to the loop, and stops at explicit safe conditions:
 - max-step limit reached
 
 The loop does not introduce new tool permissions. It reuses `run-agent-step`
-and therefore inherits the same command catalog, approval, repair brief,
-rerun-evidence, validation, and review gates. The next architecture step is to
-add richer runtime-owned read/search tool choices and malformed-output
-recovery inside the same safety model.
+and therefore inherits the same read budgets, command catalog, approval,
+repair brief, rerun-evidence, validation, and review gates. The next
+architecture step is to broaden runtime-owned inspection with explicit
+ripgrep/text-symbol choices, suppress repeated requests more aggressively,
+and recover from malformed provider output inside the same safety model.
 
 Active loops also have cooperative control endpoints:
 

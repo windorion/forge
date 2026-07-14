@@ -1024,6 +1024,21 @@ private struct AgentRunStepPanel: View {
                             .font(.caption)
                             .foregroundStyle(ForgeDesign.muted)
 
+                        if step.action == "InspectRepository" {
+                            if let searchTerms = step.searchTerms, !searchTerms.isEmpty {
+                                Text("SEARCH  \(searchTerms.joined(separator: " · "))")
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(ForgeDesign.muted)
+                                    .textSelection(.enabled)
+                            }
+                            if let contextFilePaths = step.contextFilePaths, !contextFilePaths.isEmpty {
+                                Text("READ  \(contextFilePaths.joined(separator: " · "))")
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(ForgeDesign.ink)
+                                    .textSelection(.enabled)
+                            }
+                        }
+
                         if let result = step.resultSummary ?? step.error {
                             Text(result)
                                 .font(.caption.monospaced())
