@@ -191,7 +191,7 @@ Product-readiness estimate:
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 87-91% | Adds restart-safe Agent Loop checkpoints to the session shell, full-screen review, transactional source patches, commands, self-fix, loop controls, repository inspection, and bad-output recovery; review closure and UI polish remain. |
+| Coding-agent demo V0 | 90-94% | Adds restart-safe loops and durable per-file full-diff decisions/request-change revisions to transactional source patches, commands, self-fix, repository inspection, and bad-output recovery; edge-case patching and UI polish remain. |
 | Useful developer alpha | 42-52% | Forge can now recover interrupted agent loops and apply guarded normal source modifications, but still needs broader autonomous tool use, source create/delete, transaction crash recovery, and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, memory, MCP/GitHub, and product polish. |
@@ -205,11 +205,10 @@ Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
 
 - polish the first-pass macOS coding-agent session UI toward the exact
   `design_handoff_forge` screens
-- add richer search result-quality evidence and durable full-diff decisions
+- add apply-transaction crash recovery and richer search result evidence
 - extend the restricted patch engine to source-file create/delete and
   no-newline edge cases after the new Unified Diff path proves stable
-- connect full diff review to durable file-level decisions once the review
-  model supports them
+- polish full diff split rendering and keyboard/file navigation
 - return to PR/GitHub publication after the agent coding loop feels real
 
 ## Core Principles

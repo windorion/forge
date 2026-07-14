@@ -1433,19 +1433,30 @@ private struct FullscreenDiffReview: View {
                     if let selectedFile {
                         MetricRow(label: "Status", value: selectedFile.status)
                         MetricRow(label: "Validation", value: selectedFile.validationStatus ?? "Unknown")
+                        MetricRow(label: "Review", value: selectedFileDecision?.decision ?? "Pending")
                         MetricRow(label: "Lines", value: "+\(selectedFile.additions ?? 0) -\(selectedFile.deletions ?? 0)")
                     }
 
-                    Button {} label: {
-                        Label("Looks Good", systemImage: "checkmark")
+                    Button {
+                        if let change = selectedProposalChange {
+                            workspace.reviewEditProposalFile(for: task, change: change, decision: "Approved")
+                        }
+                    } label: {
+                        Label(selectedFileDecision?.decision == "Approved" ? "Approved" : "Looks Good", systemImage: "checkmark")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(ForgeSecondaryButtonStyle())
-                    .disabled(true)
-                    .help("Per-file approval state is UI-only until the review model grows file-level decisions.")
+                    .disabled(!canReviewSelectedFile || selectedFileDecision?.decision == "Approved")
 
                     Button {
-                        workspace.rejectEditProposal(for: task)
+                        if let change = selectedProposalChange {
+                            workspace.reviewEditProposalFile(
+                                for: task,
+                                change: change,
+                                decision: "ChangesRequested",
+                                note: "Revise the proposed change for \(change.path)."
+                            )
+                        }
                     } label: {
                         Label(requestChangeTitle, systemImage: "arrow.uturn.backward")
                             .frame(maxWidth: .infinity)
@@ -1583,6 +1594,7 @@ private struct FullscreenDiffReview: View {
     private var canApplyProposal: Bool {
         task.editProposal?.status == "Proposed" &&
             task.editProposal?.validation?.status != "Blocked" &&
+            allProposedFilesApproved &&
             !workspace.isApplyingEditProposal(taskID: task.id) &&
             !workspace.isRollingBackEditProposal(taskID: task.id) &&
             !workspace.isValidatingEditProposal(taskID: task.id) &&
@@ -1591,6 +1603,7 @@ private struct FullscreenDiffReview: View {
 
     private var canRejectProposal: Bool {
         task.editProposal?.status == "Proposed" &&
+            selectedProposalChange != nil &&
             !workspace.isApplyingEditProposal(taskID: task.id) &&
             !workspace.isRollingBackEditProposal(taskID: task.id) &&
             !workspace.isRejectingEditProposal(taskID: task.id)
@@ -1618,7 +1631,38 @@ private struct FullscreenDiffReview: View {
     }
 
     private var requestChangeTitle: String {
-        workspace.isRejectingEditProposal(taskID: task.id) ? "Requesting" : "Request Change"
+        if let change = selectedProposalChange,
+           workspace.isReviewingEditProposalFile(taskID: task.id, fileChangeID: change.id) {
+            return "Requesting"
+        }
+        return "Request Change"
+    }
+
+    private var selectedProposalChange: ProposedFileChange? {
+        guard let activePath else { return nil }
+        return task.editProposal?.fileChanges.first { $0.path == activePath }
+    }
+
+    private var selectedFileDecision: EditProposalFileDecision? {
+        guard let change = selectedProposalChange else { return nil }
+        return task.editProposal?.fileDecisions?.first { $0.fileChangeID == change.id }
+    }
+
+    private var canReviewSelectedFile: Bool {
+        guard let change = selectedProposalChange else { return false }
+        return task.editProposal?.status == "Proposed" &&
+            !workspace.isReviewingEditProposalFile(taskID: task.id, fileChangeID: change.id) &&
+            !workspace.isApplyingEditProposal(taskID: task.id) &&
+            !workspace.isRollingBackEditProposal(taskID: task.id)
+    }
+
+    private var allProposedFilesApproved: Bool {
+        guard let proposal = task.editProposal else { return false }
+        if proposal.requiresFileReview != true { return true }
+        let approved = Set((proposal.fileDecisions ?? [])
+            .filter { $0.decision == "Approved" }
+            .map(\.fileChangeID))
+        return proposal.fileChanges.allSatisfy { approved.contains($0.id) }
     }
 
     private func validationResult(for path: String) -> FileChangeValidation? {
@@ -2537,6 +2581,7 @@ private struct AgentRunActionsCard: View {
     private var canApplyEditProposal: Bool {
         task.editProposal?.status == "Proposed" &&
             task.editProposal?.validation?.status != "Blocked" &&
+            fileReviewAllowsApply &&
             !isValidatingEditProposal &&
             !isApplyingEditProposal &&
             !isRollingBackEditProposal &&
@@ -2546,6 +2591,13 @@ private struct AgentRunActionsCard: View {
             !isRunningTaskCommand &&
             !isCancellingTaskCommand &&
             !isRerunningRepairCommand
+    }
+
+    private var fileReviewAllowsApply: Bool {
+        guard let proposal = task.editProposal else { return false }
+        if proposal.requiresFileReview != true { return true }
+        let approved = Set((proposal.fileDecisions ?? []).filter { $0.decision == "Approved" }.map(\.fileChangeID))
+        return proposal.fileChanges.allSatisfy { approved.contains($0.id) }
     }
 
     private var applyEditProposalTitle: String {
@@ -3498,7 +3550,8 @@ private struct ReviewPanel: View {
                         ForEach(editProposal.fileChanges) { change in
                             EditProposalFileChangeCard(
                                 change: change,
-                                validationResult: validationResult(for: change, in: editProposal)
+                                validationResult: validationResult(for: change, in: editProposal),
+                                reviewDecision: editProposal.fileDecisions?.first { $0.fileChangeID == change.id }
                             )
                         }
                     }
@@ -3953,11 +4006,19 @@ private struct ReviewPanel: View {
     private var canApplyEditProposal: Bool {
         task.editProposal?.status == "Proposed" &&
             validationAllowsApply &&
+            fileReviewAllowsApply &&
             !isValidatingEditProposal &&
             !isApplyingEditProposal &&
             !isRollingBackEditProposal &&
             !isGeneratingValidationRepairProposal &&
             !isRejectingEditProposal
+    }
+
+    private var fileReviewAllowsApply: Bool {
+        guard let proposal = task.editProposal else { return false }
+        if proposal.requiresFileReview != true { return true }
+        let approved = Set((proposal.fileDecisions ?? []).filter { $0.decision == "Approved" }.map(\.fileChangeID))
+        return proposal.fileChanges.allSatisfy { approved.contains($0.id) }
     }
 
     private var applyEditProposalButtonTitle: String {
@@ -6645,6 +6706,7 @@ private struct ValidationRepairBriefCard: View {
 private struct EditProposalFileChangeCard: View {
     var change: ProposedFileChange
     var validationResult: FileChangeValidation?
+    var reviewDecision: EditProposalFileDecision?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -6664,6 +6726,11 @@ private struct EditProposalFileChangeCard: View {
 
                 if let validationResult {
                     ValidationStatusBadge(result: validationResult)
+                }
+                if let reviewDecision {
+                    Text(reviewDecision.decision)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(reviewDecision.decision == "Approved" ? .green : .orange)
                 }
             }
 

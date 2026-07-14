@@ -1627,6 +1627,8 @@ function editProposalRequestContext(request: EditProposalRequest): string {
             summary: request.previousProposal.summary,
             validationStatus: request.previousProposal.validation?.status,
             validationSummary: request.previousProposal.validation?.summary,
+            decisionNote: request.previousProposal.decisionNote,
+            fileDecisions: request.previousProposal.fileDecisions,
             fileChanges: request.previousProposal.fileChanges.map((change) => ({
               path: change.path,
               changeType: change.changeType,

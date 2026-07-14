@@ -112,6 +112,7 @@ try {
   const openAIApplyRecoveryTask = await runOpenAIApplyRecoveryFlow();
   const openAIAgentRunStepTask = await runOpenAIAgentRunStepFlow();
   const openAIRepositoryInspectionTask = await runOpenAIRepositoryInspectionLoopFlow();
+  const openAIFileReviewRevisionTask = await runOpenAIFileReviewRevisionFlow();
   const openAIInspectionRepeatGuardTask = await runOpenAIInspectionRepeatGuardFlow();
   const openAIAgentStepOutputRecoveryTask = await runOpenAIAgentStepOutputRecoveryFlow();
   const openAIAgentStepOutputFailureTask = await runOpenAIAgentStepOutputFailureFlow();
@@ -146,6 +147,7 @@ try {
   console.log(`- OpenAI apply recovery task: ${openAIApplyRecoveryTask.id}`);
   console.log(`- OpenAI agent run step task: ${openAIAgentRunStepTask.id}`);
   console.log(`- OpenAI repository inspection task: ${openAIRepositoryInspectionTask.id}`);
+  console.log(`- OpenAI file review revision task: ${openAIFileReviewRevisionTask.id}`);
   console.log(`- OpenAI inspection repeat guard task: ${openAIInspectionRepeatGuardTask.id}`);
   console.log(`- OpenAI agent step output recovery task: ${openAIAgentStepOutputRecoveryTask.id}`);
   console.log(`- OpenAI agent step output failure task: ${openAIAgentStepOutputFailureTask.id}`);
@@ -199,6 +201,12 @@ async function runAppendFlow() {
   const appendPath = join(repoRoot, appendSmokePath);
   const before = await readFile(appendPath, "utf8");
 
+  const unreviewedApply = await postExpectError(`/tasks/${task.id}/apply-edit-proposal`, {
+    note: "Core smoke verifies file review is required before apply."
+  });
+  assert(unreviewedApply.status === 409, `Expected unreviewed apply 409, got ${unreviewedApply.status}.`);
+  assert(unreviewedApply.text.includes("Every proposed file must be approved"), "Unreviewed apply did not report the file review gate.");
+  current = await approveAllProposalFiles(current);
   current = await post(`/tasks/${task.id}/apply-edit-proposal`, {
     note: "Core smoke test applies the append proposal."
   });
@@ -242,6 +250,7 @@ async function runReplaceFlow() {
   current = await post(`/tasks/${task.id}/validate-edit-proposal`, {});
   assertProposal(current, replaceSmokePath, "ReplaceText");
 
+  current = await approveAllProposalFiles(current);
   current = await post(`/tasks/${task.id}/apply-edit-proposal`, {
     note: "Core smoke test applies the replace proposal."
   });
@@ -293,6 +302,7 @@ async function runSourceReplaceFlow() {
     "Source replace validation did not use the source/text workspace boundary."
   );
 
+  current = await approveAllProposalFiles(current);
   current = await post(`/tasks/${task.id}/apply-edit-proposal`, {
     note: "Core smoke test applies the source replace proposal."
   });
@@ -373,6 +383,7 @@ async function runSourcePatchFlow() {
     "Source patch validation did not record ordered hunk application."
   );
 
+  current = await approveAllProposalFiles(current);
   current = await post(`/tasks/${task.id}/apply-edit-proposal`, {
     note: "Core smoke test applies the source patch proposal."
   });
@@ -701,6 +712,7 @@ async function runOpenAIContextFlow() {
     "Rich OpenAI proposal did not retain the create-file operation."
   );
 
+  current = await approveAllProposalFiles(current);
   current = await post(`/tasks/${task.id}/apply-edit-proposal`, {
     note: "Core smoke test applies the OpenAI append/create proposal."
   });
@@ -750,6 +762,7 @@ async function runOpenAIUnifiedDiffTransactionFlow() {
     "Unified diff validation did not record strict context matching for both files."
   );
 
+  current = await approveAllProposalFiles(current);
   current = await post(`/tasks/${task.id}/apply-edit-proposal`, {
     note: "Core smoke test applies the cross-file unified diff transaction."
   });
@@ -810,6 +823,7 @@ async function runOpenAIApplyRecoveryFlow() {
   assert(current.editProposal?.validation?.status === "Ready", "Apply recovery proposal was not ready before fault injection.");
 
   const protectedPath = join(repoRoot, unifiedDiffSmokePathTwo);
+  current = await approveAllProposalFiles(current);
   await chmod(protectedPath, 0o444);
   try {
     const failedApply = await postExpectError(`/tasks/${task.id}/apply-edit-proposal`, {
@@ -882,6 +896,7 @@ async function runOpenAIAgentRunStepFlow() {
     "Agent run step flow did not stream the completed event for proposal generation."
   );
 
+  current = await approveAllProposalFiles(current);
   current = await post(`/tasks/${task.id}/apply-edit-proposal`, {
     note: "Core smoke test applies the agent-generated proposal."
   });
@@ -1005,6 +1020,39 @@ async function runOpenAIAgentStepOutputRecoveryFlow() {
   return current;
 }
 
+async function runOpenAIFileReviewRevisionFlow() {
+  const task = await createTask({
+    title: "Smoke file review revision",
+    objective: `Persist a file-level change request and generate a linked revision for @${appendSmokePath}.`
+  });
+  await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "file review revision task to reach plan review"
+  );
+  let current = await post(`/tasks/${task.id}/approve-plan`, { note: "Approve file review revision smoke." });
+  current = await post(`/tasks/${task.id}/generate-edit-proposal`, {});
+  const firstProposal = current.editProposal;
+  const firstChange = firstProposal.fileChanges[0];
+  current = await post(`/tasks/${task.id}/review-edit-proposal-file`, {
+    fileChangeID: firstChange.id,
+    decision: "ChangesRequested",
+    note: "Use the revised wording for this file."
+  });
+  assert(current.editProposal.revisionNumber === 2, `Expected revision 2, got ${current.editProposal.revisionNumber}.`);
+  assert(current.editProposal.revisionOfID === firstProposal.id, "File change request did not link the new proposal revision.");
+  const archived = current.editProposalRevisions.find((proposal) => proposal.id === firstProposal.id);
+  assert(archived?.status === "Rejected", "Requested-change proposal was not archived as rejected.");
+  assert(
+    archived?.fileDecisions?.some((decision) =>
+      decision.fileChangeID === firstChange.id && decision.decision === "ChangesRequested"
+    ),
+    "Archived proposal did not retain the file-level change request."
+  );
+  assert(current.changedFiles.length === 0, "File review revision mutated the workspace.");
+  return current;
+}
+
 async function runOpenAIInspectionRepeatGuardFlow() {
   const task = await createTask({
     title: "Smoke inspection repeat guard",
@@ -1122,6 +1170,7 @@ async function runOpenAIAgentRunLoopFlow() {
     "Agent run loop did not stream the paused event for proposal loop."
   );
 
+  current = await approveAllProposalFiles(current);
   current = await post(`/tasks/${task.id}/apply-edit-proposal`, {
     note: "Core smoke test applies the loop-generated proposal."
   });
@@ -1400,6 +1449,7 @@ async function runOpenAIValidationFailureRepairFlow() {
     "Validation-repair proposal did not include an append operation."
   );
 
+  current = await approveAllProposalFiles(current);
   current = await post(`/tasks/${task.id}/apply-edit-proposal`, {
     note: "Core smoke test applies before forcing validation failure."
   });
@@ -1563,6 +1613,7 @@ async function runOpenAITaskCommandFailureRepairFlow() {
   );
 
   const repairProposalID = current.editProposal.id;
+  current = await approveAllProposalFiles(current);
   current = await post(`/tasks/${task.id}/apply-edit-proposal`, {
     note: "Core smoke test applies the task-command repair proposal."
   });
@@ -2580,6 +2631,28 @@ function mockOpenAIOutput(name, requests, body) {
   }
 
   if (name === "forge_edit_proposal") {
+    if (bodyText.includes("file review revision")) {
+      const revised = bodyText.includes('"revisionNumber": 2');
+      const note = revised ? "Revised wording after durable file review." : "Initial wording before file review.";
+      return {
+        summary: revised ? "Generate the linked file-review revision." : "Generate the first file-review proposal.",
+        riskLevel: "Low",
+        fileChanges: [{
+          path: appendSmokePath,
+          changeType: "Modify",
+          rationale: "Exercise durable per-file review decisions without applying files.",
+          diffPreview: `--- a/${appendSmokePath}\n+++ b/${appendSmokePath}\n+${note}`,
+          operationKind: "AppendText",
+          appendText: `\n## File Review Revision Smoke\n\n- ${note}\n`,
+          findText: "",
+          replaceWith: "",
+          patchHunks: [],
+          unifiedDiff: "",
+          createContent: ""
+        }]
+      };
+    }
+
     if (bodyText.includes("agent repository inspection")) {
       return {
         summary: "Propose a distinct note after runtime-owned repository inspection.",
@@ -3191,6 +3264,28 @@ async function requestExpectError(method, path, body) {
 async function readPersistedModelProviderSettings() {
   const raw = await readFile(settingsPath, "utf8");
   return JSON.parse(raw);
+}
+
+async function approveAllProposalFiles(task) {
+  let current = task;
+  const proposal = current.editProposal;
+  assert(proposal?.status === "Proposed", "File approval requires a proposed edit.");
+  for (const change of proposal.fileChanges) {
+    current = await post(`/tasks/${current.id}/review-edit-proposal-file`, {
+      fileChangeID: change.id,
+      decision: "Approved",
+      note: `Core smoke approves ${change.path}.`
+    });
+  }
+  assert(
+    current.editProposal.fileChanges.every((change) =>
+      current.editProposal.fileDecisions?.some((decision) =>
+        decision.fileChangeID === change.id && decision.decision === "Approved"
+      )
+    ),
+    "Not every proposed file retained an approved review decision."
+  );
+  return current;
 }
 
 function assertProposal(task, expectedPath, expectedOperation) {

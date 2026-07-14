@@ -375,6 +375,28 @@ struct RuntimeClient {
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
 
+    func reviewEditProposalFile(
+        taskID: ForgeTask.ID,
+        fileChangeID: String,
+        decision: String,
+        note: String? = nil
+    ) async throws -> ForgeTask {
+        let url = baseURL
+            .appending(path: "tasks")
+            .appending(path: taskID)
+            .appending(path: "review-edit-proposal-file")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(
+            EditProposalFileReviewRequest(fileChangeID: fileChangeID, decision: decision, note: note)
+        )
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response, data: data)
+        return try JSONDecoder().decode(ForgeTask.self, from: data)
+    }
+
     func applyEditProposal(taskID: ForgeTask.ID, note: String? = nil) async throws -> ForgeTask {
         let url = baseURL
             .appending(path: "tasks")

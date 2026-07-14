@@ -3424,3 +3424,37 @@ Next:
 
 - Implement durable per-file full-diff decisions and request-change revision,
   then add apply-transaction crash recovery and remaining UI polish.
+
+## 2026-07-14 20:00:25 CEST
+
+Conversation summary:
+
+- Continued V0 completion directly on `main` after startup loop recovery by
+  closing the full-diff per-file review and request-change gap.
+
+Done:
+
+- Added persisted per-file `Approved`/`ChangesRequested` decisions with notes,
+  timestamps, paths, proposal file IDs, approval history, and SSE evidence.
+- Required every file in a new proposal to be approved before Apply; unreviewed
+  API apply attempts fail with 409.
+- Wired full-screen macOS `Looks Good` and `Request Change` actions to the
+  runtime and displayed current per-file decision state.
+- Made file-level change requests reject/archive the source proposal and
+  immediately generate a linked revision with reviewer feedback and prior file
+  decisions in provider context.
+- Updated all core apply smoke flows to approve files explicitly and added a
+  dedicated request-change revision/lineage regression.
+- Verified `npm run check`, `swift build`, `npm run smoke:core`, and
+  `git diff --check`.
+
+Not done:
+
+- Apply transactions interrupted by process death still need startup recovery.
+- Exact split-diff rendering, keyboard navigation, source create/delete, and
+  newline marker edge cases remain.
+
+Next:
+
+- Implement apply-transaction crash recovery, then finish diff UI and patch
+  edge-case polish.

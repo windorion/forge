@@ -27,6 +27,7 @@ export interface ApprovalRecord {
     | "Apply Edit Proposal"
     | "Rollback Edit Proposal"
     | "Reject Edit Proposal"
+    | "Review Edit Proposal File"
     | "Approve Validation Preset"
     | "Cancel Task Command"
     | "Pause Agent Loop"
@@ -290,6 +291,20 @@ export interface EditProposalDecisionRequest {
   note?: string;
 }
 
+export interface EditProposalFileReviewRequest {
+  fileChangeID: string;
+  decision: "Approved" | "ChangesRequested";
+  note?: string;
+}
+
+export interface EditProposalFileDecision {
+  fileChangeID: string;
+  path: string;
+  decision: "Approved" | "ChangesRequested";
+  note?: string;
+  decidedAt: string;
+}
+
 export type EditProposalValidationStatus = "Ready" | "Blocked";
 
 export interface FileChangeValidation {
@@ -350,6 +365,8 @@ export interface EditProposal {
   generatedAt: string;
   decidedAt?: string;
   decisionNote?: string;
+  requiresFileReview?: boolean;
+  fileDecisions?: EditProposalFileDecision[];
   rolledBackAt?: string;
   rollbackNote?: string;
   validation?: EditProposalValidation;

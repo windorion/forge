@@ -166,6 +166,12 @@ preview-only unsupported operations. Unsupported changes are kept as review
 artifacts; validation blocks apply until every proposed change fits the current
 restricted apply engine.
 
+Every newly generated proposal requires durable per-file review before Apply.
+`POST /tasks/:taskID/review-edit-proposal-file` records `Approved` or
+`ChangesRequested`. Apply requires approval for every file ID. A change request
+archives the rejected source proposal and generates a linked revision with the
+review note and file decisions in provider context, without changing files.
+
 The runtime also exposes read-only git review endpoints. `GET /git/status`
 returns git root, branch, head, ahead/behind, dirty state, changed files,
 staged/unstaged/untracked flags, and available line-count stats. `GET /git/diff`

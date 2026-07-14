@@ -29,6 +29,7 @@ import type {
   CreateTaskRequest,
   EditProposal,
   EditProposalDecisionRequest,
+  EditProposalFileReviewRequest,
   EditProposalValidation,
   FileChangeValidation,
   ForgeTask,
@@ -714,6 +715,14 @@ const server = createServer(async (request, response) => {
     const validateEditProposalTaskID = taskIDFromActionPath(url.pathname, "validate-edit-proposal");
     if (request.method === "POST" && validateEditProposalTaskID) {
       const task = await validateEditProposal(validateEditProposalTaskID);
+      writeJson(response, 200, task);
+      return;
+    }
+
+    const reviewEditProposalFileTaskID = taskIDFromActionPath(url.pathname, "review-edit-proposal-file");
+    if (request.method === "POST" && reviewEditProposalFileTaskID) {
+      const input = await readJson<EditProposalFileReviewRequest>(request);
+      const task = await reviewEditProposalFile(reviewEditProposalFileTaskID, input);
       writeJson(response, 200, task);
       return;
     }
@@ -6651,6 +6660,8 @@ async function createEditProposalForTask(
     validationRepairBrief: options.validationRepairBrief
   });
   const { proposal, repairAttempts } = proposalResult;
+  proposal.requiresFileReview = true;
+  proposal.fileDecisions = [];
   const validation = proposal.validation;
   if (!validation) {
     throw new Error("Generated edit proposal is missing runtime validation.");
@@ -6871,6 +6882,20 @@ async function applyEditProposal(
 
   if (task.editProposal?.status !== "Proposed") {
     throw new HttpError(409, "A proposed edit is required before applying changes.");
+  }
+
+  if (task.editProposal.requiresFileReview) {
+    const approvedIDs = new Set(
+      (task.editProposal.fileDecisions ?? [])
+        .filter((decision) => decision.decision === "Approved")
+        .map((decision) => decision.fileChangeID)
+    );
+    const pendingPaths = task.editProposal.fileChanges
+      .filter((change) => !approvedIDs.has(change.id))
+      .map((change) => change.path);
+    if (pendingPaths.length > 0) {
+      throw new HttpError(409, `Every proposed file must be approved before apply: ${pendingPaths.join(", ")}`);
+    }
   }
 
   const validation = await buildEditProposalValidation(task.editProposal.fileChanges);
@@ -7247,6 +7272,67 @@ function summarizeCommandRerunEvidence(rerun: TaskCommandRun): string {
   case "Running":
     return `Self-fix rerun is still running: ${rerun.name}.`;
   }
+}
+
+async function reviewEditProposalFile(
+  taskID: string,
+  input: EditProposalFileReviewRequest
+): Promise<ForgeTask> {
+  const task = requireTask(taskID);
+  const proposal = task.editProposal;
+  if (proposal?.status !== "Proposed") {
+    throw new HttpError(409, "A proposed edit is required before reviewing a file.");
+  }
+  const fileChange = proposal.fileChanges.find((change) => change.id === input.fileChangeID?.trim());
+  if (!fileChange) {
+    throw new HttpError(404, `Proposed file change not found: ${input.fileChangeID}`);
+  }
+  if (input.decision !== "Approved" && input.decision !== "ChangesRequested") {
+    throw new HttpError(400, "File review decision must be Approved or ChangesRequested.");
+  }
+
+  const decidedAt = new Date().toISOString();
+  const note = input.note?.trim() || undefined;
+  const decisions = proposal.fileDecisions ?? [];
+  const nextDecision = {
+    fileChangeID: fileChange.id,
+    path: fileChange.path,
+    decision: input.decision,
+    note,
+    decidedAt
+  };
+  const existingIndex = decisions.findIndex((decision) => decision.fileChangeID === fileChange.id);
+  if (existingIndex >= 0) {
+    decisions[existingIndex] = nextDecision;
+  } else {
+    decisions.push(nextDecision);
+  }
+  proposal.requiresFileReview = true;
+  proposal.fileDecisions = decisions;
+  task.approvals.push({
+    id: randomUUID(),
+    action: "Review Edit Proposal File",
+    decision: input.decision === "Approved" ? "Approved" : "Rejected",
+    summary: `${input.decision === "Approved" ? "Approved" : "Requested changes for"} ${fileChange.path}.`,
+    targetID: fileChange.id,
+    decidedAt,
+    userNote: note
+  });
+
+  if (input.decision === "ChangesRequested") {
+    const previousProposal = proposal;
+    rejectEditProposal(taskID, { note: note ?? `Revise the proposed change for ${fileChange.path}.` });
+    return createEditProposalForTask(task, "Revision", previousProposal);
+  }
+
+  const approvedCount = decisions.filter((decision) => decision.decision === "Approved").length;
+  task.reviewSummary = `Approved ${fileChange.path} (${approvedCount}/${proposal.fileChanges.length} proposed files).`;
+  task.status = "Human Review";
+  task.currentPhase = "Edit Proposal Review";
+  const reviewed = event("edit.proposal.file.approved", task.reviewSummary);
+  reviewed.createdAt = decidedAt;
+  saveAndBroadcast(task, reviewed);
+  return task;
 }
 
 function rejectEditProposal(taskID: string, input: EditProposalDecisionRequest): ForgeTask {

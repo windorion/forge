@@ -453,6 +453,13 @@ duplicate requests across uncertain boundaries.
 This runner intentionally performs one step per request so the same boundary
 can be reused by manual actions, smoke tests, and the bounded loop.
 
+Edit proposal review is runtime-owned at file granularity. New proposals set
+`requiresFileReview`; Apply rejects until every proposed file has a persisted
+`Approved` decision. `ChangesRequested` stores path/note/time, rejects and
+archives that proposal, then creates a new proposal with `revisionOfID` and the
+prior file decisions in provider context. This revision path performs no
+workspace mutation.
+
 ### Agent Run Loop
 
 Agent Run Loop v0 wraps Agent Run Step with a runtime-enforced `maxSteps`

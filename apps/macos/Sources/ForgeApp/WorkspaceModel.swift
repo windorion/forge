@@ -41,6 +41,7 @@ final class WorkspaceModel: ObservableObject {
     @Published private var applyingEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var rollingBackEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var rejectingEditProposalTaskIDs = Set<ForgeTask.ID>()
+    @Published private var reviewingEditProposalFileKeys = Set<String>()
     @Published private var runningAgentLoopTaskIDs = Set<ForgeTask.ID>()
     @Published private var pausingAgentLoopIDs = Set<AgentRunLoop.ID>()
     @Published private var abortingAgentLoopIDs = Set<AgentRunLoop.ID>()
@@ -518,6 +519,39 @@ final class WorkspaceModel: ObservableObject {
 
     func isRejectingEditProposal(taskID: ForgeTask.ID) -> Bool {
         rejectingEditProposalTaskIDs.contains(taskID)
+    }
+
+    func reviewEditProposalFile(
+        for task: ForgeTask,
+        change: ProposedFileChange,
+        decision: String,
+        note: String? = nil
+    ) {
+        let key = "\(task.id):\(change.id)"
+        reviewingEditProposalFileKeys.insert(key)
+        Task {
+            do {
+                let updatedTask = try await runtime.reviewEditProposalFile(
+                    taskID: task.id,
+                    fileChangeID: change.id,
+                    decision: decision,
+                    note: note
+                )
+                upsert(updatedTask)
+                selectedTaskID = updatedTask.id
+                statusMessage = decision == "Approved"
+                    ? "Approved \(change.path)."
+                    : "Requested changes and generated a linked proposal revision."
+                startEventStream()
+            } catch {
+                statusMessage = "File review failed: \(error.localizedDescription)"
+            }
+            reviewingEditProposalFileKeys.remove(key)
+        }
+    }
+
+    func isReviewingEditProposalFile(taskID: ForgeTask.ID, fileChangeID: String) -> Bool {
+        reviewingEditProposalFileKeys.contains("\(taskID):\(fileChangeID)")
     }
 
     func approveValidationPreset(for task: ForgeTask, presetID: ValidationPreset.ID) {

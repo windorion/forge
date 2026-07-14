@@ -247,7 +247,7 @@ These percentages are product-readiness estimates, not calendar estimates.
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 87-91% | Adds restart-safe Agent Loop checkpoints to the session shell, full-screen review, transactional source patches, commands, self-fix, loop controls, repository inspection, and bad-output recovery; review closure and UI polish remain. |
+| Coding-agent demo V0 | 90-94% | Adds restart-safe loops and durable per-file full-diff decisions/request-change revisions to transactional source patches, commands, self-fix, repository inspection, and bad-output recovery; edge-case patching and UI polish remain. |
 | Useful developer alpha | 42-52% | Forge can now recover interrupted agent loops and apply guarded normal source modifications, but still needs broader autonomous tool use, source create/delete, transaction crash recovery, and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
@@ -283,12 +283,12 @@ Remaining V0 gaps:
 
 - polish the first-pass `1a`/`1b`/`14a` shell toward the exact handoff
 - polish the first usable `10a` full-screen diff review toward exact handoff
-  behavior and durable per-file decisions
+  split rendering, navigation, and keyboard behavior
 - extend the restricted Unified Diff engine to source-file create/delete and
   newline-marker edge cases after the modification path proves stable
 - add richer inspection result-quality evidence and persisted-loop restart
   recovery
-- implement full diff review with per-file reasoning and request-change loop
+- add apply-transaction crash recovery and richer inspection result evidence
 - keep git/preflight work as supporting infrastructure rather than the main
   demo
 

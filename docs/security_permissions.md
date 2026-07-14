@@ -100,6 +100,8 @@ Examples:
 May run automatically based on settings, but should be logged and visible.
 
 Current v0 edit application is medium risk and requires explicit human apply.
+New proposals also require a persisted approval decision for every proposed
+file; whole-proposal Apply cannot bypass pending or requested-change files.
 It supports Markdown append/create operations plus exact single-match
 replacements and multi-hunk exact text patches for allowlisted source/text
 files, plus strict single-file Unified Diffs whose headers, ranges/counts, and

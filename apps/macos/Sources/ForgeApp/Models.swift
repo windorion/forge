@@ -795,12 +795,22 @@ struct EditProposal: Identifiable, Codable, Hashable {
     var generatedAt: String
     var decidedAt: String?
     var decisionNote: String?
+    var requiresFileReview: Bool?
+    var fileDecisions: [EditProposalFileDecision]?
     var rolledBackAt: String?
     var rollbackNote: String?
     var validation: EditProposalValidation?
     var appliedFileChanges: [AppliedFileChange]?
     var applyTransaction: EditProposalFileTransaction?
     var rollbackTransaction: EditProposalFileTransaction?
+}
+
+struct EditProposalFileDecision: Codable, Hashable {
+    var fileChangeID: String
+    var path: String
+    var decision: String
+    var note: String?
+    var decidedAt: String
 }
 
 struct EditProposalFileTransaction: Identifiable, Codable, Hashable {
@@ -905,6 +915,12 @@ struct ApprovePlanRequest: Encodable {
 }
 
 struct EditProposalDecisionRequest: Encodable {
+    var note: String?
+}
+
+struct EditProposalFileReviewRequest: Encodable {
+    var fileChangeID: String
+    var decision: String
     var note: String?
 }
 

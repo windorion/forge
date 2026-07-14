@@ -155,6 +155,13 @@ Validation stores:
 - checked timestamp
 - per-file status
 - per-file check messages
+- durable per-file `Approved` or `ChangesRequested` decisions
+
+New proposals require every file change to be approved before Apply. A
+file-level change request records the decision and note, rejects and archives
+the source proposal, and immediately generates a linked revision. The provider
+receives the previous proposal decision note and per-file decisions; no file is
+changed during this revision loop.
 
 Post-apply validation stores:
 

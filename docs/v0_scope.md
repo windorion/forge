@@ -159,8 +159,9 @@ Built foundation:
 Major gaps:
 
 - UI has a first-pass shell but does not yet fully match `design_handoff_forge`.
-- Full-screen diff review exists but still needs exact split-diff polish,
-  keyboard shortcuts, and durable file-level review decisions.
+- Full-screen diff review now has durable file-level decisions and linked
+  request-change revisions; exact split-diff behavior and keyboard polish
+  remain.
 - Patch apply now supports exact replacements, multi-hunk text patches, and
   strict context-anchored Unified Diff modifications across reviewed source
   files, with verified compensated apply/rollback transactions. Source-file
@@ -186,8 +187,7 @@ Major gaps:
 
 ## Next Implementation Order
 
-1. Add inspection result-quality evidence and durable full-diff decisions.
-2. Implement request-change revision from full diff review.
-3. Polish `10a` with durable file-level decisions and exact split-diff behavior.
-4. Extend Unified Diff to reviewed source create/delete and newline edge cases.
-5. Add `32a` chat-to-task polish once the live run works.
+1. Add apply-transaction crash recovery and inspection result-quality evidence.
+2. Polish `10a` exact split-diff behavior and keyboard/file navigation.
+3. Extend Unified Diff to reviewed source create/delete and newline edge cases.
+4. Add `32a` chat-to-task polish once the live run works.

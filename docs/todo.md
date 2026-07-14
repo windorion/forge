@@ -35,8 +35,6 @@ dashboard.
   runtime-owned tool-call loop with strict allowed tools and stop conditions.
 - Extend bounded output recovery beyond Agent Run Step decisions to malformed
   planning tool requests and patch artifacts without retrying side effects.
-- Add request-change revision loops that operate from full diff review, not
-  only the current review stack.
 
 ## P2: Review, Diff, And Git
 
@@ -87,6 +85,12 @@ dashboard.
 
 ## Done Recently
 
+- Added durable per-file edit proposal decisions and full-diff review actions.
+  Every new proposal requires each file to be approved before Apply. File-level
+  change requests are persisted, reject/archive the source proposal, and
+  immediately generate a linked revision with reviewer feedback in provider
+  context. macOS `Looks Good`/`Request Change` now call the runtime. Smoke
+  covers the 409 approval gate, existing apply flows, and revision lineage.
 - Added startup recovery for Agent Loops persisted as `Running`. Startup marks
   the loop `Paused / RuntimeRestarted`, finalizes linked running steps and
   in-memory-only tool/command/validation evidence, persists an interruption
