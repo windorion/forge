@@ -19,8 +19,8 @@ dashboard.
   tighter spacing, better selected states, stronger task queue density, and
   more faithful live-run copy.
 - Polish the first usable `10a` full-screen diff review: exact split-diff
-  behavior, keyboard shortcuts, file-level approval persistence, and stronger
-  tests-covering-this-file evidence.
+  behavior, keyboard shortcuts, and stronger tests-covering-this-file
+  evidence.
 - Harden the new restricted Unified Diff engine after real-repo use, then add
   reviewed source-file create/delete and no-newline edge cases without
   weakening strict path, context, pre-apply, or recovery checks.
@@ -85,6 +85,13 @@ dashboard.
 
 ## Done Recently
 
+- Added crash-safe edit transaction recovery. Apply now persists a versioned
+  per-file write-ahead journal before every mutation. Startup restores
+  interrupted Apply transactions to the verified before state, verifies fully
+  completed Rollbacks, and compensates mixed Rollbacks back to Applied.
+  Unknown states fail closed without overwriting. Core smoke injects
+  interrupted Apply/Rollback state through SQLite across real restarts and
+  verifies continued operation.
 - Added durable per-file edit proposal decisions and full-diff review actions.
   Every new proposal requires each file to be approved before Apply. File-level
   change requests are persisted, reject/archive the source proposal, and

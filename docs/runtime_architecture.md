@@ -223,7 +223,12 @@ existing Markdown or allowlisted source/text file, strict context-anchored
 Unified Diff modifications, plus create-file edits for new `docs/*.md` files.
 It revalidates the full proposal before writing, records a cross-file
 transaction, verifies every resulting SHA-256, and compensates already-written
-files if a later write fails. Recovery state remains persisted and auditable.
+files if a later write fails. Each file's before/after hashes and rollback
+snapshot are persisted in a versioned write-ahead journal before mutation.
+Startup reconciles persisted `Running` transactions only from those hashes:
+Apply returns to Before, a completed Rollback is finalized, and a mixed
+Rollback returns to Applied. Unknown content fails closed. Recovery state
+remains persisted and auditable.
 
 ### Edit Proposal Rollback
 

@@ -3458,3 +3458,44 @@ Next:
 
 - Implement apply-transaction crash recovery, then finish diff UI and patch
   edge-case polish.
+
+## 2026-07-14 20:23:37 CEST
+
+Conversation summary:
+
+- Continued autonomously toward 100% V0 directly on `main` by closing the
+  process-death recovery gap for edit proposal transactions.
+
+Done:
+
+- Added a versioned per-file Apply write-ahead journal persisted to SQLite
+  before each workspace mutation, including expected before/after SHA-256
+  state and rollback snapshot evidence.
+- Unified in-process partial-Apply compensation with journal state inspection,
+  distinguishing prepared-but-unwritten Before entries from written After
+  entries.
+- Added startup recovery for transactions persisted as `Running`: interrupted
+  Apply returns verified entries to Before; fully rolled-back transactions are
+  finalized; mixed Rollback state is safely reconstructed back to Applied.
+- Made recovery fail closed as `RecoveryFailed` when paths, evidence, or file
+  hashes cannot prove a known state, without overwriting unknown content.
+- Added persisted recovery events, task/agent/plan state, timestamps, and
+  continued operation after recovery.
+- Extended core smoke with SQLite transaction injection across separate real
+  runtime restarts for partial Apply, mixed Rollback, and running Agent Loop,
+  followed by a normal rollback cleanup.
+- Updated focused runtime, proposal, development, V0, status, TODO, and root
+  documentation. Coding-Agent Demo V0 estimate is now 92-95%.
+- Verified `npm run check`, `npm run smoke:core`, `swift build`, and
+  `git diff --check`.
+
+Not done:
+
+- Exact split-diff rendering and keyboard/file navigation still need polish.
+- Reviewed source create/delete and no-newline Unified Diff edge cases remain.
+- Richer inspection result-quality evidence remains.
+
+Next:
+
+- Commit and push transaction restart recovery directly to `main`, then
+  implement exact split-diff behavior and keyboard/file navigation.

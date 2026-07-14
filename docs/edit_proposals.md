@@ -143,10 +143,20 @@ current-file hash verification.
 
 Multi-file proposals use one compensated transaction. Validation rejects
 duplicate targets and simulates every operation before the first write. Each
-completed write is SHA-256 verified. If a later file fails, Forge restores and
-verifies files already written and records `Recovered`; compensation failures
-record `RecoveryFailed`. Explicit rollback uses the inverse boundary and
-attempts to return partially restored files to the verified applied state.
+file's before/after SHA-256 evidence and rollback snapshot are persisted to a
+versioned SQLite journal before mutation, and each completed write is then
+SHA-256 verified. If a later file fails, Forge restores and verifies files
+already written and records `Recovered`; compensation failures record
+`RecoveryFailed`. Explicit rollback uses the inverse boundary and attempts to
+return partially restored files to the verified applied state.
+
+At startup, a transaction persisted as `Running` is recovered from disk
+evidence rather than assumed state. Interrupted Apply accepts only the
+journaled before or after hash for every target and restores all targets to
+the before state. Interrupted Rollback verifies a fully rolled-back state as
+complete; a mixed before/after state is reconstructed and returned to the
+verified applied state. Missing evidence, unknown hashes, or unsafe paths stop
+recovery without overwriting and persist `RecoveryFailed` for human review.
 
 Validation stores:
 

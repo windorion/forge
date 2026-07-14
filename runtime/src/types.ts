@@ -343,6 +343,7 @@ export interface EditProposalFileTransaction {
   id: string;
   kind: "Apply" | "Rollback";
   status: "Running" | "Completed" | "Recovered" | "RecoveryFailed";
+  journalVersion?: 1;
   paths: string[];
   summary: string;
   startedAt: string;

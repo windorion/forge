@@ -125,6 +125,7 @@ try {
   const restartFixtureTask = await prepareOpenAIAgentLoopRestartFixture();
   await stopRuntime(runtime);
   runtime = undefined;
+  await markApplyTransactionInterruptedInDatabase(openAIApplyRecoveryTask.id);
   markAgentLoopRunningInDatabase(restartFixtureTask.id);
   runtime = await startRuntime({
     providerID: "openai",
@@ -132,7 +133,22 @@ try {
     openAIBaseURL: mockOpenAI.baseURL,
     openAIAPIKey: "sk-forge-smoke"
   });
+  const openAIApplyRestartTask = await assertOpenAIApplyRestartRecovery(openAIApplyRecoveryTask.id);
   const openAIAgentLoopRestartTask = await assertOpenAIAgentLoopRestartRecovery(restartFixtureTask.id);
+  await stopRuntime(runtime);
+  runtime = undefined;
+  await markRollbackTransactionInterruptedInDatabase(openAIUnifiedDiffTask.id);
+  runtime = await startRuntime({
+    providerID: "openai",
+    modelName: "openai-context-smoke",
+    openAIBaseURL: mockOpenAI.baseURL,
+    openAIAPIKey: "sk-forge-smoke"
+  });
+  let openAIRollbackRestartTask = await assertOpenAIRollbackRestartRecovery(openAIUnifiedDiffTask.id);
+  openAIRollbackRestartTask = await post(`/tasks/${openAIRollbackRestartTask.id}/rollback-edit-proposal`, {
+    note: "Core smoke cleans up the applied state after restart recovery."
+  });
+  assertState(openAIRollbackRestartTask, "Human Review", "Rollback Applied");
 
   console.log("Core runtime smoke passed.");
   console.log(`- Runtime: ${baseURL}`);
@@ -157,6 +173,8 @@ try {
   console.log(`- OpenAI validation repair task: ${openAIValidationRepairTask.id}`);
   console.log(`- OpenAI task command repair task: ${openAITaskCommandRepairTask.id}`);
   console.log(`- OpenAI preview-blocked task: ${openAIPreviewBlockedTask.id}`);
+  console.log(`- OpenAI apply restart task: ${openAIApplyRestartTask.id}`);
+  console.log(`- OpenAI rollback restart task: ${openAIRollbackRestartTask.id}`);
   console.log(`- OpenAI agent loop restart task: ${openAIAgentLoopRestartTask.id}`);
   console.log(`- Temporary database: ${dbPath}`);
 } finally {
@@ -1686,6 +1704,126 @@ async function prepareOpenAIAgentLoopRestartFixture() {
     (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
     "agent loop restart fixture to reach plan review"
   );
+}
+
+async function markApplyTransactionInterruptedInDatabase(taskID) {
+  const database = new DatabaseSync(dbPath);
+  try {
+    const row = database.prepare("SELECT payload_json FROM tasks WHERE id = ?").get(taskID);
+    assert(row?.payload_json, "Apply restart fixture task was not persisted.");
+    const task = JSON.parse(row.payload_json);
+    const appliedChange = task.editProposal?.appliedFileChanges?.[0];
+    assert(appliedChange?.path === unifiedDiffSmokePathOne, "Apply restart fixture is missing its first-file journal entry.");
+    assert(appliedChange.rollbackSnapshotPath, "Apply restart fixture is missing its rollback snapshot.");
+    rollbackSnapshotDirectories.add(dirname(appliedChange.rollbackSnapshotPath));
+
+    const appliedContent = [
+      "export function forgeUnifiedGreeting(name: string) {",
+      "  const label = \"Hello\";",
+      "  const punctuation = \"!\";",
+      "  return `${label}, ${name}${punctuation}`;",
+      "}",
+      ""
+    ].join("\n");
+    await writeFile(join(repoRoot, unifiedDiffSmokePathOne), appliedContent, "utf8");
+    delete appliedChange.rolledBackAt;
+    delete appliedChange.rollbackVerifiedAt;
+    const now = new Date().toISOString();
+    task.editProposal.status = "Proposed";
+    task.editProposal.appliedFileChanges = [appliedChange];
+    task.editProposal.applyTransaction = {
+      id: `restart-apply-${smokeID}`,
+      kind: "Apply",
+      status: "Running",
+      journalVersion: 1,
+      paths: [appliedChange.path],
+      summary: "Persisted interrupted apply transaction fixture.",
+      startedAt: now
+    };
+    task.status = "Running";
+    task.currentPhase = "Applying Edit Proposal";
+    task.reviewSummary = "Persisted interrupted apply transaction fixture.";
+    database.prepare("UPDATE tasks SET status = ?, current_phase = ?, payload_json = ? WHERE id = ?")
+      .run(task.status, task.currentPhase, JSON.stringify(task), taskID);
+  } finally {
+    database.close();
+  }
+}
+
+async function markRollbackTransactionInterruptedInDatabase(taskID) {
+  const database = new DatabaseSync(dbPath);
+  try {
+    const row = database.prepare("SELECT payload_json FROM tasks WHERE id = ?").get(taskID);
+    assert(row?.payload_json, "Rollback restart fixture task was not persisted.");
+    const task = JSON.parse(row.payload_json);
+    const appliedFileChanges = task.editProposal?.appliedFileChanges;
+    assert(appliedFileChanges?.length === 2, "Rollback restart fixture is missing cross-file apply evidence.");
+    for (const appliedChange of appliedFileChanges) {
+      delete appliedChange.rolledBackAt;
+      delete appliedChange.rollbackVerifiedAt;
+      if (appliedChange.rollbackSnapshotPath) {
+        rollbackSnapshotDirectories.add(dirname(appliedChange.rollbackSnapshotPath));
+      }
+    }
+
+    const secondAppliedContent = [
+      "export const forgeUnifiedRetry = {",
+      "  attempts: 3,",
+      "};",
+      ""
+    ].join("\n");
+    await writeFile(join(repoRoot, unifiedDiffSmokePathTwo), secondAppliedContent, "utf8");
+    const now = new Date().toISOString();
+    task.editProposal.status = "Applied";
+    delete task.editProposal.rolledBackAt;
+    delete task.editProposal.rollbackNote;
+    task.editProposal.rollbackTransaction = {
+      id: `restart-rollback-${smokeID}`,
+      kind: "Rollback",
+      status: "Running",
+      paths: appliedFileChanges.map((change) => change.path),
+      summary: "Persisted mixed-state rollback transaction fixture.",
+      startedAt: now
+    };
+    task.status = "Running";
+    task.currentPhase = "Rolling Back Edit Proposal";
+    task.reviewSummary = "Persisted mixed-state rollback transaction fixture.";
+    database.prepare("UPDATE tasks SET status = ?, current_phase = ?, payload_json = ? WHERE id = ?")
+      .run(task.status, task.currentPhase, JSON.stringify(task), taskID);
+  } finally {
+    database.close();
+  }
+}
+
+async function assertOpenAIApplyRestartRecovery(taskID) {
+  const current = await waitForTask(
+    taskID,
+    (candidate) => candidate.currentPhase === "Apply Recovered",
+    "interrupted apply transaction to recover after restart"
+  );
+  assert(current.editProposal?.applyTransaction?.status === "Recovered", "Restarted apply transaction was not recovered.");
+  assert(current.editProposal.applyTransaction.verifiedAt, "Restarted apply recovery did not persist verification time.");
+  assert(current.events.some((event) => event.type === "edit.proposal.apply.startup_recovered"), "Restarted apply recovery event was not persisted.");
+  const restored = await readFile(join(repoRoot, unifiedDiffSmokePathOne), "utf8");
+  assert(restored.includes('const label = "hello";'), "Restarted apply recovery did not restore the before content.");
+  assert(!restored.includes("punctuation"), "Restarted apply recovery left applied content in the first fixture.");
+  return current;
+}
+
+async function assertOpenAIRollbackRestartRecovery(taskID) {
+  const current = await waitForTask(
+    taskID,
+    (candidate) => candidate.currentPhase === "Rollback Recovered",
+    "interrupted rollback transaction to recover after restart"
+  );
+  assert(current.editProposal?.rollbackTransaction?.status === "Recovered", "Restarted rollback transaction was not recovered.");
+  assert(current.editProposal.status === "Applied", "Restarted rollback recovery did not retain the applied proposal state.");
+  assert(current.events.some((event) => event.type === "edit.proposal.rollback.startup_recovered"), "Restarted rollback recovery event was not persisted.");
+  const firstApplied = await readFile(join(repoRoot, unifiedDiffSmokePathOne), "utf8");
+  const secondApplied = await readFile(join(repoRoot, unifiedDiffSmokePathTwo), "utf8");
+  assert(firstApplied.includes("punctuation"), "Restarted rollback recovery did not reapply the first fixture.");
+  assert(secondApplied.includes("attempts: 3"), "Restarted rollback recovery did not preserve the second applied fixture.");
+  return current;
 }
 
 function markAgentLoopRunningInDatabase(taskID) {

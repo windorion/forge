@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { appendFile, mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { URL } from "node:url";
@@ -194,6 +194,7 @@ const repositoryImportantFiles = [
 ];
 
 recoverInterruptedAgentRunLoopsOnStartup();
+recoverInterruptedEditProposalTransactionsOnStartup();
 const repositorySearchStopWords = new Set([
   "about",
   "after",
@@ -5917,6 +5918,322 @@ function recoverInterruptedAgentRunLoopsOnStartup(): void {
   }
 }
 
+type PersistedEditFileState = {
+  appliedChange: AppliedFileChange;
+  state: "Applied" | "RolledBack";
+  currentContent?: string;
+};
+
+function recoverInterruptedEditProposalTransactionsOnStartup(): void {
+  for (const task of tasks.values()) {
+    const proposal = task.editProposal;
+    if (!proposal) {
+      continue;
+    }
+
+    if (proposal.rollbackTransaction?.status === "Running") {
+      recoverInterruptedRollbackTransaction(task, proposal);
+      continue;
+    }
+
+    if (proposal.applyTransaction?.status === "Running") {
+      recoverInterruptedApplyTransaction(task, proposal);
+    }
+  }
+}
+
+function recoverInterruptedApplyTransaction(task: ForgeTask, proposal: EditProposal): void {
+  const transaction = proposal.applyTransaction;
+  if (!transaction || transaction.status !== "Running") {
+    return;
+  }
+
+  const recoveredAt = new Date().toISOString();
+  try {
+    if (transaction.journalVersion !== 1) {
+      throw new Error("Interrupted apply transaction predates the durable write-ahead journal.");
+    }
+
+    const appliedFileChanges = proposal.appliedFileChanges ?? [];
+    const states = appliedFileChanges.map(inspectPersistedEditFileState);
+    for (const entry of [...states].reverse()) {
+      if (entry.state === "RolledBack") {
+        continue;
+      }
+      restorePersistedFileToBeforeState(entry.appliedChange);
+    }
+
+    for (const appliedChange of appliedFileChanges) {
+      const verified = inspectPersistedEditFileState(appliedChange);
+      if (verified.state !== "RolledBack") {
+        throw new Error(`Startup apply recovery did not restore ${appliedChange.path}.`);
+      }
+      appliedChange.rolledBackAt = recoveredAt;
+      appliedChange.rollbackVerifiedAt = recoveredAt;
+    }
+
+    transaction.status = "Recovered";
+    transaction.completedAt = recoveredAt;
+    transaction.verifiedAt = recoveredAt;
+    transaction.recoverySummary = `Runtime restart recovery restored and verified ${appliedFileChanges.length} journaled file change(s).`;
+    transaction.summary = "Interrupted apply transaction was returned to its verified pre-apply state.";
+    proposal.status = "Proposed";
+    delete proposal.decidedAt;
+    delete proposal.decisionNote;
+    task.status = "Failed";
+    task.currentPhase = "Apply Recovered";
+    task.changedFiles = [];
+    task.reviewSummary = transaction.recoverySummary;
+    setAgent(task, "Coder", "Blocked", "Interrupted apply was safely restored after runtime restart.");
+    setAgent(task, "Reviewer", "Active", "Review the recovered proposal before retrying apply.");
+    upsertPlanStep(task, {
+      id: "apply-edit-proposal",
+      title: "Apply edit proposal",
+      status: "Blocked",
+      summary: transaction.recoverySummary
+    });
+    persistStartupTransactionRecovery(task, "edit.proposal.apply.startup_recovered", transaction.recoverySummary, recoveredAt);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    transaction.status = "RecoveryFailed";
+    transaction.completedAt = recoveredAt;
+    transaction.recoverySummary = `Startup apply recovery stopped without overwriting unverified content: ${detail}`;
+    transaction.summary = "Interrupted apply transaction requires manual recovery.";
+    task.status = "Failed";
+    task.currentPhase = "Apply Recovery Required";
+    task.reviewSummary = transaction.recoverySummary;
+    setAgent(task, "Coder", "Blocked", "Startup apply recovery could not prove a safe file state.");
+    setAgent(task, "Reviewer", "Active", "Inspect the transaction evidence and working tree before continuing.");
+    upsertPlanStep(task, {
+      id: "apply-edit-proposal",
+      title: "Apply edit proposal",
+      status: "Blocked",
+      summary: transaction.recoverySummary
+    });
+    persistStartupTransactionRecovery(task, "edit.proposal.apply.startup_recovery_failed", transaction.recoverySummary, recoveredAt);
+  }
+}
+
+function recoverInterruptedRollbackTransaction(task: ForgeTask, proposal: EditProposal): void {
+  const transaction = proposal.rollbackTransaction;
+  if (!transaction || transaction.status !== "Running") {
+    return;
+  }
+
+  const recoveredAt = new Date().toISOString();
+  try {
+    const appliedFileChanges = proposal.appliedFileChanges ?? [];
+    if (appliedFileChanges.length === 0) {
+      throw new Error("Interrupted rollback transaction has no persisted applied-file evidence.");
+    }
+
+    const states = appliedFileChanges.map(inspectPersistedEditFileState);
+    if (states.every((entry) => entry.state === "RolledBack")) {
+      for (const appliedChange of appliedFileChanges) {
+        appliedChange.rolledBackAt = recoveredAt;
+        appliedChange.rollbackVerifiedAt = recoveredAt;
+      }
+      transaction.status = "Completed";
+      transaction.completedAt = recoveredAt;
+      transaction.verifiedAt = recoveredAt;
+      transaction.recoverySummary = `Runtime restart verified that all ${states.length} file change(s) had already been rolled back.`;
+      transaction.summary = "Interrupted rollback had reached a fully verified rolled-back state.";
+      proposal.status = "RolledBack";
+      proposal.rolledBackAt = recoveredAt;
+      task.status = "Human Review";
+      task.currentPhase = "Rollback Applied";
+      task.changedFiles = [...new Set(appliedFileChanges.map((change) => change.path))];
+      task.reviewSummary = transaction.recoverySummary;
+      setAgent(task, "Coder", "Done", "Interrupted rollback completed before runtime restart.");
+      setAgent(task, "Reviewer", "Active", "Review the verified rolled-back working tree.");
+      upsertPlanStep(task, {
+        id: "rollback-edit-proposal",
+        title: "Rollback edit proposal",
+        status: "Done",
+        summary: transaction.recoverySummary
+      });
+      persistStartupTransactionRecovery(task, "edit.proposal.rollback.startup_completed", transaction.recoverySummary, recoveredAt);
+      return;
+    }
+
+    for (const entry of states) {
+      if (entry.state === "RolledBack") {
+        reapplyPersistedFileChange(proposal, entry);
+      }
+    }
+    for (const appliedChange of appliedFileChanges) {
+      const verified = inspectPersistedEditFileState(appliedChange);
+      if (verified.state !== "Applied") {
+        throw new Error(`Startup rollback recovery did not restore the applied state for ${appliedChange.path}.`);
+      }
+    }
+
+    transaction.status = "Recovered";
+    transaction.completedAt = recoveredAt;
+    transaction.verifiedAt = recoveredAt;
+    transaction.recoverySummary = `Runtime restart recovery restored and verified the applied state for ${states.length} file change(s).`;
+    transaction.summary = "Interrupted rollback was compensated back to the verified applied state.";
+    proposal.status = "Applied";
+    task.status = "Failed";
+    task.currentPhase = "Rollback Recovered";
+    task.reviewSummary = transaction.recoverySummary;
+    setAgent(task, "Coder", "Blocked", "Interrupted rollback was safely returned to the applied state.");
+    setAgent(task, "Reviewer", "Active", "Review the recovered applied state before retrying rollback.");
+    upsertPlanStep(task, {
+      id: "rollback-edit-proposal",
+      title: "Rollback edit proposal",
+      status: "Blocked",
+      summary: transaction.recoverySummary
+    });
+    persistStartupTransactionRecovery(task, "edit.proposal.rollback.startup_recovered", transaction.recoverySummary, recoveredAt);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    transaction.status = "RecoveryFailed";
+    transaction.completedAt = recoveredAt;
+    transaction.recoverySummary = `Startup rollback recovery stopped without overwriting unverified content: ${detail}`;
+    transaction.summary = "Interrupted rollback transaction requires manual recovery.";
+    task.status = "Failed";
+    task.currentPhase = "Rollback Recovery Required";
+    task.reviewSummary = transaction.recoverySummary;
+    setAgent(task, "Coder", "Blocked", "Startup rollback recovery could not prove a safe file state.");
+    setAgent(task, "Reviewer", "Active", "Inspect the transaction evidence and working tree before continuing.");
+    upsertPlanStep(task, {
+      id: "rollback-edit-proposal",
+      title: "Rollback edit proposal",
+      status: "Blocked",
+      summary: transaction.recoverySummary
+    });
+    persistStartupTransactionRecovery(task, "edit.proposal.rollback.startup_recovery_failed", transaction.recoverySummary, recoveredAt);
+  }
+}
+
+function inspectPersistedEditFileState(appliedChange: AppliedFileChange): PersistedEditFileState {
+  const { absolutePath, relativePath } = resolveEditableWorkspacePath(appliedChange.path);
+  const currentContent = readTextFileIfExists(absolutePath);
+  if (!appliedChange.afterSha256) {
+    throw new Error(`Journal entry is missing the after hash for ${relativePath}.`);
+  }
+
+  if (appliedChange.rollbackKind === "DeleteCreatedFile") {
+    if (currentContent === undefined) {
+      return { appliedChange, state: "RolledBack" };
+    }
+    if (sha256Text(currentContent) === appliedChange.afterSha256) {
+      return { appliedChange, state: "Applied", currentContent };
+    }
+    throw new Error(`Current file hash for ${relativePath} matches neither the journaled created file nor its absent before state.`);
+  }
+
+  if (currentContent === undefined) {
+    throw new Error(`Journaled modified file is missing: ${relativePath}.`);
+  }
+  if (!appliedChange.beforeSha256) {
+    throw new Error(`Journal entry is missing the before hash for ${relativePath}.`);
+  }
+
+  const currentSha = sha256Text(currentContent);
+  if (currentSha === appliedChange.afterSha256) {
+    return { appliedChange, state: "Applied", currentContent };
+  }
+  if (currentSha === appliedChange.beforeSha256) {
+    return { appliedChange, state: "RolledBack", currentContent };
+  }
+  throw new Error(`Current file hash for ${relativePath} matches neither the journaled before nor after state.`);
+}
+
+function restorePersistedFileToBeforeState(appliedChange: AppliedFileChange): void {
+  const { absolutePath, relativePath } = resolveEditableWorkspacePath(appliedChange.path);
+  if (appliedChange.rollbackKind === "DeleteCreatedFile") {
+    unlinkSync(absolutePath);
+    return;
+  }
+
+  const snapshotPath = appliedChange.rollbackSnapshotPath;
+  if (!snapshotPath || !appliedChange.beforeSha256) {
+    throw new Error(`Rollback snapshot evidence is incomplete for ${relativePath}.`);
+  }
+  const snapshot = readFileSync(resolveRollbackSnapshotPath(snapshotPath), "utf8");
+  if (sha256Text(snapshot) !== appliedChange.beforeSha256) {
+    throw new Error(`Rollback snapshot hash does not match the journaled before hash for ${relativePath}.`);
+  }
+  writeFileSync(absolutePath, snapshot, "utf8");
+}
+
+function reapplyPersistedFileChange(proposal: EditProposal, entry: PersistedEditFileState): void {
+  const appliedChange = entry.appliedChange;
+  const change = proposal.fileChanges.find((candidate) =>
+    candidate.id === appliedChange.proposalFileChangeID ||
+    (!appliedChange.proposalFileChangeID && candidate.path === appliedChange.path)
+  );
+  if (!change) {
+    throw new Error(`Proposal file change is missing for journaled path ${appliedChange.path}.`);
+  }
+
+  const { absolutePath, relativePath } = resolveEditableWorkspacePath(appliedChange.path);
+  const nextContent = materializeProposedContentForRecovery(change, entry.currentContent);
+  if (!appliedChange.afterSha256 || sha256Text(nextContent) !== appliedChange.afterSha256) {
+    throw new Error(`Reconstructed applied content does not match the journaled after hash for ${relativePath}.`);
+  }
+
+  if (appliedChange.rollbackKind === "DeleteCreatedFile") {
+    writeFileSync(absolutePath, nextContent, { encoding: "utf8", flag: "wx" });
+  } else {
+    writeFileSync(absolutePath, nextContent, "utf8");
+  }
+}
+
+function materializeProposedContentForRecovery(change: ProposedFileChange, beforeContent: string | undefined): string {
+  const operation = change.applyOperation;
+  if (!operation) {
+    throw new Error(`Proposal operation is missing for ${change.path}.`);
+  }
+  if (operation.kind === "CreateFile") {
+    if (beforeContent !== undefined) {
+      throw new Error(`Created-file recovery expected an absent before state for ${change.path}.`);
+    }
+    return operation.content;
+  }
+  if (beforeContent === undefined) {
+    throw new Error(`Modified-file recovery expected existing before content for ${change.path}.`);
+  }
+  if (operation.kind === "AppendText") {
+    return `${beforeContent}${operation.text}`;
+  }
+  if (operation.kind === "ReplaceText") {
+    if (countTextOccurrences(beforeContent, operation.findText) !== 1) {
+      throw new Error(`Cannot reconstruct the unique replacement for ${change.path}.`);
+    }
+    return beforeContent.replace(operation.findText, operation.replaceWith);
+  }
+  if (operation.kind === "PatchText") {
+    return validatePatchTextOperation(operation, beforeContent, change.path);
+  }
+  if (operation.kind === "UnifiedDiff") {
+    return validateUnifiedDiffOperation(operation, beforeContent, change.path);
+  }
+  throw new Error(`Unsupported recovery operation for ${change.path}: ${operation.kind}`);
+}
+
+function readTextFileIfExists(absolutePath: string): string | undefined {
+  try {
+    return readFileSync(absolutePath, "utf8");
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+function persistStartupTransactionRecovery(task: ForgeTask, type: string, message: string, createdAt: string): void {
+  const recoveryEvent = event(type, message);
+  recoveryEvent.createdAt = createdAt;
+  task.events.push(recoveryEvent);
+  task.updatedAt = createdAt;
+  tasks.set(task.id, task);
+  taskStore.saveTask(task);
+}
+
 function requireResumableAgentRunLoop(task: ForgeTask, loopID: string): AgentRunLoop {
   const loop = requireAgentRunLoop(task, loopID);
   if (!isResumableAgentRunLoop(loop)) {
@@ -6943,18 +7260,27 @@ async function applyEditProposal(
     id: randomUUID(),
     kind: "Apply",
     status: "Running",
+    journalVersion: 1,
     paths: task.editProposal.fileChanges.map((change) => change.path),
     summary: "Preflight passed; applying the reviewed cross-file change set.",
     startedAt: started.createdAt
   };
+  task.editProposal.appliedFileChanges = [];
   saveAndBroadcast(task, started);
 
   const appliedFileChanges: AppliedFileChange[] = [];
   try {
     for (const change of task.editProposal.fileChanges) {
-      const appliedChange = await applyProposedFileChange(task.editProposal.id, change);
-      appliedFileChanges.push(appliedChange);
+      const appliedChange = await applyProposedFileChange(task.editProposal.id, change, (preparedChange) => {
+        appliedFileChanges.push(preparedChange);
+        task.editProposal!.appliedFileChanges = appliedFileChanges;
+        task.editProposal!.applyTransaction!.summary =
+          `Write-ahead journal persisted ${appliedFileChanges.length}/${task.editProposal!.fileChanges.length} file change(s).`;
+        saveTask(task);
+      });
       appliedChange.applyVerifiedAt = await verifyAppliedFileChange(appliedChange);
+      task.editProposal.appliedFileChanges = appliedFileChanges;
+      saveTask(task);
     }
 
     const now = new Date().toISOString();
@@ -8740,7 +9066,8 @@ function compareTaskCommandAndValidationFailureTime(
 
 async function applyProposedFileChange(
   proposalID: string,
-  change: ProposedFileChange
+  change: ProposedFileChange,
+  onPrepared: (appliedChange: AppliedFileChange) => void
 ): Promise<AppliedFileChange> {
   const operation = change.applyOperation;
   if (!operation) {
@@ -8789,17 +9116,18 @@ async function applyProposedFileChange(
     }
 
     await mkdir(path.dirname(absolutePath), { recursive: true });
-    await writeFile(absolutePath, operation.content, { encoding: "utf8", flag: "wx" });
-    const afterContent = await readFile(absolutePath, "utf8");
-    return buildAppliedFileChange({
+    const appliedChange = buildAppliedFileChange({
       relativePath,
       proposalFileChangeID: change.id,
       operationKind: operation.kind,
       appliedAt,
-      afterContent,
+      afterContent: operation.content,
       rollbackKind: "DeleteCreatedFile",
       rollbackSummary: `Delete ${relativePath} to undo the created file.`
     });
+    onPrepared(appliedChange);
+    await writeFile(absolutePath, operation.content, { encoding: "utf8", flag: "wx" });
+    return appliedChange;
   }
 
   if (change.changeType !== "Modify") {
@@ -8838,10 +9166,9 @@ async function applyProposedFileChange(
       throw new HttpError(409, `Proposed append text is already present at the end of ${relativePath}.`);
     }
 
+    const afterContent = `${currentContent}${operation.text}`;
     const rollbackSnapshotPath = await writeRollbackSnapshot(proposalID, change.id, currentContent);
-    await appendFile(absolutePath, operation.text, "utf8");
-    const afterContent = await readFile(absolutePath, "utf8");
-    return buildAppliedFileChange({
+    const appliedChange = buildAppliedFileChange({
       relativePath,
       proposalFileChangeID: change.id,
       operationKind: operation.kind,
@@ -8852,6 +9179,9 @@ async function applyProposedFileChange(
       rollbackKind: "RestorePreviousContent",
       rollbackSummary: `Restore the previous full contents of ${relativePath}.`
     });
+    onPrepared(appliedChange);
+    await appendFile(absolutePath, operation.text, "utf8");
+    return appliedChange;
   }
 
   if (operation.kind === "ReplaceText") {
@@ -8880,19 +9210,20 @@ async function applyProposedFileChange(
 
     const nextContent = currentContent.replace(operation.findText, operation.replaceWith);
     const rollbackSnapshotPath = await writeRollbackSnapshot(proposalID, change.id, currentContent);
-    await writeFile(absolutePath, nextContent, "utf8");
-    const afterContent = await readFile(absolutePath, "utf8");
-    return buildAppliedFileChange({
+    const appliedChange = buildAppliedFileChange({
       relativePath,
       proposalFileChangeID: change.id,
       operationKind: operation.kind,
       appliedAt,
       beforeContent: currentContent,
-      afterContent,
+      afterContent: nextContent,
       rollbackSnapshotPath,
       rollbackKind: "RestorePreviousContent",
       rollbackSummary: `Restore the previous full contents of ${relativePath}.`
     });
+    onPrepared(appliedChange);
+    await writeFile(absolutePath, nextContent, "utf8");
+    return appliedChange;
   }
 
   if (operation.kind === "PatchText") {
@@ -8902,19 +9233,20 @@ async function applyProposedFileChange(
     }
 
     const rollbackSnapshotPath = await writeRollbackSnapshot(proposalID, change.id, currentContent);
-    await writeFile(absolutePath, nextContent, "utf8");
-    const afterContent = await readFile(absolutePath, "utf8");
-    return buildAppliedFileChange({
+    const appliedChange = buildAppliedFileChange({
       relativePath,
       proposalFileChangeID: change.id,
       operationKind: operation.kind,
       appliedAt,
       beforeContent: currentContent,
-      afterContent,
+      afterContent: nextContent,
       rollbackSnapshotPath,
       rollbackKind: "RestorePreviousContent",
       rollbackSummary: `Restore the previous full contents of ${relativePath}.`
     });
+    onPrepared(appliedChange);
+    await writeFile(absolutePath, nextContent, "utf8");
+    return appliedChange;
   }
 
   if (operation.kind === "UnifiedDiff") {
@@ -8924,19 +9256,20 @@ async function applyProposedFileChange(
     }
 
     const rollbackSnapshotPath = await writeRollbackSnapshot(proposalID, change.id, currentContent);
-    await writeFile(absolutePath, nextContent, "utf8");
-    const afterContent = await readFile(absolutePath, "utf8");
-    return buildAppliedFileChange({
+    const appliedChange = buildAppliedFileChange({
       relativePath,
       proposalFileChangeID: change.id,
       operationKind: operation.kind,
       appliedAt,
       beforeContent: currentContent,
-      afterContent,
+      afterContent: nextContent,
       rollbackSnapshotPath,
       rollbackKind: "RestorePreviousContent",
       rollbackSummary: `Restore the previous full contents of ${relativePath}.`
     });
+    onPrepared(appliedChange);
+    await writeFile(absolutePath, nextContent, "utf8");
+    return appliedChange;
   }
 
   throw new HttpError(409, `Unsupported apply operation for ${relativePath}.`);
@@ -8965,23 +9298,23 @@ async function recoverPartialApply(
   }
 
   try {
-    const operations: PreparedRollbackOperation[] = [];
-    for (const appliedChange of [...appliedFileChanges].reverse()) {
-      operations.push(await prepareAppliedFileRollback(appliedChange));
-    }
-
+    const states = appliedFileChanges.map(inspectPersistedEditFileState);
+    const writtenStates = states.filter((entry) => entry.state === "Applied");
     const recoveredAt = new Date().toISOString();
-    for (const operation of operations) {
-      await operation.rollback();
-      await operation.verifyRolledBack();
+    for (const entry of [...writtenStates].reverse()) {
+      restorePersistedFileToBeforeState(entry.appliedChange);
     }
     for (const appliedChange of appliedFileChanges) {
+      const verified = inspectPersistedEditFileState(appliedChange);
+      if (verified.state !== "RolledBack") {
+        throw new Error(`Automatic apply recovery did not restore ${appliedChange.path}.`);
+      }
       appliedChange.rolledBackAt = recoveredAt;
       appliedChange.rollbackVerifiedAt = recoveredAt;
     }
     return {
       succeeded: true,
-      summary: `Automatic recovery restored and verified ${appliedFileChanges.length} previously written file(s).`
+      summary: `Automatic recovery restored and verified ${writtenStates.length} previously written file(s); ${appliedFileChanges.length} journaled file state(s) are back at their before hashes.`
     };
   } catch (recoveryError) {
     const detail = recoveryError instanceof Error ? recoveryError.message : String(recoveryError);

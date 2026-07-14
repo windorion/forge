@@ -83,7 +83,7 @@ It should not feel like:
 - model-provider-backed normal run path
 - source-file create/delete support beyond the current restricted Unified Diff
   modification path
-- crash-time recovery checkpoints beyond the current in-process compensated
+- crash-time recovery checkpoints for agent loops and compensated
   apply/rollback transactions
 - approved task-scoped command runner for checks/tests
 - command output streaming into the task
@@ -173,6 +173,10 @@ Major gaps:
 - Agent Loops left `Running` by runtime shutdown now recover at startup as
   `Paused / RuntimeRestarted` checkpoints with finalized transient evidence and
   resumable lineage.
+- Apply/Rollback transactions left `Running` by runtime shutdown now recover
+  from a versioned per-file write-ahead journal. Apply returns verified files
+  to Before; Rollback either finalizes an already-complete rollback or
+  compensates a mixed state back to Applied. Unknown hashes fail closed.
 - The provider can now choose `InspectRepository`; the runtime safely executes
   bounded read-only list/search/read tools and lets the loop continue into a
   proposal step with persisted evidence. Stable request fingerprints block an
@@ -187,7 +191,7 @@ Major gaps:
 
 ## Next Implementation Order
 
-1. Add apply-transaction crash recovery and inspection result-quality evidence.
-2. Polish `10a` exact split-diff behavior and keyboard/file navigation.
-3. Extend Unified Diff to reviewed source create/delete and newline edge cases.
+1. Polish `10a` exact split-diff behavior and keyboard/file navigation.
+2. Extend Unified Diff to reviewed source create/delete and newline edge cases.
+3. Add richer inspection result-quality evidence.
 4. Add `32a` chat-to-task polish once the live run works.

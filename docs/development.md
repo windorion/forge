@@ -299,12 +299,16 @@ without writing files. Applying calls `POST /tasks/:taskID/apply-edit-proposal`,
 revalidates the current workspace, runs the restricted v0 edit operation,
 records the changed file plus before/after rollback metadata, and marks the
 task completed. Multi-file apply records transaction state, verifies every
-resulting hash, and restores already-written files if a later file fails.
+resulting hash, and restores already-written files if a later file fails. A
+versioned per-file write-ahead journal is persisted before each mutation so a
+runtime restart can distinguish before, after, and unknown disk state.
 Applied proposals with rollback metadata can be explicitly
 rolled back with `POST /tasks/:taskID/rollback-edit-proposal`; the runtime
 checks current hashes before restoring snapshots or deleting created files,
 verifies restored results, and compensates a partial rollback back to the
-verified applied state when possible. Full diff review shows this evidence.
+verified applied state when possible. Startup performs the same guarded
+reconciliation for transactions left `Running`; unknown hashes are never
+overwritten automatically. Full diff review shows this evidence.
 Requesting changes calls `POST /tasks/:taskID/reject-edit-proposal`, records
 the rejection, leaves files unchanged, and allows another edit proposal to be
 generated. After a rejection, the same Review action area exposes

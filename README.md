@@ -101,7 +101,10 @@ Implemented today:
   normal source modifications, and new `docs/*.md` `CreateFile` changes.
   Cross-file apply and rollback record durable transaction evidence, verify
   every resulting hash, and compensate already-written files after a partial
-  failure. The macOS diff review shows apply/rollback/recovery evidence.
+  failure. Apply persists a per-file write-ahead journal before mutation;
+  startup recovery restores interrupted transactions only from recorded
+  before/after hashes and snapshots. The macOS diff review shows recovery
+  evidence.
 - Edit proposal validation, bounded validation-feedback repair, apply/reject
   flow, revision loop, and post-apply validation.
 - Approved task-scoped command execution for runtime-known command IDs. The
@@ -191,8 +194,8 @@ Product-readiness estimate:
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 90-94% | Adds restart-safe loops and durable per-file full-diff decisions/request-change revisions to transactional source patches, commands, self-fix, repository inspection, and bad-output recovery; edge-case patching and UI polish remain. |
-| Useful developer alpha | 42-52% | Forge can now recover interrupted agent loops and apply guarded normal source modifications, but still needs broader autonomous tool use, source create/delete, transaction crash recovery, and repeated success on real repositories. |
+| Coding-agent demo V0 | 92-95% | Adds restart-safe loops and edit transactions plus durable per-file full-diff decisions/request-change revisions to transactional source patches, commands, self-fix, repository inspection, and bad-output recovery; edge-case patching and UI polish remain. |
+| Useful developer alpha | 45-55% | Forge can now recover interrupted agent loops and edit transactions and apply guarded normal source modifications, but still needs broader autonomous tool use, source create/delete, and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, memory, MCP/GitHub, and product polish. |
 
@@ -205,7 +208,7 @@ Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
 
 - polish the first-pass macOS coding-agent session UI toward the exact
   `design_handoff_forge` screens
-- add apply-transaction crash recovery and richer search result evidence
+- add richer inspection result-quality evidence
 - extend the restricted patch engine to source-file create/delete and
   no-newline edge cases after the new Unified Diff path proves stable
 - polish full diff split rendering and keyboard/file navigation

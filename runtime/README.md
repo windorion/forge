@@ -98,7 +98,10 @@ Unified Diff modifications for normal source edits, plus create-file operations
 for new `docs/*.md` files. Unified Diffs require matching paths, ordered/count-
 correct hunks, and exact current-file context. Cross-file apply/rollback
 records transaction evidence, verifies hashes, and compensates partial
-failures back to the last verified state.
+failures back to the last verified state. Apply persists each file's expected
+before/after hashes and rollback snapshot before mutation. Startup reconciles
+interrupted Apply/Rollback transactions from that journal and fails closed on
+unknown file hashes.
 After apply, the runtime runs controlled built-in validation commands and only
 marks the task completed if validation passes.
 If validation fails, the runtime asks the model provider for a repair brief
@@ -362,6 +365,9 @@ verifies an identical second inspection is fingerprinted and blocked before
 duplicate search/read tool calls. It then
 verifies one malformed agent-step decision recovering on its corrective
 request and a two-attempt exhaustion path that fails closed. It then
+injects journaled Apply and mixed-state Rollback interruptions through SQLite
+across real runtime restarts, verifies safe compensation, and continues with a
+normal rollback. It then
 forces a temporary TypeScript validation failure and verifies provider-backed
 repair brief generation plus follow-up repair proposal generation before
 cleaning the temporary file.
