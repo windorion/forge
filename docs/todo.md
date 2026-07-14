@@ -3,7 +3,7 @@
 Document role: maintain the active backlog, priority order, and next concrete
 engineering tasks for Forge.
 
-Last updated: 2026-07-13
+Last updated: 2026-07-14
 
 ## Rule
 
@@ -21,24 +21,24 @@ dashboard.
 - Polish the first usable `10a` full-screen diff review: exact split-diff
   behavior, keyboard shortcuts, file-level approval persistence, and stronger
   tests-covering-this-file evidence.
-- Broaden source-file patch generation beyond exact text hunks while retaining
-  coordinated apply budgets, per-file review, partial-write recovery, strict
-  path validation, and pre-apply checks.
+- Harden the new restricted Unified Diff engine after real-repo use, then add
+  reviewed source-file create/delete and no-newline edge cases without
+  weakening strict path, context, pre-apply, or recovery checks.
 - Keep the current trust gates: plan approval before mutation, human review
   before apply, explicit command approval, and explicit git actions.
 
 ## P1: Real Agent Behavior
 
-- Split the combined `GatherRepositoryContext` action into finer-grained
-  search/read choices and add timeout/restart recovery beyond the new manual
-  loop controls.
+- Add richer inspection result-quality evidence and safe query-variation
+  handling.
 - Extend the bounded read-only planning/execution context loops into a
   runtime-owned tool-call loop with strict allowed tools and stop conditions.
-- Add stricter model output normalization, retry rules, and failure recovery
-  for malformed tool calls or patch artifacts.
+- Extend bounded output recovery beyond Agent Run Step decisions to malformed
+  planning tool requests and patch artifacts without retrying side effects.
 - Add request-change revision loops that operate from full diff review, not
   only the current review stack.
-- Make timeout and runtime-restart recovery visible in the live session.
+- Add crash-restart recovery for loops persisted as running when the runtime
+  terminated.
 
 ## P2: Review, Diff, And Git
 
@@ -89,38 +89,45 @@ dashboard.
 
 ## Done Recently
 
-- Added coordinated multi-file proposal/apply safeguards. OpenAI proposals can
-  now carry up to eight unique target files, including new allowlisted source
-  and text files through restricted `CreateFile`. Proposal validation blocks
-  duplicate normalized targets and oversized total operation payloads before
-  any write. Each apply attempt persists planned/applied/restored paths, and a
-  later write failure triggers reverse-order recovery of completed writes.
-  macOS Review shows the latest apply/recovery evidence, while core smoke covers
-  a three-file Markdown/source apply and rollback, duplicate-target blocking,
-  and a real second-file failure that restores the first write.
-- Added persisted Agent Run Loop pause, abort, and resume controls. Pause and
-  abort requests are cooperative between safe steps, carry an exact loop ID,
-  persist request/stop/resume timestamps and notes, emit SSE control events,
-  and keep completed evidence. Resume is limited to the same user-paused loop
-  with remaining steps and cannot bypass proposal review or busy-task gates.
-  The macOS action rail exposes state-specific controls and Log cards show
-  pending control requests/resume counts. Core smoke covers concurrent pause,
-  same-loop resume, and active-loop abort.
-- Added bounded multi-round repository context inside Agent Run Loop. The
-  request now accepts a separate `maxContextSteps` budget from zero to three;
-  each loop persists completed context rounds and aggregate inspected paths,
-  exposes the remaining budget to the provider, and pauses with explicit
-  `ContextBudgetReached` or `NoProgress` reasons. Context steps record newly
-  discovered paths and outcomes, the macOS Log shows the budget/evidence, and
-  core smoke covers two distinct context rounds, a no-progress round, and an
-  over-budget attempt.
-- Added provider-selected repository context gathering inside the normal Agent
-  Run Step/Loop. `GatherRepositoryContext` accepts bounded search terms and
-  repo-relative read paths, while the runtime filters unsafe paths, runs the
-  existing logged list/search/read tools, stores inspected paths on the step,
-  blocks repeated requests, and lets the loop continue into proposal
-  generation. The macOS Log tab shows inspected context paths and
-  `npm run smoke:core` covers standalone and continuous-loop paths.
+- Added explicit runtime-owned `Text` and `Symbol` inspection modes. Text uses
+  bounded fixed-string ripgrep search; Symbol uses whole-identifier matching.
+  Both use JSON output, no shell, safe file lists, output/time budgets, and a
+  recorded fallback engine when ripgrep is unavailable. Smoke verifies the
+  symbol engine and repeat guard.
+- Added cross-step `InspectRepository` request fingerprints and visible budget
+  evidence. Normalized search terms/read paths produce a stable short SHA-256
+  fingerprint; a later identical inspection is blocked before duplicate search
+  or read tools. The macOS Log shows the fingerprint and scan/search/context
+  budgets, and smoke verifies only the first request searches and reads.
+- Added bounded malformed-output recovery for OpenAI Agent Run Step decisions.
+  JSON/schema/required-field/action-enum failures get one corrective retry;
+  recovered decisions store attempt evidence, while retry exhaustion creates a
+  failed auditable step and executes no new tools, commands, or mutations. The
+  macOS Log shows recovered/failed attempt counts, and smoke covers both paths.
+- Added provider-selected `InspectRepository` inside Agent Run Step/Loop. The
+  provider supplies bounded search terms and optional repo-relative paths;
+  the runtime filters unsafe paths, executes only logged read-only list/search/
+  read tools, stores step-level search/read evidence, and continues the loop.
+  The macOS Log tab shows searches and inspected paths. Smoke coverage verifies
+  `InspectRepository -> GenerateEditProposal` and rejects `../unsafe.txt`.
+- Added cooperative Agent Run Loop pause/abort/resume controls. Pause and abort
+  requests are audited and take effect after the current safe step; resume
+  creates a linked new loop from paused/aborted/failed checkpoints. The macOS
+  action rail and Log tab expose control state, stop reason, and resume
+  lineage. `npm run smoke:core` controls a loop concurrently with a real
+  five-second approved command and verifies `UserPaused`, resume links, and
+  `UserAborted` lifecycles.
+- Added restricted `UnifiedDiff` source modifications for normal model-backed
+  edits beyond exact text hunks. The runtime validates single-file headers,
+  allowlisted paths, hunk bounds/counts/order, and exact context/deletion lines
+  against the current file before applying additions, replacements, or
+  deletions.
+- Added durable cross-file apply/rollback transactions with duplicate-target
+  rejection, per-file apply/rollback SHA-256 verification, unique rollback
+  snapshots, partial-apply compensation, and partial-rollback recovery. The
+  macOS full diff review shows transaction/recovery evidence, and
+  `npm run smoke:core` covers a two-file apply/rollback plus a real second-file
+  permission failure that automatically restores the first file.
 - Added bounded Agent Run Loop v0. `POST /tasks/:taskID/run-agent-loop`
   repeatedly runs provider-selected safe steps up to a runtime-enforced limit,
   links each step to an `AgentRunLoop`, and stops at review gates, passed

@@ -66,7 +66,7 @@ Steps:
 7. User can pause, abort, or open diff/tests at any point.
 
 Current implementation: Pause and Abort are cooperative at agent-step
-boundaries, while Resume continues the same explicitly user-paused loop.
+boundaries, while Resume creates a linked loop from the prior safe checkpoint.
 Commands already in progress use their separate Cancel Command control.
 
 Visible surfaces:

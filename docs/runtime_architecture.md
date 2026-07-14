@@ -207,14 +207,11 @@ all later file changes.
 ### Edit Proposal Validator
 
 Checks proposed file changes against the current workspace before apply. The
-v0 validator confirms supported operation type, safe Markdown paths for append
-operations, safe allowlisted source/text paths for create, exact replace, and
-patch operations, existing target file for modify operations, non-existing
-target for create operations, operation size, whether append text is already
-present at the file end, whether exact replace text appears exactly once, and
-whether every patch hunk appears exactly once in the original file and applies
-cleanly in order. Proposal-level validation also blocks more than eight targets,
-duplicate normalized paths, and oversized total operation payloads.
+validator confirms supported operation type, safe paths, unique proposal
+targets, existing modification targets, non-existing docs create targets, and
+bounded operation sizes. Unified Diff validation requires one matching file
+section, ordered ranges, exact hunk counts, and current-file context/deletion
+lines at every declared location.
 
 ### Edit Proposal Applier
 
@@ -222,21 +219,21 @@ Applies an explicitly approved proposal through restricted file operations.
 The v0 implementation supports append-text edits to existing Markdown files in
 `README.md` or `docs/`, exact replace-text edits to existing Markdown or
 allowlisted source/text files, multi-hunk exact patch-text edits to one
-existing Markdown or allowlisted source/text file, plus create-file edits for
-new allowlisted Markdown/source/text files. It revalidates the complete set
-before writing, records before/after apply metadata for rollback, and persists
-planned/applied/restored paths for the latest attempt. If a later operation
-fails, Forge attempts reverse-order restoration of completed writes before
-returning to review. Rejected or superseded proposals do not touch files.
+existing Markdown or allowlisted source/text file, strict context-anchored
+Unified Diff modifications, plus create-file edits for new `docs/*.md` files.
+It revalidates the full proposal before writing, records a cross-file
+transaction, verifies every resulting SHA-256, and compensates already-written
+files if a later write fails. Recovery state remains persisted and auditable.
 
 ### Edit Proposal Rollback
 
 Rolls back an explicitly applied proposal through another guarded mutation
 endpoint. The runtime stores restore snapshots in `.forge/rollback-snapshots/`
 during apply, verifies current file hashes before rollback, restores previous
-contents or deletes files created by the proposal, records a rollback approval,
-and marks the proposal `RolledBack`. Rollback is blocked when the current file
-no longer matches the recorded post-apply hash.
+contents or deletes files created by the proposal, and verifies every result
+before marking the proposal `RolledBack`. If a later rollback file fails, the
+runtime attempts to reapply and verify already-restored files so the workspace
+returns to the prior applied state.
 
 ### Git Review Surface
 
@@ -414,7 +411,7 @@ Agent Run Step v0 is the first provider-driven normal run path. The endpoint
 `POST /tasks/:taskID/run-agent-step` asks the active `ModelProvider` for one
 safe next action from a bounded enum:
 
-- `GatherRepositoryContext`
+- `InspectRepository`
 - `GenerateEditProposal`
 - `RunTaskCommand`
 - `GenerateValidationRepairProposal`
@@ -423,23 +420,35 @@ safe next action from a bounded enum:
 - `RequestPlanApproval`
 
 The provider receives compact task state, task-command permission snapshots,
-and runnable command-rerun evidence. It returns only an action, summary,
-rationale, optional bounded search terms/read paths, optional command ID, and
-optional rerun evidence ID. `GatherRepositoryContext` executes the existing
-repo-local list/search/read tools, filters unsafe or unavailable read paths,
-stores normalized search/read evidence, newly discovered paths, inspected
-context paths, and a context outcome on the step, and blocks repeated
-identical requests. The runtime then rechecks the existing gates before every
-other action: proposed edit review, plan approval, validation/command
-concurrency, command approval, command catalog membership, repair brief
-readiness, and rerun evidence readiness.
+and runnable command-rerun evidence. It returns an action, summary, rationale,
+optional command/rerun evidence ID, and—for `InspectRepository` only—bounded
+search terms plus optional repo-relative read paths. The runtime owns and logs
+the actual `list_repo_files`, `search_repo_context`, and `read_context_file`
+calls. It rejects unsafe or excluded paths, keeps existing read budgets, and
+blocks an inspection step that adds no new safe context. Inspection cannot run
+commands or mutate files. Normalized search terms/read paths produce a short
+SHA-256 request fingerprint and a persisted budget summary. A matching earlier
+inspection blocks the new step before duplicate search/read tools. For every
+other action, the runtime rechecks the
+existing proposed-edit, plan, concurrency, command approval/catalog, repair
+brief, and rerun-evidence gates before doing anything.
 
 Each executed decision is appended to `agentRunSteps` with provider metadata,
-action, status, summary, rationale, command/evidence IDs, linked proposal or
-command target, result, error, and timestamps. The runtime emits
+action, status, summary, rationale, command/evidence IDs, inspection search and
+file evidence, linked proposal or command target, result, error, and
+timestamps. The runtime emits
 `agent.run_step.started`, `agent.run_step.completed`,
 `agent.run_step.blocked`, or `agent.run_step.failed`, so the macOS Log tab can
 show a chronological decision trail.
+
+For OpenAI Agent Run Step decisions, structured-output decode, required-field,
+and action-enum failures get one corrective request using the same strict
+schema. A recovered decision persists its attempt count and bounded first
+error. If both responses are malformed, the runtime creates a failed
+`WaitForHumanReview` step, emits `agent.run_step.failed`, and stops the loop
+with `StepFailed` before any step tool, command, or mutation runs. Transport,
+HTTP, and timeout failures remain single-attempt failures rather than risking
+duplicate requests across uncertain boundaries.
 
 This runner intentionally performs one step per request so the same boundary
 can be reused by manual actions, smoke tests, and the bounded loop.
@@ -448,48 +457,36 @@ can be reused by manual actions, smoke tests, and the bounded loop.
 
 Agent Run Loop v0 wraps Agent Run Step with a runtime-enforced `maxSteps`
 limit. The endpoint `POST /tasks/:taskID/run-agent-loop` accepts an optional
-`preferredCommandID`, optional `maxSteps` between 1 and 8, and a separate
-optional `maxContextSteps` between 0 and 3 that cannot exceed `maxSteps`. The
-loop creates an `AgentRunLoop` record, invokes provider-selected steps, links
-each step ID back to the loop, persists completed context-step counts plus
-aggregate inspected paths, and stops at explicit safe conditions:
+`preferredCommandID` and optional `maxSteps` between 1 and 8. The loop creates
+an `AgentRunLoop` record, invokes provider-selected steps, links each step ID
+back to the loop, and stops at explicit safe conditions:
 
 - human review required for a proposed edit
 - approved command passed
 - reviewed self-fix rerun passed
 - step blocked or failed
 - task already busy with validation or a command
-- context-step budget exhausted
-- repeated context request or no newly inspected context paths
 - no progress recorded
 - max-step limit reached
 
-The provider sees the current context budget and recent search/read outcomes,
-but the runtime owns the counter and rejects over-budget choices before any
-repository tool runs. The loop does not introduce new tool permissions. It
-reuses `run-agent-step` and therefore inherits the same command catalog,
-approval, repair brief, rerun-evidence, validation, and review gates.
+The loop does not introduce new tool permissions. It reuses `run-agent-step`
+and therefore inherits the same read budgets, command catalog, approval,
+repair brief, rerun-evidence, validation, and review gates. The next
+architecture step is to add result-quality evidence and persisted-loop restart
+recovery, then extend safe format recovery to planning requests and patch
+artifacts.
 
-Loop control is runtime-owned through three exact-loop-ID endpoints:
+Active loops also have cooperative control endpoints:
 
-- `POST /tasks/:taskID/pause-agent-loop`
-- `POST /tasks/:taskID/abort-agent-loop`
-- `POST /tasks/:taskID/resume-agent-loop`
+- `pause-agent-loop` records `PauseRequested` and stops after the current safe
+  step with `UserPaused`.
+- `abort-agent-loop` records `AbortRequested` and stops after the current safe
+  step with `UserAborted`; it does not kill an in-flight command or model call.
+- `resume-agent-loop` accepts a paused, aborted, or failed loop checkpoint and
+  creates a new bounded loop with preserved forward/backward lineage.
 
-Pause and abort are cooperative: a step already in progress may finish, then
-the runtime checks the persisted request before choosing another provider
-action. The loop records request/stop timestamps, optional control note,
-resume timestamp/count, and `UserPaused` or `UserAborted`. Resume is allowed
-only for the same `UserPaused` loop when steps remain, no command/validation is
-busy, and no proposed edit is waiting for review. It retains step IDs, context
-budget usage, inspected paths, provider, and preferred command intent. Events
-include `pause_requested`, `abort_requested`, `resumed`, `paused`, and
-`aborted`. Commands are not force-killed by loop control; active commands keep
-their separate explicit cancellation path.
-
-The next architecture step is to split the combined context action into
-finer-grained search/read choices and broaden patch behavior inside the same
-runtime-owned safety model.
+Control requests, notes, timestamps, approvals, and SSE lifecycle events are
+persisted. History is append-only: resume never rewrites the source loop.
 
 ### Permission Manager
 

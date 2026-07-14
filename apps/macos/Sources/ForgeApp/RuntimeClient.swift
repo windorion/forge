@@ -484,12 +484,7 @@ struct RuntimeClient {
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
 
-    func runAgentLoop(
-        taskID: ForgeTask.ID,
-        preferredCommandID: String? = nil,
-        maxSteps: Int? = nil,
-        maxContextSteps: Int? = nil
-    ) async throws -> ForgeTask {
+    func runAgentLoop(taskID: ForgeTask.ID, preferredCommandID: String? = nil, maxSteps: Int? = nil) async throws -> ForgeTask {
         let url = baseURL
             .appending(path: "tasks")
             .appending(path: taskID)
@@ -498,11 +493,7 @@ struct RuntimeClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(
-            RunAgentLoopRequest(
-                preferredCommandID: preferredCommandID,
-                maxSteps: maxSteps,
-                maxContextSteps: maxContextSteps
-            )
+            RunAgentLoopRequest(preferredCommandID: preferredCommandID, maxSteps: maxSteps, resumeLoopID: nil)
         )
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -510,37 +501,40 @@ struct RuntimeClient {
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
 
-    func pauseAgentRunLoop(taskID: ForgeTask.ID, agentRunLoopID: AgentRunLoop.ID, note: String? = nil) async throws -> ForgeTask {
-        try await controlAgentRunLoop(
-            taskID: taskID,
-            action: "pause-agent-loop",
-            agentRunLoopID: agentRunLoopID,
-            note: note
-        )
+    func pauseAgentLoop(taskID: ForgeTask.ID, loopID: AgentRunLoop.ID, note: String? = nil) async throws -> ForgeTask {
+        try await controlAgentLoop(taskID: taskID, loopID: loopID, action: "pause-agent-loop", note: note)
     }
 
-    func abortAgentRunLoop(taskID: ForgeTask.ID, agentRunLoopID: AgentRunLoop.ID, note: String? = nil) async throws -> ForgeTask {
-        try await controlAgentRunLoop(
-            taskID: taskID,
-            action: "abort-agent-loop",
-            agentRunLoopID: agentRunLoopID,
-            note: note
-        )
+    func abortAgentLoop(taskID: ForgeTask.ID, loopID: AgentRunLoop.ID, note: String? = nil) async throws -> ForgeTask {
+        try await controlAgentLoop(taskID: taskID, loopID: loopID, action: "abort-agent-loop", note: note)
     }
 
-    func resumeAgentRunLoop(taskID: ForgeTask.ID, agentRunLoopID: AgentRunLoop.ID, note: String? = nil) async throws -> ForgeTask {
-        try await controlAgentRunLoop(
-            taskID: taskID,
-            action: "resume-agent-loop",
-            agentRunLoopID: agentRunLoopID,
-            note: note
-        )
-    }
-
-    private func controlAgentRunLoop(
+    func resumeAgentLoop(
         taskID: ForgeTask.ID,
+        loopID: AgentRunLoop.ID,
+        preferredCommandID: String? = nil,
+        maxSteps: Int? = nil
+    ) async throws -> ForgeTask {
+        let url = baseURL
+            .appending(path: "tasks")
+            .appending(path: taskID)
+            .appending(path: "resume-agent-loop")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(
+            RunAgentLoopRequest(preferredCommandID: preferredCommandID, maxSteps: maxSteps, resumeLoopID: loopID)
+        )
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response, data: data)
+        return try JSONDecoder().decode(ForgeTask.self, from: data)
+    }
+
+    private func controlAgentLoop(
+        taskID: ForgeTask.ID,
+        loopID: AgentRunLoop.ID,
         action: String,
-        agentRunLoopID: AgentRunLoop.ID,
         note: String?
     ) async throws -> ForgeTask {
         let url = baseURL
@@ -550,9 +544,7 @@ struct RuntimeClient {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(
-            AgentRunLoopControlRequest(agentRunLoopID: agentRunLoopID, note: note)
-        )
+        request.httpBody = try JSONEncoder().encode(AgentRunLoopControlRequest(loopID: loopID, note: note))
 
         let (data, response) = try await URLSession.shared.data(for: request)
         try validate(response, data: data)

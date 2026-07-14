@@ -64,12 +64,6 @@ export interface AgentRunStepRequest {
   task: ForgeTask;
   taskCommands: TaskCommandPermission[];
   commandRerunEvidence: CommandRerunEvidence[];
-  contextBudget?: {
-    loopID: string;
-    maxContextSteps: number;
-    contextStepsRun: number;
-    remainingContextSteps: number;
-  };
 }
 
 export interface IntentBriefRequest {
@@ -86,6 +80,23 @@ export interface ModelProvider {
   createAgentRunStep(request: AgentRunStepRequest): Promise<AgentRunStepDecision>;
   createEditProposal(request: EditProposalRequest): Promise<EditProposal>;
   createValidationRepairBrief(request: ValidationRepairBriefRequest): Promise<ValidationRepairBrief>;
+}
+
+export class AgentRunStepProviderError extends Error {
+  constructor(
+    readonly attemptCount: number,
+    readonly attemptErrors: string[]
+  ) {
+    super(`Model provider could not return a valid agent step after ${attemptCount} attempts.`);
+    this.name = "AgentRunStepProviderError";
+  }
+}
+
+class ModelProviderOutputFormatError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ModelProviderOutputFormatError";
+  }
 }
 
 type JsonSchema = Record<string, unknown>;
@@ -402,27 +413,60 @@ class OpenAIResponsesModelProvider implements ModelProvider {
   }
 
   async createAgentRunStep(request: AgentRunStepRequest): Promise<AgentRunStepDecision> {
-    const output = await this.createStructuredOutput(
-      "forge_agent_run_step",
-      agentRunStepDecisionSchema,
-      [
-        "Choose exactly one safe next action for Forge's live coding-agent run.",
-        "You are selecting the next runtime-owned action; you are not executing tools yourself.",
-        "Use GatherRepositoryContext when another bounded repository search/read pass would materially improve the next proposal. Supply short searchTerms and safe repo-relative readPaths; the runtime validates and executes them read-only.",
-        "When contextBudget is present, do not choose GatherRepositoryContext after remainingContextSteps reaches zero. Use prior agentRunSteps and context paths to avoid repeating searches or rereading the same file set.",
-        "Use GenerateEditProposal when an execution proposal exists and there is no proposed edit awaiting review.",
-        "Use RunTaskCommand only when one of the provided taskCommands has canRun true; commandID must exactly match that command id.",
-        "Use GenerateValidationRepairProposal when a failed validation or task command has a repair brief and no repair proposal is currently awaiting review.",
-        "Use RerunRepairCommand only when one of the provided commandRerunEvidence items is ready or failed; commandRerunEvidenceID must exactly match that evidence id.",
-        "Use WaitForHumanReview when a proposal, plan, command approval, or user decision is needed.",
-        "Use RequestPlanApproval when the current plan has not been approved.",
-        "Never ask to apply edits, commit, push, install dependencies, or run arbitrary shell text.",
-        taskProviderContext(request.task),
-        agentRunStepRequestContext(request)
-      ].join("\n\n")
-    );
+    const promptParts = [
+      "Choose exactly one safe next action for Forge's live coding-agent run.",
+      "You are selecting the next runtime-owned action; you are not executing tools yourself.",
+      "Use InspectRepository when more read-only codebase evidence is needed before proposing or repairing an edit. Provide searchMode Text for fixed substring discovery or Symbol for whole-identifier discovery, plus bounded searchTerms and optional repo-relative readPaths. The runtime validates and executes them.",
+      "Do not request repository evidence already present in task context or recent InspectRepository steps; wait for human review when no new safe context is needed.",
+      "Use GenerateEditProposal when an execution proposal exists and there is no proposed edit awaiting review.",
+      "Use RunTaskCommand only when one of the provided taskCommands has canRun true; commandID must exactly match that command id.",
+      "Use GenerateValidationRepairProposal when a failed validation or task command has a repair brief and no repair proposal is currently awaiting review.",
+      "Use RerunRepairCommand only when one of the provided commandRerunEvidence items is ready or failed; commandRerunEvidenceID must exactly match that evidence id.",
+      "Use WaitForHumanReview when a proposal, plan, command approval, or user decision is needed.",
+      "Use RequestPlanApproval when the current plan has not been approved.",
+      "Never ask to apply edits, commit, push, install dependencies, or run arbitrary shell text.",
+      taskProviderContext(request.task),
+      agentRunStepRequestContext(request)
+    ];
+    const attemptErrors: string[] = [];
 
-    return normalizeAgentRunStepDecisionOutput(output, request);
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      const correction = attemptErrors.length > 0
+        ? [
+            "Your previous agent-step output could not be validated.",
+            `Validation error: ${attemptErrors.at(-1)}`,
+            "Return exactly one object matching the supplied schema. Use only an allowed action and include non-empty summary and rationale strings."
+          ].join("\n")
+        : undefined;
+      try {
+        const output = await this.createStructuredOutput(
+          "forge_agent_run_step",
+          agentRunStepDecisionSchema,
+          [...promptParts, correction].filter(Boolean).join("\n\n")
+        );
+        let decision: AgentRunStepDecision;
+        try {
+          decision = normalizeAgentRunStepDecisionOutput(output, request);
+        } catch (error) {
+          throw new ModelProviderOutputFormatError(compactProviderError(error));
+        }
+
+        return {
+          ...decision,
+          providerAttemptCount: attempt,
+          providerOutputRecovered: attempt > 1,
+          providerAttemptErrors: attemptErrors.length > 0 ? attemptErrors : undefined
+        };
+      } catch (error) {
+        if (!(error instanceof ModelProviderOutputFormatError)) {
+          throw error;
+        }
+
+        attemptErrors.push(compactProviderError(error));
+      }
+    }
+
+    throw new AgentRunStepProviderError(2, attemptErrors);
   }
 
   async createEditProposal(request: EditProposalRequest): Promise<EditProposal> {
@@ -431,12 +475,13 @@ class OpenAIResponsesModelProvider implements ModelProvider {
       editProposalSchema,
       [
         "Create a Forge edit proposal review artifact.",
-        "You may propose up to eight coordinated file changes, but the runtime will validate the complete set before any apply.",
+        "You may propose multiple file changes, but the runtime will validate all of them before any apply.",
         "Use AppendText only for bounded appends to README.md or docs/*.md.",
         "Use ReplaceText only when the task explicitly asks for an exact quoted replacement and you can provide the exact find text. It may target README.md, docs/*.md, or normal allowlisted source/text files such as .ts, .swift, .js, .json, .css, .html, .yml, .toml, .py, .go, .rs, .java, .kt, .c, .cpp, .h, and .hpp.",
-        "Use PatchText for bounded exact replacements in an existing allowlisted Markdown/source/text file when every patchHunks item includes findText that should appear exactly once in the current file.",
-        "Use CreateFile for bounded new Markdown or allowlisted source/text files. Never use it to overwrite an existing path.",
-        "Use PreviewOnly for fuzzy patches, line-number-only diffs, deletes, unsupported paths, overwrite attempts, or anything that should be reviewed but not applied by the current v0 engine.",
+        "Use PatchText only when the task explicitly asks for multiple exact quoted replacements in one existing allowlisted Markdown/source/text file. Every patchHunks item must include exact findText and replaceWith text that should appear once in the original target file.",
+        "Use UnifiedDiff for normal edits to an existing allowlisted source/text file when exact replacement is too narrow. Provide one standard single-file unified diff with --- a/path and +++ b/path headers, line-numbered @@ hunks, and exact context lines. The header path must match the file change path. Do not use it to create or delete files.",
+        "Use CreateFile only for new docs/*.md files with bounded Markdown content.",
+        "Use PreviewOnly for deletes, new source files, unsupported paths, overwrite attempts, multi-file content inside one diff, or anything that should be reviewed but not applied by the current engine.",
         request.validationFeedback
           ? "The previous proposal failed runtime validation. Generate a corrected proposal that addresses every blocked check while staying inside the supported operation boundary."
           : request.validationRepairBrief
@@ -558,8 +603,12 @@ class OpenAIResponsesModelProvider implements ModelProvider {
         throw new Error(`OpenAI Responses request failed (${response.status}): ${raw.slice(0, 500)}`);
       }
 
-      const parsed = JSON.parse(raw) as unknown;
-      return JSON.parse(extractOpenAIOutputText(parsed));
+      try {
+        const parsed = JSON.parse(raw) as unknown;
+        return JSON.parse(extractOpenAIOutputText(parsed));
+      } catch (error) {
+        throw new ModelProviderOutputFormatError(`Structured output could not be decoded: ${compactProviderError(error)}`);
+      }
     } finally {
       clearTimeout(timeout);
     }
@@ -634,23 +683,24 @@ const agentRunStepDecisionSchema: JsonSchema = {
     action: {
       type: "string",
       enum: [
-        "GatherRepositoryContext",
         "GenerateEditProposal",
         "RunTaskCommand",
         "GenerateValidationRepairProposal",
         "RerunRepairCommand",
         "WaitForHumanReview",
-        "RequestPlanApproval"
+        "RequestPlanApproval",
+        "InspectRepository"
       ]
     },
     summary: { type: "string" },
     rationale: { type: "string" },
+    commandID: { type: "string" },
+    commandRerunEvidenceID: { type: "string" },
     searchTerms: { type: "array", items: { type: "string" } },
     readPaths: { type: "array", items: { type: "string" } },
-    commandID: { type: "string" },
-    commandRerunEvidenceID: { type: "string" }
+    searchMode: { type: "string", enum: ["Text", "Symbol"] }
   },
-  required: ["action", "summary", "rationale", "searchTerms", "readPaths", "commandID", "commandRerunEvidenceID"]
+  required: ["action", "summary", "rationale", "commandID", "commandRerunEvidenceID", "searchTerms", "readPaths", "searchMode"]
 };
 
 const editProposalGuidanceSchema: JsonSchema = {
@@ -674,7 +724,7 @@ const editProposalFileChangeSchema: JsonSchema = {
     changeType: { type: "string", enum: ["Create", "Modify", "Delete"] },
     rationale: { type: "string" },
     diffPreview: { type: "string" },
-    operationKind: { type: "string", enum: ["AppendText", "ReplaceText", "PatchText", "CreateFile", "PreviewOnly"] },
+    operationKind: { type: "string", enum: ["AppendText", "ReplaceText", "PatchText", "UnifiedDiff", "CreateFile", "PreviewOnly"] },
     appendText: { type: "string" },
     findText: { type: "string" },
     replaceWith: { type: "string" },
@@ -690,6 +740,7 @@ const editProposalFileChangeSchema: JsonSchema = {
         required: ["findText", "replaceWith"]
       }
     },
+    unifiedDiff: { type: "string" },
     content: { type: "string" }
   },
   required: [
@@ -702,6 +753,7 @@ const editProposalFileChangeSchema: JsonSchema = {
     "findText",
     "replaceWith",
     "patchHunks",
+    "unifiedDiff",
     "content"
   ]
 };
@@ -1043,16 +1095,17 @@ function normalizeAgentRunStepDecisionOutput(
     throw new Error("OpenAI agent run step output was not an object.");
   }
 
+  const action = normalizeAgentRunStepAction(output.action);
+  if (!action) {
+    throw new Error("OpenAI agent run step action was not in the allowed action enum.");
+  }
+
   const fallback = chooseDeterministicAgentRunStep(request);
-  const action = normalizeAgentRunStepAction(output.action) ?? fallback.action;
   const commandID = optionalString(output.commandID);
   const commandRerunEvidenceID = optionalString(output.commandRerunEvidenceID);
-  const searchTerms = Array.isArray(output.searchTerms)
-    ? boundedStringArray(output.searchTerms, "searchTerms", 10)
-    : [];
-  const readPaths = Array.isArray(output.readPaths)
-    ? boundedStringArray(output.readPaths, "readPaths", 6)
-    : [];
+  const searchTerms = normalizeAgentRunStepStringList(output.searchTerms, 10, 64);
+  const readPaths = normalizeAgentRunStepStringList(output.readPaths, 6, 240);
+  const searchMode = output.searchMode === "Symbol" ? "Symbol" : "Text";
   const runnableCommandIDs = new Set(request.taskCommands.filter((permission) => permission.canRun).map((permission) => permission.command.id));
   const runnableRerunEvidenceIDs = new Set(request.commandRerunEvidence.map((evidence) => evidence.id));
 
@@ -1072,24 +1125,40 @@ function normalizeAgentRunStepDecisionOutput(
     };
   }
 
-  if (action === "GatherRepositoryContext" && searchTerms.length === 0 && readPaths.length === 0) {
-    return fallback;
-  }
-
   return {
     action,
     summary: requiredString(output.summary, "summary"),
     rationale: requiredString(output.rationale, "rationale"),
-    searchTerms: action === "GatherRepositoryContext" ? searchTerms : undefined,
-    readPaths: action === "GatherRepositoryContext" ? readPaths : undefined,
     commandID: action === "RunTaskCommand" ? commandID : undefined,
-    commandRerunEvidenceID: action === "RerunRepairCommand" ? commandRerunEvidenceID : undefined
+    commandRerunEvidenceID: action === "RerunRepairCommand" ? commandRerunEvidenceID : undefined,
+    searchTerms: action === "InspectRepository" ? searchTerms : undefined,
+    readPaths: action === "InspectRepository" ? readPaths : undefined,
+    searchMode: action === "InspectRepository" ? searchMode : undefined
   };
+}
+
+function normalizeAgentRunStepStringList(value: unknown, limit: number, itemLimit: number): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => optionalString(item).trim())
+    .filter((item, index, values) => item.length > 0 && values.indexOf(item) === index)
+    .slice(0, limit)
+    .map((item) => item.slice(0, itemLimit));
+}
+
+function compactProviderError(error: unknown): string {
+  return (error instanceof Error ? error.message : String(error))
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 240) || "Unknown structured output validation error.";
 }
 
 function normalizeAgentRunStepAction(value: unknown): AgentRunStepDecision["action"] | undefined {
   switch (value) {
-  case "GatherRepositoryContext":
+  case "InspectRepository":
   case "GenerateEditProposal":
   case "RunTaskCommand":
   case "GenerateValidationRepairProposal":
@@ -1128,7 +1197,7 @@ function normalizeRichEditProposalOutput(
 
   const rawChanges = Array.isArray(output.fileChanges) ? output.fileChanges : [];
   const fileChanges = rawChanges
-    .slice(0, 8)
+    .slice(0, 4)
     .map(normalizeRichEditProposalFileChange)
     .filter((change): change is RichEditProposalFileChange => change !== undefined);
 
@@ -1181,6 +1250,11 @@ function normalizeRichEditProposalFileChange(output: unknown): RichEditProposalF
     const hunks = normalizePatchTextHunks(output.patchHunks);
     applyOperation = hunks.length > 0
       ? { kind: "PatchText", hunks }
+      : { kind: "PreviewOnly" };
+  } else if (operationKind === "UnifiedDiff") {
+    const patch = optionalMultilineString(output.unifiedDiff, 60_000);
+    applyOperation = patch
+      ? { kind: "UnifiedDiff", patch }
       : { kind: "PreviewOnly" };
   } else if (operationKind === "CreateFile") {
     applyOperation = {
@@ -1400,21 +1474,6 @@ function chooseDeterministicAgentRunStep(request: AgentRunStepRequest): AgentRun
   }
 
   if (task.executionProposal && (!task.editProposal || task.editProposal.status === "Rejected")) {
-    const alreadyGatheredRunContext = request.contextBudget
-      ? request.contextBudget.contextStepsRun > 0 || request.contextBudget.remainingContextSteps === 0
-      : task.agentRunSteps.some((step) =>
-          !step.loopID && step.action === "GatherRepositoryContext" && step.status === "Completed"
-        );
-    if (!alreadyGatheredRunContext) {
-      return {
-        action: "GatherRepositoryContext",
-        summary: "Gather one more bounded repository context pass before drafting the edit proposal.",
-        rationale: "The approved plan is ready, but the normal agent run has not yet selected its own read/search context.",
-        searchTerms: deterministicAgentContextSearchTerms(task),
-        readPaths: deterministicAgentContextReadPaths(task)
-      };
-    }
-
     return {
       action: "GenerateEditProposal",
       summary: task.editProposal?.status === "Rejected"
@@ -1449,31 +1508,6 @@ function chooseDeterministicAgentRunStep(request: AgentRunStepRequest): AgentRun
   };
 }
 
-function deterministicAgentContextSearchTerms(task: ForgeTask): string[] {
-  const stopWords = new Set(["about", "after", "agent", "build", "code", "forge", "from", "into", "make", "plan", "task", "that", "this", "with"]);
-  const terms = new Set<string>();
-  const source = [task.title, task.objective, ...task.messages.slice(-4).map((message) => message.content)].join(" ").toLowerCase();
-  for (const match of source.matchAll(/[a-z][a-z0-9_-]{2,}/g)) {
-    const term = match[0].replaceAll("_", "-");
-    if (!stopWords.has(term)) {
-      terms.add(term.slice(0, 64));
-    }
-  }
-
-  return [...terms].slice(0, 8);
-}
-
-function deterministicAgentContextReadPaths(task: ForgeTask): string[] {
-  return [
-    ...new Set(
-      task.messages
-        .flatMap((message) => message.fileReferences)
-        .filter((reference) => reference.status === "Resolved" && reference.path)
-        .map((reference) => reference.path as string)
-    )
-  ].slice(0, 6);
-}
-
 function agentRunStepRequestContext(request: AgentRunStepRequest): string {
   const runnableCommands = request.taskCommands.filter((permission) => permission.canRun);
   const commandSummaries = request.taskCommands.slice(0, 8).map((permission) => ({
@@ -1502,7 +1536,7 @@ function agentRunStepRequestContext(request: AgentRunStepRequest): string {
 
   return JSON.stringify({
     allowedActions: [
-      "GatherRepositoryContext",
+      "InspectRepository",
       "GenerateEditProposal",
       "RunTaskCommand",
       "GenerateValidationRepairProposal",
@@ -1510,10 +1544,9 @@ function agentRunStepRequestContext(request: AgentRunStepRequest): string {
       "WaitForHumanReview",
       "RequestPlanApproval"
     ],
-    repositoryContextPolicy: "GatherRepositoryContext accepts bounded searchTerms and safe repo-relative readPaths. The runtime owns filtering, reads, storage caps, and audit events.",
-    contextBudget: request.contextBudget,
     taskCommandPolicy: "RunTaskCommand can only use commandID values where canRun is true.",
     rerunPolicy: "RerunRepairCommand can only use commandRerunEvidenceID values listed in commandRerunEvidence.",
+    repositoryInspectionPolicy: "InspectRepository is read-only; searchMode is Text or Symbol, and searchTerms/readPaths are normalized and executed by runtime-owned bounded tools.",
     runnableCommandIDs: runnableCommands.map((permission) => permission.command.id),
     taskCommands: commandSummaries,
     commandRerunEvidence: rerunEvidence
@@ -1552,15 +1585,9 @@ function taskProviderContext(task: ForgeTask, sourceMessage?: TaskMessage): stri
       recommendedActions: brief.recommendedActions
     })) ?? [],
     agentRunSteps: task.agentRunSteps?.slice(-5).map((step) => ({
-      loopID: step.loopID,
       action: step.action,
       status: step.status,
       summary: step.summary,
-      searchTerms: step.searchTerms,
-      readPaths: step.readPaths,
-      contextPaths: step.contextPaths,
-      newContextPaths: step.newContextPaths,
-      contextOutcome: step.contextOutcome,
       resultSummary: step.resultSummary,
       error: step.error
     })) ?? [],
@@ -1809,6 +1836,10 @@ function editOperationLabel(operation: ProposedFileOperation): string {
 
   if (operation.kind === "PatchText") {
     return `${operation.hunks.length} exact patch hunks`;
+  }
+
+  if (operation.kind === "UnifiedDiff") {
+    return "a context-anchored unified diff";
   }
 
   return "a small append-only note";

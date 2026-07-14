@@ -39,7 +39,7 @@ should no longer feel like a generic workflow dashboard.
 
 ## Current Status
 
-Last updated: 2026-07-13
+Last updated: 2026-07-14
 
 Direction reset: the trust/runtime foundation is strong, but the next milestone
 is a redesigned coding-agent demo based on `design_handoff_forge/`, especially
@@ -66,30 +66,42 @@ Implemented today:
   plus inspected context files.
 - Provider-selected Agent Run Step v0: `POST /tasks/:taskID/run-agent-step`
   asks the active model provider for one safe next action, then the runtime
-  can execute model-selected bounded repository context passes through logged
-  read-only list/search/read tools, or enforce existing gates while it
-  generates an edit proposal, runs an
+  enforces existing gates while it generates an edit proposal, runs an
   approved task command, generates a validation repair proposal, reruns
   reviewed self-fix evidence, or waits for human review. The macOS action rail
   exposes `Run Agent Step`, and the Log tab shows recent agent step decisions,
   rationale, status, linked command/proposal targets, and result summaries.
+- Runtime-owned repository inspection step: the provider may choose
+  `InspectRepository` with bounded search terms and candidate repo-relative
+  paths. Forge filters unsafe inputs, blocks inspections that add no new
+  context, executes only its logged read-only list/search/read tools, stores
+  context evidence, and can continue the bounded loop into proposal generation
+  without granting arbitrary tools. Normalized requests store a stable
+  cross-step fingerprint and visible scan/search/context budgets; an identical
+  later request is blocked before duplicate search or read calls.
+- Agent-step structured-output recovery: malformed JSON/schema/enum decisions
+  receive one bounded correction attempt. A recovered decision records both
+  attempts; retry exhaustion creates a failed, auditable step without running
+  tools, commands, or file mutations.
 - Bounded Agent Run Loop v0: `POST /tasks/:taskID/run-agent-loop` repeatedly
   runs provider-selected safe steps up to a small runtime-enforced limit and
-  has a separate zero-to-three-step repository-context budget. It stops at
-  review gates, passed commands, verified self-fixes, blocked steps, context
-  budget exhaustion, no-progress detection, failures, or max-step protection.
-  Runtime-owned pause, abort, and resume endpoints cooperatively stop between
-  safe steps and resume the same persisted loop without bypassing review
-  gates. The macOS action rail exposes these controls, and the Log tab shows
-  loop summaries plus the linked step trail.
+  stops at review gates, passed commands, verified self-fixes, blocked steps,
+  failures, or max-step protection. The macOS action rail now exposes
+  `Run Agent Loop`, and the Log tab shows loop summaries plus the linked step
+  trail.
+- Cooperative Agent Run Loop controls: pause and abort requests are audited
+  while active and stop after the current safe step; resume starts a new
+  bounded loop linked to the prior paused/aborted/failed checkpoint. The
+  macOS action rail and Log tab expose control state and resume lineage.
 - Explicit human review gates for plans and edits.
 - Safe edit proposals with multi-file OpenAI proposal artifacts, including
   blocked preview-only operations. Apply supports Markdown `AppendText`,
   exact `ReplaceText` and multi-hunk `PatchText` for Markdown and allowlisted
-  source/text files, and bounded `CreateFile` changes for new allowlisted
-  source/text files. Coordinated proposals are capped at eight unique targets
-  and a total operation budget; apply attempts persist planned/applied/restored
-  paths and automatically restore completed writes if a later file fails.
+  source/text files, context-anchored single-file `UnifiedDiff` operations for
+  normal source modifications, and new `docs/*.md` `CreateFile` changes.
+  Cross-file apply and rollback record durable transaction evidence, verify
+  every resulting hash, and compensate already-written files after a partial
+  failure. The macOS diff review shows apply/rollback/recovery evidence.
 - Edit proposal validation, bounded validation-feedback repair, apply/reject
   flow, revision loop, and post-apply validation.
 - Approved task-scoped command execution for runtime-known command IDs. The
@@ -164,9 +176,9 @@ Not finished yet:
   file-level review persistence, decision prompts, and polished live-run
   states.
 - Rich autonomous model-backed read/search/patch/run/repair beyond the current
-  bounded loop and exact-text patch engine.
-- General source-code patch engine, richer rollback/revalidation, and richer
-  diff review.
+  bounded loop and restricted unified-diff patch engine.
+- Source-file create/delete and newline-marker patch support, plus richer diff
+  review.
 - Actual PR creation/publication after explicit review.
 - Durable repository index with symbols and semantic search.
 - Full workspace picker and commercial packaging/signing path.
@@ -179,8 +191,8 @@ Product-readiness estimate:
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 84-88% | Has a first-pass session UI shell, full-screen diff review surface, coordinated multi-file source/text create and exact patch apply with recovery evidence, streamed/cancellable selectable task commands, failed-command self-fix rerun evidence, and a bounded provider-selected loop with multi-round context budgets plus pause/abort/resume controls, but still needs more general patch generation, finer-grained tools, and UI polish before it feels like Codex or Claude Code. |
-| Useful developer alpha | 35-45% | A developer cannot yet rely on Forge like Codex or Claude Code for normal coding tasks. It needs real patching, command execution, recovery, and a stronger model-backed run loop. |
+| Coding-agent demo V0 | 85-89% | Has a first-pass session UI shell, full-screen diff review, verified cross-file source patches, streamed/cancellable commands, self-fix evidence, pause/abort/resume, a provider-selected read/search→proposal loop, and bounded bad-output recovery; richer tool breadth and UI polish remain. |
+| Useful developer alpha | 40-50% | Forge can now apply guarded normal source modifications, but still needs richer autonomous tool use, source create/delete, restart recovery, and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, memory, MCP/GitHub, and product polish. |
 
@@ -193,10 +205,9 @@ Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
 
 - polish the first-pass macOS coding-agent session UI toward the exact
   `design_handoff_forge` screens
-- broaden source-file patch generation beyond exact text hunks while retaining
-  the new coordinated apply budgets and automatic partial-write recovery
-- split the combined repository-context action into finer-grained search/read
-  choices and broaden patch/recovery behavior
+- add richer search result-quality evidence and persisted-loop restart recovery
+- extend the restricted patch engine to source-file create/delete and
+  no-newline edge cases after the new Unified Diff path proves stable
 - connect full diff review to durable file-level decisions once the review
   model supports them
 - return to PR/GitHub publication after the agent coding loop feels real

@@ -115,8 +115,8 @@ Current implementation:
   network state
 - pending cooperative stop requests remain visible until the current safe
   step finishes
-- resume continues the same persisted loop instead of silently creating a new
-  run
+- resume creates a new bounded loop linked to the prior paused, aborted, or
+  failed checkpoint, preserving append-only history
 
 ### Coordinated Apply Evidence
 
@@ -124,8 +124,8 @@ Current implementation:
 
 - the existing Review surface shows the latest proposal apply attempt without
   creating another window or view-local runtime state
-- planned, applied, and automatically restored file counts make partial-write
-  recovery visible alongside the proposal
+- transaction phase, per-file verification, and automatic compensation make
+  partial-write recovery visible alongside the proposal
 - an incomplete recovery error remains visible for explicit human follow-up
 
 ### Quick Look

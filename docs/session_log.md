@@ -3125,298 +3125,267 @@ Next:
   rollback revalidation/recovery.
 - Add pause/abort/resume and stuck-task recovery controls for bounded loops.
 
-## 2026-07-13 20:18:56 CEST
+## 2026-07-14 07:38:07 CEST
 
 Conversation summary:
 
-- User asked for a full-document review of current Forge progress, an
-  assessment of distance to Coding-Agent Demo V0, and a recommendation for
-  the next implementation step.
+- User asked to inspect the repository from `main`, choose the next long task,
+  avoid unnecessary questions, and complete as much as possible. The session
+  implemented the top V0 patch/recovery item after the bounded agent loop.
 
 Done:
 
-- Read the complete project documentation set, including the root/runtime/
-  design-handoff READMEs, all focused `docs/*.md` files, and the full session
-  history.
-- Cross-checked V0 completion criteria against the current TypeScript runtime,
-  SwiftUI app, provider contract, patch engine, command runner, review UI, and
-  test coverage.
-- Confirmed the documented trust/runtime foundation is real and stable, while
-  identifying that the current 76-80% V0 estimate is more optimistic than a
-  strict end-to-end product-experience score.
-- Verified `npm run check`, `npm run build`, `swift build`,
-  `npm run smoke:core`, `npm run smoke:git-remote`, and `git diff --check`.
-- Confirmed the working tree was clean before this session-log entry.
+- Added a restricted `UnifiedDiff` operation for normal modifications to
+  existing allowlisted source/text files, including strict file-header, path,
+  size, hunk-count, range/count, order, and current-context validation.
+- Added duplicate-target rejection and durable cross-file apply/rollback
+  transaction records with per-file SHA-256 verification.
+- Added automatic compensation after partial apply and recovery back to the
+  applied state after partial rollback, with `Recovered`/`RecoveryFailed`
+  phases and SSE audit events.
+- Added unique rollback snapshots plus apply/rollback verification timestamps
+  to persisted file-change evidence.
+- Updated macOS decoding and full diff review with Unified Diff summaries and
+  visible changeset transaction/recovery evidence.
+- Extended `npm run smoke:core` with a two-file Unified Diff apply/rollback and
+  a real read-only second-file failure that verifies the first file is restored
+  automatically.
+- Verified `npm run check`, `npm run smoke:core`, `swift build`, and
+  `git diff --check`.
 
 Not done:
 
-- Did not change runtime, macOS app, product scope, completion estimates, or
-  backlog priorities.
-- Did not run a live OpenAI API task or an interactive GUI walkthrough.
-- Did not implement broader patching, real clarification states,
-  pause/abort/resume, or durable file-level review decisions.
+- Source-file create/delete and Unified Diff newline-marker changes remain
+  preview-only/blocked.
+- Crash-time recovery for a runtime terminated mid-transaction is not yet
+  implemented; current compensation handles in-process failures.
+- Agent Run Loop pause/abort/resume and richer runtime-owned read/search tools
+  remain outstanding.
 
 Next:
 
-- Build one V0 vertical slice around a normal small source task: provider-led
-  read/search, structured multi-file patch generation, reviewed apply,
-  approved command execution, one repair attempt, rerun evidence, and final
-  full-diff review.
-- Add real clarification/decision checkpoints and pause/abort/resume to that
-  same run state machine instead of treating them as separate UI polish.
-- After the vertical slice succeeds repeatedly, finish durable per-file diff
-  decisions and exact `10a` interaction polish.
+- Add pause/abort/resume and visible stuck-task recovery to Agent Run Loop.
+- Then extend runtime-owned read/search tool choices inside the same safety
+  boundary.
 
-## 2026-07-13 20:36:43 CEST
+## 2026-07-14 07:48:04 CEST
 
 Conversation summary:
 
-- User asked to begin the recommended next step after the V0 progress review.
-  This session implemented the first provider-selected repository-context
-  action inside the normal Agent Run Step/Loop.
+- User asked to commit and push the completed patch/recovery slice, then
+  continue immediately with the next task. Commit `75a2ee1` was pushed to
+  `origin/codex/source-patch-recovery`, then the session implemented Agent Run
+  Loop controls on the same branch.
 
 Done:
 
-- Added `GatherRepositoryContext` to the provider/runtime action contract with
-  bounded search terms, repo-relative read paths, and persisted inspected
-  context paths.
-- Reused the existing logged list/search/read tools, safe repository file
-  boundary, context storage caps, and task audit events; unsafe paths are
-  filtered and repeated identical context requests are blocked.
-- Let a bounded Agent Run Loop gather context and continue into edit-proposal
-  generation without adding any side-effect permission.
-- Added macOS model decoding and Log-tab display for inspected context paths.
-- Extended the mock OpenAI core smoke flow to cover standalone context
-  gathering and context-to-proposal loop continuation.
-- Updated README, project status, TODO, development, runtime architecture,
-  model provider, security, runtime README, and V0 scope documentation. The
-  Coding-Agent Demo V0 component estimate is now 78-82%.
-- Verified runtime type checking/build, macOS `swift build`, core runtime
-  smoke, and `git diff --check`.
+- Added `pause-agent-loop`, `abort-agent-loop`, and `resume-agent-loop`
+  endpoints with active-loop ID checks and persisted request notes/timestamps.
+- Pause and abort now take effect after the current safe step, without killing
+  an in-flight provider request or approved command.
+- Added `UserPaused` and `UserAborted` stop reasons, `Aborted` loop status,
+  approval/audit records, and requested/paused/aborted/resumed SSE events.
+- Resume accepts paused, aborted, or failed checkpoints and creates a new loop
+  with `resumedFromLoopID`/`resumedByLoopID` history instead of rewriting the
+  old record.
+- Added macOS Pause, Abort, and Resume Loop actions plus Log-tab control state
+  and resume-lineage display.
+- Extended `npm run smoke:core` with concurrent controls around real approved
+  five-second commands, verifying pause, resume, abort, audit, events, and
+  inactive-loop rejection.
+- Verified `npm run check`, `npm run smoke:core`, and `swift build`.
 
 Not done:
 
-- Did not add repeated/finer-grained model tool selection beyond the first
-  combined context pass.
-- Did not add pause/abort/resume or stuck-task recovery controls.
-- Did not broaden patch application beyond the current exact replace and
-  multi-hunk patch operations.
-- Did not run a live OpenAI API task or an interactive macOS GUI walkthrough.
+- Controls are cooperative between safe steps; they do not interrupt an
+  in-flight command. Command cancellation remains a separate explicit action.
+- Runtime restart does not yet convert persisted `Running` loops into a
+  recoverable interrupted checkpoint.
+- Richer runtime-owned read/search choices and malformed provider output retry
+  remain outstanding.
 
 Next:
 
-- Extend the context action into a small runtime-owned read/search loop with
-  explicit budgets and no-progress protection.
-- Add pause/abort/resume to the same run state machine.
-- Continue the V0 vertical slice with broader multi-file patch generation,
-  reviewed apply, validation, one repair attempt, and final full-diff review.
+- Add runtime-owned read/search actions inside the bounded loop with strict
+  budgets and no mutation permissions.
+- Add malformed-output normalization/retry and crash-restart loop recovery.
 
-## 2026-07-13 20:50:45 CEST
+## 2026-07-14 08:01:30 CEST
 
 Conversation summary:
 
-- User asked to continue the next V0 implementation step. This session
-  upgraded the first Agent Run repository-context action into a bounded
-  multi-round context loop with explicit progress and stop evidence.
+- After committing and pushing the patch/recovery and loop-control slices, the
+  session continued with the next V0 orchestration task: provider-selected,
+  runtime-owned repository inspection inside Agent Run Step/Loop.
 
 Done:
 
-- Added a separate `maxContextSteps` Agent Run Loop request budget from zero
-  to three, never greater than the overall `maxSteps` limit.
-- Persisted completed context-step count and aggregate inspected paths on each
-  `AgentRunLoop`, with snapshot defaults for older stored loop records.
-- Exposed remaining context budget plus recent search/read outcomes to the
-  model provider while keeping both counters runtime-owned.
-- Recorded `newContextPaths` and `contextOutcome` on context steps, including
-  `Expanded`, `RepeatedRequest`, `NoProgress`, and `BudgetReached`.
-- Scoped duplicate detection and progress comparison to the current loop so a
-  later run may intentionally reread changed repository state.
-- Added explicit `ContextBudgetReached` and `NoProgress` loop stops; over-budget
-  choices are rejected before any repository tool runs.
-- Updated the macOS Log with context-step budget, aggregate inspected paths,
-  and per-step context outcome/new-file counts.
-- Extended core smoke coverage for two productive context rounds followed by
-  proposal generation, a no-progress round, and an over-budget model choice.
-- Updated the project/runtime/provider/security/persistence/local-first/V0
-  documents and raised the Coding-Agent Demo V0 component estimate to 80-84%.
-- Verified runtime type checking/build, the full core runtime smoke, macOS
-  `swift build`, and `git diff --check`.
+- Added `InspectRepository` to the bounded provider decision schema with
+  optional search terms and repo-relative read-path candidates.
+- Kept execution runtime-owned: the step uses logged `list_repo_files`,
+  `search_repo_context`, and `read_context_file` tools under existing budgets,
+  filters unsafe paths, and grants no command or mutation permissions.
+- Added no-progress blocking when an inspection produces no new safe context
+  and prioritized newly inspected files in the bounded task context.
+- Persisted search, requested-read, and inspected-file evidence on each agent
+  step and exposed it in the macOS Log tab.
+- Added a mock OpenAI two-step smoke flow that inspects a safe Keychain source
+  file, rejects an escaping path, then generates a reviewed proposal using the
+  newly recorded context.
+- Verified `npm run check`, `npm run smoke:core`, `swift build`, and
+  `git diff --check` during implementation and documentation closeout.
 
 Not done:
 
-- Did not split `GatherRepositoryContext` into separate model-selected search
-  and read actions.
-- Did not add pause/abort/resume controls for an active or paused Agent Run
-  Loop.
-- Did not broaden provider patch generation or apply beyond the current exact
-  replace and multi-hunk operations.
-- Did not run a live OpenAI API task or interactive macOS GUI walkthrough.
+- Inspection still reuses the existing bounded substring search instead of an
+  explicit ripgrep/text-symbol tool choice.
+- Repeated requests are stopped when they add no context, but do not yet have a
+  dedicated cross-step request fingerprint or suppression record.
+- Malformed provider-output retry and crash-restart loop recovery remain
+  outstanding.
 
 Next:
 
-- Add runtime-owned pause, abort, and resume state transitions with persisted
-  loop intent and cooperative stop checks between agent steps.
-- Surface those controls and stop states in the macOS live-session action rail.
-- Then continue the V0 vertical slice with broader multi-file patch
-  orchestration, validation, one repair attempt, and final full-diff review.
+- Add explicit ripgrep-backed text/symbol inspection choices with request
+  fingerprints and clearer budget evidence.
+- Add bounded malformed-output normalization/retry, then recover interrupted
+  persisted loops after runtime restart.
 
-## 2026-07-13 21:06:40 CEST
+## 2026-07-14 08:15:52 CEST
 
 Conversation summary:
 
-- User asked to continue the next V0 implementation step. This session added
-  persisted, runtime-owned pause, abort, and resume controls to the bounded
-  Agent Run Loop and surfaced them in the native macOS action rail.
+- After committing and pushing runtime-owned repository inspection, the
+  session continued with Agent Run Step provider-output reliability.
 
 Done:
 
-- Added exact-loop-ID pause, abort, and resume endpoints with persisted control
-  intent, timestamps, optional audit notes, resume count, and an explicit
-  `Aborted` state.
-- Made pause and abort cooperative at safe agent-step boundaries. Forge retains
-  completed context and proposal evidence and does not force-kill an active
-  validation or task command; command cancellation remains a separate action.
-- Resumed a user-paused loop in place with the same loop ID, remaining step and
-  context budgets, prior evidence, and provider preference.
-- Added runtime events for pause requested, abort requested, resumed, paused,
-  and aborted transitions, including snapshot compatibility for older stored
-  loops.
-- Added macOS Pause, Abort, and Resume controls with shared loading state and
-  guards against starting competing agent activity while a loop is resumable.
-- Extended the mock OpenAI core smoke flow to verify cooperative pause after a
-  delayed step, same-loop resume into human review, and cooperative abort with
-  retained evidence.
-- Updated the project, runtime, security, persistence, provider, macOS,
-  workspace, user-flow, development, and V0 documentation. The Coding-Agent
-  Demo V0 component estimate is now 82-86%.
-- Verified runtime type checking/build, the full core runtime smoke, macOS
-  `swift build`, and `git diff --check`.
+- Added one format-only correction attempt for OpenAI Agent Run Step decisions
+  that fail response decoding, required-field validation, or the allowed action
+  enum.
+- Kept transport, HTTP, and timeout failures single-attempt to avoid duplicating
+  requests across uncertain network boundaries.
+- Persisted provider attempt count, recovery state, and bounded validation
+  errors on agent steps; exposed recovered/exhausted state in the macOS Log.
+- Added fail-closed exhaustion handling that creates an auditable failed
+  `WaitForHumanReview` step and stops the loop with `StepFailed` before step
+  tools, commands, or mutations can run.
+- Added smoke coverage for a malformed first decision corrected on attempt two
+  and for two malformed decisions exhausting the retry with zero new tool or
+  command side effects.
+- Verified `npm run check`, `swift build`, `npm run smoke:core`, and
+  `git diff --check` during implementation.
 
 Not done:
 
-- Did not split repository context gathering into separate model-selected
-  search and read actions.
-- Did not add timeout detection or automatic restart recovery for stalled
-  provider steps.
-- Did not broaden provider patch generation and apply beyond the current exact
-  replace and multi-hunk operations.
-- Did not run a live OpenAI API task or an interactive macOS GUI walkthrough.
+- Planning context/tool-request and edit-patch structured outputs do not yet
+  share this explicit format-recovery path.
+- Repository inspection still needs cross-step request fingerprints and
+  explicit ripgrep-backed text/symbol search choices.
+- Persisted running-loop crash recovery remains outstanding.
 
 Next:
 
-- Broaden multi-file patch orchestration while preserving per-file review,
-  rollback, validation, one repair attempt, and final full-diff review.
-- Then add timeout/restart recovery and finer model-selected search/read tools
-  without expanding the existing filesystem or command permission boundary.
+- Add cross-step repository inspection fingerprints and visible budgets, then
+  introduce explicit ripgrep-backed text/symbol search choices.
+- Extend safe format recovery to planning tool requests and patch artifacts
+  without retrying side effects.
 
-## 2026-07-13 21:08:43 CEST
+## 2026-07-14 08:22:09 CEST
 
 Conversation summary:
 
-- User asked to commit and push the completed Agent Run context/control work,
-  then continue with the next V0 implementation step.
+- After pushing Agent Run Step output recovery, the session continued with
+  repeated repository-inspection suppression and visible read budgets.
 
 Done:
 
-- Reviewed the complete working-tree scope, current `main` branch, GitHub
-  remote, recent history, and the intended publication diff.
-- Confirmed the current changes form one coherent Agent Run context-budget and
-  pause/abort/resume increment, including its tests and documentation.
-- Reconfirmed the runtime TypeScript check before publication.
+- Added a stable short SHA-256 fingerprint derived from normalized inspection
+  search terms and safe repo-relative read paths.
+- Added persisted budget evidence for repository scan, search, context-file,
+  search-term, and requested-read limits.
+- Blocked a later matching inspection fingerprint after safe path
+  normalization but before duplicate `search_repo_context` or
+  `read_context_file` calls.
+- Exposed inspection fingerprint and budget evidence in the macOS Log.
+- Added a two-step mock OpenAI smoke flow that repeats the same inspection,
+  verifies the first completes, the second blocks, and only the first performs
+  repository search and context reads.
+- Verified `npm run check`, `swift build`, `npm run smoke:core`, and
+  `git diff --check` during implementation.
 
 Not done:
 
-- Did not create a publication branch, commit, push, or begin the next code
-  increment because the configured GitHub CLI account token is invalid.
+- Repository inspection still uses the existing bounded substring search and
+  does not expose explicit ripgrep-backed text versus symbol search choices.
+- Similar-but-not-identical low-value queries are not deduplicated.
+- Persisted running-loop crash recovery and wider structured-output recovery
+  remain outstanding.
 
 Next:
 
-- Re-authenticate GitHub CLI with `gh auth login -h github.com`, confirm with
-  `gh auth status`, then create a `codex/` branch, commit the scoped changes,
-  push it, and continue into broader multi-file patch orchestration.
+- Add explicit ripgrep-backed text/symbol inspection modes with bounded result
+  evidence and safe fallback when ripgrep is unavailable.
+- Then recover persisted loops left `Running` by a runtime restart.
 
-## 2026-07-13 21:32:44 CEST
+## 2026-07-14 19:22:05 CEST
 
 Conversation summary:
 
-- User asked to continue after GitHub authentication. This session published
-  the completed Agent Run context/control checkpoint, then implemented the next
-  V0 increment for coordinated multi-file proposal apply and recovery.
+- User asked to push and continue; the session implemented explicit repository
+  text and symbol search modes after the prior push.
 
 Done:
 
-- Re-authenticated GitHub CLI, created branch
-  `codex/agent-run-loop-controls`, committed the prior Agent Run increment as
-  `426869d`, and pushed the branch to `origin`.
-- Expanded restricted `CreateFile` from new `docs/*.md` files to new bounded
-  allowlisted Markdown/source/text files without enabling overwrite or delete.
-- Raised OpenAI proposal orchestration to eight file changes and broadened
-  exact `PatchText` guidance while keeping all mutations runtime-owned.
-- Added proposal-level validation for duplicate normalized targets, an
-  eight-file limit, and a 120,000-character total operation budget before any
-  workspace write.
-- Persisted the latest apply attempt with planned, applied, and restored paths,
-  timestamps, status, summary, and error evidence. Completed writes are saved
-  incrementally for crash evidence.
-- Added reverse-order automatic recovery when a later coordinated file write
-  fails. Complete recovery returns the task to human review; incomplete
-  recovery leaves an explicit failed state.
-- Added macOS Review evidence for the latest coordinated apply/recovery attempt
-  using the existing proposal surface and shared task state.
-- Extended core smoke coverage for a three-file Markdown/source apply and
-  rollback, normalized duplicate-target blocking, and a real second-file
-  failure that automatically restores the first created file.
-- Updated project status, TODO, V0, runtime, provider, security, persistence,
-  edit-proposal, macOS, workspace, and development documentation. The
-  Coding-Agent Demo V0 component estimate is now 84-88%.
-- Verified runtime TypeScript build/check through the full core smoke, macOS
-  `swift build`, and `git diff --check`.
+- Added provider-selected `Text` and `Symbol` inspection modes.
+- Added no-shell bounded `rg --json` execution: fixed-string text search and
+  whole-identifier symbol search, limited to runtime-approved files with a
+  five-second timeout and bounded output.
+- Added safe fallback to the existing substring scanner and persisted the
+  selected mode and actual engine on each step.
+- Added macOS Log evidence and smoke assertions for the symbol engine plus
+  duplicate-request suppression.
+- Verified `npm run check`, `swift build`, `npm run smoke:core`, and
+  `git diff --check`.
 
 Not done:
 
-- Did not add a content-aware or fuzzy source patch format beyond exact
-  `ReplaceText`/`PatchText` operations.
-- Did not add automatic restart recovery for an apply attempt left `Running`
-  by a process crash.
-- Did not add durable per-file approval decisions or exact split-diff polish.
-- Did not run a live OpenAI API task or an interactive macOS GUI walkthrough.
-- Did not commit or push the new coordinated multi-file increment; it remains
-  as the working tree after the published Agent Run checkpoint.
+- Match-quality metrics and similar-query suppression remain limited.
+- Persisted running-loop restart recovery remains outstanding.
 
 Next:
 
-- Add a content-aware reviewed source patch artifact that remains bounded by
-  the coordinated proposal limits and optimistic workspace revalidation.
-- Then add restart recovery for interrupted apply attempts and durable
-  file-level review decisions.
+- Recover loops left `Running` after runtime restart, then improve inspection
+  result-quality evidence.
 
-## 2026-07-13 21:54:22 CEST
+## 2026-07-14 19:31:07 CEST
 
 Conversation summary:
 
-- User asked to submit the completed Agent Run and coordinated multi-file work
-  as a pull request.
+- User asked to push all changes and merge the branch PR into `main`.
+- GitHub PR #2 was created, then latest `origin/main` was merged into the
+  branch after PR #1 had landed overlapping Agent controls and coordinated
+  apply/recovery work.
 
 Done:
 
-- Reconfirmed authenticated GitHub access, the current branch scope, clean
-  patch formatting, and that no pull request already existed for the branch.
-- Committed the coordinated multi-file apply/recovery increment as `460766e`
-  (`Add coordinated multi-file apply recovery`).
-- Pushed the updated `codex/agent-run-loop-controls` branch to `origin`.
-- Created Draft PR #1, `Add agent run controls and coordinated apply recovery`,
-  from `codex/agent-run-loop-controls` into `main`:
-  https://github.com/windorion/forge/pull/1
-- The PR description records the product reason, user/developer impact, trust
-  boundaries, and the completed TypeScript, core smoke, Swift, and diff checks.
+- Confirmed the worktree and remote branch were synchronized and GitHub CLI
+  was authenticated.
+- Created ready PR #2 from `codex/source-patch-recovery` to `main`.
+- Fetched `origin/main` at merge commit `9e5bc7e` and began integration.
+- Resolved overlapping runtime, Swift, smoke, and product documentation in
+  favor of the newer branch implementation, which supersedes the overlapping
+  PR #1 paths and has broader transactional patch, loop recovery, repository
+  inspection, malformed-output recovery, and search-mode coverage.
+- Preserved non-conflicting PR #1 documentation and task-store changes from
+  `main` for final validation.
 
 Not done:
 
-- Did not mark the pull request ready for review or merge it.
-- Did not inspect hosted CI results or address review feedback yet.
+- The integration merge, full regression, branch push, and PR merge are still
+  pending at this log checkpoint.
 
 Next:
 
-- Watch PR checks and address actionable failures or review comments.
-- After the PR checkpoint, continue with content-aware reviewed source patches
-  and interrupted-apply restart recovery.
+- Complete the merge commit, rerun TypeScript/core smoke/Swift validation,
+  push the resolved branch, and merge PR #2 into `main`.

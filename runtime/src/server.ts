@@ -7,11 +7,10 @@ import path from "node:path";
 import { URL } from "node:url";
 import { fileURLToPath } from "node:url";
 import {
+  AgentRunStepProviderError,
   createModelProvider,
   defaultModelProviderRuntimeSettings,
-  getModelProviderConfiguration,
-  type AgentRunStepRequest,
-  type PlanContextRequestResult
+  getModelProviderConfiguration
 } from "./modelProvider.js";
 import { SqliteTaskStore } from "./taskStore.js";
 import type {
@@ -29,7 +28,6 @@ import type {
   CreateTaskMessageRequest,
   CreateTaskRequest,
   EditProposal,
-  EditProposalApplyAttempt,
   EditProposalDecisionRequest,
   EditProposalValidation,
   FileChangeValidation,
@@ -89,7 +87,7 @@ const rollbackSnapshotRoot = path.join(repoRoot, ".forge", "rollback-snapshots")
 const taskStore = new SqliteTaskStore(resolveDatabasePath());
 const tasks = new Map<string, ForgeTask>(taskStore.loadTasks().map((task) => [task.id, task]));
 const activeTaskCommands = new Map<string, ActiveTaskCommand>();
-const activeAgentRunLoopTaskIDs = new Set<string>();
+const activeAgentRunLoops = new Map<string, ActiveAgentRunLoopControl>();
 let modelProviderSettings = loadModelProviderRuntimeSettings();
 let modelProvider = createModelProvider(modelProviderSettings);
 const validationCommandTimeoutMs = 60_000;
@@ -102,17 +100,15 @@ const repositorySearchMaxFiles = 240;
 const repositoryContextMaxFiles = 6;
 const modelGuidedContextMaxRounds = 3;
 const modelGuidedContextMaxStoredFiles = 8;
-const agentRunLoopDefaultMaxContextSteps = 2;
-const agentRunLoopMaxContextSteps = 3;
 const editProposalRepairMaxAttempts = 2;
 const repositoryContextMaxFileBytes = 220_000;
 const editProposalTextOperationMaxChars = 10_000;
 const editProposalPatchMaxHunks = 8;
 const editProposalPatchMaxTotalChars = 40_000;
+const editProposalUnifiedDiffMaxHunks = 16;
+const editProposalUnifiedDiffMaxChars = 60_000;
 const editProposalCreateFileMaxChars = 20_000;
 const editProposalEditableFileMaxBytes = 220_000;
-const editProposalMaxFileChanges = 8;
-const editProposalMaxTotalOperationChars = 120_000;
 const gitDiffMaxBytes = 48_000;
 const gitDiffAppPreviewLineLimit = 260;
 const enableSmokeCommands = process.env.FORGE_ENABLE_SMOKE_COMMANDS === "1";
@@ -668,26 +664,26 @@ const server = createServer(async (request, response) => {
       return;
     }
 
-    const pauseAgentRunLoopTaskID = taskIDFromActionPath(url.pathname, "pause-agent-loop");
-    if (request.method === "POST" && pauseAgentRunLoopTaskID) {
+    const pauseAgentLoopTaskID = taskIDFromActionPath(url.pathname, "pause-agent-loop");
+    if (request.method === "POST" && pauseAgentLoopTaskID) {
       const input = await readJson<AgentRunLoopControlRequest>(request);
-      const task = pauseAgentRunLoop(pauseAgentRunLoopTaskID, input);
+      const task = requestAgentRunLoopControl(pauseAgentLoopTaskID, input, "Pause");
       writeJson(response, 200, task);
       return;
     }
 
-    const abortAgentRunLoopTaskID = taskIDFromActionPath(url.pathname, "abort-agent-loop");
-    if (request.method === "POST" && abortAgentRunLoopTaskID) {
+    const abortAgentLoopTaskID = taskIDFromActionPath(url.pathname, "abort-agent-loop");
+    if (request.method === "POST" && abortAgentLoopTaskID) {
       const input = await readJson<AgentRunLoopControlRequest>(request);
-      const task = abortAgentRunLoop(abortAgentRunLoopTaskID, input);
+      const task = requestAgentRunLoopControl(abortAgentLoopTaskID, input, "Abort");
       writeJson(response, 200, task);
       return;
     }
 
-    const resumeAgentRunLoopTaskID = taskIDFromActionPath(url.pathname, "resume-agent-loop");
-    if (request.method === "POST" && resumeAgentRunLoopTaskID) {
-      const input = await readJson<AgentRunLoopControlRequest>(request);
-      const task = await resumeAgentRunLoop(resumeAgentRunLoopTaskID, input);
+    const resumeAgentLoopTaskID = taskIDFromActionPath(url.pathname, "resume-agent-loop");
+    if (request.method === "POST" && resumeAgentLoopTaskID) {
+      const input = await readJson<RunAgentLoopRequest>(request);
+      const task = await resumeAgentRunLoop(resumeAgentLoopTaskID, input);
       writeJson(response, 200, task);
       return;
     }
@@ -5591,54 +5587,68 @@ interface RunAgentStepOptions {
   loopID?: string;
 }
 
+interface ActiveAgentRunLoopControl {
+  loopID: string;
+  requestedAction?: "Pause" | "Abort";
+  requestedAt?: string;
+  note?: string;
+}
+
 async function runAgentLoop(taskID: string, input: RunAgentLoopRequest = {}): Promise<ForgeTask> {
   const task = tasks.get(taskID);
   if (!task) {
     throw new HttpError(404, `Task not found: ${taskID}`);
   }
 
-  if (activeAgentRunLoopTaskIDs.has(taskID)) {
+  if (activeAgentRunLoops.has(taskID)) {
     throw new HttpError(409, "An agent run loop is already active for this task.");
   }
+
+  const resumedFrom = input.resumeLoopID ? requireResumableAgentRunLoop(task, input.resumeLoopID) : undefined;
 
   if (hasRunningValidationRun(task) || hasRunningTaskCommandRun(task) || task.status === "Testing") {
     const loop = createAgentRunLoop(task, input, "Task is currently busy.");
     return finishAgentRunLoop(task, loop.id, "Paused", "TaskBusy", "Task is currently running another operation.");
   }
 
-  const loop = createAgentRunLoop(task, input, "Starting bounded provider-selected agent loop.");
-  saveAndBroadcast(
-    task,
-    withCreatedAt(
-      event(
-        "agent.run_loop.started",
-        `Agent loop started with up to ${loop.maxSteps} step(s) and ${loop.maxContextSteps} repository context step(s).`
-      ),
-      loop.startedAt
-    )
-  );
-  return executeAgentRunLoop(taskID, loop.id);
-}
-
-async function executeAgentRunLoop(taskID: string, loopID: string): Promise<ForgeTask> {
-  activeAgentRunLoopTaskIDs.add(taskID);
+  const loopSummary = resumedFrom
+    ? `Resuming bounded agent loop from ${resumedFrom.id} at its last safe checkpoint.`
+    : "Starting bounded provider-selected agent loop.";
+  const loop = createAgentRunLoop(task, input, loopSummary);
+  activeAgentRunLoops.set(taskID, { loopID: loop.id });
   try {
-    let current = requireTask(taskID);
-    let loop = requireAgentRunLoop(current, loopID);
-    for (let index = loop.stepsRun; index < loop.maxSteps; index += 1) {
-      const controlStopBeforeStep = agentRunLoopControlStop(loop);
-      if (controlStopBeforeStep) {
+    saveAndBroadcast(
+      task,
+      withCreatedAt(
+        event(
+          resumedFrom ? "agent.run_loop.resumed" : "agent.run_loop.started",
+          resumedFrom
+            ? `Agent loop resumed from ${resumedFrom.id} with up to ${loop.maxSteps} step(s).`
+            : `Agent loop started with up to ${loop.maxSteps} step(s).`
+        ),
+        loop.startedAt
+      )
+    );
+
+    let current = task;
+    for (let index = 0; index < loop.maxSteps; index += 1) {
+      const beforeStepControl = requestedAgentRunLoopStop(current, loop.id);
+      if (beforeStepControl) {
         return finishAgentRunLoop(
           current,
           loop.id,
-          controlStopBeforeStep.status,
-          controlStopBeforeStep.reason,
-          controlStopBeforeStep.summary
+          beforeStepControl.status,
+          beforeStepControl.reason,
+          beforeStepControl.summary
         );
       }
 
       const beforeStepIDs = new Set(current.agentRunSteps.map((step) => step.id));
-      current = await runAgentStep(taskID, { preferredCommandID: loop.preferredCommandID }, { loopID: loop.id });
+      current = await runAgentStep(
+        taskID,
+        { preferredCommandID: loop.preferredCommandID },
+        { loopID: loop.id }
+      );
       const updatedLoop = requireAgentRunLoop(current, loop.id);
       const newSteps = current.agentRunSteps.filter((step) => !beforeStepIDs.has(step.id));
       for (const step of newSteps) {
@@ -5647,30 +5657,28 @@ async function executeAgentRunLoop(taskID: string, loopID: string): Promise<Forg
         }
       }
       updatedLoop.stepsRun = updatedLoop.stepIDs.length;
-      updateAgentRunLoopContextProgress(current, updatedLoop);
       updatedLoop.summary = summarizeAgentRunLoopProgress(current, updatedLoop);
+
+      const afterStepControl = requestedAgentRunLoopStop(current, loop.id);
+      if (afterStepControl) {
+        return finishAgentRunLoop(
+          current,
+          loop.id,
+          afterStepControl.status,
+          afterStepControl.reason,
+          afterStepControl.summary
+        );
+      }
 
       const stop = agentRunLoopStopAfterStep(current, newSteps.at(-1));
       if (stop) {
         return finishAgentRunLoop(current, loop.id, stop.status, stop.reason, stop.summary);
       }
-
-      const controlStopAfterStep = agentRunLoopControlStop(updatedLoop);
-      if (controlStopAfterStep) {
-        return finishAgentRunLoop(
-          current,
-          loop.id,
-          controlStopAfterStep.status,
-          controlStopAfterStep.reason,
-          controlStopAfterStep.summary
-        );
-      }
-      loop = updatedLoop;
     }
 
     return finishAgentRunLoop(
       current,
-      loopID,
+      loop.id,
       "Paused",
       "MaxStepsReached",
       `Agent loop paused after reaching the ${loop.maxSteps}-step limit.`
@@ -5679,187 +5687,36 @@ async function executeAgentRunLoop(taskID: string, loopID: string): Promise<Forg
     const failedTask = requireTask(taskID);
     return finishAgentRunLoop(
       failedTask,
-      loopID,
+      loop.id,
       "Failed",
       "StepFailed",
       error instanceof Error ? error.message : String(error)
     );
   } finally {
-    activeAgentRunLoopTaskIDs.delete(taskID);
+    if (activeAgentRunLoops.get(taskID)?.loopID === loop.id) {
+      activeAgentRunLoops.delete(taskID);
+    }
   }
-}
-
-function pauseAgentRunLoop(taskID: string, input: AgentRunLoopControlRequest): ForgeTask {
-  const task = requireTask(taskID);
-  const loop = requireAgentRunLoopControlTarget(task, input);
-  if (loop.status === "Paused" && loop.stopReason === "UserPaused") {
-    return task;
-  }
-  if (loop.status === "Running" && loop.pauseRequestedAt) {
-    return task;
-  }
-  if (loop.status !== "Running") {
-    throw new HttpError(409, `Agent loop ${loop.id} cannot be paused from status ${loop.status}.`);
-  }
-  if (loop.abortRequestedAt) {
-    throw new HttpError(409, "The agent loop already has an abort request.");
-  }
-
-  const requestedAt = new Date().toISOString();
-  loop.pauseRequestedAt = requestedAt;
-  loop.controlNote = optionalAgentRunLoopControlNote(input.note);
-  loop.summary = "Pause requested; Forge will stop before the next agent step.";
-  task.reviewSummary = loop.summary;
-  setAgent(task, "Manager", "Active", "Pause requested; waiting for the current safe step to finish.");
-  setAgent(task, "Coder", "Active", "Finishing the current step before pausing.");
-
-  if (!activeAgentRunLoopTaskIDs.has(taskID)) {
-    return finishAgentRunLoop(task, loop.id, "Paused", "UserPaused", "Agent loop paused by the user before the next step.");
-  }
-
-  saveAndBroadcast(
-    task,
-    withCreatedAt(event("agent.run_loop.pause_requested", loop.summary), requestedAt)
-  );
-  return task;
-}
-
-function abortAgentRunLoop(taskID: string, input: AgentRunLoopControlRequest): ForgeTask {
-  const task = requireTask(taskID);
-  const loop = requireAgentRunLoopControlTarget(task, input);
-  if (loop.status === "Aborted") {
-    return task;
-  }
-  if (loop.status === "Running" && loop.abortRequestedAt) {
-    return task;
-  }
-  if (loop.status !== "Running" && loop.status !== "Paused") {
-    throw new HttpError(409, `Agent loop ${loop.id} cannot be aborted from status ${loop.status}.`);
-  }
-
-  const requestedAt = new Date().toISOString();
-  loop.abortRequestedAt = requestedAt;
-  loop.controlNote = optionalAgentRunLoopControlNote(input.note);
-  loop.summary = loop.status === "Running"
-    ? "Abort requested; Forge will stop before the next agent step."
-    : "Agent loop aborted by the user.";
-  task.reviewSummary = loop.summary;
-
-  if (loop.status === "Paused" || !activeAgentRunLoopTaskIDs.has(taskID)) {
-    return finishAgentRunLoop(task, loop.id, "Aborted", "UserAborted", "Agent loop aborted by the user.");
-  }
-
-  setAgent(task, "Manager", "Active", "Abort requested; waiting for the current safe step to finish.");
-  setAgent(task, "Coder", "Active", "Finishing the current step before aborting the loop.");
-  saveAndBroadcast(
-    task,
-    withCreatedAt(event("agent.run_loop.abort_requested", loop.summary), requestedAt)
-  );
-  return task;
-}
-
-async function resumeAgentRunLoop(taskID: string, input: AgentRunLoopControlRequest): Promise<ForgeTask> {
-  const task = requireTask(taskID);
-  const loop = requireAgentRunLoopControlTarget(task, input);
-  if (activeAgentRunLoopTaskIDs.has(taskID)) {
-    throw new HttpError(409, "An agent run loop is already active for this task.");
-  }
-  if (loop.status !== "Paused" || loop.stopReason !== "UserPaused") {
-    throw new HttpError(409, "Only a user-paused agent loop can be resumed.");
-  }
-  if (hasRunningValidationRun(task) || hasRunningTaskCommandRun(task) || task.status === "Testing") {
-    throw new HttpError(409, "The task is currently running another operation.");
-  }
-  if (task.editProposal?.status === "Proposed") {
-    throw new HttpError(409, "Review the proposed edit before resuming the agent loop.");
-  }
-  if (loop.stepsRun >= loop.maxSteps) {
-    throw new HttpError(409, "The agent loop has no remaining steps to resume.");
-  }
-
-  const resumedAt = new Date().toISOString();
-  loop.status = "Running";
-  loop.stopReason = undefined;
-  loop.completedAt = undefined;
-  loop.pauseRequestedAt = undefined;
-  loop.resumedAt = resumedAt;
-  loop.resumeCount += 1;
-  loop.controlNote = optionalAgentRunLoopControlNote(input.note);
-  loop.summary = `Agent loop resumed with ${loop.maxSteps - loop.stepsRun} step(s) remaining.`;
-  task.status = "Running";
-  task.currentPhase = "Agent Loop";
-  task.reviewSummary = loop.summary;
-  setAgent(task, "Manager", "Active", "Resuming the existing bounded agent loop.");
-  setAgent(task, "Coder", "Active", "Continuing with the next safe agent step.");
-  setAgent(task, "Reviewer", "Idle", "Waiting for the resumed loop stop condition.");
-  upsertPlanStep(task, {
-    id: "run-agent-loop",
-    title: "Run agent loop",
-    status: "Active",
-    summary: loop.summary
-  });
-  saveAndBroadcast(task, withCreatedAt(event("agent.run_loop.resumed", loop.summary), resumedAt));
-  return executeAgentRunLoop(taskID, loop.id);
-}
-
-function requireAgentRunLoopControlTarget(task: ForgeTask, input: AgentRunLoopControlRequest): AgentRunLoop {
-  const loopID = input.agentRunLoopID?.trim();
-  if (!loopID) {
-    throw new HttpError(400, "agentRunLoopID is required.");
-  }
-
-  const loop = task.agentRunLoops.find((candidate) => candidate.id === loopID);
-  if (!loop) {
-    throw new HttpError(404, `Agent run loop not found: ${loopID}`);
-  }
-  return loop;
-}
-
-function optionalAgentRunLoopControlNote(value: unknown): string | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  return value.trim().slice(0, 500) || undefined;
-}
-
-function agentRunLoopControlStop(
-  loop: AgentRunLoop
-): { status: AgentRunLoop["status"]; reason: AgentRunLoop["stopReason"]; summary: string } | undefined {
-  if (loop.abortRequestedAt) {
-    return {
-      status: "Aborted",
-      reason: "UserAborted",
-      summary: "Agent loop aborted by the user before the next step."
-    };
-  }
-  if (loop.pauseRequestedAt) {
-    return {
-      status: "Paused",
-      reason: "UserPaused",
-      summary: "Agent loop paused by the user before the next step."
-    };
-  }
-  return undefined;
 }
 
 function createAgentRunLoop(task: ForgeTask, input: RunAgentLoopRequest, summary: string): AgentRunLoop {
-  const maxSteps = normalizeAgentRunLoopMaxSteps(input.maxSteps);
-  const maxContextSteps = normalizeAgentRunLoopMaxContextSteps(input.maxContextSteps, maxSteps);
+  const resumedFrom = input.resumeLoopID ? requireAgentRunLoop(task, input.resumeLoopID) : undefined;
+  const maxSteps = normalizeAgentRunLoopMaxSteps(input.maxSteps ?? resumedFrom?.maxSteps);
   const loop: AgentRunLoop = {
     id: randomUUID(),
     provider: modelProvider.info,
     status: "Running",
     maxSteps,
     stepsRun: 0,
-    maxContextSteps,
-    contextStepsRun: 0,
-    contextPaths: [],
     stepIDs: [],
-    preferredCommandID: input.preferredCommandID?.trim() || undefined,
-    resumeCount: 0,
+    preferredCommandID: input.preferredCommandID ?? resumedFrom?.preferredCommandID,
+    resumedFromLoopID: resumedFrom?.id,
     summary,
     startedAt: new Date().toISOString()
   };
+  if (resumedFrom) {
+    resumedFrom.resumedByLoopID = loop.id;
+  }
   task.agentRunLoops.push(loop);
   task.status = "Running";
   task.currentPhase = "Agent Loop";
@@ -5874,6 +5731,124 @@ function createAgentRunLoop(task: ForgeTask, input: RunAgentLoopRequest, summary
     summary
   });
   return loop;
+}
+
+function requestAgentRunLoopControl(
+  taskID: string,
+  input: AgentRunLoopControlRequest,
+  action: "Pause" | "Abort"
+): ForgeTask {
+  const task = requireTask(taskID);
+  const control = activeAgentRunLoops.get(taskID);
+  if (!control) {
+    throw new HttpError(409, "No active agent run loop is available for control.");
+  }
+
+  if (input.loopID && input.loopID !== control.loopID) {
+    throw new HttpError(409, `Active agent loop does not match requested loop ${input.loopID}.`);
+  }
+
+  const loop = requireAgentRunLoop(task, control.loopID);
+  if (loop.status !== "Running") {
+    throw new HttpError(409, `Agent loop is not running: ${loop.id}`);
+  }
+
+  if (control.requestedAction === "Abort" || control.requestedAction === action) {
+    return task;
+  }
+
+  const now = new Date().toISOString();
+  const note = input.note?.trim() || undefined;
+  control.requestedAction = action;
+  control.requestedAt = now;
+  control.note = note;
+  loop.controlState = action === "Pause" ? "PauseRequested" : "AbortRequested";
+  loop.controlRequestedAt = now;
+  loop.controlNote = note;
+  task.currentPhase = action === "Pause" ? "Agent Loop Pause Requested" : "Agent Loop Abort Requested";
+  task.reviewSummary = `${action} requested. Forge will stop after the current safe agent step.`;
+  task.approvals.push({
+    id: randomUUID(),
+    action: `${action} Agent Loop`,
+    decision: "Approved",
+    summary: `${action} requested for active agent loop ${loop.id}.`,
+    targetID: loop.id,
+    decidedAt: now,
+    userNote: note
+  });
+  setAgent(task, "Manager", "Active", `${action} requested; waiting for the current safe step checkpoint.`);
+
+  saveAndBroadcast(
+    task,
+    withCreatedAt(
+      event(
+        action === "Pause" ? "agent.run_loop.pause.requested" : "agent.run_loop.abort.requested",
+        task.reviewSummary
+      ),
+      now
+    )
+  );
+  return task;
+}
+
+async function resumeAgentRunLoop(taskID: string, input: RunAgentLoopRequest): Promise<ForgeTask> {
+  const task = requireTask(taskID);
+  if (activeAgentRunLoops.has(taskID)) {
+    throw new HttpError(409, "Cannot resume while an agent run loop is already active.");
+  }
+
+  const source = input.resumeLoopID
+    ? requireResumableAgentRunLoop(task, input.resumeLoopID)
+    : [...task.agentRunLoops].reverse().find((loop) => isResumableAgentRunLoop(loop));
+  if (!source) {
+    throw new HttpError(409, "No paused, aborted, or failed agent loop is available to resume.");
+  }
+
+  return runAgentLoop(taskID, {
+    preferredCommandID: input.preferredCommandID ?? source.preferredCommandID,
+    maxSteps: input.maxSteps ?? source.maxSteps,
+    resumeLoopID: source.id
+  });
+}
+
+function isResumableAgentRunLoop(loop: AgentRunLoop): boolean {
+  return loop.status === "Paused" || loop.status === "Aborted" || loop.status === "Failed";
+}
+
+function requireResumableAgentRunLoop(task: ForgeTask, loopID: string): AgentRunLoop {
+  const loop = requireAgentRunLoop(task, loopID);
+  if (!isResumableAgentRunLoop(loop)) {
+    throw new HttpError(409, `Agent loop is not resumable from status ${loop.status}: ${loop.id}`);
+  }
+  return loop;
+}
+
+function requestedAgentRunLoopStop(
+  task: ForgeTask,
+  loopID: string
+): { status: AgentRunLoop["status"]; reason: AgentRunLoop["stopReason"]; summary: string } | undefined {
+  const control = activeAgentRunLoops.get(task.id);
+  if (!control || control.loopID !== loopID || !control.requestedAction) {
+    return undefined;
+  }
+
+  if (control.requestedAction === "Abort") {
+    return {
+      status: "Aborted",
+      reason: "UserAborted",
+      summary: control.note
+        ? `Agent loop aborted at a safe checkpoint: ${control.note}`
+        : "Agent loop aborted at the next safe checkpoint."
+    };
+  }
+
+  return {
+    status: "Paused",
+    reason: "UserPaused",
+    summary: control.note
+      ? `Agent loop paused at a safe checkpoint: ${control.note}`
+      : "Agent loop paused at the next safe checkpoint."
+  };
 }
 
 function normalizeAgentRunLoopMaxSteps(value: unknown): number {
@@ -5892,38 +5867,6 @@ function normalizeAgentRunLoopMaxSteps(value: unknown): number {
   return value;
 }
 
-function normalizeAgentRunLoopMaxContextSteps(value: unknown, maxSteps: number): number {
-  if (value === undefined || value === null) {
-    return Math.min(agentRunLoopDefaultMaxContextSteps, maxSteps);
-  }
-
-  if (typeof value !== "number" || !Number.isInteger(value)) {
-    throw new HttpError(400, "maxContextSteps must be an integer.");
-  }
-
-  if (value < 0 || value > agentRunLoopMaxContextSteps) {
-    throw new HttpError(400, `maxContextSteps must be between 0 and ${agentRunLoopMaxContextSteps}.`);
-  }
-
-  if (value > maxSteps) {
-    throw new HttpError(400, "maxContextSteps must not exceed maxSteps.");
-  }
-
-  return value;
-}
-
-function updateAgentRunLoopContextProgress(task: ForgeTask, loop: AgentRunLoop): void {
-  const contextSteps = loop.stepIDs
-    .map((stepID) => task.agentRunSteps.find((step) => step.id === stepID))
-    .filter((step): step is AgentRunStep =>
-      step?.action === "GatherRepositoryContext" && step.status === "Completed"
-    );
-  loop.contextStepsRun = contextSteps.length;
-  loop.contextPaths = [
-    ...new Set(contextSteps.flatMap((step) => step.contextPaths ?? []))
-  ].slice(0, agentRunLoopMaxContextSteps * repositoryContextMaxFiles);
-}
-
 function agentRunLoopStopAfterStep(
   task: ForgeTask,
   step: AgentRunStep | undefined
@@ -5934,24 +5877,6 @@ function agentRunLoopStopAfterStep(
 
   if (step.status === "Failed") {
     return { status: "Failed", reason: "StepFailed", summary: step.resultSummary ?? step.error ?? "Agent step failed." };
-  }
-
-  if (step.action === "GatherRepositoryContext" && step.status === "Blocked") {
-    if (step.contextOutcome === "BudgetReached") {
-      return {
-        status: "Paused",
-        reason: "ContextBudgetReached",
-        summary: step.resultSummary ?? "Agent loop paused after exhausting its repository context budget."
-      };
-    }
-
-    if (step.contextOutcome === "RepeatedRequest" || step.contextOutcome === "NoProgress") {
-      return {
-        status: "Paused",
-        reason: "NoProgress",
-        summary: step.resultSummary ?? "Agent loop paused because repository context gathering made no progress."
-      };
-    }
   }
 
   if (step.status === "Blocked") {
@@ -6017,12 +5942,6 @@ function finishAgentRunLoop(
   loop.stopReason = stopReason;
   loop.summary = summary;
   loop.completedAt = completedAt;
-  if (status === "Paused") {
-    loop.pausedAt = completedAt;
-  }
-  if (status === "Aborted") {
-    loop.abortedAt = completedAt;
-  }
   task.reviewSummary = summary;
   if (status === "Failed") {
     task.status = "Failed";
@@ -6030,12 +5949,6 @@ function finishAgentRunLoop(
     setAgent(task, "Manager", "Blocked", summary);
     setAgent(task, "Coder", "Blocked", "Agent loop failed before reaching a safe stop.");
     setAgent(task, "Reviewer", "Active", "Review the failed agent loop before continuing.");
-  } else if (status === "Aborted") {
-    task.status = "Human Review";
-    task.currentPhase = "Agent Loop Aborted";
-    setAgent(task, "Manager", "Ready", "Agent loop was aborted at a safe step boundary.");
-    setAgent(task, "Coder", "Idle", summary);
-    setAgent(task, "Reviewer", "Active", "Review retained context, proposals, and command evidence before continuing.");
   } else if (status === "Completed") {
     task.status = "Human Review";
     task.currentPhase = stopReason === "RepairVerified"
@@ -6046,6 +5959,12 @@ function finishAgentRunLoop(
     setAgent(task, "Manager", "Done", "Agent loop reached a safe completion condition.");
     setAgent(task, "Coder", "Done", summary);
     setAgent(task, "Reviewer", "Active", "Review the completed loop output.");
+  } else if (status === "Aborted") {
+    task.status = "Human Review";
+    task.currentPhase = "Agent Loop Aborted";
+    setAgent(task, "Manager", "Idle", "Agent loop was aborted at a safe checkpoint.");
+    setAgent(task, "Coder", "Idle", summary);
+    setAgent(task, "Reviewer", "Active", "Review completed steps before resuming or starting another loop.");
   } else {
     task.status = "Human Review";
     if (stopReason !== "HumanReviewRequired" && stopReason !== "StepBlocked") {
@@ -6064,10 +5983,10 @@ function finishAgentRunLoop(
 
   const type = status === "Completed"
     ? "agent.run_loop.completed"
-    : status === "Aborted"
-      ? "agent.run_loop.aborted"
-      : status === "Failed"
-        ? "agent.run_loop.failed"
+    : status === "Failed"
+      ? "agent.run_loop.failed"
+      : status === "Aborted"
+        ? "agent.run_loop.aborted"
         : "agent.run_loop.paused";
   saveAndBroadcast(task, withCreatedAt(event(type, summary), completedAt));
   return task;
@@ -6114,14 +6033,16 @@ async function runAgentStep(
   const runnableRerunEvidence = [...task.commandRerunEvidence]
     .reverse()
     .filter((evidence) => evidence.status === "Ready" || evidence.status === "Failed");
-  const decision = await modelProvider.createAgentRunStep({
-    task,
-    taskCommands,
-    commandRerunEvidence: runnableRerunEvidence,
-    contextBudget: options.loopID
-      ? agentRunStepContextBudget(requireAgentRunLoop(task, options.loopID))
-      : undefined
-  });
+  let decision: AgentRunStepDecision;
+  try {
+    decision = await modelProvider.createAgentRunStep({
+      task,
+      taskCommands,
+      commandRerunEvidence: runnableRerunEvidence
+    });
+  } catch (error) {
+    return failAgentRunStepProviderDecision(task, error, options);
+  }
   if (input.preferredCommandID?.trim() && decision.action === "RunTaskCommand") {
     decision.commandID = input.preferredCommandID.trim();
   }
@@ -6147,15 +6068,6 @@ async function runAgentStep(
   return executeAgentRunStep(task.id, step.id, taskCommands);
 }
 
-function agentRunStepContextBudget(loop: AgentRunLoop): NonNullable<AgentRunStepRequest["contextBudget"]> {
-  return {
-    loopID: loop.id,
-    maxContextSteps: loop.maxContextSteps,
-    contextStepsRun: loop.contextStepsRun,
-    remainingContextSteps: Math.max(0, loop.maxContextSteps - loop.contextStepsRun)
-  };
-}
-
 function createAgentRunStep(
   task: ForgeTask,
   decision: AgentRunStepDecision,
@@ -6177,15 +6089,67 @@ function createAgentRunStep(
     status: "Running",
     summary: decision.summary,
     rationale: decision.rationale,
-    searchTerms: decision.searchTerms,
-    readPaths: decision.readPaths,
     commandID: decision.commandID,
     commandName: commandPermission?.command.name ?? evidence?.commandName,
     commandRerunEvidenceID: decision.commandRerunEvidenceID,
+    searchTerms: decision.searchTerms,
+    readPaths: decision.readPaths,
+    inspectionSearchMode: decision.searchMode,
+    providerAttemptCount: decision.providerAttemptCount,
+    providerOutputRecovered: decision.providerOutputRecovered,
+    providerAttemptErrors: decision.providerAttemptErrors,
     createdAt: new Date().toISOString()
   };
   task.agentRunSteps.push(step);
   return step;
+}
+
+function failAgentRunStepProviderDecision(
+  task: ForgeTask,
+  error: unknown,
+  options: RunAgentStepOptions
+): ForgeTask {
+  const completedAt = new Date().toISOString();
+  const attemptCount = error instanceof AgentRunStepProviderError ? error.attemptCount : 1;
+  const attemptErrors = error instanceof AgentRunStepProviderError
+    ? error.attemptErrors
+    : [error instanceof Error ? error.message : String(error)];
+  const message = error instanceof AgentRunStepProviderError
+    ? error.message
+    : `Model provider failed before selecting an agent step: ${attemptErrors[0]}`;
+  const step: AgentRunStep = {
+    id: randomUUID(),
+    provider: modelProvider.info,
+    loopID: options.loopID,
+    action: "WaitForHumanReview",
+    status: "Failed",
+    summary: "Provider could not select a valid next action.",
+    rationale: "Forge failed closed before executing tools, commands, or file changes.",
+    providerAttemptCount: attemptCount,
+    providerOutputRecovered: false,
+    providerAttemptErrors: attemptErrors.map((item) => item.replace(/\s+/g, " ").trim().slice(0, 240)),
+    error: message,
+    createdAt: completedAt,
+    completedAt
+  };
+  task.agentRunSteps.push(step);
+  task.status = "Human Review";
+  task.currentPhase = "Agent Step Failed";
+  task.reviewSummary = message;
+  setAgent(task, "Manager", "Blocked", "Model provider decision failed before a safe next action was selected.");
+  setAgent(task, "Coder", "Blocked", step.summary);
+  setAgent(task, "Reviewer", "Active", "Review the provider failure before resuming the agent loop.");
+  upsertPlanStep(task, {
+    id: "run-agent-step",
+    title: "Run agent step",
+    status: "Blocked",
+    summary: message
+  });
+
+  const failed = event("agent.run_step.failed", message);
+  failed.createdAt = completedAt;
+  saveAndBroadcast(task, failed);
+  return task;
 }
 
 async function executeAgentRunStep(
@@ -6198,8 +6162,8 @@ async function executeAgentRunStep(
 
   try {
     switch (step.action) {
-    case "GatherRepositoryContext":
-      return await gatherAgentRunContext(task, step);
+    case "InspectRepository":
+      return await executeRepositoryInspectionStep(task, step);
     case "GenerateEditProposal":
       return completeAgentRunStepAfterAction(
         await generateEditProposal(taskID),
@@ -6264,110 +6228,92 @@ async function executeAgentRunStep(
   }
 }
 
-async function gatherAgentRunContext(task: ForgeTask, step: AgentRunStep): Promise<ForgeTask> {
-  if (step.loopID) {
-    const loop = requireAgentRunLoop(task, step.loopID);
-    if (loop.contextStepsRun >= loop.maxContextSteps) {
-      step.contextPaths = [];
-      step.newContextPaths = [];
-      step.contextOutcome = "BudgetReached";
-      return blockAgentRunStep(
-        task,
-        step,
-        `Agent repository context budget is exhausted (${loop.contextStepsRun}/${loop.maxContextSteps} completed context steps).`
-      );
-    }
-  }
-
+async function executeRepositoryInspectionStep(task: ForgeTask, step: AgentRunStep): Promise<ForgeTask> {
+  const existingPaths = new Set(task.contextFiles.map((file) => file.path));
   const projectFiles = await runTool(
     task,
     "list_repo_files",
-    "Agent-selected bounded repo scan excluding private and generated directories",
+    "Agent step bounded repo scan excluding private and generated directories",
     listRepositoryFiles
   );
-  const contextRequest: PlanContextRequestResult = {
-    status: "SearchAndRead",
-    rationale: step.rationale,
-    searchTerms: step.searchTerms ?? [],
-    readPaths: step.readPaths ?? []
-  };
-  const searchTerms = normalizeProviderSearchTerms(contextRequest, task);
-  const requestedReadPaths = normalizeProviderReadPaths(contextRequest.readPaths, projectFiles);
-  const requestSignature = agentRunContextRequestSignature(searchTerms, requestedReadPaths);
-  const repeatedRequest = task.agentRunSteps.some((candidate) =>
-    candidate.id !== step.id &&
-      candidate.loopID === step.loopID &&
-      candidate.action === "GatherRepositoryContext" &&
-      candidate.status === "Completed" &&
-      agentRunContextRequestSignature(candidate.searchTerms ?? [], candidate.readPaths ?? []) === requestSignature
-  );
-  if (repeatedRequest) {
-    step.searchTerms = searchTerms;
-    step.readPaths = requestedReadPaths;
-    step.contextPaths = [];
-    step.newContextPaths = [];
-    step.contextOutcome = "RepeatedRequest";
-    return blockAgentRunStep(task, step, "Agent repeated a repository context request that already completed; review or choose a different next action.");
-  }
-
-  const previousContextPaths = new Set(
-    task.agentRunSteps
-      .filter((candidate) =>
-        candidate.id !== step.id &&
-        candidate.loopID === step.loopID &&
-        candidate.action === "GatherRepositoryContext" &&
-        candidate.status === "Completed"
-      )
-      .flatMap((candidate) => candidate.contextPaths ?? [])
-  );
-  const contextMatches = await runTool(
-    task,
-    "search_repo_context",
-    searchTerms.join(", "),
-    () => searchRepositoryContext(
-      projectFiles,
-      searchTerms,
-      [...explicitContextPathsForTask(task), ...requestedReadPaths]
-    )
-  );
-  const contextFiles = await buildContextFiles(task, projectFiles, contextMatches, requestedReadPaths);
-  task.contextFiles = mergeContextFiles(task.contextFiles, contextFiles);
-  const newContextPaths = contextFiles
-    .map((file) => file.path)
-    .filter((contextPath) => !previousContextPaths.has(contextPath));
-
+  const searchTerms = normalizeProviderSearchTerms({ searchTerms: step.searchTerms ?? [] }, task);
+  const requestedReadPaths = normalizeProviderReadPaths(step.readPaths ?? [], projectFiles);
+  const searchMode = step.inspectionSearchMode === "Symbol" ? "Symbol" : "Text";
+  const requestFingerprint = repositoryInspectionRequestFingerprint(searchMode, searchTerms, requestedReadPaths);
+  const budgetSummary = `scan<=${repositoryScanMaxFiles} search<=${repositorySearchMaxFiles} context<=${repositoryContextMaxFiles} terms=${searchTerms.length} reads=${requestedReadPaths.length}`;
   step.searchTerms = searchTerms;
   step.readPaths = requestedReadPaths;
-  step.contextPaths = contextFiles.map((file) => file.path);
-  step.newContextPaths = newContextPaths;
-  if (newContextPaths.length === 0) {
-    step.contextOutcome = "NoProgress";
+  step.inspectionRequestFingerprint = requestFingerprint;
+  step.inspectionBudgetSummary = budgetSummary;
+  step.inspectionSearchMode = searchMode;
+  const repeatedStep = task.agentRunSteps.find((candidate) =>
+    candidate.id !== step.id &&
+    candidate.action === "InspectRepository" &&
+    candidate.inspectionRequestFingerprint === requestFingerprint
+  );
+  if (repeatedStep) {
     return blockAgentRunStep(
       task,
       step,
-      "Agent repository context gathering inspected no new files; review the evidence or choose a different next action."
+      `Repeated repository inspection request ${requestFingerprint} was blocked before search/read tools; first recorded by step ${repeatedStep.id}.`
     );
   }
-  step.contextOutcome = "Expanded";
-  task.status = step.loopID ? "Running" : "Human Review";
-  task.currentPhase = "Agent Context Ready";
-  task.reviewSummary = `Agent inspected ${contextFiles.length} bounded context file(s); ${newContextPaths.length} were new to this run.`;
-  setAgent(task, "Coder", step.loopID ? "Active" : "Ready", "Repository context is ready for the next provider-selected action.");
-  setAgent(task, "Reviewer", step.loopID ? "Idle" : "Active", "Review the selected read/search evidence or continue the agent run.");
 
-  return completeAgentRunStepAfterAction(
+  const searchResult = await runTool(
+    task,
+    searchMode === "Symbol" ? "search_repository_symbols" : "search_repository_text",
+    `${searchMode}: ${searchTerms.join(", ")}`,
+    () => searchRepositoryWithRipgrep(
+      projectFiles,
+      searchTerms,
+      [...explicitContextPathsForTask(task), ...requestedReadPaths],
+      searchMode
+    )
+  );
+  step.inspectionSearchEngine = searchResult.engine;
+  const matches = searchResult.matches;
+  const inspectedFiles = await buildContextFiles(task, projectFiles, matches, requestedReadPaths);
+  const newFiles = inspectedFiles.filter((file) => !existingPaths.has(file.path));
+  step.contextFilePaths = inspectedFiles.map((file) => file.path);
+
+  if (newFiles.length === 0) {
+    return blockAgentRunStep(
+      task,
+      step,
+      `Repository inspection found no new safe context for ${searchTerms.join(", ") || "the task"}.`
+    );
+  }
+
+  task.contextFiles = mergeContextFiles(task.contextFiles, inspectedFiles);
+  const resultSummary = `Inspected ${inspectedFiles.length} file(s) and added ${newFiles.length} new context file(s): ${formatPathList(newFiles.map((file) => file.path))}.`;
+  if (!step.loopID) {
+    task.status = "Human Review";
+    task.currentPhase = "Repository Context Ready";
+    task.reviewSummary = resultSummary;
+    setAgent(task, "Manager", "Ready", "Repository inspection completed at a safe read-only checkpoint.");
+    setAgent(task, "Coder", "Ready", resultSummary);
+    setAgent(task, "Reviewer", "Active", "Review inspected context before the next agent step.");
+  } else {
+    setAgent(task, "Coder", "Active", resultSummary);
+  }
+
+  const updatedTask = completeAgentRunStepAfterAction(
     task,
     step.id,
-    `Agent searched for ${searchTerms.join(", ")} and inspected ${contextFiles.length} file(s): ${formatPathList(contextFiles.map((file) => file.path))}.`,
-    () => undefined
+    resultSummary,
+    () => newFiles.at(-1)?.path
   );
+  const inspected = event("agent.repository_inspection.completed", resultSummary);
+  inspected.createdAt = step.completedAt ?? new Date().toISOString();
+  saveAndBroadcast(updatedTask, inspected);
+  return updatedTask;
 }
 
-function agentRunContextRequestSignature(searchTerms: string[], readPaths: string[]): string {
-  return JSON.stringify({
-    searchTerms: [...searchTerms].map((term) => term.toLowerCase()).sort(),
-    readPaths: [...readPaths].sort()
-  });
+function repositoryInspectionRequestFingerprint(searchMode: "Text" | "Symbol", searchTerms: string[], readPaths: string[]): string {
+  return createHash("sha256")
+    .update(JSON.stringify({ searchMode, searchTerms, readPaths }))
+    .digest("hex")
+    .slice(0, 16);
 }
 
 function completeAgentRunStepAfterAction(
@@ -6834,10 +6780,8 @@ async function applyEditProposal(
     throw new HttpError(409, "A proposed edit is required before applying changes.");
   }
 
-  const proposal = task.editProposal;
-
-  const validation = await buildEditProposalValidation(proposal.fileChanges);
-  proposal.validation = validation;
+  const validation = await buildEditProposalValidation(task.editProposal.fileChanges);
+  task.editProposal.validation = validation;
   if (validation.status !== "Ready") {
     task.status = "Human Review";
     task.currentPhase = "Edit Proposal Validation Blocked";
@@ -6875,38 +6819,36 @@ async function applyEditProposal(
     summary: validation.summary
   });
 
-  const applyStartedAt = new Date().toISOString();
-  const applyAttempt: EditProposalApplyAttempt = {
+  const started = event("edit.proposal.apply.started", "Applying approved edit proposal.");
+  started.createdAt = new Date().toISOString();
+  task.editProposal.applyTransaction = {
+    id: randomUUID(),
+    kind: "Apply",
     status: "Running",
-    plannedPaths: proposal.fileChanges.map((change) => change.path),
-    appliedPaths: [],
-    revertedPaths: [],
-    summary: `Applying ${proposal.fileChanges.length} validated file change(s) as one reviewed proposal.`,
-    startedAt: applyStartedAt
+    paths: task.editProposal.fileChanges.map((change) => change.path),
+    summary: "Preflight passed; applying the reviewed cross-file change set.",
+    startedAt: started.createdAt
   };
-  proposal.lastApplyAttempt = applyAttempt;
-  const started = event("edit.proposal.apply.started", applyAttempt.summary);
-  started.createdAt = applyStartedAt;
   saveAndBroadcast(task, started);
 
   const appliedFileChanges: AppliedFileChange[] = [];
   try {
-    for (const change of proposal.fileChanges) {
-      const appliedChange = await applyProposedFileChange(proposal.id, change);
+    for (const change of task.editProposal.fileChanges) {
+      const appliedChange = await applyProposedFileChange(task.editProposal.id, change);
       appliedFileChanges.push(appliedChange);
-      applyAttempt.appliedPaths.push(appliedChange.path);
-      saveTask(task);
+      appliedChange.applyVerifiedAt = await verifyAppliedFileChange(appliedChange);
     }
 
     const now = new Date().toISOString();
-    proposal.status = "Applied";
-    proposal.decidedAt = now;
-    proposal.decisionNote = input.note?.trim() || undefined;
-    proposal.appliedFileChanges = appliedFileChanges;
-    applyAttempt.status = "Applied";
-    applyAttempt.summary = `Applied all ${appliedFileChanges.length} validated file change(s).`;
-    applyAttempt.endedAt = now;
-    const rerunEvidence = createOrUpdateCommandRerunEvidenceForAppliedProposal(task, proposal, now);
+    task.editProposal.applyTransaction.status = "Completed";
+    task.editProposal.applyTransaction.summary = `Applied and hash-verified ${appliedFileChanges.length} file change(s).`;
+    task.editProposal.applyTransaction.completedAt = now;
+    task.editProposal.applyTransaction.verifiedAt = now;
+    task.editProposal.status = "Applied";
+    task.editProposal.decidedAt = now;
+    task.editProposal.decisionNote = input.note?.trim() || undefined;
+    task.editProposal.appliedFileChanges = appliedFileChanges;
+    const rerunEvidence = createOrUpdateCommandRerunEvidenceForAppliedProposal(task, task.editProposal, now);
     task.status = "Testing";
     task.currentPhase = "Awaiting Validation";
     task.changedFiles = [...new Set(appliedFileChanges.map((change) => change.path))];
@@ -6948,29 +6890,33 @@ async function applyEditProposal(
     }
     return runValidation(task.id, "PostApply");
   } catch (error) {
-    const applyError = error instanceof Error ? error.message : String(error);
-    const recovery = await revertPartiallyAppliedProposal(appliedFileChanges);
-    const endedAt = new Date().toISOString();
-    applyAttempt.status = recovery.complete ? "Reverted" : "Failed";
-    applyAttempt.revertedPaths = recovery.revertedPaths;
-    applyAttempt.endedAt = endedAt;
-    applyAttempt.error = applyError;
-    applyAttempt.summary = recovery.complete
-      ? `Apply stopped after ${appliedFileChanges.length} file(s); Forge restored every completed write.`
-      : `Apply stopped after ${appliedFileChanges.length} file(s), and automatic recovery was incomplete: ${recovery.error}`;
-    const message = `${applyError} ${applyAttempt.summary}`;
-    task.status = recovery.complete ? "Human Review" : "Failed";
-    task.currentPhase = recovery.complete ? "Apply Reverted" : "Apply Recovery Failed";
+    const originalMessage = error instanceof Error ? error.message : String(error);
+    const recovery = await recoverPartialApply(appliedFileChanges);
+    const now = new Date().toISOString();
+    task.editProposal.applyTransaction.status = recovery.succeeded ? "Recovered" : "RecoveryFailed";
+    task.editProposal.applyTransaction.completedAt = now;
+    task.editProposal.applyTransaction.recoverySummary = recovery.summary;
+    task.editProposal.applyTransaction.summary = recovery.succeeded
+      ? "Cross-file apply failed; already-written files were restored and verified."
+      : "Cross-file apply failed and automatic recovery could not restore every written file.";
+    if (recovery.succeeded) {
+      task.editProposal.applyTransaction.verifiedAt = now;
+      task.editProposal.status = "Proposed";
+      task.editProposal.decidedAt = undefined;
+      task.editProposal.decisionNote = undefined;
+      task.changedFiles = [];
+      const applyApproval = [...task.approvals].reverse().find((approval) => approval.action === "Apply Edit Proposal");
+      if (applyApproval) {
+        applyApproval.summary = `Apply was approved but automatically recovered after a cross-file failure: ${recovery.summary}`;
+      }
+    }
+    task.editProposal.appliedFileChanges = appliedFileChanges;
+    const message = `${originalMessage} ${recovery.summary}`.trim();
+    task.status = "Failed";
+    task.currentPhase = recovery.succeeded ? "Apply Recovered" : "Apply Recovery Required";
     task.reviewSummary = message;
-    setAgent(
-      task,
-      "Coder",
-      "Blocked",
-      recovery.complete
-        ? "Apply failed; completed writes were automatically restored."
-        : "Apply failed and automatic recovery could not restore every completed write."
-    );
-    setAgent(task, "Reviewer", "Active", "Review the apply attempt and recovery evidence before retrying.");
+    setAgent(task, "Coder", "Blocked", "Could not apply the approved edit proposal.");
+    setAgent(task, "Reviewer", "Active", "Review the apply failure before retrying.");
     upsertPlanStep(task, {
       id: "apply-edit-proposal",
       title: "Apply edit proposal",
@@ -6978,13 +6924,10 @@ async function applyEditProposal(
       summary: message
     });
 
-    const failed = event(
-      recovery.complete ? "edit.proposal.apply.reverted" : "edit.proposal.apply.failed",
-      message
-    );
-    failed.createdAt = endedAt;
+    const failed = event(recovery.succeeded ? "edit.proposal.apply.recovered" : "edit.proposal.apply.recovery_failed", message);
+    failed.createdAt = now;
     saveAndBroadcast(task, failed);
-    throw error;
+    throw new HttpError(error instanceof HttpError ? error.status : 500, message);
   }
 }
 
@@ -7020,25 +6963,41 @@ async function rollbackEditProposal(
 
   const started = event("edit.proposal.rollback.started", "Rolling back applied edit proposal.");
   started.createdAt = new Date().toISOString();
+  task.editProposal.rollbackTransaction = {
+    id: randomUUID(),
+    kind: "Rollback",
+    status: "Running",
+    paths: appliedFileChanges.map((change) => change.path),
+    summary: "Verifying applied hashes before restoring the reviewed change set.",
+    startedAt: started.createdAt
+  };
   saveAndBroadcast(task, started);
 
+  let attemptedRollbackOperations: PreparedRollbackOperation[] = [];
   try {
-    const rollbackOperations = [];
+    const rollbackOperations: PreparedRollbackOperation[] = [];
     for (const appliedChange of appliedFileChanges) {
       rollbackOperations.push(await prepareAppliedFileRollback(appliedChange));
     }
 
     for (const operation of rollbackOperations) {
+      attemptedRollbackOperations.push(operation);
       await operation.rollback();
+      await operation.verifyRolledBack();
     }
 
     const now = new Date().toISOString();
     for (const appliedChange of appliedFileChanges) {
       appliedChange.rolledBackAt = now;
+      appliedChange.rollbackVerifiedAt = now;
     }
 
     const rolledBackFiles = [...new Set(rollbackOperations.map((operation) => operation.relativePath))];
     task.editProposal.status = "RolledBack";
+    task.editProposal.rollbackTransaction.status = "Completed";
+    task.editProposal.rollbackTransaction.summary = `Restored and hash-verified ${rollbackOperations.length} file change(s).`;
+    task.editProposal.rollbackTransaction.completedAt = now;
+    task.editProposal.rollbackTransaction.verifiedAt = now;
     task.editProposal.rolledBackAt = now;
     task.editProposal.rollbackNote = input.note?.trim() || undefined;
     task.status = "Human Review";
@@ -7069,9 +7028,21 @@ async function rollbackEditProposal(
     saveAndBroadcast(task, rolledBack);
     return task;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const originalMessage = error instanceof Error ? error.message : String(error);
+    const recovery = await recoverPartialRollback(attemptedRollbackOperations);
+    const now = new Date().toISOString();
+    task.editProposal.rollbackTransaction.status = recovery.succeeded ? "Recovered" : "RecoveryFailed";
+    task.editProposal.rollbackTransaction.completedAt = now;
+    task.editProposal.rollbackTransaction.recoverySummary = recovery.summary;
+    task.editProposal.rollbackTransaction.summary = recovery.succeeded
+      ? "Rollback failed; the already-restored files were returned to the verified applied state."
+      : "Rollback failed and automatic recovery could not restore the applied state.";
+    if (recovery.succeeded) {
+      task.editProposal.rollbackTransaction.verifiedAt = now;
+    }
+    const message = `${originalMessage} ${recovery.summary}`.trim();
     task.status = "Failed";
-    task.currentPhase = "Rollback Failed";
+    task.currentPhase = recovery.succeeded ? "Rollback Recovered" : "Rollback Recovery Required";
     task.reviewSummary = message;
     setAgent(task, "Coder", "Blocked", "Could not roll back the applied edit proposal.");
     setAgent(task, "Reviewer", "Active", "Review the rollback failure before retrying.");
@@ -7082,10 +7053,10 @@ async function rollbackEditProposal(
       summary: message
     });
 
-    const failed = event("edit.proposal.rollback.failed", message);
-    failed.createdAt = new Date().toISOString();
+    const failed = event(recovery.succeeded ? "edit.proposal.rollback.recovered" : "edit.proposal.rollback.recovery_failed", message);
+    failed.createdAt = now;
     saveAndBroadcast(task, failed);
-    throw error;
+    throw new HttpError(error instanceof HttpError ? error.status : 500, message);
   }
 }
 
@@ -8188,42 +8159,19 @@ async function validateReadyProposalValidation(task: ForgeTask): Promise<string>
 async function buildEditProposalValidation(fileChanges: ProposedFileChange[]): Promise<EditProposalValidation> {
   const fileResults = await Promise.all(fileChanges.map(validateProposedFileChange));
   const pathCounts = new Map<string, number>();
-  for (const change of fileChanges) {
-    const key = proposalTargetPathKey(change.path);
-    pathCounts.set(key, (pathCounts.get(key) ?? 0) + 1);
+  for (const result of fileResults) {
+    const normalizedPath = path.posix.normalize(result.path.replaceAll("\\", "/").replace(/^\.\/+/, ""));
+    pathCounts.set(normalizedPath, (pathCounts.get(normalizedPath) ?? 0) + 1);
   }
 
-  for (const [index, change] of fileChanges.entries()) {
-    if ((pathCounts.get(proposalTargetPathKey(change.path)) ?? 0) > 1) {
-      blockProposalFileResult(
-        fileResults[index],
-        `Proposal targets ${change.path} more than once; coordinated changes require one operation per normalized path.`
-      );
+  for (const result of fileResults) {
+    const normalizedPath = path.posix.normalize(result.path.replaceAll("\\", "/").replace(/^\.\/+/, ""));
+    if ((pathCounts.get(normalizedPath) ?? 0) > 1) {
+      result.status = "Blocked";
+      result.summary = `Proposal contains more than one change for ${normalizedPath}; cross-file apply requires one operation per path.`;
+      result.checks.push("Duplicate target paths are blocked before cross-file apply.");
     }
   }
-
-  if (fileChanges.length > editProposalMaxFileChanges) {
-    for (const result of fileResults) {
-      blockProposalFileResult(
-        result,
-        `Proposal has ${fileChanges.length} file changes; the coordinated apply limit is ${editProposalMaxFileChanges}.`
-      );
-    }
-  }
-
-  const totalOperationChars = fileChanges.reduce(
-    (total, change) => total + proposedFileOperationCharacterCount(change.applyOperation),
-    0
-  );
-  if (totalOperationChars > editProposalMaxTotalOperationChars) {
-    for (const result of fileResults) {
-      blockProposalFileResult(
-        result,
-        `Proposal operation payload is ${totalOperationChars} characters; the coordinated apply limit is ${editProposalMaxTotalOperationChars}.`
-      );
-    }
-  }
-
   const blockedCount = fileResults.filter((result) => result.status === "Blocked").length;
   const status: EditProposalValidation["status"] = blockedCount > 0 ? "Blocked" : "Ready";
   const summary =
@@ -8239,39 +8187,6 @@ async function buildEditProposalValidation(fileChanges: ProposedFileChange[]): P
     checkedAt: new Date().toISOString(),
     fileResults
   };
-}
-
-function proposalTargetPathKey(inputPath: string): string {
-  return path.posix
-    .normalize(inputPath.replaceAll("\\", "/").replace(/^@/, "").replace(/^\.\/+/, ""))
-    .toLowerCase();
-}
-
-function proposedFileOperationCharacterCount(operation: ProposedFileChange["applyOperation"]): number {
-  if (!operation || operation.kind === "PreviewOnly") {
-    return 0;
-  }
-  if (operation.kind === "AppendText") {
-    return operation.text.length;
-  }
-  if (operation.kind === "ReplaceText") {
-    return operation.findText.length + operation.replaceWith.length;
-  }
-  if (operation.kind === "PatchText") {
-    return operation.hunks.reduce(
-      (total, hunk) => total + hunk.findText.length + hunk.replaceWith.length,
-      0
-    );
-  }
-  return operation.content.length;
-}
-
-function blockProposalFileResult(result: FileChangeValidation, summary: string): void {
-  result.status = "Blocked";
-  result.summary = summary;
-  if (!result.checks.includes(summary)) {
-    result.checks.push(summary);
-  }
 }
 
 async function validateProposedFileChange(change: ProposedFileChange): Promise<FileChangeValidation> {
@@ -8290,8 +8205,11 @@ async function validateProposedFileChange(change: ProposedFileChange): Promise<F
         return blockedValidation(change, `Create changes require a CreateFile operation in v0: ${change.path}`, checks);
       }
 
-      const { absolutePath, relativePath } = resolveCreateFileWorkspacePath(change.path);
-      checks.push("Path is inside the allowlisted source/text create boundary.");
+      const { absolutePath, relativePath } = resolveMarkdownWorkspacePath(change.path);
+      if (!relativePath.startsWith("docs/")) {
+        return blockedValidation(change, `CreateFile can only create docs/*.md files in v0: ${relativePath}`, checks);
+      }
+      checks.push("Path is inside the createable docs Markdown boundary.");
 
       if (operation.content.length === 0) {
         return blockedValidation(change, `CreateFile content is empty: ${relativePath}`, checks);
@@ -8324,7 +8242,7 @@ async function validateProposedFileChange(change: ProposedFileChange): Promise<F
         id: change.id,
         path: relativePath,
         status: "Ready",
-        summary: `${relativePath} is ready for restricted source/text file creation.`,
+        summary: `${relativePath} is ready for restricted Markdown file creation.`,
         checks
       };
     }
@@ -8443,6 +8361,22 @@ async function validateProposedFileChange(change: ProposedFileChange): Promise<F
         path: relativePath,
         status: "Ready",
         summary: `${relativePath} is ready for ${operation.hunks.length} restricted patch-text hunk(s).`,
+        checks
+      };
+    }
+
+    if (operation.kind === "UnifiedDiff") {
+      checks.push("Apply operation is unified-diff.");
+      const nextContent = validateUnifiedDiffOperation(operation, currentContent, relativePath, checks);
+      if (nextContent === currentContent) {
+        return blockedValidation(change, `Unified diff would not change ${relativePath}.`, checks);
+      }
+
+      return {
+        id: change.id,
+        path: relativePath,
+        status: "Ready",
+        summary: `${relativePath} is ready for a context-anchored unified diff apply.`,
         checks
       };
     }
@@ -8641,7 +8575,10 @@ async function applyProposedFileChange(
       throw new HttpError(409, `Create changes require a CreateFile operation in v0: ${change.path}`);
     }
 
-    const { absolutePath, relativePath } = resolveCreateFileWorkspacePath(change.path);
+    const { absolutePath, relativePath } = resolveMarkdownWorkspacePath(change.path);
+    if (!relativePath.startsWith("docs/")) {
+      throw new HttpError(409, `CreateFile can only create docs/*.md files in v0: ${relativePath}`);
+    }
 
     if (operation.content.length === 0) {
       throw new HttpError(409, `CreateFile content is empty: ${relativePath}`);
@@ -8801,35 +8738,104 @@ async function applyProposedFileChange(
     });
   }
 
+  if (operation.kind === "UnifiedDiff") {
+    const nextContent = validateUnifiedDiffOperation(operation, currentContent, relativePath);
+    if (nextContent === currentContent) {
+      throw new HttpError(409, `Unified diff would not change ${relativePath}.`);
+    }
+
+    const rollbackSnapshotPath = await writeRollbackSnapshot(proposalID, change.id, currentContent);
+    await writeFile(absolutePath, nextContent, "utf8");
+    const afterContent = await readFile(absolutePath, "utf8");
+    return buildAppliedFileChange({
+      relativePath,
+      proposalFileChangeID: change.id,
+      operationKind: operation.kind,
+      appliedAt,
+      beforeContent: currentContent,
+      afterContent,
+      rollbackSnapshotPath,
+      rollbackKind: "RestorePreviousContent",
+      rollbackSummary: `Restore the previous full contents of ${relativePath}.`
+    });
+  }
+
   throw new HttpError(409, `Unsupported apply operation for ${relativePath}.`);
 }
 
 type PreparedRollbackOperation = {
   relativePath: string;
   rollback: () => Promise<void>;
+  reapply: () => Promise<void>;
+  verifyRolledBack: () => Promise<void>;
+  verifyApplied: () => Promise<void>;
 };
 
-async function revertPartiallyAppliedProposal(
-  appliedFileChanges: AppliedFileChange[]
-): Promise<{ complete: boolean; revertedPaths: string[]; error?: string }> {
-  const revertedPaths: string[] = [];
-  const errors: string[] = [];
+async function verifyAppliedFileChange(appliedChange: AppliedFileChange): Promise<string> {
+  const { absolutePath, relativePath } = resolveEditableWorkspacePath(appliedChange.path);
+  const currentContent = await readFile(absolutePath, "utf8");
+  verifyCurrentContentForRollback(appliedChange, currentContent, relativePath);
+  return new Date().toISOString();
+}
 
-  for (const appliedChange of [...appliedFileChanges].reverse()) {
-    try {
-      const operation = await prepareAppliedFileRollback(appliedChange);
-      await operation.rollback();
-      revertedPaths.push(operation.relativePath);
-    } catch (error) {
-      errors.push(error instanceof Error ? error.message : String(error));
-    }
+async function recoverPartialApply(
+  appliedFileChanges: AppliedFileChange[]
+): Promise<{ succeeded: boolean; summary: string }> {
+  if (appliedFileChanges.length === 0) {
+    return { succeeded: true, summary: "No file write completed before the failure." };
   }
 
-  return {
-    complete: errors.length === 0,
-    revertedPaths,
-    error: errors.length > 0 ? errors.join(" ") : undefined
-  };
+  try {
+    const operations: PreparedRollbackOperation[] = [];
+    for (const appliedChange of [...appliedFileChanges].reverse()) {
+      operations.push(await prepareAppliedFileRollback(appliedChange));
+    }
+
+    const recoveredAt = new Date().toISOString();
+    for (const operation of operations) {
+      await operation.rollback();
+      await operation.verifyRolledBack();
+    }
+    for (const appliedChange of appliedFileChanges) {
+      appliedChange.rolledBackAt = recoveredAt;
+      appliedChange.rollbackVerifiedAt = recoveredAt;
+    }
+    return {
+      succeeded: true,
+      summary: `Automatic recovery restored and verified ${appliedFileChanges.length} previously written file(s).`
+    };
+  } catch (recoveryError) {
+    const detail = recoveryError instanceof Error ? recoveryError.message : String(recoveryError);
+    return {
+      succeeded: false,
+      summary: `Automatic apply recovery failed: ${detail}`
+    };
+  }
+}
+
+async function recoverPartialRollback(
+  attemptedOperations: PreparedRollbackOperation[]
+): Promise<{ succeeded: boolean; summary: string }> {
+  if (attemptedOperations.length === 0) {
+    return { succeeded: true, summary: "Rollback stopped before any file restore was attempted." };
+  }
+
+  try {
+    for (const operation of [...attemptedOperations].reverse()) {
+      await operation.reapply();
+      await operation.verifyApplied();
+    }
+    return {
+      succeeded: true,
+      summary: `Automatic rollback recovery restored and verified the applied state for ${attemptedOperations.length} file(s).`
+    };
+  } catch (recoveryError) {
+    const detail = recoveryError instanceof Error ? recoveryError.message : String(recoveryError);
+    return {
+      succeeded: false,
+      summary: `Automatic rollback recovery failed: ${detail}`
+    };
+  }
 }
 
 async function prepareAppliedFileRollback(appliedChange: AppliedFileChange): Promise<PreparedRollbackOperation> {
@@ -8838,7 +8844,7 @@ async function prepareAppliedFileRollback(appliedChange: AppliedFileChange): Pro
   }
 
   if (appliedChange.rollbackKind === "DeleteCreatedFile") {
-    const { absolutePath, relativePath } = resolveCreateFileWorkspacePath(appliedChange.path);
+    const { absolutePath, relativePath } = resolveMarkdownWorkspacePath(appliedChange.path);
     const currentContent = await readFile(absolutePath, "utf8");
     verifyCurrentContentForRollback(appliedChange, currentContent, relativePath);
 
@@ -8846,6 +8852,26 @@ async function prepareAppliedFileRollback(appliedChange: AppliedFileChange): Pro
       relativePath,
       rollback: async () => {
         await unlink(absolutePath);
+      },
+      reapply: async () => {
+        await writeFile(absolutePath, currentContent, { encoding: "utf8", flag: "wx" });
+      },
+      verifyRolledBack: async () => {
+        try {
+          await stat(absolutePath);
+          throw new HttpError(409, `Rollback verification expected ${relativePath} to be absent.`);
+        } catch (error) {
+          if (error instanceof HttpError) {
+            throw error;
+          }
+          if (!isNodeError(error) || error.code !== "ENOENT") {
+            throw error;
+          }
+        }
+      },
+      verifyApplied: async () => {
+        const content = await readFile(absolutePath, "utf8");
+        verifyCurrentContentForRollback(appliedChange, content, relativePath);
       }
     };
   }
@@ -8869,6 +8895,19 @@ async function prepareAppliedFileRollback(appliedChange: AppliedFileChange): Pro
       relativePath,
       rollback: async () => {
         await writeFile(absolutePath, snapshot, "utf8");
+      },
+      reapply: async () => {
+        await writeFile(absolutePath, currentContent, "utf8");
+      },
+      verifyRolledBack: async () => {
+        const restoredContent = await readFile(absolutePath, "utf8");
+        if (!appliedChange.beforeSha256 || sha256Text(restoredContent) !== appliedChange.beforeSha256) {
+          throw new HttpError(409, `Rollback verification failed for restored file ${relativePath}.`);
+        }
+      },
+      verifyApplied: async () => {
+        const reappliedContent = await readFile(absolutePath, "utf8");
+        verifyCurrentContentForRollback(appliedChange, reappliedContent, relativePath);
       }
     };
   }
@@ -8902,7 +8941,7 @@ async function writeRollbackSnapshot(
   const directory = path.join(rollbackSnapshotRoot, safeSnapshotSegment(proposalID));
   await mkdir(directory, { recursive: true });
 
-  const absolutePath = path.join(directory, `${safeSnapshotSegment(fileChangeID)}.before`);
+  const absolutePath = path.join(directory, `${safeSnapshotSegment(fileChangeID)}-${randomUUID()}.before`);
   await writeFile(absolutePath, content, { encoding: "utf8", flag: "wx" });
   return repoRelativePath(absolutePath);
 }
@@ -9071,8 +9110,192 @@ function validatePatchTextOperation(
   return nextContent;
 }
 
-function resolveCreateFileWorkspacePath(inputPath: string): { absolutePath: string; relativePath: string } {
-  return resolveEditableWorkspacePath(inputPath);
+type UnifiedDiffLine = { kind: "Context" | "Add" | "Delete"; text: string };
+
+type UnifiedDiffHunk = {
+  oldStart: number;
+  oldCount: number;
+  newStart: number;
+  newCount: number;
+  lines: UnifiedDiffLine[];
+};
+
+function validateUnifiedDiffOperation(
+  operation: Extract<NonNullable<ProposedFileChange["applyOperation"]>, { kind: "UnifiedDiff" }>,
+  currentContent: string,
+  relativePath: string,
+  checks?: string[]
+): string {
+  if (operation.patch.length === 0) {
+    throw new HttpError(409, `UnifiedDiff patch is empty: ${relativePath}`);
+  }
+
+  if (operation.patch.length > editProposalUnifiedDiffMaxChars) {
+    throw new HttpError(409, `UnifiedDiff patch is too large for restricted apply: ${relativePath}`);
+  }
+  checks?.push("Unified diff size is within the restricted apply limit.");
+
+  const { oldPath, newPath, hunks } = parseUnifiedDiff(operation.patch, relativePath);
+  if (oldPath !== relativePath || newPath !== relativePath) {
+    throw new HttpError(
+      409,
+      `UnifiedDiff headers must both target ${relativePath}; received ${oldPath} and ${newPath}.`
+    );
+  }
+  checks?.push("Unified diff headers match the proposed file path.");
+
+  if (hunks.length === 0) {
+    throw new HttpError(409, `UnifiedDiff requires at least one hunk: ${relativePath}`);
+  }
+
+  if (hunks.length > editProposalUnifiedDiffMaxHunks) {
+    throw new HttpError(409, `UnifiedDiff has too many hunks for restricted apply: ${relativePath}`);
+  }
+  checks?.push(`Unified diff hunk count is within the limit (${hunks.length}/${editProposalUnifiedDiffMaxHunks}).`);
+
+  const lineEnding = currentContent.includes("\r\n") ? "\r\n" : "\n";
+  const normalizedContent = lineEnding === "\r\n" ? currentContent.replaceAll("\r\n", "\n") : currentContent;
+  const trailingNewline = normalizedContent.endsWith("\n");
+  const sourceLines = normalizedContent.length === 0 ? [] : normalizedContent.split("\n");
+  if (trailingNewline && sourceLines.length > 0) {
+    sourceLines.pop();
+  }
+
+  const outputLines: string[] = [];
+  let sourceCursor = 0;
+  for (const [hunkIndex, hunk] of hunks.entries()) {
+    const sourceStart = hunk.oldCount === 0 ? hunk.oldStart : hunk.oldStart - 1;
+    const outputStart = hunk.newCount === 0 ? hunk.newStart : hunk.newStart - 1;
+    if (sourceStart < sourceCursor || sourceStart > sourceLines.length) {
+      throw new HttpError(409, `UnifiedDiff hunk ${hunkIndex + 1} has an invalid or overlapping old range: ${relativePath}`);
+    }
+
+    outputLines.push(...sourceLines.slice(sourceCursor, sourceStart));
+    if (outputLines.length !== outputStart) {
+      throw new HttpError(409, `UnifiedDiff hunk ${hunkIndex + 1} new range does not follow prior hunks: ${relativePath}`);
+    }
+
+    let hunkSourceCursor = sourceStart;
+    for (const line of hunk.lines) {
+      if (line.kind === "Add") {
+        outputLines.push(line.text);
+        continue;
+      }
+
+      const currentLine = sourceLines[hunkSourceCursor];
+      if (currentLine !== line.text) {
+        throw new HttpError(
+          409,
+          `UnifiedDiff hunk ${hunkIndex + 1} context mismatch at source line ${hunkSourceCursor + 1}: ${relativePath}`
+        );
+      }
+
+      if (line.kind === "Context") {
+        outputLines.push(currentLine);
+      }
+      hunkSourceCursor += 1;
+    }
+    sourceCursor = hunkSourceCursor;
+  }
+
+  outputLines.push(...sourceLines.slice(sourceCursor));
+  checks?.push("Every unified diff context and deletion line matches the current file at its declared range.");
+  const normalizedNextContent = `${outputLines.join("\n")}${trailingNewline ? "\n" : ""}`;
+  return lineEnding === "\r\n" ? normalizedNextContent.replaceAll("\n", "\r\n") : normalizedNextContent;
+}
+
+function parseUnifiedDiff(
+  patchText: string,
+  relativePath: string
+): { oldPath: string; newPath: string; hunks: UnifiedDiffHunk[] } {
+  const lines = patchText.replaceAll("\r\n", "\n").split("\n");
+  if (lines.at(-1) === "") {
+    lines.pop();
+  }
+
+  if (!lines[0]?.startsWith("--- ") || !lines[1]?.startsWith("+++ ")) {
+    throw new HttpError(409, `UnifiedDiff requires --- and +++ file headers: ${relativePath}`);
+  }
+
+  const oldPath = normalizeUnifiedDiffHeaderPath(lines[0].slice(4), relativePath);
+  const newPath = normalizeUnifiedDiffHeaderPath(lines[1].slice(4), relativePath);
+  const hunks: UnifiedDiffHunk[] = [];
+  let index = 2;
+  while (index < lines.length) {
+    const header = lines[index];
+    if (!header) {
+      index += 1;
+      continue;
+    }
+
+    const match = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?: .*)?$/.exec(header);
+    if (!match) {
+      throw new HttpError(409, `UnifiedDiff contains unsupported content outside a hunk: ${relativePath}`);
+    }
+
+    const oldStart = Number(match[1]);
+    const oldCount = match[2] === undefined ? 1 : Number(match[2]);
+    const newStart = Number(match[3]);
+    const newCount = match[4] === undefined ? 1 : Number(match[4]);
+    index += 1;
+    const hunkLines: UnifiedDiffLine[] = [];
+    while (index < lines.length && !lines[index].startsWith("@@ ")) {
+      const line = lines[index];
+      if (line === "\\ No newline at end of file") {
+        throw new HttpError(409, `UnifiedDiff newline-marker changes are not supported: ${relativePath}`);
+      }
+
+      const prefix = line[0];
+      if (prefix !== " " && prefix !== "+" && prefix !== "-") {
+        throw new HttpError(409, `UnifiedDiff hunk contains an invalid line prefix: ${relativePath}`);
+      }
+
+      hunkLines.push({
+        kind: prefix === " " ? "Context" : prefix === "+" ? "Add" : "Delete",
+        text: line.slice(1)
+      });
+      index += 1;
+    }
+
+    const actualOldCount = hunkLines.filter((line) => line.kind !== "Add").length;
+    const actualNewCount = hunkLines.filter((line) => line.kind !== "Delete").length;
+    if (actualOldCount !== oldCount || actualNewCount !== newCount) {
+      throw new HttpError(
+        409,
+        `UnifiedDiff hunk line counts do not match its header (${actualOldCount}/${oldCount} old, ${actualNewCount}/${newCount} new): ${relativePath}`
+      );
+    }
+
+    if (hunkLines.length === 0) {
+      throw new HttpError(409, `UnifiedDiff hunk is empty: ${relativePath}`);
+    }
+    hunks.push({ oldStart, oldCount, newStart, newCount, lines: hunkLines });
+  }
+
+  return { oldPath, newPath, hunks };
+}
+
+function normalizeUnifiedDiffHeaderPath(value: string, relativePath: string): string {
+  const rawPath = value.split("\t", 1)[0].trim();
+  if (rawPath === "/dev/null") {
+    throw new HttpError(409, `UnifiedDiff cannot create or delete files: ${relativePath}`);
+  }
+
+  const withoutPrefix = rawPath.startsWith("a/") || rawPath.startsWith("b/") ? rawPath.slice(2) : rawPath;
+  const normalized = path.posix.normalize(withoutPrefix.replaceAll("\\", "/"));
+  if (!normalized || normalized === "." || normalized === ".." || normalized.startsWith("../") || normalized.startsWith("/")) {
+    throw new HttpError(409, `UnifiedDiff contains an unsafe file header: ${relativePath}`);
+  }
+  return normalized;
+}
+
+function resolveMarkdownWorkspacePath(inputPath: string): { absolutePath: string; relativePath: string } {
+  const resolved = resolveWorkspaceEditPath(inputPath);
+  if (!isEditableMarkdownWorkspacePath(resolved.relativePath)) {
+    throw new HttpError(409, `Only README.md and docs/*.md paths can be edited with Markdown operations in v0: ${inputPath}`);
+  }
+
+  return resolved;
 }
 
 function resolveEditableWorkspacePath(inputPath: string): { absolutePath: string; relativePath: string } {
@@ -9391,6 +9614,150 @@ async function searchRepositoryContext(
     .slice(0, 12);
 }
 
+async function searchRepositoryWithRipgrep(
+  files: string[],
+  searchTerms: string[],
+  explicitPaths: string[],
+  searchMode: "Text" | "Symbol"
+): Promise<{ engine: string; matches: RepositorySearchMatch[] }> {
+  try {
+    const output = await runBoundedRipgrep(files.slice(0, repositorySearchMaxFiles), searchTerms, searchMode);
+    return {
+      engine: searchMode === "Symbol" ? "ripgrep-word" : "ripgrep-fixed",
+      matches: parseRipgrepRepositoryMatches(output, files, searchTerms, explicitPaths, searchMode)
+    };
+  } catch {
+    return {
+      engine: "fallback-substring",
+      matches: await searchRepositoryContext(files, searchTerms, explicitPaths)
+    };
+  }
+}
+
+function runBoundedRipgrep(
+  files: string[],
+  searchTerms: string[],
+  searchMode: "Text" | "Symbol"
+): Promise<string> {
+  if (files.length === 0 || searchTerms.length === 0) {
+    return Promise.resolve("");
+  }
+
+  const args = ["--json", "--ignore-case", "--max-count", "6", "--fixed-strings"];
+  if (searchMode === "Symbol") {
+    args.push("--word-regexp");
+  }
+  for (const term of searchTerms) {
+    args.push("-e", term);
+  }
+  args.push("--", ...files);
+
+  return new Promise((resolve, reject) => {
+    const child = spawn("rg", args, { cwd: repoRoot, shell: false, env: { ...process.env } });
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const timeout = setTimeout(() => {
+      child.kill("SIGTERM");
+      if (!settled) {
+        settled = true;
+        reject(new Error("Bounded ripgrep search timed out."));
+      }
+    }, 5_000);
+    const append = (current: string, chunk: Buffer) => (current + chunk.toString("utf8")).slice(-240_000);
+    child.stdout.on("data", (chunk: Buffer) => { stdout = append(stdout, chunk); });
+    child.stderr.on("data", (chunk: Buffer) => { stderr = append(stderr, chunk); });
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      if (!settled) {
+        settled = true;
+        reject(error);
+      }
+    });
+    child.on("close", (code) => {
+      clearTimeout(timeout);
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (code === 0 || code === 1) {
+        resolve(stdout);
+      } else {
+        reject(new Error(`ripgrep exited with code ${code ?? "unknown"}: ${stderr.slice(-500)}`));
+      }
+    });
+  });
+}
+
+function parseRipgrepRepositoryMatches(
+  output: string,
+  files: string[],
+  searchTerms: string[],
+  explicitPaths: string[],
+  searchMode: "Text" | "Symbol"
+): RepositorySearchMatch[] {
+  const byPath = new Map<string, RepositorySearchMatch>();
+  const explicitSet = new Set(explicitPaths);
+  const ensure = (file: string) => {
+    let match = byPath.get(file);
+    if (!match) {
+      match = { path: file, score: 0, reasons: [], matchedLines: [] };
+      byPath.set(file, match);
+    }
+    return match;
+  };
+
+  for (const file of files.slice(0, repositorySearchMaxFiles)) {
+    const match = ensure(file);
+    if (explicitSet.has(file)) {
+      match.score += 100;
+      match.reasons.push("explicitly referenced by task conversation");
+    }
+    const lowerPath = file.toLowerCase();
+    for (const term of searchTerms) {
+      if (lowerPath.includes(term.toLowerCase())) {
+        match.score += 12;
+        match.reasons.push(`path matches "${term}"`);
+      }
+    }
+  }
+
+  for (const line of output.split("\n")) {
+    if (!line) {
+      continue;
+    }
+    try {
+      const record = JSON.parse(line) as {
+        type?: string;
+        data?: { path?: { text?: string }; lines?: { text?: string }; line_number?: number; submatches?: unknown[] };
+      };
+      if (record.type !== "match" || !record.data?.path?.text) {
+        continue;
+      }
+      const match = ensure(record.data.path.text);
+      const hitCount = Math.max(1, record.data.submatches?.length ?? 1);
+      match.score += Math.min(24, hitCount * (searchMode === "Symbol" ? 6 : 4));
+      const reason = searchMode === "Symbol" ? "whole-symbol match" : "fixed-text match";
+      if (!match.reasons.includes(reason)) {
+        match.reasons.push(reason);
+      }
+      if (match.matchedLines.length < 4 && record.data.lines?.text) {
+        match.matchedLines.push(
+          `${record.data.line_number ?? 0}: ${record.data.lines.text.trim().replace(/\s+/g, " ").slice(0, 160)}`
+        );
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return [...byPath.values()]
+    .filter((match) => match.score > 0)
+    .map((match) => ({ ...match, reasons: match.reasons.slice(0, 4), matchedLines: match.matchedLines.slice(0, 3) }))
+    .sort((left, right) => right.score - left.score || left.path.localeCompare(right.path))
+    .slice(0, 12);
+}
+
 async function scoreRepositoryFile(
   relativePath: string,
   searchTerms: string[],
@@ -9503,10 +9870,14 @@ async function buildContextFiles(
 }
 
 function mergeContextFiles(existing: ContextFile[], incoming: ContextFile[]): ContextFile[] {
-  const byPath = new Map(existing.map((file) => [file.path, file]));
-
+  const byPath = new Map<string, ContextFile>();
   for (const file of incoming) {
     byPath.set(file.path, file);
+  }
+  for (const file of existing) {
+    if (!byPath.has(file.path)) {
+      byPath.set(file.path, file);
+    }
   }
 
   return [...byPath.values()].slice(0, modelGuidedContextMaxStoredFiles);
@@ -9550,7 +9921,7 @@ function selectRepositoryContextPaths(
 }
 
 function normalizeProviderSearchTerms(
-  contextRequest: PlanContextRequestResult,
+  contextRequest: { searchTerms: string[] },
   task: ForgeTask
 ): string[] {
   const terms = new Set<string>();

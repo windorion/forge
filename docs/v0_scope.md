@@ -3,7 +3,7 @@
 Document role: define the first end-to-end product target for Forge so early
 implementation has a clear finish line.
 
-Last updated: 2026-07-13
+Last updated: 2026-07-14
 
 ## Scope Reset
 
@@ -81,8 +81,10 @@ It should not feel like:
 - plan progress strip
 - Log/Diff/Tests tabs
 - model-provider-backed normal run path
-- source-file patch proposal format beyond exact text hunks
-- controlled patch apply with rollback, revalidation, and recovery states
+- source-file create/delete support beyond the current restricted Unified Diff
+  modification path
+- crash-time recovery checkpoints beyond the current in-process compensated
+  apply/rollback transactions
 - approved task-scoped command runner for checks/tests
 - command output streaming into the task
 - failed-check self-fix loop
@@ -142,11 +144,9 @@ Built foundation:
 - validation presets and repair briefs
 - approved task-scoped command runner with streamed stdout/stderr chunks
 - failed task-command repair briefs and review-only self-fix proposals
-- provider-selected bounded agent loop with multi-round repository context
-  budgets and no-progress stops, proposal generation, approved command
-  execution, validation repair proposal generation, reviewed self-fix reruns,
-  human-review pauses, cooperative user pause/abort, same-loop resume, and
-  max-step protection
+- provider-selected bounded agent loop for proposal generation, approved
+  command execution, validation repair proposal generation, reviewed self-fix
+  reruns, human-review pauses, and max-step protection
 - git status/diff/commit/push/branch/PR handoff preflights
 - app-managed runtime diagnostics
 - local smoke coverage
@@ -161,23 +161,30 @@ Major gaps:
 - UI has a first-pass shell but does not yet fully match `design_handoff_forge`.
 - Full-screen diff review exists but still needs exact split-diff polish,
   keyboard shortcuts, and durable file-level review decisions.
-- Patch apply now has coordinated multi-file exact source patches, new
-  allowlisted source/text file creation, proposal-level budgets, and partial-
-  write recovery evidence, but generation is still too exact-text-dependent
-  for normal source-code tasks.
+- Patch apply now supports exact replacements, multi-hunk text patches, and
+  strict context-anchored Unified Diff modifications across reviewed source
+  files, with verified compensated apply/rollback transactions. Source-file
+  create/delete and newline-marker edge cases remain unsupported.
 - Command output now has a streamed, cancellable, selectable task-scoped
   surface with reviewed self-fix rerun evidence after apply.
-- Provider-backed run loop now has bounded multi-step orchestration and
-  multi-round runtime-owned repository context budgets plus manual
-  pause/abort/resume controls, but it still lacks finer-grained separate
-  read/search choices and broader patch generation.
+- Provider-backed run loop now has bounded multi-step orchestration, but it
+  still needs richer search result-quality evidence and restart recovery.
+- The provider can now choose `InspectRepository`; the runtime safely executes
+  bounded read-only list/search/read tools and lets the loop continue into a
+  proposal step with persisted evidence. Stable request fingerprints block an
+  identical later request before duplicate search/read calls, and the Log shows
+  the active inspection budgets.
+- Malformed Agent Run Step decisions now get one bounded correction attempt.
+  Recovery and exhaustion evidence is persisted, and exhaustion fails closed
+  before tools, commands, or edits.
+- The live session now exposes cooperative pause/abort/resume controls. Pause
+  and abort stop after the current safe step; resume preserves the prior loop
+  and creates a linked recovery run.
 
 ## Next Implementation Order
 
-1. Broaden provider patch generation beyond exact text hunks while preserving
-   coordinated budgets, per-file review, and partial-write recovery.
-2. Split the combined agent-selected repository context action into
-   finer-grained search/read choices.
-3. Implement request-change revision from full diff review.
-4. Polish `10a` with durable file-level decisions and exact split-diff behavior.
+1. Add inspection result-quality evidence and persisted-loop restart recovery.
+2. Implement request-change revision from full diff review.
+3. Polish `10a` with durable file-level decisions and exact split-diff behavior.
+4. Extend Unified Diff to reviewed source create/delete and newline edge cases.
 5. Add `32a` chat-to-task polish once the live run works.

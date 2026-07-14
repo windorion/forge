@@ -142,14 +142,19 @@ struct AgentRunStep: Identifiable, Codable, Hashable {
     var status: String
     var summary: String
     var rationale: String
-    var searchTerms: [String]?
-    var readPaths: [String]?
-    var contextPaths: [String]?
-    var newContextPaths: [String]?
-    var contextOutcome: String?
     var commandID: String?
     var commandName: String?
     var commandRerunEvidenceID: String?
+    var searchTerms: [String]?
+    var readPaths: [String]?
+    var contextFilePaths: [String]?
+    var inspectionRequestFingerprint: String?
+    var inspectionBudgetSummary: String?
+    var inspectionSearchMode: String?
+    var inspectionSearchEngine: String?
+    var providerAttemptCount: Int?
+    var providerOutputRecovered: Bool?
+    var providerAttemptErrors: [String]?
     var targetID: String?
     var resultSummary: String?
     var error: String?
@@ -163,17 +168,12 @@ struct AgentRunLoop: Identifiable, Codable, Hashable {
     var status: String
     var maxSteps: Int
     var stepsRun: Int
-    var maxContextSteps: Int
-    var contextStepsRun: Int
-    var contextPaths: [String]
     var stepIDs: [String]
     var preferredCommandID: String?
-    var pauseRequestedAt: String?
-    var pausedAt: String?
-    var abortRequestedAt: String?
-    var abortedAt: String?
-    var resumedAt: String?
-    var resumeCount: Int
+    var resumedFromLoopID: String?
+    var resumedByLoopID: String?
+    var controlState: String?
+    var controlRequestedAt: String?
     var controlNote: String?
     var stopReason: String?
     var summary: String
@@ -772,6 +772,7 @@ struct ProposedFileOperation: Codable, Hashable {
     var findText: String?
     var replaceWith: String?
     var hunks: [PatchTextHunk]?
+    var patch: String?
     var content: String?
 }
 
@@ -798,18 +799,20 @@ struct EditProposal: Identifiable, Codable, Hashable {
     var rollbackNote: String?
     var validation: EditProposalValidation?
     var appliedFileChanges: [AppliedFileChange]?
-    var lastApplyAttempt: EditProposalApplyAttempt?
+    var applyTransaction: EditProposalFileTransaction?
+    var rollbackTransaction: EditProposalFileTransaction?
 }
 
-struct EditProposalApplyAttempt: Codable, Hashable {
+struct EditProposalFileTransaction: Identifiable, Codable, Hashable {
+    var id: String
+    var kind: String
     var status: String
-    var plannedPaths: [String]
-    var appliedPaths: [String]
-    var revertedPaths: [String]
+    var paths: [String]
     var summary: String
     var startedAt: String
-    var endedAt: String?
-    var error: String?
+    var completedAt: String?
+    var verifiedAt: String?
+    var recoverySummary: String?
 }
 
 struct AppliedFileChange: Identifiable, Codable, Hashable {
@@ -825,7 +828,9 @@ struct AppliedFileChange: Identifiable, Codable, Hashable {
     var beforeByteLength: Int?
     var afterByteLength: Int?
     var rollbackSnapshotPath: String?
+    var applyVerifiedAt: String?
     var rolledBackAt: String?
+    var rollbackVerifiedAt: String?
 }
 
 struct EditProposalValidation: Codable, Hashable {
@@ -923,11 +928,11 @@ struct RunAgentStepRequest: Encodable {
 struct RunAgentLoopRequest: Encodable {
     var preferredCommandID: String?
     var maxSteps: Int?
-    var maxContextSteps: Int?
+    var resumeLoopID: String?
 }
 
 struct AgentRunLoopControlRequest: Encodable {
-    var agentRunLoopID: String
+    var loopID: String?
     var note: String?
 }
 

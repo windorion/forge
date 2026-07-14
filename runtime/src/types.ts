@@ -29,6 +29,8 @@ export interface ApprovalRecord {
     | "Reject Edit Proposal"
     | "Approve Validation Preset"
     | "Cancel Task Command"
+    | "Pause Agent Loop"
+    | "Abort Agent Loop"
     | "Create Git Commit"
     | "Push Git Branch"
     | "Create Git Branch"
@@ -148,7 +150,7 @@ export interface ExecutionProposal {
 }
 
 export type AgentRunStepAction =
-  | "GatherRepositoryContext"
+  | "InspectRepository"
   | "GenerateEditProposal"
   | "RunTaskCommand"
   | "GenerateValidationRepairProposal"
@@ -156,20 +158,20 @@ export type AgentRunStepAction =
   | "WaitForHumanReview"
   | "RequestPlanApproval";
 
-export type AgentRunContextOutcome =
-  | "Expanded"
-  | "RepeatedRequest"
-  | "NoProgress"
-  | "BudgetReached";
+export type RepositoryInspectionSearchMode = "Text" | "Symbol";
 
 export interface AgentRunStepDecision {
   action: AgentRunStepAction;
   summary: string;
   rationale: string;
-  searchTerms?: string[];
-  readPaths?: string[];
   commandID?: string;
   commandRerunEvidenceID?: string;
+  searchTerms?: string[];
+  readPaths?: string[];
+  searchMode?: RepositoryInspectionSearchMode;
+  providerAttemptCount?: number;
+  providerOutputRecovered?: boolean;
+  providerAttemptErrors?: string[];
 }
 
 export interface AgentRunStep {
@@ -180,14 +182,19 @@ export interface AgentRunStep {
   status: "Running" | "Completed" | "Blocked" | "Failed";
   summary: string;
   rationale: string;
-  searchTerms?: string[];
-  readPaths?: string[];
-  contextPaths?: string[];
-  newContextPaths?: string[];
-  contextOutcome?: AgentRunContextOutcome;
   commandID?: string;
   commandName?: string;
   commandRerunEvidenceID?: string;
+  searchTerms?: string[];
+  readPaths?: string[];
+  contextFilePaths?: string[];
+  inspectionRequestFingerprint?: string;
+  inspectionBudgetSummary?: string;
+  inspectionSearchMode?: RepositoryInspectionSearchMode;
+  inspectionSearchEngine?: string;
+  providerAttemptCount?: number;
+  providerOutputRecovered?: boolean;
+  providerAttemptErrors?: string[];
   targetID?: string;
   resultSummary?: string;
   error?: string;
@@ -204,7 +211,6 @@ export type AgentRunLoopStopReason =
   | "MaxStepsReached"
   | "TaskBusy"
   | "NoProgress"
-  | "ContextBudgetReached"
   | "UserPaused"
   | "UserAborted";
 
@@ -214,17 +220,12 @@ export interface AgentRunLoop {
   status: "Running" | "Completed" | "Paused" | "Aborted" | "Failed";
   maxSteps: number;
   stepsRun: number;
-  maxContextSteps: number;
-  contextStepsRun: number;
-  contextPaths: string[];
   stepIDs: string[];
   preferredCommandID?: string;
-  pauseRequestedAt?: string;
-  pausedAt?: string;
-  abortRequestedAt?: string;
-  abortedAt?: string;
-  resumedAt?: string;
-  resumeCount: number;
+  resumedFromLoopID?: string;
+  resumedByLoopID?: string;
+  controlState?: "PauseRequested" | "AbortRequested";
+  controlRequestedAt?: string;
   controlNote?: string;
   stopReason?: AgentRunLoopStopReason;
   summary: string;
@@ -262,6 +263,11 @@ export interface PatchTextOperation {
   hunks: PatchTextHunk[];
 }
 
+export interface UnifiedDiffOperation {
+  kind: "UnifiedDiff";
+  patch: string;
+}
+
 export interface CreateFileOperation {
   kind: "CreateFile";
   content: string;
@@ -275,6 +281,7 @@ export type ProposedFileOperation =
   | AppendTextOperation
   | ReplaceTextOperation
   | PatchTextOperation
+  | UnifiedDiffOperation
   | CreateFileOperation
   | PreviewOnlyOperation;
 
@@ -311,18 +318,21 @@ export interface AppliedFileChange {
   beforeByteLength?: number;
   afterByteLength?: number;
   rollbackSnapshotPath?: string;
+  applyVerifiedAt?: string;
   rolledBackAt?: string;
+  rollbackVerifiedAt?: string;
 }
 
-export interface EditProposalApplyAttempt {
-  status: "Running" | "Applied" | "Reverted" | "Failed";
-  plannedPaths: string[];
-  appliedPaths: string[];
-  revertedPaths: string[];
+export interface EditProposalFileTransaction {
+  id: string;
+  kind: "Apply" | "Rollback";
+  status: "Running" | "Completed" | "Recovered" | "RecoveryFailed";
+  paths: string[];
   summary: string;
   startedAt: string;
-  endedAt?: string;
-  error?: string;
+  completedAt?: string;
+  verifiedAt?: string;
+  recoverySummary?: string;
 }
 
 export interface EditProposal {
@@ -343,7 +353,8 @@ export interface EditProposal {
   rollbackNote?: string;
   validation?: EditProposalValidation;
   appliedFileChanges?: AppliedFileChange[];
-  lastApplyAttempt?: EditProposalApplyAttempt;
+  applyTransaction?: EditProposalFileTransaction;
+  rollbackTransaction?: EditProposalFileTransaction;
 }
 
 export interface ToolCall {
@@ -899,11 +910,11 @@ export interface RunAgentStepRequest {
 export interface RunAgentLoopRequest {
   preferredCommandID?: string;
   maxSteps?: number;
-  maxContextSteps?: number;
+  resumeLoopID?: string;
 }
 
 export interface AgentRunLoopControlRequest {
-  agentRunLoopID?: string;
+  loopID?: string;
   note?: string;
 }
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -20,15 +20,12 @@ const appendSmokePath = `docs/${smokeID}-append.md`;
 const replaceSmokePath = `docs/${smokeID}-replace.md`;
 const sourceReplaceSmokePath = `runtime/src/${smokeID}-source-replace.ts`;
 const sourcePatchSmokePath = `runtime/src/${smokeID}-source-patch.ts`;
+const unifiedDiffSmokePathOne = `runtime/src/${smokeID}-unified-one.ts`;
+const unifiedDiffSmokePathTwo = `runtime/src/${smokeID}-unified-two.ts`;
 const createSmokePath = `docs/${smokeID}-openai-created.md`;
-const sourceCreateSmokePath = `runtime/src/${smokeID}-openai-created.ts`;
-const partialRecoveryDirectory = `runtime/src/${smokeID}-partial-recovery`;
-const partialRecoveryParentPath = `${partialRecoveryDirectory}/Makefile`;
-const partialRecoveryChildPath = `${partialRecoveryParentPath}/child.ts`;
 const binarySmokePath = `docs/${smokeID}-binary.bin`;
 const largeDiffSmokePath = `docs/${smokeID}-large-diff.txt`;
 const brokenTypeScriptSmokePath = `runtime/src/${smokeID}-broken.ts`;
-const agentContextSmokePath = "runtime/src/taskStore.ts";
 const branchSmokeName = `forge/${smokeID}-branch`;
 
 const smokeFiles = [
@@ -49,6 +46,26 @@ const smokeFiles = [
     initialContent: [
       "export const forgePatchSmokeOne = \"PATCH_OLD_ONE\";",
       "export const forgePatchSmokeTwo = \"PATCH_OLD_TWO\";",
+      ""
+    ].join("\n")
+  },
+  {
+    relativePath: unifiedDiffSmokePathOne,
+    initialContent: [
+      "export function forgeUnifiedGreeting(name: string) {",
+      "  const label = \"hello\";",
+      "  return `${label}, ${name}`;",
+      "}",
+      ""
+    ].join("\n")
+  },
+  {
+    relativePath: unifiedDiffSmokePathTwo,
+    initialContent: [
+      "export const forgeUnifiedRetry = {",
+      "  attempts: 2,",
+      "  backoff: true",
+      "};",
       ""
     ].join("\n")
   }
@@ -90,15 +107,18 @@ try {
     openAIAPIKey: "sk-forge-smoke"
   });
   const openAIContextTask = await runOpenAIContextFlow();
+  const openAIUnifiedDiffTask = await runOpenAIUnifiedDiffTransactionFlow();
+  const openAIApplyRecoveryTask = await runOpenAIApplyRecoveryFlow();
   const openAIAgentRunStepTask = await runOpenAIAgentRunStepFlow();
+  const openAIRepositoryInspectionTask = await runOpenAIRepositoryInspectionLoopFlow();
+  const openAIInspectionRepeatGuardTask = await runOpenAIInspectionRepeatGuardFlow();
+  const openAIAgentStepOutputRecoveryTask = await runOpenAIAgentStepOutputRecoveryFlow();
+  const openAIAgentStepOutputFailureTask = await runOpenAIAgentStepOutputFailureFlow();
   const openAIAgentRunLoopTask = await runOpenAIAgentRunLoopFlow();
-  const openAIAgentContextBudgetTask = await runOpenAIAgentContextBudgetFlow();
-  const openAIAgentLoopControlTasks = await runOpenAIAgentLoopControlFlow();
+  const openAIAgentLoopControlsTask = await runOpenAIAgentLoopControlsFlow();
   const openAIAutoRepairTask = await runOpenAIAutoRepairFlow();
   const openAIValidationRepairTask = await runOpenAIValidationFailureRepairFlow();
   const openAITaskCommandRepairTask = await runOpenAITaskCommandFailureRepairFlow();
-  const openAIPartialRecoveryTask = await runOpenAIPartialRecoveryFlow();
-  const openAIDuplicateTargetTask = await runOpenAIDuplicateTargetFlow();
   const openAIPreviewBlockedTask = await runOpenAIPreviewBlockedFlow();
 
   console.log("Core runtime smoke passed.");
@@ -110,16 +130,18 @@ try {
   console.log(`- Task command task: ${taskCommandTask.id}`);
   console.log(`- Cancelled task command task: ${cancelledTaskCommandTask.id}`);
   console.log(`- OpenAI context task: ${openAIContextTask.id}`);
+  console.log(`- OpenAI unified diff task: ${openAIUnifiedDiffTask.id}`);
+  console.log(`- OpenAI apply recovery task: ${openAIApplyRecoveryTask.id}`);
   console.log(`- OpenAI agent run step task: ${openAIAgentRunStepTask.id}`);
+  console.log(`- OpenAI repository inspection task: ${openAIRepositoryInspectionTask.id}`);
+  console.log(`- OpenAI inspection repeat guard task: ${openAIInspectionRepeatGuardTask.id}`);
+  console.log(`- OpenAI agent step output recovery task: ${openAIAgentStepOutputRecoveryTask.id}`);
+  console.log(`- OpenAI agent step output failure task: ${openAIAgentStepOutputFailureTask.id}`);
   console.log(`- OpenAI agent run loop task: ${openAIAgentRunLoopTask.id}`);
-  console.log(`- OpenAI agent context budget task: ${openAIAgentContextBudgetTask.id}`);
-  console.log(`- OpenAI paused/resumed agent loop task: ${openAIAgentLoopControlTasks.resumed.id}`);
-  console.log(`- OpenAI aborted agent loop task: ${openAIAgentLoopControlTasks.aborted.id}`);
+  console.log(`- OpenAI agent loop controls task: ${openAIAgentLoopControlsTask.id}`);
   console.log(`- OpenAI auto-repair task: ${openAIAutoRepairTask.id}`);
   console.log(`- OpenAI validation repair task: ${openAIValidationRepairTask.id}`);
   console.log(`- OpenAI task command repair task: ${openAITaskCommandRepairTask.id}`);
-  console.log(`- OpenAI partial apply recovery task: ${openAIPartialRecoveryTask.id}`);
-  console.log(`- OpenAI duplicate-target task: ${openAIDuplicateTargetTask.id}`);
   console.log(`- OpenAI preview-blocked task: ${openAIPreviewBlockedTask.id}`);
   console.log(`- Temporary database: ${dbPath}`);
 } finally {
@@ -650,8 +672,8 @@ async function runOpenAIContextFlow() {
   assertState(current, "Human Review", "Edit Proposal Review");
   assert(current.editProposal?.status === "Proposed", "OpenAI context flow did not create an edit proposal.");
   assert(
-    current.editProposal.fileChanges?.length === 3,
-    `Expected 3 coordinated OpenAI proposal changes, got ${current.editProposal.fileChanges?.length ?? 0}.`
+    current.editProposal.fileChanges?.length === 2,
+    `Expected 2 rich OpenAI proposal changes, got ${current.editProposal.fileChanges?.length ?? 0}.`
   );
   assert(
     current.editProposal.validation?.status === "Ready",
@@ -665,14 +687,6 @@ async function runOpenAIContextFlow() {
     ),
     "Rich OpenAI proposal did not retain the create-file operation."
   );
-  assert(
-    current.editProposal.fileChanges?.some((change) =>
-      change.path === sourceCreateSmokePath &&
-        change.changeType === "Create" &&
-        change.applyOperation?.kind === "CreateFile"
-    ),
-    "Rich OpenAI proposal did not retain the allowlisted source create-file operation."
-  );
 
   current = await post(`/tasks/${task.id}/apply-edit-proposal`, {
     note: "Core smoke test applies the OpenAI append/create proposal."
@@ -682,28 +696,138 @@ async function runOpenAIContextFlow() {
     current.changedFiles?.includes(createSmokePath),
     `Changed files did not include created file ${createSmokePath}.`
   );
-  assert(
-    current.changedFiles?.includes(sourceCreateSmokePath),
-    `Changed files did not include created source file ${sourceCreateSmokePath}.`
-  );
   const created = await readFile(join(repoRoot, createSmokePath), "utf8");
   assert(created.includes("Preview created by the OpenAI smoke flow."), "CreateFile smoke did not write expected content.");
-  const createdSource = await readFile(join(repoRoot, sourceCreateSmokePath), "utf8");
-  assert(createdSource.includes("forgeOpenAICreatedSmoke"), "Source CreateFile smoke did not write expected content.");
-  assert(
-    current.editProposal.lastApplyAttempt?.status === "Applied" &&
-      current.editProposal.lastApplyAttempt.appliedPaths?.length === 3,
-    "Coordinated apply attempt did not persist all applied paths."
+
+  return current;
+}
+
+async function runOpenAIUnifiedDiffTransactionFlow() {
+  const task = await createTask({
+    title: "OpenAI unified diff transaction smoke",
+    objective: `Apply a reviewed cross-file unified diff to @${unifiedDiffSmokePathOne} and @${unifiedDiffSmokePathTwo}, then verify rollback.`
+  });
+
+  await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "unified diff task to reach initial plan review"
   );
-  assertAppliedChangeMetadata(current, sourceCreateSmokePath, "CreateFile");
+
+  let current = await post(`/tasks/${task.id}/generate-plan-revision`, {});
+  assertState(current, "Human Review", "Plan Review");
+
+  current = await post(`/tasks/${task.id}/approve-plan`, {
+    note: "Core smoke test approves the cross-file unified diff plan."
+  });
+  assert(current.executionProposal, "Unified diff flow did not create an execution proposal.");
+
+  current = await post(`/tasks/${task.id}/generate-edit-proposal`, {});
+  assert(current.editProposal?.status === "Proposed", "Unified diff flow did not create a proposed edit.");
+  assert(current.editProposal?.fileChanges?.length === 2, "Unified diff flow did not propose two file changes.");
+  assert(
+    current.editProposal.fileChanges.every((change) => change.applyOperation?.kind === "UnifiedDiff"),
+    "Unified diff flow did not normalize both operations as UnifiedDiff."
+  );
+  assert(
+    current.editProposal.validation?.fileResults?.every((result) =>
+      result.status === "Ready" &&
+      result.checks?.some((check) => check.includes("context and deletion line matches"))
+    ),
+    "Unified diff validation did not record strict context matching for both files."
+  );
+
+  current = await post(`/tasks/${task.id}/apply-edit-proposal`, {
+    note: "Core smoke test applies the cross-file unified diff transaction."
+  });
+  assertState(current, "Completed", "Validation Passed");
+  assert(current.editProposal?.applyTransaction?.status === "Completed", "Unified diff apply transaction did not complete.");
+  assert(current.editProposal.applyTransaction.paths?.length === 2, "Unified diff apply transaction did not record two paths.");
+  assert(current.editProposal.applyTransaction.verifiedAt, "Unified diff apply transaction did not record verification.");
+
+  const firstApplied = await readFile(join(repoRoot, unifiedDiffSmokePathOne), "utf8");
+  const secondApplied = await readFile(join(repoRoot, unifiedDiffSmokePathTwo), "utf8");
+  assert(firstApplied.includes('const punctuation = "!";'), "Unified diff did not add the first-file line.");
+  assert(firstApplied.includes("${name}${punctuation}"), "Unified diff did not rewrite the first-file return line.");
+  assert(secondApplied.includes("attempts: 3"), "Unified diff did not update the second-file value.");
+  assert(!secondApplied.includes("backoff"), "Unified diff did not delete the second-file line.");
+  for (const expectedPath of [unifiedDiffSmokePathOne, unifiedDiffSmokePathTwo]) {
+    const applied = assertAppliedChangeMetadata(current, expectedPath, "UnifiedDiff");
+    assert(applied.applyVerifiedAt, `Unified diff apply did not verify ${expectedPath}.`);
+  }
 
   current = await post(`/tasks/${task.id}/rollback-edit-proposal`, {
-    note: "Core smoke test rolls back the coordinated Markdown/source proposal."
+    note: "Core smoke test rolls back the cross-file unified diff transaction."
   });
   assertState(current, "Human Review", "Rollback Applied");
-  assert(current.editProposal?.status === "RolledBack", "Coordinated rollback did not mark the proposal RolledBack.");
-  await assertFileMissing(createSmokePath);
-  await assertFileMissing(sourceCreateSmokePath);
+  assert(current.editProposal?.rollbackTransaction?.status === "Completed", "Unified diff rollback transaction did not complete.");
+  assert(current.editProposal.rollbackTransaction.verifiedAt, "Unified diff rollback transaction did not record verification.");
+  for (const expectedPath of [unifiedDiffSmokePathOne, unifiedDiffSmokePathTwo]) {
+    const applied = assertAppliedChangeMetadata(current, expectedPath, "UnifiedDiff");
+    assert(applied.rollbackVerifiedAt, `Unified diff rollback did not verify ${expectedPath}.`);
+  }
+
+  const firstRestored = await readFile(join(repoRoot, unifiedDiffSmokePathOne), "utf8");
+  const secondRestored = await readFile(join(repoRoot, unifiedDiffSmokePathTwo), "utf8");
+  assert(firstRestored.includes('const label = "hello";'), "Unified diff rollback did not restore the first file.");
+  assert(!firstRestored.includes("punctuation"), "Unified diff rollback left added first-file content.");
+  assert(secondRestored.includes("attempts: 2"), "Unified diff rollback did not restore the second-file value.");
+  assert(secondRestored.includes("backoff: true"), "Unified diff rollback did not restore the deleted line.");
+
+  return current;
+}
+
+async function runOpenAIApplyRecoveryFlow() {
+  const task = await createTask({
+    title: "OpenAI apply recovery smoke",
+    objective: `Verify automatic cross-file apply recovery for @${unifiedDiffSmokePathOne} and @${unifiedDiffSmokePathTwo}.`
+  });
+
+  await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "apply recovery task to reach initial plan review"
+  );
+
+  let current = await post(`/tasks/${task.id}/generate-plan-revision`, {});
+  current = await post(`/tasks/${task.id}/approve-plan`, {
+    note: "Core smoke test approves the recoverable cross-file apply."
+  });
+  current = await post(`/tasks/${task.id}/generate-edit-proposal`, {});
+  assert(current.editProposal?.validation?.status === "Ready", "Apply recovery proposal was not ready before fault injection.");
+
+  const protectedPath = join(repoRoot, unifiedDiffSmokePathTwo);
+  await chmod(protectedPath, 0o444);
+  try {
+    const failedApply = await postExpectError(`/tasks/${task.id}/apply-edit-proposal`, {
+      note: "Core smoke test intentionally makes the second file read-only."
+    });
+    assert(failedApply.status === 500, `Expected recoverable apply to fail with 500, got ${failedApply.status}.`);
+    assert(
+      failedApply.text.includes("Automatic recovery restored and verified 1 previously written file"),
+      `Apply recovery response did not include compensation evidence: ${failedApply.text}`
+    );
+
+    const taskList = await get("/tasks");
+    current = taskList.tasks?.find((candidate) => candidate.id === task.id);
+    assert(current, "Recovered apply task was not present in the task list.");
+    assertState(current, "Failed", "Apply Recovered");
+    assert(current.editProposal?.status === "Proposed", "Recovered apply should keep the proposal reviewable.");
+    assert(current.editProposal?.applyTransaction?.status === "Recovered", "Apply transaction was not marked Recovered.");
+    assert(current.editProposal.applyTransaction.verifiedAt, "Recovered apply transaction did not record verification.");
+    assert(
+      current.events?.some((event) => event.type === "edit.proposal.apply.recovered"),
+      "Recovered apply did not record the recovery event."
+    );
+
+    const firstRestored = await readFile(join(repoRoot, unifiedDiffSmokePathOne), "utf8");
+    const secondUntouched = await readFile(protectedPath, "utf8");
+    assert(firstRestored.includes('const label = "hello";'), "Apply recovery did not restore the first file.");
+    assert(!firstRestored.includes("punctuation"), "Apply recovery left the first file partially changed.");
+    assert(secondUntouched.includes("attempts: 2"), "Faulted second file should remain unchanged.");
+  } finally {
+    await chmod(protectedPath, 0o644);
+  }
 
   return current;
 }
@@ -724,24 +848,6 @@ async function runOpenAIAgentRunStepFlow() {
     note: "Core smoke test approves the agent run step plan."
   });
   assert(current.executionProposal, "OpenAI agent run step flow did not create an execution proposal.");
-
-  const contextStep = await collectRuntimeEventsDuring(
-    () => post(`/tasks/${task.id}/run-agent-step`, {}),
-    (event, result) => event.type === "agent.run_step.completed" && event.data?.taskID === result.id
-  );
-  current = contextStep.result;
-  assertState(current, "Human Review", "Agent Context Ready");
-  const gatheredStep = current.agentRunSteps?.at(-1);
-  assert(gatheredStep?.action === "GatherRepositoryContext", `Expected GatherRepositoryContext, got ${gatheredStep?.action}.`);
-  assert(gatheredStep.status === "Completed", `Expected context step Completed, got ${gatheredStep.status}.`);
-  assert(gatheredStep.searchTerms?.includes("agent-run-step"), "Agent context step did not retain normalized search terms.");
-  assert(gatheredStep.readPaths?.includes(appendSmokePath), "Agent context step did not retain the safe requested read path.");
-  assert(!gatheredStep.readPaths?.some((readPath) => readPath.includes(".forge")), "Agent context step retained a blocked internal read path.");
-  assert(gatheredStep.contextPaths?.includes(appendSmokePath), "Agent context step did not retain inspected context paths.");
-  assert(
-    contextStep.events.some((event) => event.type === "tool.completed" && event.data?.taskID === current.id),
-    "Agent context step did not stream nested read-only tool completion."
-  );
 
   const proposalStep = await collectRuntimeEventsDuring(
     () => post(`/tasks/${task.id}/run-agent-step`, {}),
@@ -809,6 +915,160 @@ async function runOpenAIAgentRunStepFlow() {
   return current;
 }
 
+async function runOpenAIRepositoryInspectionLoopFlow() {
+  const task = await createTask({
+    title: "Smoke agent repository inspection",
+    objective: "Let the bounded agent loop choose one read-only repository inspection before proposing work."
+  });
+
+  await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "repository inspection task to reach initial plan review"
+  );
+
+  let current = await post(`/tasks/${task.id}/approve-plan`, {
+    note: "Core smoke test approves read-only inspection before proposal generation."
+  });
+  const contextBefore = new Set(current.contextFiles?.map((file) => file.path));
+  assert(!contextBefore.has("apps/macos/Sources/ForgeApp/KeychainStore.swift"), "Inspection fixture path was already in context.");
+
+  current = await post(`/tasks/${task.id}/run-agent-loop`, { maxSteps: 3 });
+  const loop = current.agentRunLoops?.at(-1);
+  const loopSteps = loop?.stepIDs?.map((stepID) => current.agentRunSteps.find((step) => step.id === stepID));
+  assert(loopSteps?.[0]?.action === "InspectRepository", `Expected InspectRepository first, got ${loopSteps?.[0]?.action}.`);
+  assert(loopSteps?.[0]?.status === "Completed", "Repository inspection step did not complete.");
+  assert(
+    loopSteps?.[0]?.contextFilePaths?.includes("apps/macos/Sources/ForgeApp/KeychainStore.swift"),
+    "Repository inspection did not record the provider-requested safe read path."
+  );
+  assert(loopSteps?.[1]?.action === "GenerateEditProposal", `Expected proposal second, got ${loopSteps?.[1]?.action}.`);
+  assert(current.editProposal?.status === "Proposed", "Repository inspection loop did not reach proposal review.");
+  assert(
+    current.contextFiles?.some((file) => file.path === "apps/macos/Sources/ForgeApp/KeychainStore.swift"),
+    "Repository inspection did not merge new context into task state."
+  );
+  assert(
+    current.toolCalls?.some((tool) => tool.name === "list_repo_files") &&
+      current.toolCalls?.some((tool) => tool.name === "search_repository_text") &&
+      current.toolCalls?.some((tool) => tool.name === "read_context_file"),
+    "Repository inspection did not execute the runtime-owned read-only tool chain."
+  );
+  assert(
+    current.events?.some((event) => event.type === "agent.repository_inspection.completed"),
+    "Repository inspection did not record its completion event."
+  );
+
+  return current;
+}
+
+async function runOpenAIAgentStepOutputRecoveryFlow() {
+  const task = await createTask({
+    title: "Smoke provider output recovery",
+    objective: "Recover one malformed provider agent-step decision without executing side effects."
+  });
+
+  const before = await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "provider output recovery task to reach plan review"
+  );
+  const toolCallCountBefore = before.toolCalls?.length ?? 0;
+  const commandRunCountBefore = before.taskCommandRuns?.length ?? 0;
+
+  const current = await post(`/tasks/${task.id}/run-agent-loop`, { maxSteps: 2 });
+  const loop = current.agentRunLoops?.at(-1);
+  const step = current.agentRunSteps?.find((candidate) => candidate.id === loop?.stepIDs?.at(-1));
+  assert(loop?.status === "Paused", `Expected recovered-output loop Paused, got ${loop?.status}.`);
+  assert(loop.stopReason === "StepBlocked", `Expected recovered-output StepBlocked, got ${loop.stopReason}.`);
+  assert(step?.action === "RequestPlanApproval", `Expected recovered RequestPlanApproval, got ${step?.action}.`);
+  assert(step.status === "Blocked", `Expected recovered decision to reach its safe review gate, got ${step.status}.`);
+  assert(step.providerAttemptCount === 2, `Expected two provider attempts, got ${step.providerAttemptCount}.`);
+  assert(step.providerOutputRecovered === true, "Recovered provider decision did not retain recovery evidence.");
+  assert(step.providerAttemptErrors?.length === 1, "Recovered provider decision did not retain the first format error.");
+  assert(current.toolCalls?.length === toolCallCountBefore, "Malformed provider output recovery unexpectedly executed a tool.");
+  assert(current.taskCommandRuns?.length === commandRunCountBefore, "Malformed provider output recovery unexpectedly ran a command.");
+
+  return current;
+}
+
+async function runOpenAIInspectionRepeatGuardFlow() {
+  const task = await createTask({
+    title: "Smoke inspection repeat guard",
+    objective: "Block a repeated provider-selected repository inspection before duplicate search and read calls."
+  });
+
+  await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "inspection repeat guard task to reach plan review"
+  );
+  const before = await post(`/tasks/${task.id}/approve-plan`, {
+    note: "Core smoke test approves the repeated-inspection guard flow."
+  });
+  const searchCallsBefore = before.toolCalls?.filter((tool) => tool.name === "search_repository_symbols").length ?? 0;
+  const readCallsBefore = before.toolCalls?.filter((tool) => tool.name === "read_context_file").length ?? 0;
+
+  const current = await post(`/tasks/${task.id}/run-agent-loop`, { maxSteps: 3 });
+  const loop = current.agentRunLoops?.at(-1);
+  const steps = loop?.stepIDs?.map((stepID) => current.agentRunSteps?.find((step) => step.id === stepID));
+  assert(loop?.status === "Paused", `Expected repeated-inspection loop Paused, got ${loop?.status}.`);
+  assert(loop.stopReason === "StepBlocked", `Expected repeated-inspection StepBlocked, got ${loop.stopReason}.`);
+  assert(steps?.length === 2, `Expected two inspection attempts, got ${steps?.length}.`);
+  assert(steps?.every((step) => step?.action === "InspectRepository"), "Repeat guard flow did not record two inspection decisions.");
+  assert(steps?.[0]?.status === "Completed", "First inspection did not complete.");
+  assert(steps?.[1]?.status === "Blocked", "Repeated inspection was not blocked.");
+  assert(
+    steps?.[0]?.inspectionRequestFingerprint === steps?.[1]?.inspectionRequestFingerprint,
+    "Repeated inspection steps did not retain the same request fingerprint."
+  );
+  assert(steps?.[0]?.inspectionBudgetSummary?.includes("scan<=400"), "Inspection step did not retain visible budget evidence.");
+  assert(steps?.[0]?.inspectionSearchMode === "Symbol", "Inspection step did not retain the selected Symbol mode.");
+  assert(steps?.[0]?.inspectionSearchEngine === "ripgrep-word", `Expected ripgrep-word, got ${steps?.[0]?.inspectionSearchEngine}.`);
+  assert(
+    (current.toolCalls?.filter((tool) => tool.name === "search_repository_symbols").length ?? 0) - searchCallsBefore === 1,
+    "Repeated inspection executed a duplicate repository search."
+  );
+  assert(
+    (current.toolCalls?.filter((tool) => tool.name === "read_context_file").length ?? 0) - readCallsBefore ===
+      (steps?.[0]?.contextFilePaths?.length ?? 0),
+    "Repeated inspection executed a duplicate context read."
+  );
+
+  return current;
+}
+
+async function runOpenAIAgentStepOutputFailureFlow() {
+  const task = await createTask({
+    title: "Smoke provider output retry exhaustion",
+    objective: "Fail closed after repeated malformed provider agent-step decisions."
+  });
+
+  const before = await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "provider output retry exhaustion task to reach plan review"
+  );
+  const toolCallCountBefore = before.toolCalls?.length ?? 0;
+  const commandRunCountBefore = before.taskCommandRuns?.length ?? 0;
+
+  const current = await post(`/tasks/${task.id}/run-agent-loop`, { maxSteps: 2 });
+  const loop = current.agentRunLoops?.at(-1);
+  const step = current.agentRunSteps?.find((candidate) => candidate.id === loop?.stepIDs?.at(-1));
+  assert(loop?.status === "Failed", `Expected exhausted-output loop Failed, got ${loop?.status}.`);
+  assert(loop.stopReason === "StepFailed", `Expected exhausted-output StepFailed, got ${loop.stopReason}.`);
+  assert(step?.status === "Failed", `Expected exhausted provider decision step Failed, got ${step?.status}.`);
+  assert(step.action === "WaitForHumanReview", `Expected fail-closed WaitForHumanReview, got ${step.action}.`);
+  assert(step.providerAttemptCount === 2, `Expected exhausted provider decision to record two attempts, got ${step.providerAttemptCount}.`);
+  assert(step.providerOutputRecovered === false, "Exhausted provider decision was incorrectly marked recovered.");
+  assert(step.providerAttemptErrors?.length === 2, "Exhausted provider decision did not retain both bounded errors.");
+  assert(current.events?.some((event) => event.type === "agent.run_step.failed"), "Exhausted provider retry did not emit a failed step event.");
+  assert(current.toolCalls?.length === toolCallCountBefore, "Exhausted malformed output unexpectedly executed a tool.");
+  assert(current.taskCommandRuns?.length === commandRunCountBefore, "Exhausted malformed output unexpectedly ran a command.");
+
+  return current;
+}
+
 async function runOpenAIAgentRunLoopFlow() {
   const task = await createTask({
     title: "Smoke OpenAI agent run loop",
@@ -827,7 +1087,7 @@ async function runOpenAIAgentRunLoopFlow() {
   assert(current.executionProposal, "OpenAI agent run loop flow did not create an execution proposal.");
 
   const proposalLoop = await collectRuntimeEventsDuring(
-    () => post(`/tasks/${task.id}/run-agent-loop`, { maxSteps: 4, maxContextSteps: 2 }),
+    () => post(`/tasks/${task.id}/run-agent-loop`, { maxSteps: 4 }),
     (event, result) => event.type === "agent.run_loop.paused" && event.data?.taskID === result.id
   );
   current = proposalLoop.result;
@@ -836,21 +1096,10 @@ async function runOpenAIAgentRunLoopFlow() {
   const firstLoop = current.agentRunLoops?.at(-1);
   assert(firstLoop?.status === "Paused", `Expected first agent loop Paused, got ${firstLoop?.status}.`);
   assert(firstLoop.stopReason === "HumanReviewRequired", `Expected HumanReviewRequired, got ${firstLoop.stopReason}.`);
-  assert(firstLoop.stepsRun === 3, `Expected two context steps plus proposal generation before review, got ${firstLoop.stepsRun}.`);
-  assert(firstLoop.maxContextSteps === 2, `Expected a two-step context budget, got ${firstLoop.maxContextSteps}.`);
-  assert(firstLoop.contextStepsRun === 2, `Expected two completed context steps, got ${firstLoop.contextStepsRun}.`);
-  const firstLoopSteps = firstLoop.stepIDs.map((id) => current.agentRunSteps?.find((step) => step.id === id));
-  assert(firstLoopSteps[0]?.action === "GatherRepositoryContext", `Expected loop GatherRepositoryContext, got ${firstLoopSteps[0]?.action}.`);
-  assert(firstLoopSteps[0]?.contextPaths?.includes(appendSmokePath), "Agent loop context step did not inspect the referenced fixture.");
-  assert(!firstLoopSteps[0]?.readPaths?.some((readPath) => readPath.includes("..")), "Agent loop context step retained an unsafe parent path.");
-  assert(firstLoopSteps[0]?.contextOutcome === "Expanded", `Expected first context step Expanded, got ${firstLoopSteps[0]?.contextOutcome}.`);
-  assert(firstLoopSteps[1]?.action === "GatherRepositoryContext", `Expected second loop GatherRepositoryContext, got ${firstLoopSteps[1]?.action}.`);
-  assert(firstLoopSteps[1]?.newContextPaths?.includes(agentContextSmokePath), "Second context step did not add the requested persistence file.");
-  assert(firstLoopSteps[1]?.contextOutcome === "Expanded", `Expected second context step Expanded, got ${firstLoopSteps[1]?.contextOutcome}.`);
-  assert(firstLoop.contextPaths?.includes(appendSmokePath), "Agent loop did not aggregate the first context path.");
-  assert(firstLoop.contextPaths?.includes(agentContextSmokePath), "Agent loop did not aggregate the second context path.");
-  assert(firstLoopSteps[2]?.action === "GenerateEditProposal", `Expected loop GenerateEditProposal, got ${firstLoopSteps[2]?.action}.`);
-  assert(firstLoopSteps.every((step) => step?.loopID === firstLoop.id), "Agent loop did not link its context/proposal steps.");
+  assert(firstLoop.stepsRun === 1, `Expected one loop step before proposal review, got ${firstLoop.stepsRun}.`);
+  const firstLoopStep = current.agentRunSteps?.find((step) => step.id === firstLoop.stepIDs.at(-1));
+  assert(firstLoopStep?.action === "GenerateEditProposal", `Expected loop GenerateEditProposal, got ${firstLoopStep?.action}.`);
+  assert(firstLoopStep.loopID === firstLoop.id, "Agent loop did not link its generated proposal step.");
   assert(
     proposalLoop.events.some((event) => event.type === "agent.run_loop.started" && event.data?.taskID === current.id),
     "Agent run loop did not stream the started event for proposal loop."
@@ -918,176 +1167,107 @@ async function runOpenAIAgentRunLoopFlow() {
   return current;
 }
 
-async function runOpenAIAgentContextBudgetFlow() {
+async function runOpenAIAgentLoopControlsFlow() {
   const task = await createTask({
-    title: "Smoke OpenAI agent context budget",
-    objective: `Run an agent context budget smoke against @${appendSmokePath}.`
+    title: "Smoke agent loop controls",
+    objective: "Pause, resume, and abort a bounded agent loop at safe checkpoints."
   });
 
   await waitForTask(
     task.id,
     (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
-    "OpenAI agent context budget task to reach initial plan review"
+    "agent loop controls task to reach initial plan review"
   );
 
   let current = await post(`/tasks/${task.id}/approve-plan`, {
-    note: "Core smoke test approves the context budget plan."
+    note: "Core smoke test approves the agent loop controls plan."
   });
-  assert(current.executionProposal, "Agent context budget flow did not create an execution proposal.");
+  current = await post(`/tasks/${task.id}/approve-validation-preset`, {
+    presetID: "smoke-task-commands",
+    note: "Core smoke test approves the long command used for cooperative loop controls."
+  });
 
-  const noProgressLoop = await collectRuntimeEventsDuring(
-    () => post(`/tasks/${task.id}/run-agent-loop`, { maxSteps: 3, maxContextSteps: 2 }),
-    (event, result) => event.type === "agent.run_loop.paused" && event.data?.taskID === result.id
+  const firstLoopPromise = post(`/tasks/${task.id}/run-agent-loop`, {
+    preferredCommandID: "smoke-long-task-command",
+    maxSteps: 2
+  });
+  const firstRunning = await waitForTask(
+    task.id,
+    (candidate) =>
+      candidate.agentRunLoops?.at(-1)?.status === "Running" &&
+      candidate.taskCommandRuns?.at(-1)?.commandID === "smoke-long-task-command" &&
+      candidate.taskCommandRuns?.at(-1)?.status === "Running",
+    "first controlled agent loop to run its long command"
   );
-  current = noProgressLoop.result;
-  assertState(current, "Human Review", "Agent Loop Paused");
-  const stalledLoop = current.agentRunLoops?.at(-1);
-  assert(stalledLoop?.stopReason === "NoProgress", `Expected NoProgress, got ${stalledLoop?.stopReason}.`);
-  assert(stalledLoop.contextStepsRun === 1, `Expected one productive context step, got ${stalledLoop.contextStepsRun}.`);
-  assert(stalledLoop.stepsRun === 2, `Expected one productive and one stalled context step, got ${stalledLoop.stepsRun}.`);
-  const stalledSteps = stalledLoop.stepIDs.map((id) => current.agentRunSteps?.find((step) => step.id === id));
-  assert(stalledSteps[0]?.contextOutcome === "Expanded", `Expected first context outcome Expanded, got ${stalledSteps[0]?.contextOutcome}.`);
-  assert(stalledSteps[1]?.contextOutcome === "NoProgress", `Expected second context outcome NoProgress, got ${stalledSteps[1]?.contextOutcome}.`);
-
-  const budgetLoop = await collectRuntimeEventsDuring(
-    () => post(`/tasks/${task.id}/run-agent-loop`, { maxSteps: 3, maxContextSteps: 1 }),
-    (event, result) => event.type === "agent.run_loop.paused" && event.data?.taskID === result.id
-  );
-  current = budgetLoop.result;
-  assertState(current, "Human Review", "Agent Loop Paused");
-  const loop = current.agentRunLoops?.at(-1);
-  assert(loop?.status === "Paused", `Expected context budget loop Paused, got ${loop?.status}.`);
-  assert(loop.stopReason === "ContextBudgetReached", `Expected ContextBudgetReached, got ${loop.stopReason}.`);
-  assert(loop.maxContextSteps === 1, `Expected context budget 1, got ${loop.maxContextSteps}.`);
-  assert(loop.contextStepsRun === 1, `Expected one completed context step, got ${loop.contextStepsRun}.`);
-  assert(loop.stepsRun === 2, `Expected one context step and one blocked over-budget attempt, got ${loop.stepsRun}.`);
-  const steps = loop.stepIDs.map((id) => current.agentRunSteps?.find((step) => step.id === id));
-  assert(steps[0]?.contextOutcome === "Expanded", `Expected first budget context step Expanded, got ${steps[0]?.contextOutcome}.`);
-  assert(steps[1]?.status === "Blocked", `Expected over-budget step Blocked, got ${steps[1]?.status}.`);
-  assert(steps[1]?.contextOutcome === "BudgetReached", `Expected over-budget outcome BudgetReached, got ${steps[1]?.contextOutcome}.`);
+  const firstLoop = firstRunning.agentRunLoops.at(-1);
+  const pauseRequested = await post(`/tasks/${task.id}/pause-agent-loop`, {
+    loopID: firstLoop.id,
+    note: "Pause after the current approved command."
+  });
   assert(
-    budgetLoop.events.some((event) => event.type === "agent.run_step.blocked" && event.data?.taskID === current.id),
-    "Agent context budget flow did not stream the blocked step."
+    pauseRequested.agentRunLoops.at(-1)?.controlState === "PauseRequested",
+    "Pause request did not persist on the active loop."
   );
+  current = await firstLoopPromise;
+  const pausedLoop = current.agentRunLoops.find((loop) => loop.id === firstLoop.id);
+  assert(pausedLoop?.status === "Paused", `Expected controlled loop Paused, got ${pausedLoop?.status}.`);
+  assert(pausedLoop.stopReason === "UserPaused", `Expected UserPaused, got ${pausedLoop.stopReason}.`);
+  assert(
+    current.approvals?.some((approval) => approval.action === "Pause Agent Loop" && approval.targetID === firstLoop.id),
+    "Pause request did not record an approval/audit entry."
+  );
+  assert(
+    current.events?.some((event) => event.type === "agent.run_loop.pause.requested") &&
+      current.events?.some((event) => event.type === "agent.run_loop.paused"),
+    "Pause lifecycle events were not recorded."
+  );
+
+  const resumePromise = post(`/tasks/${task.id}/resume-agent-loop`, {
+    resumeLoopID: firstLoop.id,
+    preferredCommandID: "smoke-long-task-command",
+    maxSteps: 2
+  });
+  const resumedRunning = await waitForTask(
+    task.id,
+    (candidate) =>
+      candidate.agentRunLoops?.length >= 2 &&
+      candidate.agentRunLoops?.at(-1)?.status === "Running" &&
+      candidate.agentRunLoops?.at(-1)?.resumedFromLoopID === firstLoop.id &&
+      candidate.taskCommandRuns?.at(-1)?.status === "Running",
+    "resumed agent loop to run its long command"
+  );
+  const resumedLoop = resumedRunning.agentRunLoops.at(-1);
+  const abortRequested = await post(`/tasks/${task.id}/abort-agent-loop`, {
+    loopID: resumedLoop.id,
+    note: "Abort after the current approved command."
+  });
+  assert(
+    abortRequested.agentRunLoops.at(-1)?.controlState === "AbortRequested",
+    "Abort request did not persist on the resumed loop."
+  );
+  current = await resumePromise;
+  const abortedLoop = current.agentRunLoops.find((loop) => loop.id === resumedLoop.id);
+  const linkedSourceLoop = current.agentRunLoops.find((loop) => loop.id === firstLoop.id);
+  assert(abortedLoop?.status === "Aborted", `Expected resumed loop Aborted, got ${abortedLoop?.status}.`);
+  assert(abortedLoop.stopReason === "UserAborted", `Expected UserAborted, got ${abortedLoop.stopReason}.`);
+  assert(linkedSourceLoop?.resumedByLoopID === resumedLoop.id, "Paused loop did not link to the resumed loop.");
+  assert(
+    current.approvals?.some((approval) => approval.action === "Abort Agent Loop" && approval.targetID === resumedLoop.id),
+    "Abort request did not record an approval/audit entry."
+  );
+  assert(
+    current.events?.some((event) => event.type === "agent.run_loop.resumed") &&
+      current.events?.some((event) => event.type === "agent.run_loop.abort.requested") &&
+      current.events?.some((event) => event.type === "agent.run_loop.aborted"),
+    "Resume/abort lifecycle events were not recorded."
+  );
+
+  const inactiveControl = await postExpectError(`/tasks/${task.id}/pause-agent-loop`, {
+    loopID: resumedLoop.id
+  });
+  assert(inactiveControl.status === 409, "Controlling an inactive loop should be rejected.");
 
   return current;
-}
-
-async function runOpenAIAgentLoopControlFlow() {
-  const pauseTask = await createTask({
-    title: "Smoke OpenAI agent loop pause resume",
-    objective: `Run an agent loop pause resume smoke against @${appendSmokePath}.`
-  });
-  await waitForTask(
-    pauseTask.id,
-    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
-    "OpenAI agent loop pause/resume task to reach initial plan review"
-  );
-  await post(`/tasks/${pauseTask.id}/approve-plan`, {
-    note: "Core smoke test approves the pause/resume plan."
-  });
-
-  const pausedRun = await collectRuntimeEventsDuring(
-    async () => {
-      const runPromise = post(`/tasks/${pauseTask.id}/run-agent-loop`, { maxSteps: 4, maxContextSteps: 2 });
-      const running = await waitForTask(
-        pauseTask.id,
-        (candidate) => candidate.agentRunLoops?.at(-1)?.status === "Running",
-        "agent loop to start before pause"
-      );
-      const loop = running.agentRunLoops.at(-1);
-      const pauseRequested = await post(`/tasks/${pauseTask.id}/pause-agent-loop`, {
-        agentRunLoopID: loop.id,
-        note: "Core smoke requests a cooperative pause."
-      });
-      assert(pauseRequested.agentRunLoops.at(-1)?.pauseRequestedAt, "Pause request timestamp was not persisted.");
-      return runPromise;
-    },
-    (event, result) => event.type === "agent.run_loop.paused" && event.data?.taskID === result.id
-  );
-  let pausedTask = pausedRun.result;
-  let loop = pausedTask.agentRunLoops.at(-1);
-  assertState(pausedTask, "Human Review", "Agent Loop Paused");
-  assert(loop.status === "Paused", `Expected user-paused loop Paused, got ${loop.status}.`);
-  assert(loop.stopReason === "UserPaused", `Expected UserPaused, got ${loop.stopReason}.`);
-  assert(loop.stepsRun === 1, `Expected one completed step before pause, got ${loop.stepsRun}.`);
-  assert(loop.resumeCount === 0, `Expected zero resumes before resume call, got ${loop.resumeCount}.`);
-  assert(
-    pausedRun.events.some((event) => event.type === "agent.run_loop.pause_requested" && event.data?.taskID === pauseTask.id),
-    "Pause flow did not stream pause_requested."
-  );
-
-  const resumedRun = await collectRuntimeEventsDuring(
-    () => post(`/tasks/${pauseTask.id}/resume-agent-loop`, {
-      agentRunLoopID: loop.id,
-      note: "Core smoke resumes the same loop."
-    }),
-    (event, result) => event.type === "agent.run_loop.paused" && event.data?.taskID === result.id
-  );
-  pausedTask = resumedRun.result;
-  loop = pausedTask.agentRunLoops.at(-1);
-  assert(pausedTask.status === "Human Review", `Expected resumed task Human Review, got ${pausedTask.status}.`);
-  assert(
-    pausedTask.currentPhase === "Edit Proposal Review" || pausedTask.currentPhase === "Edit Proposal Validation Blocked",
-    `Expected resumed task to stop at edit proposal review, got ${pausedTask.currentPhase}.`
-  );
-  assert(loop.id === pausedRun.result.agentRunLoops.at(-1).id, "Resume created a new loop instead of continuing the existing loop.");
-  assert(loop.status === "Paused", `Expected resumed loop to pause for review, got ${loop.status}.`);
-  assert(loop.stopReason === "HumanReviewRequired", `Expected HumanReviewRequired after resume, got ${loop.stopReason}.`);
-  assert(loop.stepsRun === 2, `Expected resumed loop to retain and add a step, got ${loop.stepsRun}.`);
-  assert(loop.resumeCount === 1, `Expected resume count 1, got ${loop.resumeCount}.`);
-  assert(loop.resumedAt, "Resumed loop did not persist resumedAt.");
-  assert(pausedTask.editProposal?.status === "Proposed", "Resumed loop did not continue into edit proposal review.");
-  assert(
-    resumedRun.events.some((event) => event.type === "agent.run_loop.resumed" && event.data?.taskID === pauseTask.id),
-    "Resume flow did not stream resumed."
-  );
-
-  const abortTask = await createTask({
-    title: "Smoke OpenAI agent loop abort",
-    objective: `Run an agent loop abort smoke against @${appendSmokePath}.`
-  });
-  await waitForTask(
-    abortTask.id,
-    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
-    "OpenAI agent loop abort task to reach initial plan review"
-  );
-  await post(`/tasks/${abortTask.id}/approve-plan`, {
-    note: "Core smoke test approves the abort plan."
-  });
-
-  const abortedRun = await collectRuntimeEventsDuring(
-    async () => {
-      const runPromise = post(`/tasks/${abortTask.id}/run-agent-loop`, { maxSteps: 4, maxContextSteps: 2 });
-      const running = await waitForTask(
-        abortTask.id,
-        (candidate) => candidate.agentRunLoops?.at(-1)?.status === "Running",
-        "agent loop to start before abort"
-      );
-      const runningLoop = running.agentRunLoops.at(-1);
-      const abortRequested = await post(`/tasks/${abortTask.id}/abort-agent-loop`, {
-        agentRunLoopID: runningLoop.id,
-        note: "Core smoke requests a cooperative abort."
-      });
-      assert(abortRequested.agentRunLoops.at(-1)?.abortRequestedAt, "Abort request timestamp was not persisted.");
-      return runPromise;
-    },
-    (event, result) => event.type === "agent.run_loop.aborted" && event.data?.taskID === result.id
-  );
-  const abortedTask = abortedRun.result;
-  const abortedLoop = abortedTask.agentRunLoops.at(-1);
-  assertState(abortedTask, "Human Review", "Agent Loop Aborted");
-  assert(abortedLoop.status === "Aborted", `Expected loop Aborted, got ${abortedLoop.status}.`);
-  assert(abortedLoop.stopReason === "UserAborted", `Expected UserAborted, got ${abortedLoop.stopReason}.`);
-  assert(abortedLoop.stepsRun === 1, `Expected one retained step before abort, got ${abortedLoop.stepsRun}.`);
-  assert(abortedLoop.abortedAt, "Aborted loop did not persist abortedAt.");
-  assert(!abortedTask.editProposal, "Aborted loop unexpectedly continued into an edit proposal.");
-  assert(
-    abortedRun.events.some((event) => event.type === "agent.run_loop.abort_requested" && event.data?.taskID === abortTask.id),
-    "Abort flow did not stream abort_requested."
-  );
-
-  return { resumed: pausedTask, aborted: abortedTask };
 }
 
 async function runOpenAIPreviewBlockedFlow() {
@@ -1130,91 +1310,6 @@ async function runOpenAIPreviewBlockedFlow() {
     current.events?.filter((event) => event.type === "edit.proposal.repair.started").length >= 2,
     "Preview-only proposal did not record repair attempt events."
   );
-
-  return current;
-}
-
-async function runOpenAIDuplicateTargetFlow() {
-  const task = await createTask({
-    title: "Smoke duplicate-target proposal",
-    objective: `Generate a coordinated proposal that repeats @${appendSmokePath}.`
-  });
-
-  await waitForTask(
-    task.id,
-    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
-    "OpenAI duplicate-target task to reach initial plan review"
-  );
-
-  const before = await readFile(join(repoRoot, appendSmokePath), "utf8");
-  let current = await post(`/tasks/${task.id}/approve-plan`, {
-    note: "Core smoke test approves the duplicate-target validation plan."
-  });
-  assert(current.executionProposal, "OpenAI duplicate-target flow did not create an execution proposal.");
-
-  current = await post(`/tasks/${task.id}/generate-edit-proposal`, {});
-  assertState(current, "Human Review", "Edit Proposal Validation Blocked");
-  assert(current.editProposal?.validation?.status === "Blocked", "Duplicate targets should block coordinated apply.");
-  assert(current.editProposal?.fileChanges?.length === 2, "Duplicate-target proposal should retain both review artifacts.");
-  assert(
-    current.editProposal.validation.fileResults?.every((result) =>
-      result.status === "Blocked" && result.summary.includes("more than once")
-    ),
-    "Duplicate-target validation did not block every repeated normalized path."
-  );
-  assert(!current.editProposal.lastApplyAttempt, "Blocked duplicate-target proposal unexpectedly started apply.");
-  const after = await readFile(join(repoRoot, appendSmokePath), "utf8");
-  assert(after === before, "Duplicate-target validation changed the workspace before apply.");
-
-  return current;
-}
-
-async function runOpenAIPartialRecoveryFlow() {
-  const task = await createTask({
-    title: "Smoke partial-recovery proposal",
-    objective: "Force the second file in a coordinated create proposal to fail after the first write."
-  });
-
-  await waitForTask(
-    task.id,
-    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
-    "OpenAI partial-recovery task to reach initial plan review"
-  );
-
-  let current = await post(`/tasks/${task.id}/approve-plan`, {
-    note: "Core smoke test approves the partial apply recovery plan."
-  });
-  current = await post(`/tasks/${task.id}/generate-edit-proposal`, {});
-  assertState(current, "Human Review", "Edit Proposal Review");
-  assert(current.editProposal?.validation?.status === "Ready", "Partial-recovery proposal should pass preflight validation.");
-
-  const failedApply = await postExpectError(`/tasks/${task.id}/apply-edit-proposal`, {
-    note: "Core smoke test forces a later coordinated write failure."
-  });
-  assert(failedApply.status === 500, `Expected coordinated apply to fail with 500, got ${failedApply.status}.`);
-
-  current = await waitForTask(
-    task.id,
-    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Apply Reverted",
-    "partial coordinated apply to record automatic recovery"
-  );
-  assertState(current, "Human Review", "Apply Reverted");
-  assert(current.editProposal?.status === "Proposed", "Recovered partial apply should remain a reviewable proposal.");
-  assert(current.editProposal.lastApplyAttempt?.status === "Reverted", "Partial apply did not record Reverted status.");
-  assert(
-    current.editProposal.lastApplyAttempt.appliedPaths?.includes(partialRecoveryParentPath),
-    "Partial apply did not record the completed first write."
-  );
-  assert(
-    current.editProposal.lastApplyAttempt.revertedPaths?.includes(partialRecoveryParentPath),
-    "Partial apply did not record restoration of the first write."
-  );
-  assert(
-    current.events?.some((event) => event.type === "edit.proposal.apply.reverted"),
-    "Partial apply recovery did not record the reverted event."
-  );
-  await assertFileMissing(partialRecoveryParentPath);
-  await assertFileMissing(partialRecoveryChildPath);
 
   return current;
 }
@@ -1542,9 +1637,12 @@ async function assertRuntimeDiagnosticsAndSettings() {
     home.includes("POST /tasks/:taskID/run-agent-loop"),
     "Runtime home page did not link the agent run loop endpoint."
   );
-  assert(home.includes("POST /tasks/:taskID/pause-agent-loop"), "Runtime home page did not link pause agent loop.");
-  assert(home.includes("POST /tasks/:taskID/abort-agent-loop"), "Runtime home page did not link abort agent loop.");
-  assert(home.includes("POST /tasks/:taskID/resume-agent-loop"), "Runtime home page did not link resume agent loop.");
+  assert(
+    home.includes("POST /tasks/:taskID/pause-agent-loop") &&
+      home.includes("POST /tasks/:taskID/abort-agent-loop") &&
+      home.includes("POST /tasks/:taskID/resume-agent-loop"),
+    "Runtime home page did not link the agent run loop control endpoints."
+  );
 
   const initialHealth = await get("/health");
   assert(initialHealth.ok === true, "Runtime health did not report ok.");
@@ -1999,8 +2097,6 @@ async function cleanupSmokeFiles() {
   await rm(join(repoRoot, binarySmokePath), { force: true });
   await rm(join(repoRoot, largeDiffSmokePath), { force: true });
   await rm(join(repoRoot, createSmokePath), { force: true });
-  await rm(join(repoRoot, sourceCreateSmokePath), { force: true });
-  await rm(join(repoRoot, partialRecoveryDirectory), { recursive: true, force: true });
   await rm(join(repoRoot, brokenTypeScriptSmokePath), { force: true });
   for (const directory of rollbackSnapshotDirectories) {
     await rm(join(repoRoot, directory), { recursive: true, force: true });
@@ -2080,13 +2176,6 @@ async function startMockOpenAI() {
     const body = JSON.parse(raw);
     const name = body?.text?.format?.name;
     requests.push({ name, body });
-    const bodyText = JSON.stringify(body);
-    if (
-      name === "forge_agent_run_step" &&
-      (bodyText.includes("agent loop pause resume smoke") || bodyText.includes("agent loop abort smoke"))
-    ) {
-      await sleep(450);
-    }
     const output = mockOpenAIOutput(name, requests, body);
     response.writeHead(200, { "Content-Type": "application/json" });
     response.end(JSON.stringify({
@@ -2207,70 +2296,99 @@ function mockOpenAIOutput(name, requests, body) {
   }
 
   if (name === "forge_agent_run_step") {
-    if (bodyText.includes("agent loop pause resume smoke")) {
-      const controlStepCount = requests.filter((request) =>
-        request.name === "forge_agent_run_step" && JSON.stringify(request.body).includes("agent loop pause resume smoke")
+    if (bodyText.includes("inspection repeat guard")) {
+      return {
+        action: "InspectRepository",
+        summary: "Inspect the same Keychain boundary to exercise cross-step request suppression.",
+        rationale: "The smoke provider intentionally repeats an identical safe read-only request.",
+        commandID: "",
+        commandRerunEvidenceID: "",
+        searchTerms: ["Keychain", "security", "provider"],
+        readPaths: ["apps/macos/Sources/ForgeApp/KeychainStore.swift"],
+        searchMode: "Symbol"
+      };
+    }
+
+    if (bodyText.includes("provider output recovery")) {
+      const taskRequestCount = requests.filter((request) =>
+        request.name === "forge_agent_run_step" && JSON.stringify(request.body).includes("provider output recovery")
       ).length;
-      if (controlStepCount === 1) {
+      if (taskRequestCount === 1) {
         return {
-          action: "GatherRepositoryContext",
-          summary: "Gather one context step before a cooperative user pause.",
-          rationale: "The control smoke needs a safe completed step before the runtime pauses.",
-          searchTerms: ["pause-resume-control"],
-          readPaths: [appendSmokePath],
+          action: "RunUnapprovedShell",
+          summary: "This action is outside the allowed enum.",
+          rationale: "The smoke server intentionally returns one malformed decision.",
           commandID: "",
-          commandRerunEvidenceID: ""
+          commandRerunEvidenceID: "",
+          searchTerms: [],
+          readPaths: []
         };
       }
+
+      return {
+        action: "RequestPlanApproval",
+        summary: "Pause at the existing plan approval gate after output recovery.",
+        rationale: "The corrected decision uses an allowed action and performs no side effect.",
+        commandID: "",
+        commandRerunEvidenceID: "",
+        searchTerms: [],
+        readPaths: []
+      };
+    }
+
+    if (bodyText.includes("provider output retry exhaustion")) {
+      return {
+        action: "BypassHumanReview",
+        summary: "This action remains outside the allowed enum.",
+        rationale: "The smoke server intentionally exhausts both format attempts.",
+        commandID: "",
+        commandRerunEvidenceID: "",
+        searchTerms: [],
+        readPaths: []
+      };
+    }
+
+    if (bodyText.includes("agent repository inspection")) {
+      if (!bodyText.includes("KeychainStore.swift")) {
+        return {
+          action: "InspectRepository",
+          summary: "Inspect Keychain integration before proposing the next reviewed change.",
+          rationale: "The current task context does not yet include the macOS Keychain boundary.",
+          commandID: "",
+          commandRerunEvidenceID: "",
+          searchTerms: ["Keychain", "security", "provider"],
+          readPaths: ["apps/macos/Sources/ForgeApp/KeychainStore.swift", "../unsafe.txt"],
+          searchMode: "Text"
+        };
+      }
+
       return {
         action: "GenerateEditProposal",
-        summary: "Continue the resumed loop into edit proposal review.",
-        rationale: "The same loop was resumed with remaining steps and context evidence.",
+        summary: "Generate a reviewed proposal after the read-only inspection.",
+        rationale: "The requested Keychain context is now recorded in task state.",
+        commandID: "",
+        commandRerunEvidenceID: "",
         searchTerms: [],
-        readPaths: [],
-        commandID: "",
-        commandRerunEvidenceID: ""
+        readPaths: []
       };
     }
 
-    if (bodyText.includes("agent loop abort smoke")) {
+    if (bodyText.includes("agent loop controls")) {
       return {
-        action: "GatherRepositoryContext",
-        summary: "Gather one context step before a cooperative user abort.",
-        rationale: "The control smoke needs a safe completed step before the runtime aborts.",
-        searchTerms: ["abort-control"],
-        readPaths: [appendSmokePath],
-        commandID: "",
-        commandRerunEvidenceID: ""
-      };
-    }
-
-    if (bodyText.includes("agent context budget smoke")) {
-      const contextBudgetStepCount = requests.filter((request) =>
-        request.name === "forge_agent_run_step" && JSON.stringify(request.body).includes("agent context budget smoke")
-      ).length;
-      return {
-        action: "GatherRepositoryContext",
-        summary: "Request another bounded repository context step.",
-        rationale: "The smoke provider intentionally requests context until the runtime-owned budget stops it.",
-        searchTerms: [`context-budget-round-${contextBudgetStepCount}-unique`],
-        readPaths: contextBudgetStepCount <= 2 ? [appendSmokePath] : [agentContextSmokePath],
-        commandID: "",
+        action: "RunTaskCommand",
+        summary: "Run the approved long smoke command so loop control can stop at a safe checkpoint.",
+        rationale: "The command is runtime-known and already approved for this task.",
+        commandID: "smoke-long-task-command",
         commandRerunEvidenceID: ""
       };
     }
 
     if (bodyText.includes("agent run loop smoke")) {
-      const loopStepCount = requests.filter((request) =>
-        request.name === "forge_agent_run_step" && JSON.stringify(request.body).includes("agent run loop smoke")
-      ).length;
       if (bodyText.includes("Command Failed")) {
         return {
           action: "GenerateValidationRepairProposal",
           summary: "Generate a reviewed self-fix proposal from the failed command output.",
           rationale: "The approved runtime command failed and the runtime produced a repair brief.",
-          searchTerms: [],
-          readPaths: [],
           commandID: "",
           commandRerunEvidenceID: ""
         };
@@ -2281,33 +2399,7 @@ function mockOpenAIOutput(name, requests, body) {
           action: "RunTaskCommand",
           summary: "Run the approved TypeScript/runtime check from the loop.",
           rationale: "The reviewed loop proposal has been applied and runtime-typescript is approved.",
-          searchTerms: [],
-          readPaths: [],
           commandID: "runtime-npm-check",
-          commandRerunEvidenceID: ""
-        };
-      }
-
-      if (loopStepCount === 1) {
-        return {
-          action: "GatherRepositoryContext",
-          summary: "Search and read bounded repository context before the loop drafts a proposal.",
-          rationale: "The normal run should select its own read-only context after plan approval.",
-          searchTerms: ["agent-run-loop", "smoke"],
-          readPaths: [appendSmokePath, "../blocked.txt"],
-          commandID: "",
-          commandRerunEvidenceID: ""
-        };
-      }
-
-      if (loopStepCount === 2) {
-        return {
-          action: "GatherRepositoryContext",
-          summary: "Read a second bounded repository area before drafting the proposal.",
-          rationale: "The first context round found the task fixture; the second should inspect persistence state.",
-          searchTerms: ["task-store", "persistence"],
-          readPaths: [agentContextSmokePath],
-          commandID: "",
           commandRerunEvidenceID: ""
         };
       }
@@ -2316,23 +2408,17 @@ function mockOpenAIOutput(name, requests, body) {
         action: "GenerateEditProposal",
         summary: "Generate the first loop-managed implementation proposal.",
         rationale: "The plan has been approved and no proposal is waiting for review.",
-        searchTerms: [],
-        readPaths: [],
         commandID: "",
         commandRerunEvidenceID: ""
       };
     }
 
-    const runStepCount = requests.filter((request) =>
-      request.name === "forge_agent_run_step" && JSON.stringify(request.body).includes("agent run step smoke")
-    ).length;
+    const runStepCount = requests.filter((request) => request.name === "forge_agent_run_step").length;
     if (runStepCount === 1) {
       return {
-        action: "GatherRepositoryContext",
-        summary: "Search and read bounded repository context before drafting the proposal.",
-        rationale: "The normal run should select its own read-only context after plan approval.",
-        searchTerms: ["agent-run-step", "smoke"],
-        readPaths: [appendSmokePath, ".forge/blocked.sqlite"],
+        action: "GenerateEditProposal",
+        summary: "Generate the first reviewed implementation proposal.",
+        rationale: "The plan has been approved and no proposal is waiting for human review.",
         commandID: "",
         commandRerunEvidenceID: ""
       };
@@ -2340,23 +2426,9 @@ function mockOpenAIOutput(name, requests, body) {
 
     if (runStepCount === 2) {
       return {
-        action: "GenerateEditProposal",
-        summary: "Generate the first reviewed implementation proposal.",
-        rationale: "The plan has been approved and no proposal is waiting for human review.",
-        searchTerms: [],
-        readPaths: [],
-        commandID: "",
-        commandRerunEvidenceID: ""
-      };
-    }
-
-    if (runStepCount === 3) {
-      return {
         action: "RunTaskCommand",
         summary: "Run the approved TypeScript/runtime check.",
         rationale: "The reviewed edit has been applied and runtime-typescript is approved for this task.",
-        searchTerms: [],
-        readPaths: [],
         commandID: "runtime-npm-check",
         commandRerunEvidenceID: ""
       };
@@ -2366,8 +2438,6 @@ function mockOpenAIOutput(name, requests, body) {
       action: "WaitForHumanReview",
       summary: "Wait for the next human decision.",
       rationale: "The smoke flow has already exercised the provider-driven proposal and command paths.",
-      searchTerms: [],
-      readPaths: [],
       commandID: "",
       commandRerunEvidenceID: ""
     };
@@ -2402,6 +2472,93 @@ function mockOpenAIOutput(name, requests, body) {
   }
 
   if (name === "forge_edit_proposal") {
+    if (bodyText.includes("agent repository inspection")) {
+      return {
+        summary: "Propose a distinct note after runtime-owned repository inspection.",
+        riskLevel: "Low",
+        fileChanges: [
+          {
+            path: appendSmokePath,
+            changeType: "Modify",
+            rationale: "Record that the bounded loop inspected provider-requested repository context before proposing work.",
+            diffPreview: [
+              `--- a/${appendSmokePath}`,
+              `+++ b/${appendSmokePath}`,
+              "@@ repository inspection smoke @@",
+              "+",
+              "+## Agent Repository Inspection Smoke",
+              "+",
+              "+- Runtime-owned read/search tools completed before proposal generation."
+            ].join("\n"),
+            operationKind: "AppendText",
+            appendText: "\n## Agent Repository Inspection Smoke\n\n- Runtime-owned read/search tools completed before proposal generation.\n",
+            findText: "",
+            replaceWith: "",
+            patchHunks: [],
+            unifiedDiff: "",
+            content: ""
+          }
+        ]
+      };
+    }
+
+    if (bodyText.includes("unified diff transaction smoke") || bodyText.includes("apply recovery smoke")) {
+      const firstPatch = [
+        `--- a/${unifiedDiffSmokePathOne}`,
+        `+++ b/${unifiedDiffSmokePathOne}`,
+        "@@ -1,4 +1,5 @@",
+        " export function forgeUnifiedGreeting(name: string) {",
+        "-  const label = \"hello\";",
+        "+  const label = \"Hello\";",
+        "+  const punctuation = \"!\";",
+        "-  return `${label}, ${name}`;",
+        "+  return `${label}, ${name}${punctuation}`;",
+        " }"
+      ].join("\n");
+      const secondPatch = [
+        `--- a/${unifiedDiffSmokePathTwo}`,
+        `+++ b/${unifiedDiffSmokePathTwo}`,
+        "@@ -1,4 +1,3 @@",
+        " export const forgeUnifiedRetry = {",
+        "-  attempts: 2,",
+        "+  attempts: 3,",
+        "-  backoff: true",
+        " };"
+      ].join("\n");
+      return {
+        summary: "Apply a reviewable two-file source change through strict unified diffs.",
+        riskLevel: "Medium",
+        fileChanges: [
+          {
+            path: unifiedDiffSmokePathOne,
+            changeType: "Modify",
+            rationale: "Exercise context-anchored additions and replacements in a source file.",
+            diffPreview: firstPatch,
+            operationKind: "UnifiedDiff",
+            appendText: "",
+            findText: "",
+            replaceWith: "",
+            patchHunks: [],
+            unifiedDiff: firstPatch,
+            content: ""
+          },
+          {
+            path: unifiedDiffSmokePathTwo,
+            changeType: "Modify",
+            rationale: "Exercise a second-file replacement and deletion in the same reviewed transaction.",
+            diffPreview: secondPatch,
+            operationKind: "UnifiedDiff",
+            appendText: "",
+            findText: "",
+            replaceWith: "",
+            patchHunks: [],
+            unifiedDiff: secondPatch,
+            content: ""
+          }
+        ]
+      };
+    }
+
     if (bodyText.includes("Agent run loop smoke command repair")) {
       return {
         summary: "Fix the broken TypeScript fixture from the agent run loop command failure.",
@@ -2644,70 +2801,8 @@ function mockOpenAIOutput(name, requests, body) {
       };
     }
 
-    if (bodyText.includes("duplicate-target proposal")) {
-      return {
-        summary: "Propose two operations against the same normalized target so runtime validation blocks the set.",
-        riskLevel: "Medium",
-        fileChanges: [
-          {
-            path: appendSmokePath,
-            changeType: "Modify",
-            rationale: "First duplicate target operation.",
-            diffPreview: `--- a/${appendSmokePath}\n+++ b/${appendSmokePath}\n+duplicate one`,
-            operationKind: "AppendText",
-            appendText: "\nDuplicate coordinated change one.\n",
-            findText: "",
-            replaceWith: "",
-            content: ""
-          },
-          {
-            path: `./${appendSmokePath}`,
-            changeType: "Modify",
-            rationale: "Second duplicate target operation using an equivalent normalized path.",
-            diffPreview: `--- a/${appendSmokePath}\n+++ b/${appendSmokePath}\n+duplicate two`,
-            operationKind: "AppendText",
-            appendText: "\nDuplicate coordinated change two.\n",
-            findText: "",
-            replaceWith: "",
-            content: ""
-          }
-        ]
-      };
-    }
-
-    if (bodyText.includes("partial-recovery proposal")) {
-      return {
-        summary: "Create one allowlisted file, then force the next coordinated create to fail so recovery can be verified.",
-        riskLevel: "Medium",
-        fileChanges: [
-          {
-            path: partialRecoveryParentPath,
-            changeType: "Create",
-            rationale: "Create an allowlisted Makefile that will make the next parent-directory creation fail.",
-            diffPreview: `--- /dev/null\n+++ b/${partialRecoveryParentPath}\n+partial recovery parent`,
-            operationKind: "CreateFile",
-            appendText: "",
-            findText: "",
-            replaceWith: "",
-            content: "# Partial recovery smoke parent.\n"
-          },
-          {
-            path: partialRecoveryChildPath,
-            changeType: "Create",
-            rationale: "This path passes preflight while its parent is absent, then fails after the first write makes the parent a file.",
-            diffPreview: `--- /dev/null\n+++ b/${partialRecoveryChildPath}\n+export const child = true;`,
-            operationKind: "CreateFile",
-            appendText: "",
-            findText: "",
-            replaceWith: "",
-            content: "export const child = true;\n"
-          }
-        ]
-      };
-    }
-
     return {
-      summary: "Propose a coordinated append plus Markdown and source create-file changes.",
+      summary: "Propose a safe append plus a safe Markdown create-file change.",
       riskLevel: "Medium",
       fileChanges: [
         {
@@ -2746,22 +2841,6 @@ function mockOpenAIOutput(name, requests, body) {
           findText: "",
           replaceWith: "",
           content: "# OpenAI Created Smoke\n\nPreview created by the OpenAI smoke flow.\n"
-        },
-        {
-          path: sourceCreateSmokePath,
-          changeType: "Create",
-          rationale: "Create a new allowlisted TypeScript source fixture inside the runtime source boundary.",
-          diffPreview: [
-            "--- /dev/null",
-            `+++ b/${sourceCreateSmokePath}`,
-            "@@ create source file @@",
-            "+export const forgeOpenAICreatedSmoke = true;"
-          ].join("\n"),
-          operationKind: "CreateFile",
-          appendText: "",
-          findText: "",
-          replaceWith: "",
-          content: "export const forgeOpenAICreatedSmoke = true;\n"
         }
       ]
     };
@@ -3024,18 +3103,6 @@ function assertProposal(task, expectedPath, expectedOperation) {
     task.editProposal.validation.fileResults?.every((result) => result.status === "Ready"),
     "Expected every proposal file validation result to be Ready."
   );
-}
-
-async function assertFileMissing(relativePath) {
-  try {
-    await readFile(join(repoRoot, relativePath), "utf8");
-    throw new Error(`Expected ${relativePath} to be absent.`);
-  } catch (error) {
-    if (error instanceof Error && error.message === `Expected ${relativePath} to be absent.`) {
-      throw error;
-    }
-    assert(error?.code === "ENOENT", `Expected ${relativePath} to be missing, got ${error}.`);
-  }
 }
 
 function assertCompletedTask(task, expectedChangedFile) {

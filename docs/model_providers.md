@@ -42,13 +42,11 @@ or archiving proposals remains a runtime-owned approval step.
 
 The local provider can also choose a deterministic Agent Run Step v0 action
 from current task state: rerun reviewed self-fix evidence, generate a repair
-proposal from the latest repair brief, wait for human review, gather one
-runtime-owned repository context pass, generate the next edit proposal from
-an execution proposal, run the first approved command after an applied
-proposal, or request plan approval.
+proposal from the latest repair brief, wait for human review, generate the
+next edit proposal from an execution proposal, run the first approved command
+after an applied proposal, or request plan approval.
 Agent Run Loop v0 is runtime-owned; the provider still chooses one step at a
-time, sees only a runtime-calculated remaining repository-context budget, and
-never receives permission to execute tools directly.
+time and never receives permission to execute tools directly.
 
 The optional OpenAI provider:
 
@@ -68,29 +66,37 @@ model again for the revision. After plan approval, the runtime runs a bounded
 read-only execution-context pass before asking for the execution proposal, so
 the provider sees updated context without directly running tools. During edit
 proposal generation, the runtime can also feed blocked validation checks back
-to the provider for a bounded repair loop. OpenAI structured output may carry
-up to eight coordinated changes and request restricted creation of new
-allowlisted Markdown/source/text files; the runtime still rejects duplicate
-targets, over-budget operation sets, overwrites, deletes, and unsupported paths
-before mutation. When validation commands or
+to the provider for a bounded repair loop. OpenAI proposals may use restricted
+single-file `UnifiedDiff` operations for normal modifications; the runtime,
+not the provider, validates headers, paths, hunk ranges/counts, current-file
+context, cross-file transaction safety, and recovery. When validation commands or
 task-scoped commands fail, the runtime can ask the provider for a repair brief
 from compact command summaries. A later edit proposal request can include that
 repair brief so the provider proposes a narrow follow-up repair artifact. The
 provider can also choose one Agent Run Step v0 action from a bounded enum:
-gather repository context from bounded search terms and repo-relative read
-paths, generate an edit proposal, run an already-approved task command,
-generate a validation repair proposal, rerun reviewed self-fix evidence, wait
-for human review, or request plan approval. The runtime still generates IDs,
-timestamps, validation state, execution proposal evidence, command execution,
-and restricted apply operations locally. The remote provider never directly
-edits files, runs commands, commits, pushes, or executes tools.
+inspect the repository, generate an edit proposal, run an already-approved
+task command, generate a validation repair proposal, rerun reviewed self-fix
+evidence, wait for human review, or request plan approval. For repository
+inspection the provider returns only bounded search terms and optional
+repo-relative read paths; the runtime filters unsafe paths and executes logged
+`list_repo_files`, `search_repo_context`, and `read_context_file` calls under
+existing budgets. The runtime fingerprints normalized inspection requests and
+blocks a repeated fingerprint before duplicate search/read calls. The runtime
+still generates IDs, timestamps, validation
+state, execution proposal evidence, command execution, and restricted apply
+operations locally. The remote provider never directly edits files, runs
+commands, commits, pushes, or executes tools.
 Agent Run Loop v0 repeats these provider step decisions under runtime-owned
-stop conditions. It may choose multiple distinct repository-context rounds,
-but it cannot exceed the separate zero-to-three-step context budget, repeat an
-identical request, control either loop counter, or bypass review gates.
-Pause, abort, and resume are also runtime/user controls; providers cannot emit
-them as model-selected actions. Resuming calls the provider only for the next
-normal bounded step and preserves every existing action gate.
+stop conditions; the provider does not control the loop counter or bypass
+review gates.
+
+OpenAI Agent Run Step decisions also have one format-only correction attempt.
+Response JSON/schema decoding, missing required text, and unknown action enums
+can be retried once with a concise validation error and the same strict schema.
+The runtime records successful recovery metadata on the step. If correction is
+still malformed, it stores a failed safe-wait step and stops before any tool,
+command, or file action. HTTP, network, and timeout errors are not automatically
+retried.
 
 ## Configuration
 
@@ -186,10 +192,6 @@ A provider receives task state and returns structured output. Current output:
 - validation and task-command failure repair brief summaries
 - validation repair brief context for follow-up proposals
 - agent run step action, summary, rationale, command id, and rerun evidence id
-- agent-selected search terms, requested safe read paths, and inspected
-  context paths for repository-context steps
-- newly discovered context paths, context outcome, and the loop's remaining
-  repository-context budget
 - risk level
 - generated timestamp
 

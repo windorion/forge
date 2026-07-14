@@ -3,7 +3,7 @@
 Document role: record the current product state, objective completion estimate,
 major gaps, and what "finished" means at each product horizon.
 
-Last updated: 2026-07-13
+Last updated: 2026-07-14
 
 ## One-Line Status
 
@@ -11,18 +11,15 @@ Forge is a strong trust/runtime foundation with a first-pass coding-agent
 session shell and a usable full-screen diff review surface in the macOS app.
 It can create tasks, inspect bounded repo context, hold review gates, generate
 safe edit proposals, apply restricted Markdown edits, exact source/text
-replacements, and multi-hunk source/text patches, validate work, expose
-guarded git actions, run approved task-scoped commands with streamed output,
+replacements, multi-hunk patches, and context-anchored unified diffs across
+reviewed source files, validate work, expose guarded git actions, run approved
+task-scoped commands with streamed output,
 record rerun evidence after reviewed self-fixes, let a model provider choose
 safe next agent steps inside a bounded multi-step loop, and persist task state
-locally. The loop can now select multiple bounded read-only repository context
-passes during the normal run, with a separate context-step budget and
-no-progress stops, before proposing edits. The user can now request a
-cooperative pause or abort between safe steps and resume the same persisted
-user-paused loop. Multi-file proposals can now create new allowlisted source
-files, reject duplicate targets and oversized coordinated operation sets, and
-automatically restore completed writes after a later apply failure. The next
-milestone is more general patch generation and finer-grained search/read choices.
+locally. The loop now has cooperative controls and a provider-selected,
+runtime-executed read-only repository inspection step. Agent-step format errors
+now get one bounded correction attempt and fail closed with persisted evidence;
+the next milestone is broader search/symbol choices and patch breadth.
 
 ## Current Implementation
 
@@ -55,35 +52,38 @@ Implemented:
   execution-context pass. The proposal stores tool evidence and context files
   so the app can show what repository evidence informed the next action.
 - Provider-selected Agent Run Step v0. `POST /tasks/:taskID/run-agent-step`
-  asks the active model provider for exactly one safe next action. The action
-  can now be `GatherRepositoryContext`, which carries bounded search terms and
-  repo-relative read paths through runtime-validated list/search/read tools,
-  filters unsafe paths, records the inspected paths on the step, and rejects
-  repeated requests. A Loop can run multiple distinct context steps, but the
-  runtime enforces a separate zero-to-three-step context budget and pauses on
-  budget exhaustion or no new inspected files. The runtime also enforces
-  policy before generating an edit proposal, running one approved task
-  command, generating a validation repair proposal, rerunning reviewed
-  self-fix evidence, or waiting for human review. Each step records provider
-  metadata, action, summary, rationale, command/evidence IDs, linked proposal
-  or command targets, status, result, timestamps, and SSE events.
+  asks the active model provider for exactly one safe next action, then the
+  runtime enforces policy before generating an edit proposal, running one
+  approved task command, generating a validation repair proposal, rerunning
+  reviewed self-fix evidence, or waiting for human review. Each step records
+  provider metadata, action, summary, rationale, command/evidence IDs, linked
+  proposal or command targets, status, result, timestamps, and SSE events.
   The macOS action rail exposes `Run Agent Step`, and the Log tab shows the
   recent decision trail.
+- `InspectRepository` Agent Run Step action. The provider supplies only bounded
+  search terms and candidate repo-relative reads; the runtime normalizes them,
+  rejects unsafe paths, executes logged `list_repo_files`,
+  `search_repo_context`, and `read_context_file`, stores context/tool evidence,
+  and lets the bounded loop continue to its next provider decision. Each
+  normalized request stores a short SHA-256 fingerprint and visible scan,
+  search, context, term, and read budgets. A later identical request is blocked
+  before duplicate search/read calls.
+- Bounded Agent Run Step output recovery. OpenAI structured-output decode,
+  required-field, and action-enum failures receive one corrective retry. A
+  successful retry stores its attempt count and first error; exhaustion stores
+  a failed `WaitForHumanReview` step with both bounded errors and stops the loop
+  before any tool, command, or file side effect.
 - Bounded Agent Run Loop v0. `POST /tasks/:taskID/run-agent-loop` repeatedly
   runs provider-selected safe steps up to a runtime-enforced step limit, links
-  each `AgentRunStep` back to the loop, enforces a separate context-step
-  budget, aggregates inspected paths, and stops at edit-proposal review gates,
-  passed commands, verified self-fix reruns, budget exhaustion, blocked/failed
-  steps, busy-task guards, no-progress guards, or max-step protection. The
-  macOS action rail exposes `Run Agent Loop`, and the Log tab shows recent
-  loop status, step/context counts, inspected paths, stop reason, and summaries.
-  `POST /tasks/:taskID/pause-agent-loop`, `POST
-  /tasks/:taskID/abort-agent-loop`, and `POST
-  /tasks/:taskID/resume-agent-loop` persist control timestamps, notes, resume count, and
-  explicit `UserPaused`/`UserAborted` stop reasons. Active requests finish the
-  current step before stopping; resume continues the same loop and remaining
-  budgets. The macOS action rail shows state-specific Pause, Abort, and Resume
-  controls.
+  each `AgentRunStep` back to the loop, and stops at edit-proposal review
+  gates, passed commands, verified self-fix reruns, blocked/failed steps,
+  busy-task guards, no-progress guards, or max-step protection. The macOS
+  action rail exposes `Run Agent Loop`, and the Log tab shows recent loop
+  status, step counts, stop reason, and summaries.
+- Cooperative loop control. Pause and abort requests are persisted and audited
+  while active, then take effect after the current safe step. Resume creates a
+  linked new loop instead of rewriting the paused/aborted/failed checkpoint.
+  The macOS action rail and Log tab show control state and resume lineage.
 - Safe edit proposal review flow with multi-file OpenAI proposal artifacts,
   including blocked preview-only unsupported operations.
 - `AppendText` and exact `ReplaceText` restricted edit operations for
@@ -95,12 +95,16 @@ Implemented:
   source/text files. Each hunk must have exact find/replace text, the find
   text must appear exactly once in the original file, and hunks are simulated
   in order before apply.
-- Restricted `CreateFile` apply for new allowlisted Markdown/source/text files.
-- Coordinated apply policy for up to eight unique normalized target paths and
-  a bounded total operation payload. Every apply attempt records its planned,
-  applied, and restored paths. If a later file write fails, Forge attempts to
-  restore completed writes in reverse order and surfaces the recovery evidence
-  in the macOS Review pane.
+- Restricted `UnifiedDiff` operations for normal modifications to existing
+  allowlisted source/text files. The runtime requires one file per diff,
+  matching `---`/`+++` paths, bounded ordered hunks, exact declared line
+  counts, and current-file context/deletion matches before apply.
+- Cross-file apply/rollback transactions with duplicate-path rejection,
+  per-file apply and rollback hash verification, durable transaction status,
+  automatic compensation after partial apply, and recovery back to the
+  applied state after partial rollback. The full diff review shows this
+  recovery evidence.
+- Restricted `CreateFile` apply for new Markdown files under `docs/`.
 - Edit proposal validation before apply and immediate revalidation during
   apply.
 - Applied edit proposals now record per-file rollback metadata: operation kind,
@@ -210,12 +214,13 @@ Implemented:
 - Core runtime smoke regression command covering create task, file-reference
   messages, plan revision, plan approval, edit proposal generation,
   validation, apply, built-in post-apply validation, append/replace operations,
-  exact source-file replace, multi-hunk source patch, applied-file rollback
-  metadata, explicit source replace/patch rollback, restricted docs create-file
+  exact source-file replace, multi-hunk and two-file Unified Diff source
+  patches, applied-file/rollback hash verification, automatic partial-apply
+  recovery, explicit source patch rollback, restricted docs create-file
   apply, SQLite restart recovery, runtime health diagnostics, model-provider
   settings GET/POST, fake-key handling without secret persistence, a mock
   OpenAI model-guided context loop, provider-selected agent run step and
-  bounded agent run loop,
+  bounded agent run loop with concurrent pause/resume/abort checkpoints,
   blocked-to-repaired proposal handling, and bounded blocked preview-only
   proposal handling, plus failed project validation repair brief generation
   and follow-up repair proposal generation.
@@ -242,8 +247,8 @@ These percentages are product-readiness estimates, not calendar estimates.
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 84-88% | Has a first-pass session UI shell, full-screen diff review surface, coordinated multi-file source/text create and exact patch apply with recovery evidence, streamed/cancellable selectable task commands, failed-command self-fix rerun evidence, and a bounded provider-selected loop with multi-round context budgets plus pause/abort/resume controls, but still needs more general patch generation, finer-grained tools, and UI polish before it feels like Codex or Claude Code. |
-| Useful developer alpha | 35-45% | A developer cannot yet rely on Forge like Codex or Claude Code for normal coding tasks. It needs real patching, command execution, recovery, and a stronger model-backed run loop. |
+| Coding-agent demo V0 | 85-89% | Has a first-pass session UI shell, full-screen diff review, verified cross-file source patches, streamed/cancellable commands, self-fix evidence, pause/abort/resume, a provider-selected read/search→proposal loop, and bounded bad-output recovery; richer tool breadth and UI polish remain. |
+| Useful developer alpha | 40-50% | Forge can now apply guarded normal source modifications, but still needs richer autonomous tool use, source create/delete, restart recovery, and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
 
@@ -279,10 +284,10 @@ Remaining V0 gaps:
 - polish the first-pass `1a`/`1b`/`14a` shell toward the exact handoff
 - polish the first usable `10a` full-screen diff review toward exact handoff
   behavior and durable per-file decisions
-- broaden source-file patch generation beyond exact text hunks while retaining
-  coordinated apply budgets and automatic partial-write recovery
-- split the combined agent-selected repository context action into
-  finer-grained search/read choices and broaden patch/recovery behavior
+- extend the restricted Unified Diff engine to source-file create/delete and
+  newline-marker edge cases after the modification path proves stable
+- add richer inspection result-quality evidence and persisted-loop restart
+  recovery
 - implement full diff review with per-file reasoning and request-change loop
 - keep git/preflight work as supporting infrastructure rather than the main
   demo
@@ -295,7 +300,7 @@ with a model provider while preserving human review.
 Alpha requires:
 
 - richer provider-backed read/search/patch/run/repair in normal flows
-- a richer patch format and rollback/recovery
+- source-file create/delete support and crash-time transaction recovery
 - full diff review matching the design handoff
 - streamed terminal/test output in the task
 - git status, changed-file inspection, commit preparation, local commit,

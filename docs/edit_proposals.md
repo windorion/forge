@@ -91,7 +91,6 @@ An edit proposal stores:
 - optional restricted apply operation
 - optional validation result
 - optional applied-file rollback metadata
-- optional latest coordinated apply-attempt evidence
 - optional rollback timestamp and rollback note
 
 Task state also stores previous edit proposals in `editProposalRevisions`.
@@ -124,8 +123,14 @@ Current restricted operation kinds:
   non-empty find and replacement text, each find text must appear exactly once
   in the original target file, and the runtime simulates the ordered patch
   before applying it.
-- `CreateFile`: creates a new bounded file at an allowlisted Markdown,
-  source, or text path; it never overwrites an existing target.
+- `UnifiedDiff`: applies one standard context-anchored unified diff to one
+  existing allowlisted source/text file. Both headers must match the proposed
+  path; hunk counts/ranges must be ordered and exact; every context/deletion
+  line must match the current file at its declared location. It supports line
+  additions, replacements, and deletions, but not file create/delete or
+  `No newline at end of file` markers.
+- `CreateFile`: creates a new bounded Markdown file under `docs/` only; it
+  never overwrites an existing target.
 - `PreviewOnly`: review artifact only; validation blocks apply.
 
 After apply, the proposal records `appliedFileChanges` metadata for every
@@ -136,13 +141,12 @@ a local snapshot path under `.forge/rollback-snapshots/`. The runtime exposes
 `POST /tasks/:taskID/rollback-edit-proposal` to apply that rollback after
 current-file hash verification.
 
-Coordinated proposals are limited to eight unique normalized target paths and
-120,000 total operation characters. The runtime validates these proposal-level
-limits before any write. Each apply stores `lastApplyAttempt` with planned,
-applied, and restored paths. If a later file operation fails after earlier
-writes completed, Forge uses their rollback metadata in reverse order to
-restore them and emits `edit.proposal.apply.reverted`. Incomplete automatic
-recovery is recorded as a failed attempt and requires human review.
+Multi-file proposals use one compensated transaction. Validation rejects
+duplicate targets and simulates every operation before the first write. Each
+completed write is SHA-256 verified. If a later file fails, Forge restores and
+verifies files already written and records `Recovered`; compensation failures
+record `RecoveryFailed`. Explicit rollback uses the inverse boundary and
+attempts to return partially restored files to the verified applied state.
 
 Validation stores:
 
@@ -176,7 +180,8 @@ Post-apply validation stores:
 - A blocked generated proposal can be repaired automatically only within a
   bounded attempt limit and only by producing another review artifact.
 - Current v0 apply behavior supports `AppendText`, exact `ReplaceText`,
-  multi-hunk exact `PatchText`, and `CreateFile`.
+  multi-hunk exact `PatchText`, context-anchored `UnifiedDiff`, and
+  `CreateFile`.
 - Current v0 append behavior only writes existing Markdown files in
   `README.md` or `docs/*.md`.
 - Current v0 exact replace behavior can write existing allowlisted source/text
@@ -184,11 +189,12 @@ Post-apply validation stores:
 - Current v0 patch behavior can write existing allowlisted source/text files
   after strict path, size, hunk-count, original single-occurrence, and ordered
   simulation checks.
-- Current v0 create behavior only writes new allowlisted Markdown/source/text
-  files and never overwrites an existing target.
-- A coordinated proposal may target at most eight unique normalized paths and
-  must remain inside the proposal-level operation-character budget.
-- Preview-only, delete, unsupported path, overwrite-create, or broad patch
+- Current Unified Diff behavior can modify existing allowlisted source/text
+  files after strict path/header, size, hunk-count, declared-range/count, and
+  exact context checks.
+- Current v0 create behavior only writes new `docs/*.md` files.
+- Preview-only, file delete, unsupported path, overwrite-create, or unsupported
+  source create
   proposals may be shown for review but must validate as `Blocked`.
 - Absolute paths, parent-directory traversal, `.git`, and `.forge` paths are
   rejected.
@@ -199,15 +205,14 @@ Post-apply validation stores:
 - Apply is blocked if any patch hunk find text is missing, duplicated, appears
   more than once in the original file, cannot be applied in order, is identical
   to its replacement, or if any hunk/patch exceeds size limits.
+- Apply is blocked if a Unified Diff contains multiple file sections, unsafe
+  or mismatched headers, overlapping ranges, incorrect counts, stale context,
+  unsupported newline markers, or exceeds patch limits.
 - Apply is blocked for source/text targets outside the allowlist, generated
   directories, lockfiles, secret-like files, oversized files, or binary-looking
   content.
-- Apply is blocked if create-file content is empty, oversized, outside the
-  allowlisted source/text boundary, or targets an existing file.
-- Apply is blocked before mutation when coordinated changes repeat a normalized
-  target path or exceed the proposal-level file/operation budget.
-- If a later coordinated write fails, Forge attempts reverse-order restoration
-  of completed writes and records whether recovery was complete.
+- Apply is blocked if create-file content is empty, oversized, outside
+  `docs/*.md`, or targets an existing file.
 - Applying a proposal moves the task into `Testing` and runs built-in
   validation commands before completion.
 - Medium-risk project validation presets require explicit approval before they
@@ -228,7 +233,7 @@ Post-apply validation stores:
 
 ## Future Work
 
-- Generate broader model-backed patch content beyond exact text hunks while
-  keeping runtime-owned validation, coordinated budgets, and review gates.
-- Add richer rollback revalidation and recovery UI for partially failed or
-  user-modified rollback attempts.
+- Add reviewed source-file creation/deletion after the modification path is
+  proven on real repositories.
+- Add crash-time recovery checkpoints for runtime termination mid-transaction.
+- Support newline-marker changes without weakening exact pre-apply checks.

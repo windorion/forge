@@ -93,12 +93,12 @@ provider; blocked intermediate proposals are archived as `Superseded`. The
 apply path revalidates against the current workspace before writing. The
 current apply path is intentionally narrow: it supports append-text on
 existing Markdown files, exact replace and multi-hunk exact patch operations
-on existing Markdown and allowlisted source/text files, plus create-file
-operations for new allowlisted Markdown/source/text files. Coordinated apply
-allows up to eight unique normalized targets and a bounded total operation
-payload. Exact replace and patch hunks require the find text to appear once.
-Every apply attempt records planned/applied/restored paths, and a later write
-failure triggers reverse-order restoration of completed writes.
+on existing Markdown and allowlisted source/text files, strict single-file
+Unified Diff modifications for normal source edits, plus create-file operations
+for new `docs/*.md` files. Unified Diffs require matching paths, ordered/count-
+correct hunks, and exact current-file context. Cross-file apply/rollback
+records transaction evidence, verifies hashes, and compensates partial
+failures back to the last verified state.
 After apply, the runtime runs controlled built-in validation commands and only
 marks the task completed if validation passes.
 If validation fails, the runtime asks the model provider for a repair brief
@@ -117,34 +117,43 @@ to the failed source run, repair brief, and applied proposal.
 
 `POST /tasks/:taskID/run-agent-step` asks the active model provider for one
 safe next action and then lets the runtime enforce the same gates as the
-manual endpoints. The current action enum can gather a bounded repository
-context pass through logged list/search/read tools, generate an edit proposal,
-run an approved task command, generate a validation repair proposal, rerun
-reviewed self-fix evidence, wait for human review, or request plan approval.
-Context requests carry model-selected search terms and repo-relative read
-paths; the runtime filters unsafe paths, records inspected and newly
-discovered context paths plus an outcome, and blocks repeated requests. Every
-decision is stored in `agentRunSteps` with provider metadata, rationale,
-status, linked target IDs, result summaries, and timestamps. This endpoint is
-one step at a time; the bounded loop endpoint chains the same safe boundary.
+manual endpoints. The current action enum can inspect the repository, generate
+an edit proposal, run an approved task command, generate a validation repair
+proposal, rerun reviewed self-fix evidence, wait for human review, or request
+plan approval. Inspection accepts bounded provider search terms and optional
+repo-relative read paths, but the runtime filters paths and executes only its
+logged read-only list/search/read tools. Normalized inspection requests retain
+a short fingerprint and visible budget summary; repeated fingerprints block
+before duplicate search/read calls. Every decision is stored in
+`agentRunSteps` with provider metadata, rationale, inspection evidence, status,
+linked target IDs, result summaries, and timestamps. This endpoint is one step
+at a time; the bounded loop endpoint chains the same safe boundary.
+
+Inspection search mode is provider-selected but runtime-enforced: `Text` uses
+fixed-string ripgrep matching, while `Symbol` adds whole-word identifier
+matching. Ripgrep runs without a shell against the bounded safe file list with
+JSON output, a five-second timeout, and bounded captured output; unavailable or
+failed ripgrep falls back to the existing substring scanner and records the
+actual engine on the step.
+
+OpenAI agent-step decision decoding has one bounded format-recovery attempt.
+Malformed JSON/schema/required-field/action-enum output is corrected with the
+same strict schema. Recovered decisions store attempt/error evidence; two bad
+outputs produce a failed safe-wait step and no step tool, command, or mutation.
+Transport and HTTP failures are recorded without an automatic retry.
 
 `POST /tasks/:taskID/run-agent-loop` wraps the same runtime-owned step
-boundary in a bounded loop. The request can include `maxSteps` from 1 to 8,
-`maxContextSteps` from 0 to 3 (never above `maxSteps`), and
+boundary in a bounded loop. The request can include `maxSteps` from 1 to 8 and
 an optional `preferredCommandID` for already-runnable command steps. The loop
 records `agentRunLoops`, links each step by ID, and stops at edit-proposal
-review gates, passed commands, verified self-fix reruns, context-budget
-exhaustion, blocked/failed steps, busy-task guards, no-progress guards, or
-max-step protection. It does not add new permissions and does not apply
-patches automatically.
+review gates, passed commands, verified self-fix reruns, blocked/failed
+steps, busy-task guards, no-progress guards, or max-step protection. It does
+not add new permissions and does not apply patches automatically.
 
-Pause and abort take an exact `agentRunLoopID`, persist cooperative stop
-intent, and stop before the next provider-selected step. Resume accepts only
-the same user-paused loop with remaining steps and no unresolved proposal or
-busy command/validation gate. It preserves linked steps, budgets, context,
-provider, and preferred command intent. Loop control does not terminate an
-active command; use the existing exact-run-ID command cancellation endpoint
-for that.
+Pause and abort can target only the runtime-owned active loop ID and take
+effect after the current safe step; they do not kill an in-flight provider call
+or command. Resume accepts a paused, aborted, or failed loop ID and creates a
+new bounded loop linked in both directions so history remains auditable.
 
 OpenAI-backed edit proposals can include multiple file changes and
 preview-only unsupported operations. Unsupported changes are kept as review
@@ -335,6 +344,12 @@ before an OpenAI-backed plan
 revision, a richer edit proposal with append/create apply, and a blocked
 preview-only artifact. It also verifies a blocked-to-repaired proposal path and
 bounded stop behavior for proposals that remain preview-only. The smoke also
+verifies a provider-selected repository inspection followed by proposal
+generation, including rejection of an unsafe requested path. It then
+verifies an identical second inspection is fingerprinted and blocked before
+duplicate search/read tool calls. It then
+verifies one malformed agent-step decision recovering on its corrective
+request and a two-attempt exhaustion path that fails closed. It then
 forces a temporary TypeScript validation failure and verifies provider-backed
 repair brief generation plus follow-up repair proposal generation before
 cleaning the temporary file.
