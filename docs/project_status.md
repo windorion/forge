@@ -34,6 +34,11 @@ Implemented:
   tree, main diff pane, why-this-change reasoning, validation/test evidence,
   and apply/request-change actions backed by the existing proposal review
   gates.
+- Full-screen diff review now parses standard unified hunk ranges into exact
+  old/new line numbers and aligned change blocks for real split rendering. It
+  prefers the pending proposal diff before Apply, falls back to the working
+  tree afterward, and supports `J`/`K` hunk navigation, `⌘←`/`⌘→` file
+  navigation, and `⌘↵` per-file approval.
 - Local TypeScript runtime.
 - Task creation and task conversation.
 - Server-Sent Events from runtime to app.
@@ -248,7 +253,7 @@ These percentages are product-readiness estimates, not calendar estimates.
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 92-95% | Adds restart-safe loops and edit transactions plus durable per-file full-diff decisions/request-change revisions to transactional source patches, commands, self-fix, repository inspection, and bad-output recovery; edge-case patching and UI polish remain. |
+| Coding-agent demo V0 | 94-97% | Adds a real aligned split-diff review with keyboard navigation to restart-safe loops/transactions, per-file decisions, source patches, commands, self-fix, repository inspection, and bad-output recovery; patch edge cases and final UI/evidence polish remain. |
 | Useful developer alpha | 45-55% | Forge can now recover interrupted agent loops and edit transactions and apply guarded normal source modifications, but still needs broader autonomous tool use, source create/delete, and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
@@ -263,8 +268,8 @@ The hardest remaining work is not the app shell. The hardest remaining work is:
 
 - a richer model-backed coding loop with read/search tool choices and broader
   patch/recovery behavior
-- a polished UI that fully matches the handoff, especially exact split-diff,
-  durable file-level review state, and decision prompts
+- a polished UI that fully matches the handoff, especially file-specific test
+  evidence, live-run polish, and decision prompts
 - a useful source-code patch engine beyond exact text-based hunks
 - reliable repository understanding beyond bounded file scans
 - git workflow from dirty tree to approved published PR
@@ -283,8 +288,7 @@ real source diff, and approve the final patch.
 Remaining V0 gaps:
 
 - polish the first-pass `1a`/`1b`/`14a` shell toward the exact handoff
-- polish the first usable `10a` full-screen diff review toward exact handoff
-  split rendering, navigation, and keyboard behavior
+- strengthen tests-covering-this-file evidence in the `10a` review
 - extend the restricted Unified Diff engine to source-file create/delete and
   newline-marker edge cases after the modification path proves stable
 - add richer inspection result-quality evidence

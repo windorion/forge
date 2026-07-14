@@ -1203,6 +1203,7 @@ private struct FullscreenDiffReview: View {
 
     @State private var selectedPath: String?
     @State private var mode: DiffReviewMode = .unified
+    @State private var selectedHunkIndex = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1237,6 +1238,12 @@ private struct FullscreenDiffReview: View {
                 workspace.refreshGitDiff(path: activePath)
             }
         }
+        .onChange(of: activePath) { _, path in
+            selectedHunkIndex = 0
+            if let path {
+                workspace.refreshGitDiff(path: path)
+            }
+        }
     }
 
     private var header: some View {
@@ -1255,12 +1262,37 @@ private struct FullscreenDiffReview: View {
             StatusPill(label: "\(reviewFiles.count) Files", color: ForgeDesign.paper)
             StatusPill(label: validationState, color: validationColor)
 
+            if !reviewFiles.isEmpty {
+                Text("FILE \(activeFileIndex + 1) OF \(reviewFiles.count)")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(ForgeDesign.muted)
+            }
+
+            Button {
+                selectPreviousFile()
+            } label: {
+                Label("Prev", systemImage: "arrow.left")
+            }
+            .buttonStyle(ForgeSecondaryButtonStyle())
+            .keyboardShortcut(.leftArrow, modifiers: [.command])
+            .disabled(!canSelectPreviousFile)
+
+            Button {
+                selectNextFile()
+            } label: {
+                Label("Next", systemImage: "arrow.right")
+            }
+            .buttonStyle(ForgeSecondaryButtonStyle())
+            .keyboardShortcut(.rightArrow, modifiers: [.command])
+            .disabled(!canSelectNextFile)
+
             Button {
                 workspace.refreshGitStatus()
             } label: {
                 Label(workspace.isRefreshingGitStatus() ? "Refreshing" : "Refresh", systemImage: "arrow.clockwise")
             }
             .buttonStyle(ForgeSecondaryButtonStyle())
+            .keyboardShortcut(.cancelAction)
             .disabled(workspace.isRefreshingGitStatus())
 
             Button {
@@ -1316,6 +1348,18 @@ private struct FullscreenDiffReview: View {
                         }
                     }
                 }
+
+                HStack {
+                    Text("✓ \(approvedFileCount) REVIEWED")
+                    Spacer()
+                    Text("\(max(reviewFiles.count - approvedFileCount, 0)) TO GO")
+                }
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(ForgeDesign.muted)
+                .padding(10)
+                .overlay(alignment: .top) {
+                    Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+                }
             }
         }
         .background(Color.white)
@@ -1350,38 +1394,72 @@ private struct FullscreenDiffReview: View {
             }
             .background(Color.white)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    if let activePath {
-                        if mode == .split {
-                            Text("Split mode uses Forge's bounded side-by-side renderer when the runtime marks the diff as previewable.")
-                                .font(.caption)
-                                .foregroundStyle(ForgeDesign.muted)
-                                .padding(10)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color.white)
-                                .overlay(Rectangle().stroke(ForgeDesign.divider, lineWidth: 1))
-                        }
-
-                        GitDiffCard(
-                            path: activePath,
-                            diff: workspace.gitDiff(for: activePath),
-                            isLoading: workspace.isLoadingGitDiff(path: activePath),
-                            load: {
-                                workspace.refreshGitDiff(path: activePath)
-                            }
-                        )
-                    } else {
-                        EmptyTerminalMessage(
-                            title: "NO FILE SELECTED",
-                            message: "Select a changed file from the left tree to inspect its diff."
-                        )
-                    }
-                }
+            if let activePath {
+                FullscreenGitDiffView(
+                    path: activePath,
+                    diff: workspace.gitDiff(for: activePath),
+                    proposalDiff: selectedProposalChange?.diffPreview,
+                    isLoading: workspace.isLoadingGitDiff(path: activePath),
+                    mode: mode,
+                    selectedHunkIndex: $selectedHunkIndex,
+                    load: { workspace.refreshGitDiff(path: activePath) }
+                )
+            } else {
+                EmptyTerminalMessage(
+                    title: "NO FILE SELECTED",
+                    message: "Select a changed file from the left tree to inspect its diff."
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(14)
             }
+
+            fileVerdictBar
         }
         .background(ForgeDesign.paper)
+    }
+
+    private var fileVerdictBar: some View {
+        HStack(spacing: 8) {
+            Button("↑ PREV HUNK") {
+                selectedHunkIndex = max(selectedHunkIndex - 1, 0)
+            }
+            .buttonStyle(ForgeSecondaryButtonStyle())
+            .keyboardShortcut("k", modifiers: [])
+            .disabled(selectedHunkIndex <= 0 || selectedHunkCount == 0)
+
+            Button("↓ NEXT HUNK") {
+                selectedHunkIndex = min(selectedHunkIndex + 1, max(selectedHunkCount - 1, 0))
+            }
+            .buttonStyle(ForgeSecondaryButtonStyle())
+            .keyboardShortcut("j", modifiers: [])
+            .disabled(selectedHunkIndex >= selectedHunkCount - 1 || selectedHunkCount == 0)
+
+            Text(selectedHunkCount == 0 ? "NO HUNKS" : "HUNK \(selectedHunkIndex + 1)/\(selectedHunkCount)")
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(ForgeDesign.muted)
+
+            Spacer()
+
+            Text("THIS FILE:")
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(ForgeDesign.muted)
+
+            Button(selectedFileDecision?.decision == "Approved" ? "✓ APPROVED" : "✓ LOOKS GOOD") {
+                approveSelectedFile()
+            }
+            .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.accent, foreground: ForgeDesign.ink))
+            .keyboardShortcut(.return, modifiers: [.command])
+            .disabled(!canReviewSelectedFile || selectedFileDecision?.decision == "Approved")
+
+            Button("✎ REQUEST CHANGE") {
+                requestChangeForSelectedFile()
+            }
+            .buttonStyle(ForgeSecondaryButtonStyle())
+            .disabled(!canRejectProposal)
+        }
+        .padding(10)
+        .background(Color.white)
+        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
     }
 
     private var reasoningPane: some View {
@@ -1438,33 +1516,6 @@ private struct FullscreenDiffReview: View {
                     }
 
                     Button {
-                        if let change = selectedProposalChange {
-                            workspace.reviewEditProposalFile(for: task, change: change, decision: "Approved")
-                        }
-                    } label: {
-                        Label(selectedFileDecision?.decision == "Approved" ? "Approved" : "Looks Good", systemImage: "checkmark")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(ForgeSecondaryButtonStyle())
-                    .disabled(!canReviewSelectedFile || selectedFileDecision?.decision == "Approved")
-
-                    Button {
-                        if let change = selectedProposalChange {
-                            workspace.reviewEditProposalFile(
-                                for: task,
-                                change: change,
-                                decision: "ChangesRequested",
-                                note: "Revise the proposed change for \(change.path)."
-                            )
-                        }
-                    } label: {
-                        Label(requestChangeTitle, systemImage: "arrow.uturn.backward")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(ForgeSecondaryButtonStyle())
-                    .disabled(!canRejectProposal)
-
-                    Button {
                         workspace.applyEditProposal(for: task)
                     } label: {
                         Label(applyPatchTitle, systemImage: "checkmark.seal")
@@ -1497,6 +1548,65 @@ private struct FullscreenDiffReview: View {
         return reviewFiles.first?.path
     }
 
+    private var activeFileIndex: Int {
+        guard let activePath,
+              let index = reviewFiles.firstIndex(where: { $0.path == activePath }) else {
+            return 0
+        }
+        return index
+    }
+
+    private var canSelectPreviousFile: Bool {
+        !reviewFiles.isEmpty && activeFileIndex > 0
+    }
+
+    private var canSelectNextFile: Bool {
+        !reviewFiles.isEmpty && activeFileIndex < reviewFiles.count - 1
+    }
+
+    private var approvedFileCount: Int {
+        Set((task.editProposal?.fileDecisions ?? [])
+            .filter { $0.decision == "Approved" }
+            .map(\.fileChangeID)).count
+    }
+
+    private var selectedHunkCount: Int {
+        if let proposalDiff = selectedProposalChange?.diffPreview,
+           !proposalDiff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return ParsedUnifiedDiff(proposalDiff).hunks.count
+        }
+        guard let activePath, let diff = workspace.gitDiff(for: activePath),
+              (diff.displayMode ?? "SideBySide") == "SideBySide" else {
+            return 0
+        }
+        return ParsedUnifiedDiff(diff.diff).hunks.count
+    }
+
+    private func selectPreviousFile() {
+        guard canSelectPreviousFile else { return }
+        selectedPath = reviewFiles[activeFileIndex - 1].path
+    }
+
+    private func selectNextFile() {
+        guard canSelectNextFile else { return }
+        selectedPath = reviewFiles[activeFileIndex + 1].path
+    }
+
+    private func approveSelectedFile() {
+        guard let change = selectedProposalChange else { return }
+        workspace.reviewEditProposalFile(for: task, change: change, decision: "Approved")
+    }
+
+    private func requestChangeForSelectedFile() {
+        guard let change = selectedProposalChange else { return }
+        workspace.reviewEditProposalFile(
+            for: task,
+            change: change,
+            decision: "ChangesRequested",
+            note: "Revise the proposed change for \(change.path)."
+        )
+    }
+
     private var selectedFile: DiffReviewFile? {
         guard let activePath else {
             return nil
@@ -1522,12 +1632,13 @@ private struct FullscreenDiffReview: View {
         for change in task.editProposal?.fileChanges ?? [] {
             let validation = validationResult(for: change.path)
             let existing = files[change.path]
+            let proposalStats = diffStats(change.diffPreview)
             files[change.path] = DiffReviewFile(
                 path: change.path,
                 status: existing?.status ?? change.changeType,
                 detail: existing?.detail ?? change.changeType,
-                additions: existing?.additions,
-                deletions: existing?.deletions,
+                additions: existing?.additions ?? proposalStats.additions,
+                deletions: existing?.deletions ?? proposalStats.deletions,
                 rationale: change.rationale,
                 validationStatus: validation?.status
             )
@@ -1546,6 +1657,19 @@ private struct FullscreenDiffReview: View {
         }
 
         return files.values.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+    }
+
+    private func diffStats(_ preview: String) -> (additions: Int, deletions: Int) {
+        var additions = 0
+        var deletions = 0
+        for line in preview.split(separator: "\n", omittingEmptySubsequences: false) {
+            if line.hasPrefix("+") && !line.hasPrefix("+++") {
+                additions += 1
+            } else if line.hasPrefix("-") && !line.hasPrefix("---") {
+                deletions += 1
+            }
+        }
+        return (additions, deletions)
     }
 
     private var selectedRationale: String {
@@ -6328,6 +6452,398 @@ private struct GitFileChangeRow: View {
             return .blue
         default:
             return .secondary
+        }
+    }
+}
+
+private struct FullscreenGitDiffView: View {
+    var path: String
+    var diff: GitFileDiff?
+    var proposalDiff: String?
+    var isLoading: Bool
+    var mode: DiffReviewMode
+    @Binding var selectedHunkIndex: Int
+    var load: () -> Void
+
+    var body: some View {
+        Group {
+            if let proposalDiff,
+               !proposalDiff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                ReviewDiffDocumentView(
+                    parsed: ParsedUnifiedDiff(proposalDiff),
+                    mode: mode,
+                    selectedHunkIndex: $selectedHunkIndex,
+                    lineLimit: 260
+                )
+            } else if let diff, shouldRender(diff) {
+                ReviewDiffDocumentView(
+                    parsed: ParsedUnifiedDiff(diff.diff),
+                    mode: mode,
+                    selectedHunkIndex: $selectedHunkIndex,
+                    lineLimit: diff.appPreviewLineLimit ?? 260
+                )
+            } else {
+                ScrollView {
+                    GitDiffCard(path: path, diff: diff, isLoading: isLoading, load: load)
+                        .padding(14)
+                }
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if isLoading {
+                ProgressView()
+                    .controlSize(.small)
+                    .padding(10)
+            }
+        }
+    }
+
+    private func shouldRender(_ diff: GitFileDiff) -> Bool {
+        (diff.displayMode ?? "SideBySide") == "SideBySide" &&
+            !diff.diff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
+private struct ReviewDiffDocumentView: View {
+    var parsed: ParsedUnifiedDiff
+    var mode: DiffReviewMode
+    @Binding var selectedHunkIndex: Int
+    var lineLimit: Int
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView([.horizontal, .vertical]) {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(parsed.metadata.prefix(12).enumerated()), id: \.offset) { _, line in
+                        Text(line)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(Color.white.opacity(0.46))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 2)
+                    }
+
+                    ForEach(Array(parsed.hunks.enumerated()), id: \.element.id) { index, hunk in
+                        VStack(alignment: .leading, spacing: 0) {
+                            ReviewDiffHunkHeader(
+                                hunk: hunk,
+                                index: index,
+                                count: parsed.hunks.count,
+                                isSelected: index == selectedHunkIndex
+                            )
+
+                            if mode == .split {
+                                ReviewSplitHunkView(hunk: hunk, lineLimit: lineLimit)
+                            } else {
+                                ReviewUnifiedHunkView(hunk: hunk, lineLimit: lineLimit)
+                            }
+                        }
+                        .id(hunk.id)
+                    }
+
+                    if parsed.hunks.isEmpty {
+                        Text("NO TEXT HUNKS IN THIS DIFF")
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Color.white.opacity(0.55))
+                            .padding(18)
+                    }
+                }
+                .frame(minWidth: mode == .split ? 900 : 720, alignment: .leading)
+            }
+            .background(ForgeDesign.ink)
+            .onChange(of: selectedHunkIndex) { _, index in
+                guard parsed.hunks.indices.contains(index) else { return }
+                withAnimation(.easeOut(duration: 0.16)) {
+                    proxy.scrollTo(parsed.hunks[index].id, anchor: .top)
+                }
+            }
+        }
+    }
+}
+
+private struct ReviewDiffHunkHeader: View {
+    var hunk: ParsedDiffHunk
+    var index: Int
+    var count: Int
+    var isSelected: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text("HUNK \(index + 1)/\(count)")
+                .fontWeight(.black)
+            Text(hunk.header)
+                .lineLimit(1)
+        }
+        .font(.system(size: 10, design: .monospaced))
+        .foregroundStyle(isSelected ? ForgeDesign.ink : Color.white.opacity(0.72))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(isSelected ? ForgeDesign.accent : Color.white.opacity(0.08))
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Color.white.opacity(0.16)).frame(height: 1)
+        }
+    }
+}
+
+private struct ReviewUnifiedHunkView: View {
+    var hunk: ParsedDiffHunk
+    var lineLimit: Int
+
+    var body: some View {
+        ForEach(hunk.unifiedLines.prefix(lineLimit)) { line in
+            HStack(alignment: .top, spacing: 0) {
+                Text(line.oldLine.map(String.init) ?? "")
+                    .frame(width: 42, alignment: .trailing)
+                Text(line.newLine.map(String.init) ?? "")
+                    .frame(width: 42, alignment: .trailing)
+                Text(line.marker)
+                    .frame(width: 22)
+                Text(line.text.isEmpty ? " " : line.text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .font(.system(size: 11, design: .monospaced))
+            .foregroundStyle(line.foreground)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            .background(line.background)
+        }
+    }
+}
+
+private struct ReviewSplitHunkView: View {
+    var hunk: ParsedDiffHunk
+    var lineLimit: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 0) {
+                Text("OLD")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text("NEW")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .font(.system(size: 9, weight: .black, design: .monospaced))
+            .foregroundStyle(Color.white.opacity(0.5))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+
+            ForEach(hunk.splitRows.prefix(lineLimit)) { row in
+                HStack(alignment: .top, spacing: 0) {
+                    ReviewSplitCell(cell: row.old, side: .old)
+                    Rectangle().fill(Color.white.opacity(0.18)).frame(width: 1)
+                    ReviewSplitCell(cell: row.new, side: .new)
+                }
+            }
+        }
+    }
+}
+
+private struct ReviewSplitCell: View {
+    enum Side { case old, new }
+
+    var cell: ReviewDiffCell?
+    var side: Side
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(cell?.lineNumber.map(String.init) ?? "")
+                .foregroundStyle(Color.white.opacity(0.28))
+                .frame(width: 38, alignment: .trailing)
+            Text(cell?.text.isEmpty == false ? cell?.text ?? "" : " ")
+                .foregroundStyle(foreground)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .font(.system(size: 11, design: .monospaced))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 2)
+        .background(background)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var foreground: Color {
+        guard let cell else { return Color.white.opacity(0.2) }
+        switch cell.kind {
+        case .deletion: return Color(red: 1, green: 0.63, blue: 0.63)
+        case .addition: return Color(red: 0.62, green: 1, blue: 0.69)
+        case .marker: return Color.white.opacity(0.46)
+        case .context: return Color.white.opacity(0.82)
+        }
+    }
+
+    private var background: Color {
+        guard let cell else { return Color.white.opacity(0.018) }
+        switch (side, cell.kind) {
+        case (.old, .deletion): return Color.red.opacity(0.2)
+        case (.new, .addition): return Color.green.opacity(0.18)
+        case (_, .marker): return Color.white.opacity(0.055)
+        default: return .clear
+        }
+    }
+}
+
+private struct ParsedUnifiedDiff {
+    var metadata: [String]
+    var hunks: [ParsedDiffHunk]
+
+    init(_ text: String) {
+        var metadata: [String] = []
+        var hunks: [ParsedDiffHunk] = []
+        var currentHeader: String?
+        var currentLines: [String] = []
+
+        func flushHunk() {
+            guard let currentHeader else { return }
+            hunks.append(ParsedDiffHunk(index: hunks.count, header: currentHeader, rawLines: currentLines))
+        }
+
+        for raw in text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
+            if raw.hasPrefix("@@") {
+                flushHunk()
+                currentHeader = raw
+                currentLines = []
+            } else if currentHeader == nil {
+                metadata.append(raw)
+            } else {
+                currentLines.append(raw)
+            }
+        }
+        flushHunk()
+        self.metadata = metadata.filter { !$0.isEmpty }
+        self.hunks = hunks
+    }
+}
+
+private struct ParsedDiffHunk: Identifiable {
+    var id: String { "hunk-\(index)-\(header)" }
+    var index: Int
+    var header: String
+    var unifiedLines: [ReviewUnifiedLine]
+    var splitRows: [ReviewSplitRow]
+
+    init(index: Int, header: String, rawLines: [String]) {
+        self.index = index
+        self.header = header
+        let ranges = Self.parseRanges(header)
+        var oldLine = ranges.oldStart
+        var newLine = ranges.newStart
+        var unifiedLines: [ReviewUnifiedLine] = []
+        var splitRows: [ReviewSplitRow] = []
+        var pendingOld: [ReviewDiffCell] = []
+        var pendingNew: [ReviewDiffCell] = []
+
+        func flushChanges() {
+            let count = max(pendingOld.count, pendingNew.count)
+            for offset in 0..<count {
+                splitRows.append(ReviewSplitRow(
+                    id: "\(index)-split-\(splitRows.count)",
+                    old: pendingOld.indices.contains(offset) ? pendingOld[offset] : nil,
+                    new: pendingNew.indices.contains(offset) ? pendingNew[offset] : nil
+                ))
+            }
+            pendingOld.removeAll(keepingCapacity: true)
+            pendingNew.removeAll(keepingCapacity: true)
+        }
+
+        for (offset, raw) in rawLines.enumerated() {
+            if raw == "\\ No newline at end of file" {
+                flushChanges()
+                let marker = ReviewDiffCell(lineNumber: nil, text: raw, kind: .marker)
+                splitRows.append(ReviewSplitRow(id: "\(index)-split-\(splitRows.count)", old: marker, new: marker))
+                unifiedLines.append(ReviewUnifiedLine(id: "\(index)-line-\(offset)", oldLine: nil, newLine: nil, text: raw, kind: .marker))
+                continue
+            }
+
+            let marker = raw.first
+            let text = marker == "+" || marker == "-" || marker == " " ? String(raw.dropFirst()) : raw
+            switch marker {
+            case "-":
+                let cell = ReviewDiffCell(lineNumber: oldLine, text: text, kind: .deletion)
+                pendingOld.append(cell)
+                unifiedLines.append(ReviewUnifiedLine(id: "\(index)-line-\(offset)", oldLine: oldLine, newLine: nil, text: text, kind: .deletion))
+                oldLine = oldLine.map { $0 + 1 }
+            case "+":
+                let cell = ReviewDiffCell(lineNumber: newLine, text: text, kind: .addition)
+                pendingNew.append(cell)
+                unifiedLines.append(ReviewUnifiedLine(id: "\(index)-line-\(offset)", oldLine: nil, newLine: newLine, text: text, kind: .addition))
+                newLine = newLine.map { $0 + 1 }
+            default:
+                flushChanges()
+                let oldCell = ReviewDiffCell(lineNumber: oldLine, text: text, kind: .context)
+                let newCell = ReviewDiffCell(lineNumber: newLine, text: text, kind: .context)
+                splitRows.append(ReviewSplitRow(id: "\(index)-split-\(splitRows.count)", old: oldCell, new: newCell))
+                unifiedLines.append(ReviewUnifiedLine(id: "\(index)-line-\(offset)", oldLine: oldLine, newLine: newLine, text: text, kind: .context))
+                oldLine = oldLine.map { $0 + 1 }
+                newLine = newLine.map { $0 + 1 }
+            }
+        }
+        flushChanges()
+        self.unifiedLines = unifiedLines
+        self.splitRows = splitRows
+    }
+
+    private static func parseRanges(_ header: String) -> (oldStart: Int?, newStart: Int?) {
+        let parts = header.split(separator: " ")
+        guard parts.count >= 3 else { return (nil, nil) }
+        return (parseStart(parts[1], prefix: "-"), parseStart(parts[2], prefix: "+"))
+    }
+
+    private static func parseStart(_ token: Substring, prefix: Character) -> Int? {
+        guard token.first == prefix else { return nil }
+        let range = token.dropFirst().split(separator: ",", maxSplits: 1).first
+        return Int(range ?? "")
+    }
+}
+
+private enum ReviewDiffKind {
+    case context
+    case addition
+    case deletion
+    case marker
+}
+
+private struct ReviewDiffCell {
+    var lineNumber: Int?
+    var text: String
+    var kind: ReviewDiffKind
+}
+
+private struct ReviewSplitRow: Identifiable {
+    var id: String
+    var old: ReviewDiffCell?
+    var new: ReviewDiffCell?
+}
+
+private struct ReviewUnifiedLine: Identifiable {
+    var id: String
+    var oldLine: Int?
+    var newLine: Int?
+    var text: String
+    var kind: ReviewDiffKind
+
+    var marker: String {
+        switch kind {
+        case .addition: return "+"
+        case .deletion: return "−"
+        case .marker: return "\\"
+        case .context: return " "
+        }
+    }
+
+    var foreground: Color {
+        switch kind {
+        case .addition: return Color(red: 0.62, green: 1, blue: 0.69)
+        case .deletion: return Color(red: 1, green: 0.63, blue: 0.63)
+        case .marker: return Color.white.opacity(0.46)
+        case .context: return Color.white.opacity(0.82)
+        }
+    }
+
+    var background: Color {
+        switch kind {
+        case .addition: return Color.green.opacity(0.17)
+        case .deletion: return Color.red.opacity(0.19)
+        case .marker: return Color.white.opacity(0.055)
+        case .context: return .clear
         }
     }
 }

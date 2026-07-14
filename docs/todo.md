@@ -18,9 +18,8 @@ dashboard.
 - Polish the first-pass `1a`/`1b`/`14a` macOS shell toward the exact handoff:
   tighter spacing, better selected states, stronger task queue density, and
   more faithful live-run copy.
-- Polish the first usable `10a` full-screen diff review: exact split-diff
-  behavior, keyboard shortcuts, and stronger tests-covering-this-file
-  evidence.
+- Strengthen tests-covering-this-file evidence in the `10a` full-screen diff
+  review and finish its final visual-density pass.
 - Harden the new restricted Unified Diff engine after real-repo use, then add
   reviewed source-file create/delete and no-newline edge cases without
   weakening strict path, context, pre-apply, or recovery checks.
@@ -85,6 +84,12 @@ dashboard.
 
 ## Done Recently
 
+- Replaced the placeholder split view with a parsed, aligned two-column diff
+  renderer using standard unified hunk ranges and exact old/new line numbers.
+  Full-screen review now prefers the pending proposal diff before Apply,
+  falls back to working-tree diff afterward, shows reviewed/to-go counts, and
+  supports `J`/`K` hunk, `⌘←`/`⌘→` file, `⌘↵` approval, and Escape close
+  shortcuts. File decisions now live in the handoff-aligned diff verdict bar.
 - Added crash-safe edit transaction recovery. Apply now persists a versioned
   per-file write-ahead journal before every mutation. Startup restores
   interrupted Apply transactions to the verified before state, verifies fully

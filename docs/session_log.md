@@ -3499,3 +3499,49 @@ Next:
 
 - Commit and push transaction restart recovery directly to `main`, then
   implement exact split-diff behavior and keyboard/file navigation.
+
+## 2026-07-14 20:36:57 CEST
+
+Conversation summary:
+
+- After pushing transaction restart recovery directly to `main`, continued
+  the next V0 task by bringing the full-screen `10a` diff review closer to the
+  design handoff and native macOS keyboard behavior.
+
+Done:
+
+- Replaced the placeholder side-by-side view with a parser for standard
+  unified hunk ranges, exact old/new line numbers, and aligned deletion/addition
+  blocks.
+- Added a dark unified renderer and a true two-column split renderer with
+  distinct context, addition, deletion, marker, metadata, and selected-hunk
+  states.
+- Made full-screen review prefer the pending proposal's `diffPreview` before
+  Apply, then fall back to the real bounded working-tree diff afterward.
+- Derived proposal line statistics when git has no pre-Apply working-tree
+  change, so file and total counts remain useful during review.
+- Added stable Prev/Next file controls, reviewed/to-go progress, J/K hunk
+  navigation with scroll-to-hunk, `⌘←`/`⌘→` file navigation, `⌘↵` file
+  approval, and Escape close.
+- Moved per-file Looks Good / Request Change decisions into the handoff-aligned
+  diff verdict bar while preserving final Apply/Rollback actions in the review
+  pane.
+- Followed the macOS SwiftUI patterns guidance for explicit selection,
+  visible controls paired with shortcuts, and a stable three-pane desktop
+  layout.
+- Updated workspace, development, V0, project status, TODO, and root docs.
+  Coding-Agent Demo V0 estimate is now 94-97%.
+- Verified a full `swift build` before the final optional-line-number cleanup,
+  then direct `swiftc -typecheck` across every app source after that cleanup;
+  `git diff --check` also passes.
+
+Not done:
+
+- File-specific test evidence still uses task-level validation summaries.
+- Reviewed source create/delete and no-newline patch edge cases remain.
+- Richer inspection result-quality evidence and final `32a` polish remain.
+
+Next:
+
+- Commit and push the full-screen diff slice directly to `main`, then extend
+  reviewed source patching to create/delete and newline edge cases.

@@ -123,6 +123,12 @@ Responsibilities:
 The diff review should follow `10a`. It is the trust surface, not an
 afterthought inside a scroll stack.
 
+Current implementation: pending proposal diffs render before Apply and working
+tree diffs render afterward. Standard unified hunks are parsed into exact
+unified or aligned split rows with old/new line numbers. The surface provides
+stable file selection, reviewed/to-go progress, `J`/`K` hunk navigation,
+`⌘←`/`⌘→` file navigation, and `⌘↵` file approval alongside visible buttons.
+
 ### Tests And Terminal
 
 Responsibilities:

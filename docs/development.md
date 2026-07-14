@@ -40,8 +40,8 @@ task lifecycle without using real project memory or provider settings.
 Product-direction note: this development slice now has the first real
 provider-selected bounded loop with cooperative pause/abort/resume checkpoints,
 but it still is not a full Codex/Claude Code style autonomous agent. The next
-app/runtime work should add result-quality evidence, apply-transaction crash
-recovery, deeper self-fix, and final review polish.
+app/runtime work should add result-quality evidence, broader patch operations,
+deeper self-fix, and final review polish.
 
 The macOS app now has a first-pass coding-agent session shell: a task queue,
 `1a`-style empty composer, live agent stream, plan progress strip,
@@ -52,7 +52,10 @@ controls remain the main gap before the shell behaves like the finished V0.
 The shell also includes a first usable `10a`-style full-screen diff review
 surface. It opens from the Diff tab or review state card, shows a file tree,
 main diff pane, why-this-change reasoning, validation evidence, and
-apply/request-change actions wired to the existing proposal review gates.
+apply/request-change actions wired to the existing proposal review gates. It
+now renders pending proposal diffs before Apply, parses standard unified hunks
+into real aligned split rows with old/new line numbers, and supports keyboard
+file/hunk navigation plus per-file approval.
 
 ## Run Runtime
 
