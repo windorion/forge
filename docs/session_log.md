@@ -3588,3 +3588,39 @@ Next:
 
 - Commit and push source create/delete and EOF handling directly to `main`,
   then close inspection/test evidence and final chat-to-task polish.
+
+## 2026-07-14 21:58:07 CEST
+
+Conversation summary:
+
+- Continued directly on `main` with the last evidence-quality gap before the
+  final `32a` chat-to-task slice.
+
+Done:
+
+- Added persisted inspection result quality (`Strong`, `Partial`, `Weak`, or
+  `NoNewContext`) with a compact explanation, query-term coverage,
+  match/file/new-context counts, and total context bytes.
+- Added per-context-file byte length, SHA-256, matched-line count, and match
+  reasons so later review can verify exactly what repository evidence informed
+  a provider step.
+- Surfaced inspection quality and query coverage in the macOS Log alongside
+  the existing mode, engine, fingerprint, and budget evidence.
+- Split full-screen Diff validation into genuinely file-specific evidence and
+  task-wide evidence explicitly labelled as not proving file coverage.
+- Extended core smoke assertions for inspection quality, counts, coverage,
+  context bytes/hashes, and repeated-query guard evidence.
+- Updated status, V0, runtime, provider, local-first, workspace, development,
+  TODO, and root documentation. Coding-Agent Demo V0 estimate is now 98-99%.
+- Verified TypeScript checks/build, direct Swift type-check across all app
+  sources, full `npm run smoke:core`, and the evidence assertions.
+
+Not done:
+
+- Final `32a` clarification/chat-to-task polish remains before declaring the
+  documented V0 acceptance criteria 100% complete.
+
+Next:
+
+- Commit and push the evidence slice directly to `main`, then implement and
+  validate the final chat-to-task/plan-to-live-run closure.

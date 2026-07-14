@@ -414,14 +414,16 @@ guards, or max-step protection. Pause and abort requests are audited while the
 loop is active and stop it after the current safe step. Resume creates a new
 linked loop from a paused, aborted, or failed checkpoint. These controls do not
 kill in-flight commands or model calls and do not add permissions. A complete
-V0 agent still needs stronger query-variation handling, result-quality
-evidence, and wider recovery for malformed planning/patch output.
+V0 agent still needs stronger query-variation handling and wider recovery for
+malformed planning/patch output.
 
 Repository inspection steps also store a stable fingerprint of their
 normalized search terms and safe read paths plus a compact budget summary. If
 the same request fingerprint already exists on the task, Forge blocks the new
 step after path normalization but before duplicate `search_repo_context` or
-`read_context_file` calls.
+`read_context_file` calls. Completed steps persist a result-quality rating,
+query-term coverage, match/file/new-context counts, total context bytes, and
+per-file byte length, SHA-256, matched-line count, and match reasons.
 
 OpenAI Agent Run Step decisions have a narrow format-recovery boundary. If the
 response cannot be decoded or fails required-field/action-enum normalization,

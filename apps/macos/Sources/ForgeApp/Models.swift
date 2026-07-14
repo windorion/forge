@@ -152,6 +152,13 @@ struct AgentRunStep: Identifiable, Codable, Hashable {
     var inspectionBudgetSummary: String?
     var inspectionSearchMode: String?
     var inspectionSearchEngine: String?
+    var inspectionQuality: String?
+    var inspectionQualitySummary: String?
+    var inspectionMatchCount: Int?
+    var inspectionMatchedFileCount: Int?
+    var inspectionNewContextFileCount: Int?
+    var inspectionContextByteCount: Int?
+    var inspectionQueryCoverage: Double?
     var providerAttemptCount: Int?
     var providerOutputRecovered: Bool?
     var providerAttemptErrors: [String]?
@@ -672,6 +679,10 @@ struct ContextFile: Identifiable, Codable, Hashable {
     var id: String { path }
     var path: String
     var summary: String
+    var byteLength: Int?
+    var contentSha256: String?
+    var matchedLineCount: Int?
+    var matchReasons: [String]?
 }
 
 struct ModelProviderInfo: Codable, Hashable {

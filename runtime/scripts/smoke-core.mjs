@@ -1092,6 +1092,11 @@ async function runOpenAIRepositoryInspectionLoopFlow() {
   const loopSteps = loop?.stepIDs?.map((stepID) => current.agentRunSteps.find((step) => step.id === stepID));
   assert(loopSteps?.[0]?.action === "InspectRepository", `Expected InspectRepository first, got ${loopSteps?.[0]?.action}.`);
   assert(loopSteps?.[0]?.status === "Completed", "Repository inspection step did not complete.");
+  assert(["Strong", "Partial"].includes(loopSteps?.[0]?.inspectionQuality), `Unexpected inspection quality ${loopSteps?.[0]?.inspectionQuality}.`);
+  assert((loopSteps?.[0]?.inspectionMatchCount ?? 0) > 0, "Repository inspection did not persist matched-line evidence.");
+  assert((loopSteps?.[0]?.inspectionMatchedFileCount ?? 0) > 0, "Repository inspection did not persist matched-file evidence.");
+  assert((loopSteps?.[0]?.inspectionContextByteCount ?? 0) > 0, "Repository inspection did not persist read-byte evidence.");
+  assert(typeof loopSteps?.[0]?.inspectionQueryCoverage === "number", "Repository inspection did not persist query coverage.");
   assert(
     loopSteps?.[0]?.contextFilePaths?.includes("apps/macos/Sources/ForgeApp/KeychainStore.swift"),
     "Repository inspection did not record the provider-requested safe read path."
@@ -1102,6 +1107,9 @@ async function runOpenAIRepositoryInspectionLoopFlow() {
     current.contextFiles?.some((file) => file.path === "apps/macos/Sources/ForgeApp/KeychainStore.swift"),
     "Repository inspection did not merge new context into task state."
   );
+  const inspectedContext = current.contextFiles?.find((file) => file.path === "apps/macos/Sources/ForgeApp/KeychainStore.swift");
+  assert((inspectedContext?.byteLength ?? 0) > 0, "Inspected context did not retain byte length.");
+  assert(inspectedContext?.contentSha256?.length === 64, "Inspected context did not retain SHA-256 evidence.");
   assert(
     current.toolCalls?.some((tool) => tool.name === "list_repo_files") &&
       current.toolCalls?.some((tool) => tool.name === "search_repository_text") &&
@@ -1212,6 +1220,7 @@ async function runOpenAIInspectionRepeatGuardFlow() {
   assert(steps?.[0]?.inspectionBudgetSummary?.includes("scan<=400"), "Inspection step did not retain visible budget evidence.");
   assert(steps?.[0]?.inspectionSearchMode === "Symbol", "Inspection step did not retain the selected Symbol mode.");
   assert(steps?.[0]?.inspectionSearchEngine === "ripgrep-word", `Expected ripgrep-word, got ${steps?.[0]?.inspectionSearchEngine}.`);
+  assert(steps?.[0]?.inspectionQualitySummary?.includes("query term"), "Inspection step did not retain result-quality summary.");
   assert(
     (current.toolCalls?.filter((tool) => tool.name === "search_repository_symbols").length ?? 0) - searchCallsBefore === 1,
     "Repeated inspection executed a duplicate repository search."

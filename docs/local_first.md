@@ -51,6 +51,9 @@ Current implementation:
   durable full-text or symbol index.
 - It records search mode, engine, budgets, inspected/new paths and a normalized
   request fingerprint; repeats and zero-new-context steps are blocked.
+- It persists query coverage, matched lines/files, context byte totals, content
+  hashes, and a Strong/Partial/Weak/NoNewContext result-quality rating without
+  building or uploading a durable remote index.
 
 Still future work:
 

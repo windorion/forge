@@ -153,7 +153,8 @@ Built foundation:
   agent stream, plan gate/action rail, and Log/Diff/Tests tabs
 - first usable full-screen diff review surface with file tree, main diff pane,
   reasoning, validation evidence, and existing proposal apply/request-change
-  actions
+  actions. Validation is split into genuinely file-specific evidence and
+  clearly labelled task-wide evidence that is not claimed as file coverage.
 
 Major gaps:
 
@@ -161,15 +162,19 @@ Major gaps:
 - Full-screen diff review now has durable file-level decisions and linked
   request-change revisions, exact aligned split rendering with old/new line
   numbers, proposal-before-Apply preview, and keyboard file/hunk/approval
-  navigation. File-specific test evidence still needs a stronger mapping.
+  navigation. Its validation panel only calls evidence file-specific when the
+  command metadata names the selected path or filename; all other results are
+  labelled task-wide and are not claimed as file coverage.
 - Patch apply now supports exact replacements, multi-hunk text patches, and
   strict context-anchored Unified Diff modifications across reviewed source
   files, reviewed source create/delete, and standard EOF newline markers, with
   verified compensated apply/rollback transactions.
 - Command output now has a streamed, cancellable, selectable task-scoped
   surface with reviewed self-fix rerun evidence after apply.
-- Provider-backed run loop now has bounded multi-step orchestration, but it
-  still needs richer search result-quality evidence and review-loop polish.
+- Provider-backed run loop now has bounded multi-step orchestration and
+  persisted Strong/Partial/Weak/NoNewContext inspection quality with query
+  coverage, matches, new-context, byte totals, and per-file hashes. Review-loop
+  polish remains.
 - Agent Loops left `Running` by runtime shutdown now recover at startup as
   `Paused / RuntimeRestarted` checkpoints with finalized transient evidence and
   resumable lineage.
@@ -191,5 +196,4 @@ Major gaps:
 
 ## Next Implementation Order
 
-1. Add richer inspection result-quality and file-specific test evidence.
-2. Add `32a` chat-to-task polish once the live run works.
+1. Complete `32a` chat-to-task and clarification polish.

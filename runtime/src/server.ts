@@ -6718,17 +6718,41 @@ async function executeRepositoryInspectionStep(task: ForgeTask, step: AgentRunSt
   const inspectedFiles = await buildContextFiles(task, projectFiles, matches, requestedReadPaths);
   const newFiles = inspectedFiles.filter((file) => !existingPaths.has(file.path));
   step.contextFilePaths = inspectedFiles.map((file) => file.path);
+  const matchCount = matches.reduce((total, match) => total + match.matchedLines.length, 0);
+  const matchedFileCount = matches.filter((match) =>
+    match.matchedLines.length > 0 || match.reasons.some((reason) =>
+      reason.includes("match") || reason.includes("referenced")
+    )
+  ).length;
+  const coveredTermCount = repositoryInspectionCoveredTerms(searchTerms, matches).length;
+  const queryCoverage = searchTerms.length === 0 ? 1 : coveredTermCount / searchTerms.length;
+  const contextByteCount = inspectedFiles.reduce((total, file) => total + (file.byteLength ?? 0), 0);
+  const quality = newFiles.length === 0
+    ? "NoNewContext"
+    : queryCoverage >= 0.75 && matchedFileCount >= 2
+      ? "Strong"
+      : queryCoverage >= 0.4 || requestedReadPaths.length > 0
+        ? "Partial"
+        : "Weak";
+  const qualitySummary = `${quality} inspection: ${matchCount} matched line(s) across ${matchedFileCount} file(s), ${coveredTermCount}/${searchTerms.length} query term(s) covered, ${newFiles.length} new context file(s), ${contextByteCount} byte(s) read.`;
+  step.inspectionQuality = quality;
+  step.inspectionQualitySummary = qualitySummary;
+  step.inspectionMatchCount = matchCount;
+  step.inspectionMatchedFileCount = matchedFileCount;
+  step.inspectionNewContextFileCount = newFiles.length;
+  step.inspectionContextByteCount = contextByteCount;
+  step.inspectionQueryCoverage = queryCoverage;
 
   if (newFiles.length === 0) {
     return blockAgentRunStep(
       task,
       step,
-      `Repository inspection found no new safe context for ${searchTerms.join(", ") || "the task"}.`
+      `Repository inspection found no new safe context for ${searchTerms.join(", ") || "the task"}. ${qualitySummary}`
     );
   }
 
   task.contextFiles = mergeContextFiles(task.contextFiles, inspectedFiles);
-  const resultSummary = `Inspected ${inspectedFiles.length} file(s) and added ${newFiles.length} new context file(s): ${formatPathList(newFiles.map((file) => file.path))}.`;
+  const resultSummary = `Inspected ${inspectedFiles.length} file(s) and added ${newFiles.length} new context file(s): ${formatPathList(newFiles.map((file) => file.path))}. ${qualitySummary}`;
   if (!step.loopID) {
     task.status = "Human Review";
     task.currentPhase = "Repository Context Ready";
@@ -6757,6 +6781,17 @@ function repositoryInspectionRequestFingerprint(searchMode: "Text" | "Symbol", s
     .update(JSON.stringify({ searchMode, searchTerms, readPaths }))
     .digest("hex")
     .slice(0, 16);
+}
+
+function repositoryInspectionCoveredTerms(searchTerms: string[], matches: RepositorySearchMatch[]): string[] {
+  return searchTerms.filter((term) => {
+    const normalized = term.toLowerCase();
+    return matches.some((match) =>
+      match.path.toLowerCase().includes(normalized) ||
+      match.reasons.some((reason) => reason.toLowerCase().includes(normalized)) ||
+      match.matchedLines.some((line) => line.toLowerCase().includes(normalized))
+    );
+  });
 }
 
 function completeAgentRunStepAfterAction(
@@ -10549,7 +10584,11 @@ async function buildContextFiles(
     const match = matches.find((candidate) => candidate.path === file);
     contextFiles.push({
       path: file,
-      summary: summarizeContextFile(file, content, match)
+      summary: summarizeContextFile(file, content, match),
+      byteLength: Buffer.byteLength(content, "utf8"),
+      contentSha256: sha256Text(content),
+      matchedLineCount: match?.matchedLines.length ?? 0,
+      matchReasons: match?.reasons ?? []
     });
   }
 

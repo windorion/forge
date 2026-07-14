@@ -78,7 +78,10 @@ Implemented today:
   context evidence, and can continue the bounded loop into proposal generation
   without granting arbitrary tools. Normalized requests store a stable
   cross-step fingerprint and visible scan/search/context budgets; an identical
-  later request is blocked before duplicate search or read calls.
+  later request is blocked before duplicate search or read calls. Completed
+  inspections also persist Strong/Partial/Weak/NoNewContext quality, query-term
+  coverage, match/file counts, new-context counts, byte totals, and per-file
+  content hashes.
 - Agent-step structured-output recovery: malformed JSON/schema/enum decisions
   receive one bounded correction attempt. A recovered decision records both
   attempts; retry exhaustion creates a failed, auditable step without running
@@ -176,11 +179,10 @@ Implemented today:
 
 Not finished yet:
 
-- Full-fidelity `design_handoff_forge` UI, especially decision prompts,
-  file-specific test evidence, and polished live-run states.
+- Full-fidelity `design_handoff_forge` UI, especially the final `32a`
+  chat-to-task and decision-prompt polish.
 - Rich autonomous model-backed read/search/patch/run/repair beyond the current
   bounded loop and restricted unified-diff patch engine.
-- Richer file-specific test evidence and inspection result-quality evidence.
 - Actual PR creation/publication after explicit review.
 - Durable repository index with symbols and semantic search.
 - Full workspace picker and commercial packaging/signing path.
@@ -193,7 +195,7 @@ Product-readiness estimate:
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 97-98% | Adds reviewed source create/delete and EOF-marker handling to real aligned split review, restart-safe loops/transactions, per-file decisions, commands, self-fix, repository inspection, and bad-output recovery; final evidence and chat-to-task polish remain. |
+| Coding-agent demo V0 | 98-99% | Adds durable inspection-quality metrics and honest file-specific versus task-wide validation evidence to reviewed source lifecycle, aligned diff, restart-safe loops/transactions, commands, self-fix, and bad-output recovery; only final chat-to-task polish remains. |
 | Useful developer alpha | 50-60% | Forge can recover interrupted loops/transactions and apply guarded source create/modify/delete changes, but still needs broader autonomous tool use and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, memory, MCP/GitHub, and product polish. |
@@ -207,8 +209,7 @@ Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
 
 - polish the first-pass macOS coding-agent session UI toward the exact
   `design_handoff_forge` screens
-- add richer inspection result-quality evidence
-- strengthen file-specific test evidence in full diff review
+- complete the `32a` chat-to-task and clarification experience
 - return to PR/GitHub publication after the agent coding loop feels real
 
 ## Core Principles

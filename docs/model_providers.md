@@ -82,8 +82,10 @@ inspection the provider returns only bounded search terms and optional
 repo-relative read paths; the runtime filters unsafe paths and executes logged
 `list_repo_files`, `search_repo_context`, and `read_context_file` calls under
 existing budgets. The runtime fingerprints normalized inspection requests and
-blocks a repeated fingerprint before duplicate search/read calls. The runtime
-still generates IDs, timestamps, validation
+blocks a repeated fingerprint before duplicate search/read calls. The runtime,
+not the provider, derives and persists query coverage, match counts, context
+bytes/hashes, and the final inspection-quality rating. The runtime still
+generates IDs, timestamps, validation
 state, execution proposal evidence, command execution, and restricted apply
 operations locally. The remote provider never directly edits files, runs
 commands, commits, pushes, or executes tools.

@@ -15,11 +15,9 @@ what to do next without rereading the whole project history.
 Goal: make Forge feel like a real coding-agent application, not a workflow
 dashboard.
 
-- Polish the first-pass `1a`/`1b`/`14a` macOS shell toward the exact handoff:
-  tighter spacing, better selected states, stronger task queue density, and
-  more faithful live-run copy.
-- Strengthen tests-covering-this-file evidence in the `10a` full-screen diff
-  review and finish its final visual-density pass.
+- Complete the `32a` chat-to-task and clarification flow, including a compact
+  embedded plan with time/cost/risk evidence and a direct transition from plan
+  approval into the bounded live run.
 - Harden reviewed source create/modify/delete and EOF-marker handling after
   real-repo use without weakening strict path, context, pre-apply, or recovery
   checks.
@@ -28,8 +26,8 @@ dashboard.
 
 ## P1: Real Agent Behavior
 
-- Add richer inspection result-quality evidence and safe query-variation
-  handling.
+- Add safe query-variation handling beyond the current exact-fingerprint repeat
+  guard.
 - Extend the bounded read-only planning/execution context loops into a
   runtime-owned tool-call loop with strict allowed tools and stop conditions.
 - Extend bounded output recovery beyond Agent Run Step decisions to malformed

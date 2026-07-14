@@ -1033,6 +1033,24 @@ private struct AgentRunStepPanel: View {
                         }
 
                         if step.action == "InspectRepository" {
+                            if let quality = step.inspectionQuality {
+                                HStack(spacing: 8) {
+                                    Text("QUALITY  \(quality.uppercased())")
+                                        .font(.caption2.monospaced().weight(.bold))
+                                        .foregroundStyle(quality == "Strong" ? ForgeDesign.success : quality == "Weak" || quality == "NoNewContext" ? ForgeDesign.warning : ForgeDesign.ink)
+                                    if let coverage = step.inspectionQueryCoverage {
+                                        Text("COVERAGE  \(Int((coverage * 100).rounded()))%")
+                                            .font(.caption2.monospaced())
+                                            .foregroundStyle(ForgeDesign.muted)
+                                    }
+                                }
+                            }
+                            if let qualitySummary = step.inspectionQualitySummary {
+                                Text(qualitySummary)
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(ForgeDesign.muted)
+                                    .textSelection(.enabled)
+                            }
                             if let mode = step.inspectionSearchMode {
                                 Text("SEARCH MODE  \(mode) · \(step.inspectionSearchEngine ?? "pending")")
                                     .font(.caption2.monospaced().weight(.medium))
@@ -1478,20 +1496,37 @@ private struct FullscreenDiffReview: View {
                 .forgeCard(shadow: false)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("TESTS COVERING THIS FILE")
+                    Text("VALIDATION EVIDENCE")
                         .font(.system(size: 10, weight: .bold, design: .monospaced))
                         .foregroundStyle(ForgeDesign.muted)
 
-                    if testEvidence.isEmpty {
+                    if fileTestEvidence.isEmpty && taskWideTestEvidence.isEmpty {
                         Text("No validation evidence has been recorded yet.")
                             .font(.caption)
                             .foregroundStyle(ForgeDesign.muted)
                     } else {
-                        ForEach(Array(testEvidence.prefix(6).enumerated()), id: \.offset) { _, evidence in
+                        Text(fileTestEvidence.isEmpty ? "FILE-SPECIFIC  NONE RECORDED" : "FILE-SPECIFIC")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundStyle(fileTestEvidence.isEmpty ? ForgeDesign.warning : ForgeDesign.success)
+
+                        ForEach(Array(fileTestEvidence.prefix(4).enumerated()), id: \.offset) { _, evidence in
                             Text(evidence)
                                 .font(.caption.monospaced())
                                 .foregroundStyle(ForgeDesign.ink)
                                 .textSelection(.enabled)
+                        }
+
+                        if !taskWideTestEvidence.isEmpty {
+                            Text("TASK-WIDE — NOT CLAIMED AS FILE COVERAGE")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .foregroundStyle(ForgeDesign.muted)
+
+                            ForEach(Array(taskWideTestEvidence.prefix(3).enumerated()), id: \.offset) { _, evidence in
+                                Text(evidence)
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(ForgeDesign.muted)
+                                    .textSelection(.enabled)
+                            }
                         }
                     }
                 }
@@ -1682,10 +1717,28 @@ private struct FullscreenDiffReview: View {
         return task.reviewSummary ?? "Forge will attach file-level reasoning here when an edit proposal exists."
     }
 
-    private var testEvidence: [String] {
-        task.validationRuns.reversed().flatMap { run in
+    private var fileTestEvidence: [String] {
+        validationEvidence.filter { $0.isFileSpecific }.map { $0.summary }
+    }
+
+    private var taskWideTestEvidence: [String] {
+        validationEvidence.filter { !$0.isFileSpecific }.map { $0.summary }
+    }
+
+    private var validationEvidence: [(summary: String, isFileSpecific: Bool)] {
+        let path = activePath ?? ""
+        let fileName = path.split(separator: "/").last.map(String.init) ?? path
+        return task.validationRuns.reversed().flatMap { run in
             run.commands.map { command in
-                "\(run.presetName) / \(command.name) / \(command.status): \(command.outputSummary)"
+                let searchable = "\(command.name) \(command.command) \(command.outputSummary)".lowercased()
+                let isFileSpecific = !path.isEmpty && (
+                    searchable.contains(path.lowercased()) ||
+                    (!fileName.isEmpty && searchable.contains(fileName.lowercased()))
+                )
+                return (
+                    "\(run.presetName) / \(command.name) / \(command.status): \(command.outputSummary)",
+                    isFileSpecific
+                )
             }
         }
     }

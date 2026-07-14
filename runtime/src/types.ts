@@ -193,6 +193,13 @@ export interface AgentRunStep {
   inspectionBudgetSummary?: string;
   inspectionSearchMode?: RepositoryInspectionSearchMode;
   inspectionSearchEngine?: string;
+  inspectionQuality?: "Strong" | "Partial" | "Weak" | "NoNewContext";
+  inspectionQualitySummary?: string;
+  inspectionMatchCount?: number;
+  inspectionMatchedFileCount?: number;
+  inspectionNewContextFileCount?: number;
+  inspectionContextByteCount?: number;
+  inspectionQueryCoverage?: number;
   providerAttemptCount?: number;
   providerOutputRecovered?: boolean;
   providerAttemptErrors?: string[];
@@ -874,6 +881,10 @@ export interface GitPullRequestPreflight {
 export interface ContextFile {
   path: string;
   summary: string;
+  byteLength?: number;
+  contentSha256?: string;
+  matchedLineCount?: number;
+  matchReasons?: string[];
 }
 
 export interface ForgeTask {

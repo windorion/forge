@@ -72,7 +72,10 @@ Implemented:
   and lets the bounded loop continue to its next provider decision. Each
   normalized request stores a short SHA-256 fingerprint and visible scan,
   search, context, term, and read budgets. A later identical request is blocked
-  before duplicate search/read calls.
+  before duplicate search/read calls. A completed inspection also stores a
+  Strong/Partial/Weak/NoNewContext rating, a concise quality explanation,
+  query-term coverage, match/file/new-context counts, total context bytes, and
+  per-file byte length, SHA-256, matched-line count, and match reasons.
 - Bounded Agent Run Step output recovery. OpenAI structured-output decode,
   required-field, and action-enum failures receive one corrective retry. A
   successful retry stores its attempt count and first error; exhaustion stores
@@ -258,7 +261,7 @@ These percentages are product-readiness estimates, not calendar estimates.
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 97-98% | Adds reviewed source create/delete and EOF-marker handling to real aligned split review, restart-safe loops/transactions, per-file decisions, commands, self-fix, repository inspection, and bad-output recovery; final evidence and chat-to-task polish remain. |
+| Coding-agent demo V0 | 98-99% | Adds durable inspection-quality metrics and honest file-specific versus task-wide validation evidence to reviewed source lifecycle, aligned diff, restart-safe loops/transactions, commands, self-fix, and bad-output recovery; only final chat-to-task polish remains. |
 | Useful developer alpha | 50-60% | Forge can recover interrupted loops/transactions and apply guarded source create/modify/delete changes, but still needs broader autonomous tool use and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
@@ -273,8 +276,8 @@ The hardest remaining work is not the app shell. The hardest remaining work is:
 
 - a richer model-backed coding loop with read/search tool choices and broader
   patch/recovery behavior
-- a polished UI that fully matches the handoff, especially file-specific test
-  evidence, live-run polish, and decision prompts
+- a polished UI that fully matches the handoff, especially live-run polish and
+  decision prompts
 - a useful source-code patch engine beyond exact text-based hunks
 - reliable repository understanding beyond bounded file scans
 - git workflow from dirty tree to approved published PR
@@ -292,9 +295,7 @@ real source diff, and approve the final patch.
 
 Remaining V0 gaps:
 
-- polish the first-pass `1a`/`1b`/`14a` shell toward the exact handoff
-- strengthen tests-covering-this-file evidence in the `10a` review
-- add richer inspection result-quality evidence
+- complete the `32a` chat-to-task and clarification flow
 - keep git/preflight work as supporting infrastructure rather than the main
   demo
 

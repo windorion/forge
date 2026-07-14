@@ -128,6 +128,9 @@ tree diffs render afterward. Standard unified hunks are parsed into exact
 unified or aligned split rows with old/new line numbers. The surface provides
 stable file selection, reviewed/to-go progress, `J`/`K` hunk navigation,
 `⌘←`/`⌘→` file navigation, and `⌘↵` file approval alongside visible buttons.
+Validation evidence names the selected file only when stored command metadata
+references its path or filename; otherwise the result appears in a separate
+task-wide section explicitly marked as not proving file coverage.
 
 ### Tests And Terminal
 
