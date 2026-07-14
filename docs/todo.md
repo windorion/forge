@@ -29,12 +29,12 @@ dashboard.
 
 ## P1: Real Agent Behavior
 
-- Extend `InspectRepository` with repeated-request suppression, explicit
-  ripgrep-backed text/symbol search choices, and malformed-output retry.
+- Extend `InspectRepository` with cross-step request fingerprints, explicit
+  ripgrep-backed text/symbol search choices, and clearer budget evidence.
 - Extend the bounded read-only planning/execution context loops into a
   runtime-owned tool-call loop with strict allowed tools and stop conditions.
-- Add stricter model output normalization, retry rules, and failure recovery
-  for malformed tool calls or patch artifacts.
+- Extend bounded output recovery beyond Agent Run Step decisions to malformed
+  planning tool requests and patch artifacts without retrying side effects.
 - Add request-change revision loops that operate from full diff review, not
   only the current review stack.
 - Add crash-restart recovery for loops persisted as running when the runtime
@@ -89,6 +89,11 @@ dashboard.
 
 ## Done Recently
 
+- Added bounded malformed-output recovery for OpenAI Agent Run Step decisions.
+  JSON/schema/required-field/action-enum failures get one corrective retry;
+  recovered decisions store attempt evidence, while retry exhaustion creates a
+  failed auditable step and executes no new tools, commands, or mutations. The
+  macOS Log shows recovered/failed attempt counts, and smoke covers both paths.
 - Added provider-selected `InspectRepository` inside Agent Run Step/Loop. The
   provider supplies bounded search terms and optional repo-relative paths;
   the runtime filters unsafe paths, executes only logged read-only list/search/

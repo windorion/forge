@@ -166,6 +166,9 @@ export interface AgentRunStepDecision {
   commandRerunEvidenceID?: string;
   searchTerms?: string[];
   readPaths?: string[];
+  providerAttemptCount?: number;
+  providerOutputRecovered?: boolean;
+  providerAttemptErrors?: string[];
 }
 
 export interface AgentRunStep {
@@ -182,6 +185,9 @@ export interface AgentRunStep {
   searchTerms?: string[];
   readPaths?: string[];
   contextFilePaths?: string[];
+  providerAttemptCount?: number;
+  providerOutputRecovered?: boolean;
+  providerAttemptErrors?: string[];
   targetID?: string;
   resultSummary?: string;
   error?: string;

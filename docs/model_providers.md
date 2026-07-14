@@ -88,6 +88,14 @@ Agent Run Loop v0 repeats these provider step decisions under runtime-owned
 stop conditions; the provider does not control the loop counter or bypass
 review gates.
 
+OpenAI Agent Run Step decisions also have one format-only correction attempt.
+Response JSON/schema decoding, missing required text, and unknown action enums
+can be retried once with a concise validation error and the same strict schema.
+The runtime records successful recovery metadata on the step. If correction is
+still malformed, it stores a failed safe-wait step and stops before any tool,
+command, or file action. HTTP, network, and timeout errors are not automatically
+retried.
+
 ## Configuration
 
 Environment variables provide startup defaults:

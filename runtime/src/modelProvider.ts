@@ -82,6 +82,23 @@ export interface ModelProvider {
   createValidationRepairBrief(request: ValidationRepairBriefRequest): Promise<ValidationRepairBrief>;
 }
 
+export class AgentRunStepProviderError extends Error {
+  constructor(
+    readonly attemptCount: number,
+    readonly attemptErrors: string[]
+  ) {
+    super(`Model provider could not return a valid agent step after ${attemptCount} attempts.`);
+    this.name = "AgentRunStepProviderError";
+  }
+}
+
+class ModelProviderOutputFormatError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ModelProviderOutputFormatError";
+  }
+}
+
 type JsonSchema = Record<string, unknown>;
 
 interface OpenAIProviderConfig {
@@ -396,27 +413,60 @@ class OpenAIResponsesModelProvider implements ModelProvider {
   }
 
   async createAgentRunStep(request: AgentRunStepRequest): Promise<AgentRunStepDecision> {
-    const output = await this.createStructuredOutput(
-      "forge_agent_run_step",
-      agentRunStepDecisionSchema,
-      [
-        "Choose exactly one safe next action for Forge's live coding-agent run.",
-        "You are selecting the next runtime-owned action; you are not executing tools yourself.",
-        "Use InspectRepository when more read-only codebase evidence is needed before proposing or repairing an edit. Provide bounded searchTerms and optional repo-relative readPaths. The runtime validates and executes them.",
-        "Do not request repository evidence already present in task context or recent InspectRepository steps; wait for human review when no new safe context is needed.",
-        "Use GenerateEditProposal when an execution proposal exists and there is no proposed edit awaiting review.",
-        "Use RunTaskCommand only when one of the provided taskCommands has canRun true; commandID must exactly match that command id.",
-        "Use GenerateValidationRepairProposal when a failed validation or task command has a repair brief and no repair proposal is currently awaiting review.",
-        "Use RerunRepairCommand only when one of the provided commandRerunEvidence items is ready or failed; commandRerunEvidenceID must exactly match that evidence id.",
-        "Use WaitForHumanReview when a proposal, plan, command approval, or user decision is needed.",
-        "Use RequestPlanApproval when the current plan has not been approved.",
-        "Never ask to apply edits, commit, push, install dependencies, or run arbitrary shell text.",
-        taskProviderContext(request.task),
-        agentRunStepRequestContext(request)
-      ].join("\n\n")
-    );
+    const promptParts = [
+      "Choose exactly one safe next action for Forge's live coding-agent run.",
+      "You are selecting the next runtime-owned action; you are not executing tools yourself.",
+      "Use InspectRepository when more read-only codebase evidence is needed before proposing or repairing an edit. Provide bounded searchTerms and optional repo-relative readPaths. The runtime validates and executes them.",
+      "Do not request repository evidence already present in task context or recent InspectRepository steps; wait for human review when no new safe context is needed.",
+      "Use GenerateEditProposal when an execution proposal exists and there is no proposed edit awaiting review.",
+      "Use RunTaskCommand only when one of the provided taskCommands has canRun true; commandID must exactly match that command id.",
+      "Use GenerateValidationRepairProposal when a failed validation or task command has a repair brief and no repair proposal is currently awaiting review.",
+      "Use RerunRepairCommand only when one of the provided commandRerunEvidence items is ready or failed; commandRerunEvidenceID must exactly match that evidence id.",
+      "Use WaitForHumanReview when a proposal, plan, command approval, or user decision is needed.",
+      "Use RequestPlanApproval when the current plan has not been approved.",
+      "Never ask to apply edits, commit, push, install dependencies, or run arbitrary shell text.",
+      taskProviderContext(request.task),
+      agentRunStepRequestContext(request)
+    ];
+    const attemptErrors: string[] = [];
 
-    return normalizeAgentRunStepDecisionOutput(output, request);
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      const correction = attemptErrors.length > 0
+        ? [
+            "Your previous agent-step output could not be validated.",
+            `Validation error: ${attemptErrors.at(-1)}`,
+            "Return exactly one object matching the supplied schema. Use only an allowed action and include non-empty summary and rationale strings."
+          ].join("\n")
+        : undefined;
+      try {
+        const output = await this.createStructuredOutput(
+          "forge_agent_run_step",
+          agentRunStepDecisionSchema,
+          [...promptParts, correction].filter(Boolean).join("\n\n")
+        );
+        let decision: AgentRunStepDecision;
+        try {
+          decision = normalizeAgentRunStepDecisionOutput(output, request);
+        } catch (error) {
+          throw new ModelProviderOutputFormatError(compactProviderError(error));
+        }
+
+        return {
+          ...decision,
+          providerAttemptCount: attempt,
+          providerOutputRecovered: attempt > 1,
+          providerAttemptErrors: attemptErrors.length > 0 ? attemptErrors : undefined
+        };
+      } catch (error) {
+        if (!(error instanceof ModelProviderOutputFormatError)) {
+          throw error;
+        }
+
+        attemptErrors.push(compactProviderError(error));
+      }
+    }
+
+    throw new AgentRunStepProviderError(2, attemptErrors);
   }
 
   async createEditProposal(request: EditProposalRequest): Promise<EditProposal> {
@@ -553,8 +603,12 @@ class OpenAIResponsesModelProvider implements ModelProvider {
         throw new Error(`OpenAI Responses request failed (${response.status}): ${raw.slice(0, 500)}`);
       }
 
-      const parsed = JSON.parse(raw) as unknown;
-      return JSON.parse(extractOpenAIOutputText(parsed));
+      try {
+        const parsed = JSON.parse(raw) as unknown;
+        return JSON.parse(extractOpenAIOutputText(parsed));
+      } catch (error) {
+        throw new ModelProviderOutputFormatError(`Structured output could not be decoded: ${compactProviderError(error)}`);
+      }
     } finally {
       clearTimeout(timeout);
     }
@@ -1040,8 +1094,12 @@ function normalizeAgentRunStepDecisionOutput(
     throw new Error("OpenAI agent run step output was not an object.");
   }
 
+  const action = normalizeAgentRunStepAction(output.action);
+  if (!action) {
+    throw new Error("OpenAI agent run step action was not in the allowed action enum.");
+  }
+
   const fallback = chooseDeterministicAgentRunStep(request);
-  const action = normalizeAgentRunStepAction(output.action) ?? fallback.action;
   const commandID = optionalString(output.commandID);
   const commandRerunEvidenceID = optionalString(output.commandRerunEvidenceID);
   const searchTerms = normalizeAgentRunStepStringList(output.searchTerms, 10, 64);
@@ -1086,6 +1144,13 @@ function normalizeAgentRunStepStringList(value: unknown, limit: number, itemLimi
     .filter((item, index, values) => item.length > 0 && values.indexOf(item) === index)
     .slice(0, limit)
     .map((item) => item.slice(0, itemLimit));
+}
+
+function compactProviderError(error: unknown): string {
+  return (error instanceof Error ? error.message : String(error))
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 240) || "Unknown structured output validation error.";
 }
 
 function normalizeAgentRunStepAction(value: unknown): AgentRunStepDecision["action"] | undefined {

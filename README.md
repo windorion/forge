@@ -73,9 +73,14 @@ Implemented today:
   rationale, status, linked command/proposal targets, and result summaries.
 - Runtime-owned repository inspection step: the provider may choose
   `InspectRepository` with bounded search terms and candidate repo-relative
-  paths. Forge filters unsafe/repeated inputs, executes only its logged
-  read-only list/search/read tools, stores context evidence, and can continue
-  the bounded loop into proposal generation without granting arbitrary tools.
+  paths. Forge filters unsafe inputs, blocks inspections that add no new
+  context, executes only its logged read-only list/search/read tools, stores
+  context evidence, and can continue the bounded loop into proposal generation
+  without granting arbitrary tools.
+- Agent-step structured-output recovery: malformed JSON/schema/enum decisions
+  receive one bounded correction attempt. A recovered decision records both
+  attempts; retry exhaustion creates a failed, auditable step without running
+  tools, commands, or file mutations.
 - Bounded Agent Run Loop v0: `POST /tasks/:taskID/run-agent-loop` repeatedly
   runs provider-selected safe steps up to a small runtime-enforced limit and
   stops at review gates, passed commands, verified self-fixes, blocked steps,
@@ -184,7 +189,7 @@ Product-readiness estimate:
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 84-88% | Has a first-pass session UI shell, full-screen diff review, verified cross-file source patches, streamed/cancellable commands, self-fix evidence, pause/abort/resume, and a provider-selected read/search→proposal loop; richer retries/tool breadth and UI polish remain. |
+| Coding-agent demo V0 | 85-89% | Has a first-pass session UI shell, full-screen diff review, verified cross-file source patches, streamed/cancellable commands, self-fix evidence, pause/abort/resume, a provider-selected read/search→proposal loop, and bounded bad-output recovery; richer tool breadth and UI polish remain. |
 | Useful developer alpha | 40-50% | Forge can now apply guarded normal source modifications, but still needs richer autonomous tool use, source create/delete, restart recovery, and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, memory, MCP/GitHub, and product polish. |
@@ -199,7 +204,7 @@ Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
 - polish the first-pass macOS coding-agent session UI toward the exact
   `design_handoff_forge` screens
 - extend `InspectRepository` with repeated-request suppression, explicit
-  ripgrep/symbol choices, and malformed-output recovery
+  ripgrep/text-symbol choices, and clearer budget evidence
 - extend the restricted patch engine to source-file create/delete and
   no-newline edge cases after the new Unified Diff path proves stable
 - connect full diff review to durable file-level decisions once the review

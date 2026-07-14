@@ -148,6 +148,9 @@ struct AgentRunStep: Identifiable, Codable, Hashable {
     var searchTerms: [String]?
     var readPaths: [String]?
     var contextFilePaths: [String]?
+    var providerAttemptCount: Int?
+    var providerOutputRecovered: Bool?
+    var providerAttemptErrors: [String]?
     var targetID: String?
     var resultSummary: String?
     var error: String?

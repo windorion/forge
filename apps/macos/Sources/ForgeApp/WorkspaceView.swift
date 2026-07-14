@@ -1024,6 +1024,14 @@ private struct AgentRunStepPanel: View {
                             .font(.caption)
                             .foregroundStyle(ForgeDesign.muted)
 
+                        if let attempts = step.providerAttemptCount, attempts > 1 {
+                            Text(step.providerOutputRecovered == true
+                                ? "PROVIDER  recovered on attempt \(attempts)"
+                                : "PROVIDER  failed after \(attempts) attempts")
+                                .font(.caption2.monospaced().weight(.medium))
+                                .foregroundStyle(step.providerOutputRecovered == true ? ForgeDesign.success : ForgeDesign.danger)
+                        }
+
                         if step.action == "InspectRepository" {
                             if let searchTerms = step.searchTerms, !searchTerms.isEmpty {
                                 Text("SEARCH  \(searchTerms.joined(separator: " · "))")

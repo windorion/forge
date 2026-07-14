@@ -438,6 +438,15 @@ timestamps. The runtime emits
 `agent.run_step.blocked`, or `agent.run_step.failed`, so the macOS Log tab can
 show a chronological decision trail.
 
+For OpenAI Agent Run Step decisions, structured-output decode, required-field,
+and action-enum failures get one corrective request using the same strict
+schema. A recovered decision persists its attempt count and bounded first
+error. If both responses are malformed, the runtime creates a failed
+`WaitForHumanReview` step, emits `agent.run_step.failed`, and stops the loop
+with `StepFailed` before any step tool, command, or mutation runs. Transport,
+HTTP, and timeout failures remain single-attempt failures rather than risking
+duplicate requests across uncertain boundaries.
+
 This runner intentionally performs one step per request so the same boundary
 can be reused by manual actions, smoke tests, and the bounded loop.
 
@@ -462,7 +471,7 @@ and therefore inherits the same read budgets, command catalog, approval,
 repair brief, rerun-evidence, validation, and review gates. The next
 architecture step is to broaden runtime-owned inspection with explicit
 ripgrep/text-symbol choices, suppress repeated requests more aggressively,
-and recover from malformed provider output inside the same safety model.
+and extend safe format recovery to planning requests and patch artifacts.
 
 Active loops also have cooperative control endpoints:
 

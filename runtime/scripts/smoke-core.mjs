@@ -111,6 +111,8 @@ try {
   const openAIApplyRecoveryTask = await runOpenAIApplyRecoveryFlow();
   const openAIAgentRunStepTask = await runOpenAIAgentRunStepFlow();
   const openAIRepositoryInspectionTask = await runOpenAIRepositoryInspectionLoopFlow();
+  const openAIAgentStepOutputRecoveryTask = await runOpenAIAgentStepOutputRecoveryFlow();
+  const openAIAgentStepOutputFailureTask = await runOpenAIAgentStepOutputFailureFlow();
   const openAIAgentRunLoopTask = await runOpenAIAgentRunLoopFlow();
   const openAIAgentLoopControlsTask = await runOpenAIAgentLoopControlsFlow();
   const openAIAutoRepairTask = await runOpenAIAutoRepairFlow();
@@ -131,6 +133,8 @@ try {
   console.log(`- OpenAI apply recovery task: ${openAIApplyRecoveryTask.id}`);
   console.log(`- OpenAI agent run step task: ${openAIAgentRunStepTask.id}`);
   console.log(`- OpenAI repository inspection task: ${openAIRepositoryInspectionTask.id}`);
+  console.log(`- OpenAI agent step output recovery task: ${openAIAgentStepOutputRecoveryTask.id}`);
+  console.log(`- OpenAI agent step output failure task: ${openAIAgentStepOutputFailureTask.id}`);
   console.log(`- OpenAI agent run loop task: ${openAIAgentRunLoopTask.id}`);
   console.log(`- OpenAI agent loop controls task: ${openAIAgentLoopControlsTask.id}`);
   console.log(`- OpenAI auto-repair task: ${openAIAutoRepairTask.id}`);
@@ -952,6 +956,67 @@ async function runOpenAIRepositoryInspectionLoopFlow() {
     current.events?.some((event) => event.type === "agent.repository_inspection.completed"),
     "Repository inspection did not record its completion event."
   );
+
+  return current;
+}
+
+async function runOpenAIAgentStepOutputRecoveryFlow() {
+  const task = await createTask({
+    title: "Smoke provider output recovery",
+    objective: "Recover one malformed provider agent-step decision without executing side effects."
+  });
+
+  const before = await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "provider output recovery task to reach plan review"
+  );
+  const toolCallCountBefore = before.toolCalls?.length ?? 0;
+  const commandRunCountBefore = before.taskCommandRuns?.length ?? 0;
+
+  const current = await post(`/tasks/${task.id}/run-agent-loop`, { maxSteps: 2 });
+  const loop = current.agentRunLoops?.at(-1);
+  const step = current.agentRunSteps?.find((candidate) => candidate.id === loop?.stepIDs?.at(-1));
+  assert(loop?.status === "Paused", `Expected recovered-output loop Paused, got ${loop?.status}.`);
+  assert(loop.stopReason === "StepBlocked", `Expected recovered-output StepBlocked, got ${loop.stopReason}.`);
+  assert(step?.action === "RequestPlanApproval", `Expected recovered RequestPlanApproval, got ${step?.action}.`);
+  assert(step.status === "Blocked", `Expected recovered decision to reach its safe review gate, got ${step.status}.`);
+  assert(step.providerAttemptCount === 2, `Expected two provider attempts, got ${step.providerAttemptCount}.`);
+  assert(step.providerOutputRecovered === true, "Recovered provider decision did not retain recovery evidence.");
+  assert(step.providerAttemptErrors?.length === 1, "Recovered provider decision did not retain the first format error.");
+  assert(current.toolCalls?.length === toolCallCountBefore, "Malformed provider output recovery unexpectedly executed a tool.");
+  assert(current.taskCommandRuns?.length === commandRunCountBefore, "Malformed provider output recovery unexpectedly ran a command.");
+
+  return current;
+}
+
+async function runOpenAIAgentStepOutputFailureFlow() {
+  const task = await createTask({
+    title: "Smoke provider output retry exhaustion",
+    objective: "Fail closed after repeated malformed provider agent-step decisions."
+  });
+
+  const before = await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "provider output retry exhaustion task to reach plan review"
+  );
+  const toolCallCountBefore = before.toolCalls?.length ?? 0;
+  const commandRunCountBefore = before.taskCommandRuns?.length ?? 0;
+
+  const current = await post(`/tasks/${task.id}/run-agent-loop`, { maxSteps: 2 });
+  const loop = current.agentRunLoops?.at(-1);
+  const step = current.agentRunSteps?.find((candidate) => candidate.id === loop?.stepIDs?.at(-1));
+  assert(loop?.status === "Failed", `Expected exhausted-output loop Failed, got ${loop?.status}.`);
+  assert(loop.stopReason === "StepFailed", `Expected exhausted-output StepFailed, got ${loop.stopReason}.`);
+  assert(step?.status === "Failed", `Expected exhausted provider decision step Failed, got ${step?.status}.`);
+  assert(step.action === "WaitForHumanReview", `Expected fail-closed WaitForHumanReview, got ${step.action}.`);
+  assert(step.providerAttemptCount === 2, `Expected exhausted provider decision to record two attempts, got ${step.providerAttemptCount}.`);
+  assert(step.providerOutputRecovered === false, "Exhausted provider decision was incorrectly marked recovered.");
+  assert(step.providerAttemptErrors?.length === 2, "Exhausted provider decision did not retain both bounded errors.");
+  assert(current.events?.some((event) => event.type === "agent.run_step.failed"), "Exhausted provider retry did not emit a failed step event.");
+  assert(current.toolCalls?.length === toolCallCountBefore, "Exhausted malformed output unexpectedly executed a tool.");
+  assert(current.taskCommandRuns?.length === commandRunCountBefore, "Exhausted malformed output unexpectedly ran a command.");
 
   return current;
 }
@@ -2183,6 +2248,45 @@ function mockOpenAIOutput(name, requests, body) {
   }
 
   if (name === "forge_agent_run_step") {
+    if (bodyText.includes("provider output recovery")) {
+      const taskRequestCount = requests.filter((request) =>
+        request.name === "forge_agent_run_step" && JSON.stringify(request.body).includes("provider output recovery")
+      ).length;
+      if (taskRequestCount === 1) {
+        return {
+          action: "RunUnapprovedShell",
+          summary: "This action is outside the allowed enum.",
+          rationale: "The smoke server intentionally returns one malformed decision.",
+          commandID: "",
+          commandRerunEvidenceID: "",
+          searchTerms: [],
+          readPaths: []
+        };
+      }
+
+      return {
+        action: "RequestPlanApproval",
+        summary: "Pause at the existing plan approval gate after output recovery.",
+        rationale: "The corrected decision uses an allowed action and performs no side effect.",
+        commandID: "",
+        commandRerunEvidenceID: "",
+        searchTerms: [],
+        readPaths: []
+      };
+    }
+
+    if (bodyText.includes("provider output retry exhaustion")) {
+      return {
+        action: "BypassHumanReview",
+        summary: "This action remains outside the allowed enum.",
+        rationale: "The smoke server intentionally exhausts both format attempts.",
+        commandID: "",
+        commandRerunEvidenceID: "",
+        searchTerms: [],
+        readPaths: []
+      };
+    }
+
     if (bodyText.includes("agent repository inspection")) {
       if (!bodyText.includes("KeychainStore.swift")) {
         return {

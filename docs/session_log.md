@@ -3250,3 +3250,43 @@ Next:
   fingerprints and clearer budget evidence.
 - Add bounded malformed-output normalization/retry, then recover interrupted
   persisted loops after runtime restart.
+
+## 2026-07-14 08:15:52 CEST
+
+Conversation summary:
+
+- After committing and pushing runtime-owned repository inspection, the
+  session continued with Agent Run Step provider-output reliability.
+
+Done:
+
+- Added one format-only correction attempt for OpenAI Agent Run Step decisions
+  that fail response decoding, required-field validation, or the allowed action
+  enum.
+- Kept transport, HTTP, and timeout failures single-attempt to avoid duplicating
+  requests across uncertain network boundaries.
+- Persisted provider attempt count, recovery state, and bounded validation
+  errors on agent steps; exposed recovered/exhausted state in the macOS Log.
+- Added fail-closed exhaustion handling that creates an auditable failed
+  `WaitForHumanReview` step and stops the loop with `StepFailed` before step
+  tools, commands, or mutations can run.
+- Added smoke coverage for a malformed first decision corrected on attempt two
+  and for two malformed decisions exhausting the retry with zero new tool or
+  command side effects.
+- Verified `npm run check`, `swift build`, `npm run smoke:core`, and
+  `git diff --check` during implementation.
+
+Not done:
+
+- Planning context/tool-request and edit-patch structured outputs do not yet
+  share this explicit format-recovery path.
+- Repository inspection still needs cross-step request fingerprints and
+  explicit ripgrep-backed text/symbol search choices.
+- Persisted running-loop crash recovery remains outstanding.
+
+Next:
+
+- Add cross-step repository inspection fingerprints and visible budgets, then
+  introduce explicit ripgrep-backed text/symbol search choices.
+- Extend safe format recovery to planning tool requests and patch artifacts
+  without retrying side effects.

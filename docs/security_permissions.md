@@ -79,6 +79,12 @@ unsafe paths and remains the sole executor of the logged read-only tools.
 Inspection adds no command, network, edit, or git permissions, and a request
 that produces no new safe context is blocked as no progress.
 
+Malformed Agent Run Step structured output may be requested once more only to
+repair its format. The corrective request uses the same bounded schema and
+does not execute the proposed action. Attempt metadata and bounded validation
+errors are persisted. Exhaustion becomes a failed safe-wait step, so malformed
+model output cannot grant a tool, command, file, git, or network capability.
+
 ### Medium Risk
 
 Examples:

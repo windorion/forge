@@ -127,6 +127,12 @@ logged read-only list/search/read tools. Every decision is stored in
 linked target IDs, result summaries, and timestamps. This endpoint is one step
 at a time; the bounded loop endpoint chains the same safe boundary.
 
+OpenAI agent-step decision decoding has one bounded format-recovery attempt.
+Malformed JSON/schema/required-field/action-enum output is corrected with the
+same strict schema. Recovered decisions store attempt/error evidence; two bad
+outputs produce a failed safe-wait step and no step tool, command, or mutation.
+Transport and HTTP failures are recorded without an automatic retry.
+
 `POST /tasks/:taskID/run-agent-loop` wraps the same runtime-owned step
 boundary in a bounded loop. The request can include `maxSteps` from 1 to 8 and
 an optional `preferredCommandID` for already-runnable command steps. The loop
@@ -331,6 +337,8 @@ preview-only artifact. It also verifies a blocked-to-repaired proposal path and
 bounded stop behavior for proposals that remain preview-only. The smoke also
 verifies a provider-selected repository inspection followed by proposal
 generation, including rejection of an unsafe requested path. It then
+verifies one malformed agent-step decision recovering on its corrective
+request and a two-attempt exhaustion path that fails closed. It then
 forces a temporary TypeScript validation failure and verifies provider-backed
 repair brief generation plus follow-up repair proposal generation before
 cleaning the temporary file.

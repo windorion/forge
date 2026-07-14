@@ -7,6 +7,7 @@ import path from "node:path";
 import { URL } from "node:url";
 import { fileURLToPath } from "node:url";
 import {
+  AgentRunStepProviderError,
   createModelProvider,
   defaultModelProviderRuntimeSettings,
   getModelProviderConfiguration
@@ -6032,11 +6033,16 @@ async function runAgentStep(
   const runnableRerunEvidence = [...task.commandRerunEvidence]
     .reverse()
     .filter((evidence) => evidence.status === "Ready" || evidence.status === "Failed");
-  const decision = await modelProvider.createAgentRunStep({
-    task,
-    taskCommands,
-    commandRerunEvidence: runnableRerunEvidence
-  });
+  let decision: AgentRunStepDecision;
+  try {
+    decision = await modelProvider.createAgentRunStep({
+      task,
+      taskCommands,
+      commandRerunEvidence: runnableRerunEvidence
+    });
+  } catch (error) {
+    return failAgentRunStepProviderDecision(task, error, options);
+  }
   if (input.preferredCommandID?.trim() && decision.action === "RunTaskCommand") {
     decision.commandID = input.preferredCommandID.trim();
   }
@@ -6088,10 +6094,61 @@ function createAgentRunStep(
     commandRerunEvidenceID: decision.commandRerunEvidenceID,
     searchTerms: decision.searchTerms,
     readPaths: decision.readPaths,
+    providerAttemptCount: decision.providerAttemptCount,
+    providerOutputRecovered: decision.providerOutputRecovered,
+    providerAttemptErrors: decision.providerAttemptErrors,
     createdAt: new Date().toISOString()
   };
   task.agentRunSteps.push(step);
   return step;
+}
+
+function failAgentRunStepProviderDecision(
+  task: ForgeTask,
+  error: unknown,
+  options: RunAgentStepOptions
+): ForgeTask {
+  const completedAt = new Date().toISOString();
+  const attemptCount = error instanceof AgentRunStepProviderError ? error.attemptCount : 1;
+  const attemptErrors = error instanceof AgentRunStepProviderError
+    ? error.attemptErrors
+    : [error instanceof Error ? error.message : String(error)];
+  const message = error instanceof AgentRunStepProviderError
+    ? error.message
+    : `Model provider failed before selecting an agent step: ${attemptErrors[0]}`;
+  const step: AgentRunStep = {
+    id: randomUUID(),
+    provider: modelProvider.info,
+    loopID: options.loopID,
+    action: "WaitForHumanReview",
+    status: "Failed",
+    summary: "Provider could not select a valid next action.",
+    rationale: "Forge failed closed before executing tools, commands, or file changes.",
+    providerAttemptCount: attemptCount,
+    providerOutputRecovered: false,
+    providerAttemptErrors: attemptErrors.map((item) => item.replace(/\s+/g, " ").trim().slice(0, 240)),
+    error: message,
+    createdAt: completedAt,
+    completedAt
+  };
+  task.agentRunSteps.push(step);
+  task.status = "Human Review";
+  task.currentPhase = "Agent Step Failed";
+  task.reviewSummary = message;
+  setAgent(task, "Manager", "Blocked", "Model provider decision failed before a safe next action was selected.");
+  setAgent(task, "Coder", "Blocked", step.summary);
+  setAgent(task, "Reviewer", "Active", "Review the provider failure before resuming the agent loop.");
+  upsertPlanStep(task, {
+    id: "run-agent-step",
+    title: "Run agent step",
+    status: "Blocked",
+    summary: message
+  });
+
+  const failed = event("agent.run_step.failed", message);
+  failed.createdAt = completedAt;
+  saveAndBroadcast(task, failed);
+  return task;
 }
 
 async function executeAgentRunStep(

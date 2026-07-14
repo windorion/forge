@@ -41,7 +41,7 @@ Product-direction note: this development slice now has the first real
 provider-selected bounded loop with cooperative pause/abort/resume checkpoints,
 but it still is not a full Codex/Claude Code style autonomous agent. The next
 app/runtime work should add explicit ripgrep/text-symbol inspection choices,
-malformed-output recovery, deeper self-fix, and full diff review polish.
+cross-step request fingerprints, deeper self-fix, and full diff review polish.
 
 The macOS app now has a first-pass coding-agent session shell: a task queue,
 `1a`-style empty composer, live agent stream, plan progress strip,
@@ -406,7 +406,15 @@ loop is active and stop it after the current safe step. Resume creates a new
 linked loop from a paused, aborted, or failed checkpoint. These controls do not
 kill in-flight commands or model calls and do not add permissions. A complete
 V0 agent still needs explicit ripgrep/text-symbol choices, stronger repeated-
-request suppression, and malformed-output recovery.
+request suppression, and wider recovery for malformed planning/patch output.
+
+OpenAI Agent Run Step decisions have a narrow format-recovery boundary. If the
+response cannot be decoded or fails required-field/action-enum normalization,
+Forge sends one corrective structured-output request. Successful recovery
+stores the attempt count and bounded prior error on the step. If the second
+attempt also fails, Forge records a failed `WaitForHumanReview` step, stops the
+loop with `StepFailed`, and runs no step tools, commands, or mutations. Network,
+HTTP, and timeout errors are not blindly retried.
 
 Current validation presets:
 
@@ -493,6 +501,8 @@ It covers:
 - mock OpenAI bounded loop that first selects `InspectRepository`, filters an
   unsafe path, reads a safe macOS source file, then generates a proposal using
   the newly persisted context
+- mock OpenAI malformed agent-step output that recovers on the second bounded
+  request, plus retry exhaustion that records both errors and fails closed
 - mock OpenAI bounded agent run loop that generates a proposal, applies it
   after review, then runs an approved command, creates a repair brief from the
   failed command, and generates a self-fix proposal inside one loop
