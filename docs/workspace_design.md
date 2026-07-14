@@ -94,6 +94,12 @@ Responsibilities:
 Chat is strongest during task formation. After approval, the live coding run
 should become the dominant surface.
 
+Current implementation: active intent-brief questions appear as an explicit
+`PLANNING PAUSED` decision block in the conversation and plan rail. A resolving
+reply automatically embeds the generated plan in chat. The card and rail show
+time, cost, risk, file-area, and validation evidence; `Approve & Run` enters
+the bounded live loop in one action while preserving every later review gate.
+
 ### Plan Gate
 
 Responsibilities:

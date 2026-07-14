@@ -131,7 +131,7 @@ V0 is complete when:
 - No file change, command, commit, push, or PR happens without an explicit
   policy path and audit record.
 
-## Current State Against New V0
+## Completed State Against V0
 
 Built foundation:
 
@@ -155,10 +155,17 @@ Built foundation:
   reasoning, validation evidence, and existing proposal apply/request-change
   actions. Validation is split into genuinely file-specific evidence and
   clearly labelled task-wide evidence that is not claimed as file coverage.
+- `32a` clarification pauses planning and blocks approval until the active
+  questions are answered. The resolving reply automatically creates the plan.
+- embedded plans expose steps, expected file areas, validation, risk notes,
+  and runtime-derived time/cost estimates in both conversation and plan rail.
+- `Approve & Run` records the plan approval and immediately enters the bounded
+  Agent Run Loop through a combined runtime endpoint.
 
-Major gaps:
+Acceptance evidence:
 
-- UI has a first-pass shell but does not yet fully match `design_handoff_forge`.
+- The UI implements the V0 responsibilities of `1a`, `1b`, `10a`, `14a`, and
+  `32a`; additional pixel-level handoff fidelity is post-V0 polish.
 - Full-screen diff review now has durable file-level decisions and linked
   request-change revisions, exact aligned split rendering with old/new line
   numbers, proposal-before-Apply preview, and keyboard file/hunk/approval
@@ -171,10 +178,10 @@ Major gaps:
   verified compensated apply/rollback transactions.
 - Command output now has a streamed, cancellable, selectable task-scoped
   surface with reviewed self-fix rerun evidence after apply.
-- Provider-backed run loop now has bounded multi-step orchestration and
+- Provider-backed run loop has bounded multi-step orchestration and
   persisted Strong/Partial/Weak/NoNewContext inspection quality with query
-  coverage, matches, new-context, byte totals, and per-file hashes. Review-loop
-  polish remains.
+  coverage, matches, new-context, byte totals, per-file hashes, and persisted
+  review evidence.
 - Agent Loops left `Running` by runtime shutdown now recover at startup as
   `Paused / RuntimeRestarted` checkpoints with finalized transient evidence and
   resumable lineage.
@@ -194,6 +201,9 @@ Major gaps:
   and abort stop after the current safe step; resume preserves the prior loop
   and creates a linked recovery run.
 
-## Next Implementation Order
+## Post-V0 Implementation Order
 
-1. Complete `32a` chat-to-task and clarification polish.
+1. Exercise the completed V0 repeatedly on varied real repositories.
+2. Extend safe tool choice, query variation, and malformed planning/patch
+   recovery for the alpha horizon.
+3. Add approved GitHub PR publication and packaged distribution later.

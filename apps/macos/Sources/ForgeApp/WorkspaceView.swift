@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 private enum ForgeDesign {
@@ -2274,10 +2275,48 @@ private struct PlanGateCard: View {
                 Label("Risk \(revision.riskLevel)", systemImage: "shield")
                     .font(.caption)
                     .foregroundStyle(ForgeDesign.muted)
+
+                HStack(spacing: 8) {
+                    PlanEvidenceBadge(label: "EST", value: estimatedTime(revision))
+                    PlanEvidenceBadge(label: "COST", value: estimatedCost(revision))
+                    PlanEvidenceBadge(label: "RISK", value: revision.riskLevel.uppercased())
+                }
+
+                PlanEvidenceList(
+                    title: "EXPECTED FILE AREAS",
+                    values: revision.expectedFileAreas ?? []
+                )
+                PlanEvidenceList(
+                    title: "VALIDATION PLAN",
+                    values: revision.validationPlan ?? []
+                )
+                PlanEvidenceList(
+                    title: "RISK NOTES",
+                    values: revision.riskNotes ?? []
+                )
             } else {
                 Text(task.reviewSummary ?? "Forge is waiting for a generated plan before code changes can begin.")
                     .font(.callout)
                     .foregroundStyle(ForgeDesign.muted)
+
+                if !clarificationQuestions.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("CLARIFICATION REQUIRED")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundStyle(ForgeDesign.danger)
+                        ForEach(clarificationQuestions, id: \.self) { question in
+                            Text("? \(question)")
+                                .font(.caption)
+                                .textSelection(.enabled)
+                        }
+                        Text("Reply in the conversation. Planning remains paused until the questions are resolved.")
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(ForgeDesign.muted)
+                    }
+                    .padding(9)
+                    .background(ForgeDesign.warning.opacity(0.18))
+                    .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                }
             }
 
             VStack(alignment: .leading, spacing: 7) {
@@ -2339,6 +2378,8 @@ private struct PlanGateCard: View {
 
     private var canApprovePlan: Bool {
         task.status == "Human Review" &&
+            task.currentPhase == "Plan Review" &&
+            latestPlanRevision != nil &&
             !hasApprovedCurrentPlan &&
             !workspace.isApprovingPlan(taskID: task.id)
     }
@@ -2350,11 +2391,12 @@ private struct PlanGateCard: View {
         if hasApprovedCurrentPlan {
             return "Plan Approved"
         }
-        return "Approve Plan"
+        return "Approve & Run"
     }
 
     private var canGeneratePlanRevision: Bool {
         !workspace.isGeneratingPlanRevision(taskID: task.id) &&
+            clarificationQuestions.isEmpty &&
             task.editProposal?.status != "Proposed" &&
             task.editProposal?.status != "Applied"
     }
@@ -2364,6 +2406,9 @@ private struct PlanGateCard: View {
     }
 
     private var planState: String {
+        if !clarificationQuestions.isEmpty {
+            return "Clarifying"
+        }
         if hasApprovedCurrentPlan {
             return "Approved"
         }
@@ -2372,6 +2417,62 @@ private struct PlanGateCard: View {
 
     private var planColor: Color {
         hasApprovedCurrentPlan ? ForgeDesign.success : ForgeDesign.warning
+    }
+
+    private var clarificationQuestions: [String] {
+        task.messages.last(where: { $0.role == "Assistant" })?.intentBrief?.openQuestions ?? []
+    }
+
+    private func estimatedTime(_ revision: PlanRevision) -> String {
+        revision.estimatedMinutes.map { "~\($0) MIN" } ?? "PENDING"
+    }
+
+    private func estimatedCost(_ revision: PlanRevision) -> String {
+        guard let cost = revision.estimatedCostUSD else { return "PENDING" }
+        return cost == 0 ? "LOCAL $0" : String(format: "~$%.2f", cost)
+    }
+}
+
+private struct PlanEvidenceBadge: View {
+    var label: String
+    var value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .foregroundStyle(ForgeDesign.muted)
+            Text(value)
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(ForgeDesign.paper)
+        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1))
+    }
+}
+
+private struct PlanEvidenceList: View {
+    var title: String
+    var values: [String]
+
+    var body: some View {
+        if !values.isEmpty {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    .foregroundStyle(ForgeDesign.muted)
+                ForEach(values.prefix(3), id: \.self) { value in
+                    Text("• \(value)")
+                        .font(.caption2)
+                        .foregroundStyle(ForgeDesign.ink)
+                        .lineLimit(2)
+                        .textSelection(.enabled)
+                }
+            }
+        }
     }
 }
 
@@ -3124,6 +3225,33 @@ private struct TaskConversationPanel: View {
     var body: some View {
         Panel(title: "Task Conversation", systemImage: "bubble.left.and.text.bubble.right") {
             VStack(alignment: .leading, spacing: 12) {
+                if !clarificationQuestions.isEmpty {
+                    VStack(alignment: .leading, spacing: 7) {
+                        HStack {
+                            Text("FORGE NEEDS YOUR DECISION")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            Spacer()
+                            Text("PLANNING PAUSED")
+                                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(ForgeDesign.warning)
+                                .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1))
+                        }
+                        ForEach(clarificationQuestions, id: \.self) { question in
+                            Text("? \(question)")
+                                .font(.callout.weight(.semibold))
+                                .textSelection(.enabled)
+                        }
+                        Text("No code, command, or model loop continues until your reply resolves these questions.")
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(ForgeDesign.muted)
+                    }
+                    .padding(10)
+                    .background(ForgeDesign.warning.opacity(0.2))
+                    .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                }
+
                 if task.messages.isEmpty {
                     Text("No task messages yet.")
                         .foregroundStyle(.secondary)
@@ -3135,8 +3263,12 @@ private struct TaskConversationPanel: View {
                     }
                 }
 
+                if let revision = task.planRevisions.last {
+                    EmbeddedConversationPlanCard(task: task, revision: revision)
+                }
+
                 HStack(alignment: .bottom, spacing: 8) {
-                    TextField("Add instruction or clarification", text: $draft, axis: .vertical)
+                    TextField(replyPlaceholder, text: $draft, axis: .vertical)
                         .lineLimit(2...5)
                         .textFieldStyle(.roundedBorder)
 
@@ -3173,12 +3305,24 @@ private struct TaskConversationPanel: View {
 
     private var canGeneratePlanRevision: Bool {
         !workspace.isGeneratingPlanRevision(taskID: task.id) &&
+            clarificationQuestions.isEmpty &&
             task.editProposal?.status != "Proposed" &&
             task.editProposal?.status != "Applied"
     }
 
     private var planRevisionButtonTitle: String {
-        workspace.isGeneratingPlanRevision(taskID: task.id) ? "Updating Plan" : "Update Plan From Conversation"
+        if !clarificationQuestions.isEmpty {
+            return "Answer Clarification First"
+        }
+        return workspace.isGeneratingPlanRevision(taskID: task.id) ? "Updating Plan" : "Update Plan From Conversation"
+    }
+
+    private var clarificationQuestions: [String] {
+        task.messages.last(where: { $0.role == "Assistant" })?.intentBrief?.openQuestions ?? []
+    }
+
+    private var replyPlaceholder: String {
+        clarificationQuestions.isEmpty ? "Reply, adjust the plan, or ask anything" : "Answer Forge's clarification questions"
     }
 
     private func send() {
@@ -3189,6 +3333,85 @@ private struct TaskConversationPanel: View {
 
         draft = ""
         workspace.sendTaskMessage(for: task, content: content)
+    }
+}
+
+private struct EmbeddedConversationPlanCard: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
+
+    var task: ForgeTask
+    var revision: PlanRevision
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack {
+                Text("PLAN")
+                    .font(.system(size: 9, weight: .black, design: .monospaced))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(ForgeDesign.accent)
+                    .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                Text(revision.summary)
+                    .font(.callout.weight(.bold))
+                    .lineLimit(2)
+                Spacer()
+            }
+
+            ForEach(revision.steps.prefix(6)) { step in
+                HStack(alignment: .top, spacing: 7) {
+                    Text(step.status == "Done" ? "✓" : step.status == "Active" ? "▸" : "○")
+                        .font(.caption.monospaced().weight(.bold))
+                        .foregroundStyle(step.status == "Done" ? ForgeDesign.success : ForgeDesign.accent)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(step.title)
+                            .font(.caption.weight(.semibold))
+                        Text(step.summary)
+                            .font(.caption2)
+                            .foregroundStyle(ForgeDesign.muted)
+                            .lineLimit(2)
+                    }
+                }
+            }
+
+            HStack(spacing: 12) {
+                Text("est ~\(revision.estimatedMinutes ?? 0)m")
+                Text(revision.estimatedCostUSD == 0 ? "local $0" : String(format: "~$%.2f", revision.estimatedCostUSD ?? 0))
+                Text("risk \(revision.riskLevel.lowercased())")
+                if let areas = revision.expectedFileAreas, !areas.isEmpty {
+                    Text("\(areas.count) area(s)")
+                }
+            }
+            .font(.system(size: 9, weight: .bold, design: .monospaced))
+            .foregroundStyle(ForgeDesign.muted)
+
+            Button {
+                workspace.approvePlan(for: task)
+            } label: {
+                Label(approveTitle, systemImage: "play.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.accent, foreground: ForgeDesign.ink))
+            .disabled(!canApprove)
+            .keyboardShortcut(.return, modifiers: [.command])
+        }
+        .padding(11)
+        .background(Color.white)
+        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+        .shadow(color: ForgeDesign.ink, radius: 0, x: 4, y: 4)
+    }
+
+    private var approved: Bool {
+        task.approvals.contains {
+            $0.action == "Approve Plan" && $0.decision == "Approved" && $0.targetID == revision.id
+        }
+    }
+
+    private var canApprove: Bool {
+        task.status == "Human Review" && task.currentPhase == "Plan Review" && !approved && !workspace.isApprovingPlan(taskID: task.id)
+    }
+
+    private var approveTitle: String {
+        workspace.isApprovingPlan(taskID: task.id) ? "Approving & Starting" : approved ? "Approved" : "Approve & Run"
     }
 }
 

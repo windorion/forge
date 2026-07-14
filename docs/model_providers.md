@@ -179,6 +179,8 @@ A provider receives task state and returns structured output. Current output:
 - plan revision summary
 - plan revision rationale
 - revised plan steps
+- runtime-derived expected file areas, validation plan, risk notes, and bounded
+  time/cost estimates
 - model-guided context request rationale
 - model-guided context request status
 - bounded requested search terms and repo-relative read paths

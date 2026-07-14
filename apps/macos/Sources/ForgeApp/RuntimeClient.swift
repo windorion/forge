@@ -315,6 +315,32 @@ struct RuntimeClient {
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
 
+    func approvePlanAndRun(
+        taskID: ForgeTask.ID,
+        note: String? = nil,
+        preferredCommandID: String? = nil,
+        maxSteps: Int? = 6
+    ) async throws -> ForgeTask {
+        let url = baseURL
+            .appending(path: "tasks")
+            .appending(path: taskID)
+            .appending(path: "approve-plan-and-run")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(
+            ApprovePlanAndRunRequest(
+                note: note,
+                preferredCommandID: preferredCommandID,
+                maxSteps: maxSteps
+            )
+        )
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response, data: data)
+        return try JSONDecoder().decode(ForgeTask.self, from: data)
+    }
+
     func generateEditProposal(taskID: ForgeTask.ID) async throws -> ForgeTask {
         let url = baseURL
             .appending(path: "tasks")

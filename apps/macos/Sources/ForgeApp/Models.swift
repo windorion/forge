@@ -104,6 +104,11 @@ struct PlanRevision: Identifiable, Codable, Hashable {
     var rationale: String
     var riskLevel: String
     var steps: [PlanStep]
+    var expectedFileAreas: [String]?
+    var validationPlan: [String]?
+    var riskNotes: [String]?
+    var estimatedMinutes: Int?
+    var estimatedCostUSD: Double?
     var generatedAt: String
 }
 
@@ -923,6 +928,12 @@ struct CreateTaskRequest: Encodable {
 
 struct ApprovePlanRequest: Encodable {
     var note: String?
+}
+
+struct ApprovePlanAndRunRequest: Encodable {
+    var note: String?
+    var preferredCommandID: String?
+    var maxSteps: Int?
 }
 
 struct EditProposalDecisionRequest: Encodable {

@@ -21,6 +21,7 @@ import type {
   AgentState,
   AppliedFileChange,
   ApprovalRecord,
+  ApprovePlanAndRunRequest,
   ApprovePlanRequest,
   ApproveValidationPresetRequest,
   CancelTaskCommandRequest,
@@ -648,6 +649,18 @@ const server = createServer(async (request, response) => {
     if (request.method === "POST" && approvePlanTaskID) {
       const input = await readJson<ApprovePlanRequest>(request);
       const task = await approvePlan(approvePlanTaskID, input);
+      writeJson(response, 200, task);
+      return;
+    }
+
+    const approvePlanAndRunTaskID = taskIDFromActionPath(url.pathname, "approve-plan-and-run");
+    if (request.method === "POST" && approvePlanAndRunTaskID) {
+      const input = await readJson<ApprovePlanAndRunRequest>(request);
+      await approvePlan(approvePlanAndRunTaskID, input);
+      const task = await runAgentLoop(approvePlanAndRunTaskID, {
+        preferredCommandID: input.preferredCommandID,
+        maxSteps: input.maxSteps ?? 6
+      });
       writeJson(response, 200, task);
       return;
     }
@@ -4990,9 +5003,18 @@ async function createTask(input: CreateTaskRequest): Promise<ForgeTask> {
   upsertPlanStep(task, {
     id: "clarify-intent",
     title: "Clarify task intent",
-    status: "Done",
-    summary: assistantMessage.intentBrief?.summary ?? "Task intent captured from the initial objective."
+    status: assistantMessage.intentBrief?.openQuestions.length ? "Blocked" : "Done",
+    summary: assistantMessage.intentBrief?.openQuestions.length
+      ? `Waiting for clarification: ${assistantMessage.intentBrief.openQuestions.join(" ")}`
+      : assistantMessage.intentBrief?.summary ?? "Task intent captured from the initial objective."
   });
+
+  if (assistantMessage.intentBrief?.openQuestions.length) {
+    task.status = "Human Review";
+    task.currentPhase = "Clarification";
+    task.reviewSummary = `Forge needs ${assistantMessage.intentBrief.openQuestions.length} clarification answer(s) before planning.`;
+    setAgent(task, "Planner", "Blocked", "Waiting for the user to answer the explicit clarification questions.");
+  }
 
   return task;
 }
@@ -5012,6 +5034,7 @@ async function createTaskMessage(taskID: string, input: CreateTaskMessageRequest
     throw new HttpError(413, "Task message content is too large.");
   }
 
+  const wasClarifying = (latestTaskMessage(task, "Assistant")?.intentBrief?.openQuestions.length ?? 0) > 0;
   const now = new Date().toISOString();
   const userMessage = await createUserTaskMessage(content, now);
   task.messages.push(userMessage);
@@ -5041,19 +5064,46 @@ async function createTaskMessage(taskID: string, input: CreateTaskMessageRequest
 
   const assistantMessage = await createAssistantIntentBriefMessage(task, userMessage);
   task.messages.push(assistantMessage);
-  task.reviewSummary = "Intent brief updated from the latest task conversation message.";
-  setAgent(task, "Planner", "Ready", "Updated the task intent brief; waiting for the next planning or review action.");
+  const openQuestions = assistantMessage.intentBrief?.openQuestions ?? [];
+  task.reviewSummary = openQuestions.length
+    ? `Forge still needs ${openQuestions.length} clarification answer(s) before planning.`
+    : wasClarifying
+      ? "Clarification resolved. Forge is generating a reviewable plan."
+      : "Intent brief updated from the latest task conversation message.";
+  if (openQuestions.length) {
+    task.status = "Human Review";
+    task.currentPhase = "Clarification";
+  } else if (wasClarifying) {
+    task.status = "Planning";
+    task.currentPhase = "Plan Revision";
+  }
+  setAgent(
+    task,
+    "Planner",
+    openQuestions.length ? "Blocked" : wasClarifying ? "Active" : "Ready",
+    openQuestions.length
+      ? "Waiting for the remaining clarification answers."
+      : wasClarifying
+        ? "Clarification resolved; generating the implementation plan."
+        : "Updated the task intent brief; waiting for the next planning action."
+  );
   upsertPlanStep(task, {
     id: "clarify-intent",
     title: "Clarify task intent",
-    status: "Done",
-    summary: assistantMessage.intentBrief?.summary ?? "Task intent updated."
+    status: openQuestions.length ? "Blocked" : "Done",
+    summary: openQuestions.length
+      ? `Waiting for clarification: ${openQuestions.join(" ")}`
+      : assistantMessage.intentBrief?.summary ?? "Task intent updated."
   });
 
   const briefCreated = event("conversation.intent_brief.created", "Assistant created an updated task intent brief.");
   briefCreated.createdAt = assistantMessage.createdAt;
   saveAndBroadcast(task, briefCreated);
-  return task;
+  if (openQuestions.length > 0 || !wasClarifying) {
+    return task;
+  }
+
+  return generatePlanRevision(taskID);
 }
 
 async function generatePlanRevision(taskID: string): Promise<ForgeTask> {
@@ -5088,7 +5138,10 @@ async function generatePlanRevision(taskID: string): Promise<ForgeTask> {
 
   await buildProviderGuidedPlanContext(task, sourceMessage);
 
-  const revision = await modelProvider.createPlanRevision({ task, sourceMessage });
+  const revision = enrichPlanRevisionEvidence(
+    task,
+    await modelProvider.createPlanRevision({ task, sourceMessage })
+  );
   task.planRevisions.push(revision);
   task.planSteps = revision.steps.map((step) => ({ ...step }));
   task.status = "Human Review";
@@ -5102,6 +5155,46 @@ async function generatePlanRevision(taskID: string): Promise<ForgeTask> {
   ready.createdAt = revision.generatedAt;
   saveAndBroadcast(task, ready);
   return task;
+}
+
+function enrichPlanRevisionEvidence(task: ForgeTask, revision: PlanRevision): PlanRevision {
+  const contextAreas = [
+    ...latestResolvedTaskFilePaths(task),
+    ...task.contextFiles.map((file) => file.path)
+  ].filter((value, index, values) => values.indexOf(value) === index).slice(0, 8);
+  const validationSteps = revision.steps
+    .filter((step) => /test|validat|check|lint|build|verify/i.test(`${step.title} ${step.summary}`))
+    .map((step) => `${step.title}: ${step.summary}`)
+    .slice(0, 4);
+  const pendingStepCount = Math.max(1, revision.steps.filter((step) => step.status !== "Done").length);
+  const estimatedMinutes = Math.min(90, Math.max(5, 4 + pendingStepCount * 3 + Math.min(task.contextFiles.length, 8)));
+  const estimatedCostUSD = revision.provider.mode === "local"
+    ? 0
+    : Math.round((0.08 + pendingStepCount * 0.05 + Math.min(task.contextFiles.length, 8) * 0.01) * 100) / 100;
+
+  return {
+    ...revision,
+    expectedFileAreas: contextAreas.length > 0
+      ? contextAreas
+      : ["Repository areas will be confirmed by bounded read-only inspection before edits."],
+    validationPlan: validationSteps.length > 0
+      ? validationSteps
+      : ["Run the approved project check that covers the changed area and retain its output."],
+    riskNotes: [
+      `${revision.riskLevel} implementation risk; every proposed file still requires review before Apply.`,
+      "Commands run only through approved runtime-known presets; commit and push remain separate approvals."
+    ],
+    estimatedMinutes,
+    estimatedCostUSD
+  };
+}
+
+function latestResolvedTaskFilePaths(task: ForgeTask): string[] {
+  return [...task.messages]
+    .reverse()
+    .flatMap((message) => message.fileReferences)
+    .filter((reference) => reference.status === "Resolved" && reference.path)
+    .map((reference) => reference.path as string);
 }
 
 async function buildProviderGuidedPlanContext(
@@ -5468,6 +5561,13 @@ async function approvePlan(taskID: string, input: ApprovePlanRequest): Promise<F
 
   const now = new Date().toISOString();
   const planRevision = latestPlanRevision(task);
+  const openQuestions = latestTaskMessage(task, "Assistant")?.intentBrief?.openQuestions ?? [];
+  if (openQuestions.length > 0) {
+    throw new HttpError(409, "Answer the active clarification questions before approving a plan.");
+  }
+  if (!planRevision) {
+    throw new HttpError(409, "Generate a reviewable plan revision before approval.");
+  }
   if (hasPlanApproval(task, planRevision?.id)) {
     throw new HttpError(409, "The current plan is already approved.");
   }
@@ -10171,15 +10271,20 @@ function runAgentLoopV0(taskID: string): void {
     ],
     [
       2300,
-      (task) => {
+      async (task) => {
+        const sourceMessage = latestTaskMessage(task, "User");
+        const revision = enrichPlanRevisionEvidence(
+          task,
+          await modelProvider.createPlanRevision({ task, sourceMessage })
+        );
+        task.planRevisions.push(revision);
+        task.planSteps = revision.steps.map((step) => ({ ...step }));
         setAgent(task, "Planner", "Done", "Prepared a reviewable implementation plan.");
         setAgent(task, "Coder", "Ready", "Waiting for human approval before file changes.");
         setAgent(task, "Reviewer", "Ready", "Ready to review plan risk before execution.");
-        setPlanStep(task, "draft-plan", "Done", "Plan prepared from real local project docs: add context, propose changes, wait for review, then execute.");
-        setPlanStep(task, "request-review", "Active", "Human approval required before code changes.");
         task.status = "Human Review";
         task.currentPhase = "Plan Review";
-        task.reviewSummary = "Agent Loop v0 read local project context and prepared a plan. It stopped before modifying files.";
+        task.reviewSummary = revision.summary;
         return event("plan.ready", "Planner prepared a plan and is waiting for human review.");
       }
     ],
@@ -10235,9 +10340,11 @@ function runAgentLoopV0(taskID: string): void {
 
 function shouldContinueAgentLoopV0(task: ForgeTask): boolean {
   const planApproved = task.approvals.some((approval) => approval.action === "Approve Plan");
+  const hasOpenClarification = (latestTaskMessage(task, "Assistant")?.intentBrief?.openQuestions.length ?? 0) > 0;
   return (
     task.planRevisions.length === 0 &&
     !planApproved &&
+    !hasOpenClarification &&
     !task.executionProposal &&
     !task.editProposal
   );
@@ -11067,6 +11174,7 @@ function renderRuntimeHome(): string {
       <li><code>POST /tasks/:taskID/messages</code></li>
       <li><code>POST /tasks/:taskID/generate-plan-revision</code></li>
       <li><code>POST /tasks/:taskID/approve-plan</code></li>
+      <li><code>POST /tasks/:taskID/approve-plan-and-run</code></li>
       <li><code>POST /tasks/:taskID/run-agent-step</code></li>
       <li><code>POST /tasks/:taskID/run-agent-loop</code></li>
       <li><code>POST /tasks/:taskID/pause-agent-loop</code></li>

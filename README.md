@@ -42,8 +42,9 @@ should no longer feel like a generic workflow dashboard.
 Last updated: 2026-07-14
 
 Direction reset: the trust/runtime foundation is strong, but the next milestone
-is a redesigned coding-agent demo based on `design_handoff_forge/`, especially
-the new-task, plan-approval, live-session, and full diff-review screens.
+is now complete: the Coding-Agent Demo V0 implements the documented
+new-task, clarification, plan-approval, live-session, and full diff-review
+acceptance path from `design_handoff_forge/`.
 
 Implemented today:
 
@@ -59,6 +60,14 @@ Implemented today:
 - Deterministic Agent Loop v0 with visible Manager, Planner, Coder, Tester, and Reviewer states.
 - Bounded repo context search and file reading.
 - Structured intent briefs and conversation-driven plan revisions.
+- `32a` clarification gate: unclear tasks pause before planning, present the
+  provider's questions in the conversation and plan rail, reject premature
+  plan approval at the runtime boundary, then generate the plan automatically
+  when the user's answer resolves the questions.
+- Embedded reviewable plans include steps, expected file areas, validation
+  plan, risk notes, and bounded time/cost estimates. `Approve & Run` uses
+  `POST /tasks/:taskID/approve-plan-and-run` to persist approval, prepare
+  execution context, and immediately enter the bounded Agent Run Loop.
 - OpenAI plan revisions can run a bounded model-guided read/search context
   loop through logged read-only repo tools.
 - Plan approval triggers a bounded read-only execution-context pass before the
@@ -177,10 +186,9 @@ Implemented today:
 - App-visible runtime state and diagnostics for endpoint, version, provider
   configuration, SSE stream, and copy/open diagnostics actions.
 
-Not finished yet:
+Beyond V0:
 
-- Full-fidelity `design_handoff_forge` UI, especially the final `32a`
-  chat-to-task and decision-prompt polish.
+- Continued handoff fidelity and broader decision-inbox polish.
 - Rich autonomous model-backed read/search/patch/run/repair beyond the current
   bounded loop and restricted unified-diff patch engine.
 - Actual PR creation/publication after explicit review.
@@ -195,21 +203,20 @@ Product-readiness estimate:
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 98-99% | Adds durable inspection-quality metrics and honest file-specific versus task-wide validation evidence to reviewed source lifecycle, aligned diff, restart-safe loops/transactions, commands, self-fix, and bad-output recovery; only final chat-to-task polish remains. |
+| Coding-agent demo V0 | 100% | All documented V0 acceptance criteria are implemented and smoke-covered: clarification, evidence-rich plan, Approve & Run, bounded live loop, reviewed source lifecycle, commands/self-fix, aligned diff, recovery, and local commit preparation/creation. |
 | Useful developer alpha | 50-60% | Forge can recover interrupted loops/transactions and apply guarded source create/modify/delete changes, but still needs broader autonomous tool use and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, memory, MCP/GitHub, and product polish. |
 
-Short version: Forge has a real trust/runtime skeleton, but the visible demo
-must now become a real coding-agent workspace.
+Short version: the Coding-Agent Demo V0 is complete; the next horizon is
+repeated real-repository success and alpha breadth.
 
 ## Next TODO
 
-Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
+Top priorities are tracked in `docs/todo.md`. Current post-V0 themes:
 
-- polish the first-pass macOS coding-agent session UI toward the exact
-  `design_handoff_forge` screens
-- complete the `32a` chat-to-task and clarification experience
+- harden the completed V0 on varied real repositories
+- widen safe provider tool use and planning/patch output recovery
 - return to PR/GitHub publication after the agent coding loop feels real
 
 ## Core Principles

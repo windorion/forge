@@ -3624,3 +3624,53 @@ Next:
 
 - Commit and push the evidence slice directly to `main`, then implement and
   validate the final chat-to-task/plan-to-live-run closure.
+
+## 2026-07-14 22:14:59 CEST
+
+Conversation summary:
+
+- Completed the final documented Coding-Agent Demo V0 gap directly on `main`,
+  validated the full product path, then built and launched Forge locally for
+  the user to inspect.
+
+Done:
+
+- Changed unclear task intake into a real runtime-owned clarification gate.
+  Active questions move the task to `Human Review / Clarification`, stop the
+  legacy planner, and block plan approval until answered.
+- Made a resolving conversation reply automatically generate the plan while
+  preserving explicit regenerate behavior for ordinary later messages.
+- Enriched every generated plan with expected file areas, validation plan,
+  risk notes, estimated minutes, and estimated cost; local-provider cost is
+  explicitly zero.
+- Added the combined `POST /tasks/:taskID/approve-plan-and-run` path. It records
+  the current plan approval, prepares bounded read-only execution context, and
+  immediately enters the existing bounded Agent Run Loop without weakening
+  later review or permission gates.
+- Added explicit `PLANNING PAUSED` clarification UI, an embedded conversation
+  plan card, time/cost/risk/file/validation evidence, and `Approve & Run` in
+  both chat and the plan rail.
+- Extended core smoke to prove unresolved clarification blocks approval,
+  resolving it generates an evidence-rich plan, and Approve & Run reaches an
+  edit-proposal review gate in one action.
+- Updated architecture, development, workspace, user flow, security, database,
+  provider, V0, status, TODO, and root documentation. Coding-Agent Demo V0 is
+  now recorded as 100% against its documented acceptance criteria.
+- Passed TypeScript check/build, direct Swift full-app type-check, and the full
+  core runtime smoke including restart, transaction recovery, source
+  create/modify/delete, EOF handling, commands, repair, inspection, and loops.
+- Built `dist/Forge.app` through `script/build_and_run.sh --verify`, verified
+  the process, started the local runtime on `127.0.0.1:17373`, confirmed health
+  and local-provider readiness, then relaunched Forge against the live runtime.
+
+Not done:
+
+- Alpha/beta work remains by design: repeated varied-repository hardening,
+  broader tool/recovery breadth, GitHub PR publication, semantic indexing, and
+  signed/notarized distribution.
+
+Next:
+
+- Commit and push the completed V0 slice directly to `main`; then use the
+  running local app for manual product inspection and begin alpha work in the
+  next task.

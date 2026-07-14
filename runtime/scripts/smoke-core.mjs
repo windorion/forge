@@ -84,6 +84,7 @@ const smokeFiles = [
 ];
 
 const rollbackSnapshotDirectories = new Set();
+let clarificationFlowAsserted = false;
 
 let runtime;
 let mockOpenAI;
@@ -1277,16 +1278,19 @@ async function runOpenAIAgentRunLoopFlow() {
     "OpenAI agent run loop task to reach initial plan review"
   );
 
-  let current = await post(`/tasks/${task.id}/approve-plan`, {
-    note: "Core smoke test approves the agent run loop plan."
-  });
-  assert(current.executionProposal, "OpenAI agent run loop flow did not create an execution proposal.");
-
   const proposalLoop = await collectRuntimeEventsDuring(
-    () => post(`/tasks/${task.id}/run-agent-loop`, { maxSteps: 4 }),
+    () => post(`/tasks/${task.id}/approve-plan-and-run`, {
+      note: "Core smoke test approves the plan and starts the agent run in one action.",
+      maxSteps: 4
+    }),
     (event, result) => event.type === "agent.run_loop.paused" && event.data?.taskID === result.id
   );
-  current = proposalLoop.result;
+  let current = proposalLoop.result;
+  assert(current.executionProposal, "Approve & run did not create an execution proposal.");
+  assert(
+    current.approvals?.some((approval) => approval.action === "Approve Plan"),
+    "Approve & run did not persist the plan approval."
+  );
   assertState(current, "Human Review", "Edit Proposal Review");
   assert(current.editProposal?.status === "Proposed", "Agent run loop did not create an edit proposal.");
   const firstLoop = current.agentRunLoops?.at(-1);
@@ -2014,9 +2018,38 @@ async function assertOpenAIAgentLoopRestartRecovery(taskID) {
 }
 
 async function createTask(body) {
-  const task = await post("/tasks", body);
+  let task = await post("/tasks", body);
   assert(task.id, "Create task response did not include an id.");
+  const questions = task.messages?.at(-1)?.intentBrief?.openQuestions ?? [];
+  if (questions.length > 0) {
+    assertState(task, "Human Review", "Clarification");
+    assert((task.planRevisions ?? []).length === 0, "Clarification task should not have generated a plan yet.");
+    if (!clarificationFlowAsserted) {
+      const blockedApproval = await postExpectError(`/tasks/${task.id}/approve-plan`, {
+        note: "Core smoke verifies that unresolved clarification blocks approval."
+      });
+      assert(blockedApproval.status === 409, `Expected clarification approval guard 409, got ${blockedApproval.status}.`);
+      assert(blockedApproval.text.includes("clarification"), "Clarification approval guard did not explain the blocker.");
+      clarificationFlowAsserted = true;
+    }
+
+    task = await post(`/tasks/${task.id}/messages`, {
+      content: "Done means the requested behavior is implemented and verified by the relevant approved project check. Treat the task's named module and referenced files as primary context."
+    });
+    assertState(task, "Human Review", "Plan Review");
+    assertPlanEvidence(task);
+  }
   return task;
+}
+
+function assertPlanEvidence(task) {
+  const revision = task.planRevisions?.at(-1);
+  assert(revision, "Clarification resolution did not generate an embedded plan revision.");
+  assert((revision.expectedFileAreas ?? []).length > 0, "Plan revision did not include expected file areas.");
+  assert((revision.validationPlan ?? []).length > 0, "Plan revision did not include a validation plan.");
+  assert((revision.riskNotes ?? []).length > 0, "Plan revision did not include risk notes.");
+  assert(Number.isInteger(revision.estimatedMinutes) && revision.estimatedMinutes > 0, "Plan revision did not include a bounded time estimate.");
+  assert(typeof revision.estimatedCostUSD === "number" && revision.estimatedCostUSD >= 0, "Plan revision did not include a cost estimate.");
 }
 
 async function assertRuntimeDiagnosticsAndSettings() {
@@ -2037,6 +2070,10 @@ async function assertRuntimeDiagnosticsAndSettings() {
   assert(
     home.includes("POST /tasks/:taskID/run-agent-loop"),
     "Runtime home page did not link the agent run loop endpoint."
+  );
+  assert(
+    home.includes("POST /tasks/:taskID/approve-plan-and-run"),
+    "Runtime home page did not link the approve-and-run endpoint."
   );
   assert(
     home.includes("POST /tasks/:taskID/pause-agent-loop") &&

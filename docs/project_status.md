@@ -9,6 +9,7 @@ Last updated: 2026-07-14
 
 Forge is a strong trust/runtime foundation with a first-pass coding-agent
 session shell and a usable full-screen diff review surface in the macOS app.
+The documented Coding-Agent Demo V0 acceptance criteria are complete.
 It can create tasks, inspect bounded repo context, hold review gates, generate
 safe edit proposals, apply restricted Markdown edits, exact source/text
 replacements, multi-hunk patches, and context-anchored unified diffs across
@@ -49,6 +50,15 @@ Implemented:
 - Repo-local file mentions in task messages.
 - Structured intent briefs.
 - Conversation-driven plan revisions.
+- Unclear task intake now stops in `Clarification` before planning. Active
+  questions are visible in the conversation and plan gate, unresolved
+  questions block plan approval at the runtime boundary, and a resolving reply
+  automatically produces the reviewable plan.
+- Every new plan revision includes runtime-derived expected file areas,
+  validation plan, risk notes, and bounded time/cost estimates. The embedded
+  chat plan and plan rail expose `Approve & Run`; the combined endpoint records
+  approval, prepares read-only execution context, and enters the bounded Agent
+  Run Loop in one user action.
 - OpenAI-backed plan revisions can first run a bounded model-guided
   read/search context loop; the runtime validates and executes each requested
   round through logged read-only repo tools.
@@ -261,7 +271,7 @@ These percentages are product-readiness estimates, not calendar estimates.
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 98-99% | Adds durable inspection-quality metrics and honest file-specific versus task-wide validation evidence to reviewed source lifecycle, aligned diff, restart-safe loops/transactions, commands, self-fix, and bad-output recovery; only final chat-to-task polish remains. |
+| Coding-agent demo V0 | 100% | All documented V0 acceptance criteria are implemented and smoke-covered: clarification, evidence-rich plan, Approve & Run, bounded live loop, reviewed source lifecycle, commands/self-fix, aligned diff, recovery, and local commit preparation/creation. |
 | Useful developer alpha | 50-60% | Forge can recover interrupted loops/transactions and apply guarded source create/modify/delete changes, but still needs broader autonomous tool use and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
@@ -288,16 +298,14 @@ The hardest remaining work is not the app shell. The hardest remaining work is:
 
 ## V0 Finish Line
 
-The old V0 foundation is mostly built. The new V0 finish line is the
-Coding-Agent Demo defined in `docs/v0_scope.md`: a user should type a coding
+The old V0 foundation and the new V0 finish line are complete. The
+Coding-Agent Demo defined in `docs/v0_scope.md` proves that a user can type a coding
 task, approve a plan, watch a live agent run, see code/test activity, review a
 real source diff, and approve the final patch.
 
-Remaining V0 gaps:
-
-- complete the `32a` chat-to-task and clarification flow
-- keep git/preflight work as supporting infrastructure rather than the main
-  demo
+There are no remaining documented V0 acceptance gaps. Git/preflight remains
+supporting infrastructure rather than the main demo; broader autonomy,
+repository understanding, publication, and distribution belong to alpha/beta.
 
 ## Alpha Finish Line
 

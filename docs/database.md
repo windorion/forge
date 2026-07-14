@@ -123,6 +123,11 @@ Fields:
 - rationale
 - risk level
 - revised plan steps
+- expected file areas
+- validation plan
+- risk notes
+- estimated minutes
+- estimated cost USD
 - generated at
 
 ### Edit Proposal Revisions

@@ -793,6 +793,9 @@ class LocalDeterministicModelProvider implements ModelProvider {
     const changedFileCount = request.task.changedFiles.length;
     const resolvedReferences = resolvedFileReferencesForMessage(request.latestUserMessage);
     const referenceSummary = formatFileReferenceList(resolvedReferences);
+    const isClarificationReply = request.task.messages.some((message) =>
+      message.role === "Assistant" && (message.intentBrief?.openQuestions.length ?? 0) > 0
+    ) && request.task.messages.filter((message) => message.role === "User").length > 1;
 
     return {
       summary: latestMessage || objective || "Clarify the software task and keep it reviewable.",
@@ -817,8 +820,10 @@ class LocalDeterministicModelProvider implements ModelProvider {
           ? `Any follow-up work accounts for ${changedFileCount} changed file(s).`
           : "No workspace mutation happens until an explicit approval gate."
       ],
-      openQuestions: buildOpenQuestions(latestMessage, resolvedReferences.length > 0),
-      nextAction: "Review the intent brief, answer any open question, then continue to planning or proposal generation."
+      openQuestions: isClarificationReply ? [] : buildOpenQuestions(latestMessage, resolvedReferences.length > 0),
+      nextAction: isClarificationReply
+        ? "Clarification is recorded. Generate the reviewable plan."
+        : "Review the intent brief, answer any open question, then continue to planning."
     };
   }
 

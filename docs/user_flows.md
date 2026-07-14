@@ -51,6 +51,11 @@ Required surfaces:
 - `32a` chat-to-task session
 - `1b` or `20a` plan approval
 
+Current V0 implementation: unresolved questions stop the task in
+`Clarification` and block plan approval. A resolving reply automatically
+creates the evidence-rich plan. `Approve & Run` persists approval, prepares
+read-only execution context, and starts the bounded live loop in one action.
+
 ## Flow 3: Live Agent Coding Run
 
 Goal: let the agent code while the user can understand what is happening.

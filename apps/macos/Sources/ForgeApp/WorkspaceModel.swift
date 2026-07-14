@@ -301,20 +301,25 @@ final class WorkspaceModel: ObservableObject {
 
     func approvePlan(for task: ForgeTask) {
         approvingTaskIDs.insert(task.id)
+        runningAgentLoopTaskIDs.insert(task.id)
+        statusMessage = "Approving plan and starting the bounded agent run."
+        startEventStream()
 
         Task {
             do {
-                let approvedTask = try await runtime.approvePlan(taskID: task.id)
-                upsert(approvedTask)
-                selectedTaskID = approvedTask.id
-                statusMessage = "Plan approved. Controlled execution opened."
-                await refreshValidationPermissionSnapshotIfPossible(for: approvedTask.id)
+                let runningTask = try await runtime.approvePlanAndRun(taskID: task.id)
+                upsert(runningTask)
+                selectedTaskID = runningTask.id
+                statusMessage = "Approved plan entered the bounded agent run."
+                await refreshGitStatusSnapshot()
+                await refreshValidationPermissionSnapshotIfPossible(for: runningTask.id)
                 startEventStream()
             } catch {
-                statusMessage = "Approve plan failed: \(error.localizedDescription)"
+                statusMessage = "Approve & run failed: \(error.localizedDescription)"
             }
 
             approvingTaskIDs.remove(task.id)
+            runningAgentLoopTaskIDs.remove(task.id)
         }
     }
 

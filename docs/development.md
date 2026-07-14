@@ -268,13 +268,19 @@ Agent Loop v0 currently runs local read-only tools:
 The app shows those tool calls and the resulting context file summaries before
 the task stops at the human review gate.
 
-When a task reaches `Human Review`, the Review panel enables `Approve Plan`.
-That action calls `POST /tasks/:taskID/approve-plan`, records approval history,
-targets the current plan revision when one exists, runs bounded read-only
-repository tools for execution context, asks the model provider for an
-execution proposal, and moves the task into `Execution Preparation` without
-changing files. The proposal carries `contextFiles` and `toolEvidence` for the
-Review panel.
+When intake is ambiguous, the task first reaches `Human Review / Clarification`.
+The conversation displays the active questions, planning stays paused, and the
+runtime rejects approval until a reply clears them. The resolving reply
+automatically generates a plan with expected file areas, validation, risk
+notes, and bounded time/cost estimates.
+
+When a task reaches `Human Review / Plan Review`, the embedded plan and Review
+rail enable `Approve & Run`. That action calls
+`POST /tasks/:taskID/approve-plan-and-run`, records approval history, targets
+the current plan revision, runs bounded read-only repository tools for
+execution context, asks the provider for an execution proposal, and enters the
+bounded Agent Run Loop. The proposal carries `contextFiles` and `toolEvidence`;
+all later file, command, Apply, and git gates remain unchanged.
 
 After an execution proposal exists, the Review panel enables
 `Generate Edit Proposal`. That action calls

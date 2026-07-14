@@ -60,6 +60,11 @@ export interface PlanRevision {
   rationale: string;
   riskLevel: "Low" | "Medium" | "High";
   steps: PlanStep[];
+  expectedFileAreas?: string[];
+  validationPlan?: string[];
+  riskNotes?: string[];
+  estimatedMinutes?: number;
+  estimatedCostUSD?: number;
   generatedAt: string;
 }
 
@@ -923,6 +928,11 @@ export interface CreateTaskRequest {
 
 export interface ApprovePlanRequest {
   note?: string;
+}
+
+export interface ApprovePlanAndRunRequest extends ApprovePlanRequest {
+  preferredCommandID?: string;
+  maxSteps?: number;
 }
 
 export interface ApproveValidationPresetRequest {

@@ -10,18 +10,14 @@ Last updated: 2026-07-14
 Keep this file practical. A future agent should be able to open it and know
 what to do next without rereading the whole project history.
 
-## P0: Coding-Agent Demo V0
+## Coding-Agent Demo V0: Complete
 
-Goal: make Forge feel like a real coding-agent application, not a workflow
-dashboard.
+All acceptance criteria in `docs/v0_scope.md` are implemented and covered by
+the core runtime smoke. Preserve these completed boundaries:
 
-- Complete the `32a` chat-to-task and clarification flow, including a compact
-  embedded plan with time/cost/risk evidence and a direct transition from plan
-  approval into the bounded live run.
-- Harden reviewed source create/modify/delete and EOF-marker handling after
-  real-repo use without weakening strict path, context, pre-apply, or recovery
-  checks.
-- Keep the current trust gates: plan approval before mutation, human review
+- clarification before planning when questions remain
+- evidence-rich plan and one-action Approve & Run
+- plan approval before mutation, human review
   before apply, explicit command approval, and explicit git actions.
 
 ## P1: Real Agent Behavior

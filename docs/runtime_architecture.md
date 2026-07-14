@@ -161,6 +161,12 @@ structured intent brief. Follow-up task messages use the same provider boundary
 to update the brief with summary, constraints, acceptance criteria, open
 questions, and next action.
 
+When the latest brief has open questions, the runtime sets the task to
+`Human Review / Clarification`, blocks the legacy planner loop, and rejects
+plan approval. A follow-up answer that clears the questions automatically
+generates the plan revision; ordinary later conversation updates still wait
+for an explicit regenerate action.
+
 Task messages can also carry repo-local file references parsed from paths in
 the message body, including `README.md`, `docs/example.md`, or
 `@runtime/src/server.ts:120`. The runtime owns parsing and safety checks. It
@@ -174,13 +180,21 @@ review, diff, or validation surfaces.
 Turns the latest task conversation and structured intent brief into a
 reviewable plan revision. A revision records provider metadata, source message,
 intent summary, rationale, risk level, generated timestamp, and revised plan
-steps. Generating a revision clears any prepared execution proposal, updates
+steps. The runtime enriches every revision with expected file areas,
+validation plan, explicit risk notes, and bounded estimated minutes/cost; local
+provider cost is recorded as zero. Generating a revision clears any prepared execution proposal, updates
 the visible planner, returns the task to `Human Review`, and requires a fresh
 plan approval targeted at that revision before execution can continue.
 
 Plan revision generation is blocked while an edit proposal is proposed or
 applied, because the user must resolve the current change review before
 changing the plan beneath it.
+
+`POST /tasks/:taskID/approve-plan-and-run` is the V0 product path. It reuses
+the same clarification and current-plan approval checks as `approve-plan`,
+prepares the read-only execution proposal, then immediately enters
+`run-agent-loop` with runtime-owned limits. It does not weaken file, command,
+apply, commit, push, or PR gates.
 
 ### Edit Proposal Generator
 
