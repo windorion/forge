@@ -65,6 +65,10 @@ Steps:
 6. Diff and Tests tabs update during the run.
 7. User can pause, abort, or open diff/tests at any point.
 
+Current implementation: Pause and Abort are cooperative at agent-step
+boundaries, while Resume creates a linked loop from the prior safe checkpoint.
+Commands already in progress use their separate Cancel Command control.
+
 Visible surfaces:
 
 - `14a` main window

@@ -16,7 +16,12 @@ index fields and a full JSON payload so the app can recover task state,
 events, tool calls, validation runs, context files, approval history,
 task conversation messages, plan revisions, execution proposals, edit
 proposals, edit proposal revisions, edit proposal validations, edit proposal
-decisions, and review state after a runtime restart.
+decisions, Agent Run Steps/Loops, repository-inspection budgets/outcomes, and
+review state after a runtime restart. Agent Run Loop snapshots retain linked
+step IDs, preferred command intent, cooperative control state/timestamps/note,
+resume lineage, and stop reason. Edit proposal snapshots retain changeset
+transaction phase, per-file hashes/snapshots, verification timestamps,
+recovery phase, summary, and errors.
 
 This is intentionally smaller than the full conceptual schema below. Future
 migrations should split runs, messages, tool calls, commands, file changes,
@@ -136,6 +141,7 @@ Fields:
 - proposed file changes
 - diff previews
 - validation result
+- latest changeset transaction and recovery evidence
 - status
 - decided at
 - decision note

@@ -76,6 +76,11 @@ This is the most important surface. When a task is running, the user should
 see the agent doing engineering work: reading files, matching conventions,
 editing code, running tests, and explaining skips.
 
+Current implementation: the action rail shows Pause and Abort only for an
+active Agent Run Loop, shows pending cooperative-stop feedback while the
+current step finishes, and replaces them with Resume/Abort for a user-paused
+loop. Loop Log cards show requested control state and resume lineage.
+
 ### New Session Surface
 
 Responsibilities:
@@ -112,6 +117,8 @@ Responsibilities:
 - per-file reasoning: why this change, convention matched, tests covering it
 - per-file approve/request-change actions
 - final approve/apply/commit/PR handoff
+- latest changeset transaction evidence: phase, verified file outcomes,
+  compensation/recovery state, and any recovery error
 
 The diff review should follow `10a`. It is the trust surface, not an
 afterthought inside a scroll stack.

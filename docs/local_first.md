@@ -42,13 +42,15 @@ Indexer should collect:
 
 Current implementation:
 
-- Agent Loop v0 has a bounded read-only repo-context scanner.
+- Agent Loop v0 has bounded runtime-owned read-only repository inspection.
 - It skips private/generated directories such as `.git`, `.forge`,
   `node_modules`, `.build`, `.swiftpm`, and `dist`.
 - It scans a limited set of source, config, script, and documentation file
   types, then scores matches from task-derived search terms.
 - It stores compact context summaries on the task rather than building a
   durable full-text or symbol index.
+- It records search mode, engine, budgets, inspected/new paths and a normalized
+  request fingerprint; repeats and zero-new-context steps are blocked.
 
 Still future work:
 

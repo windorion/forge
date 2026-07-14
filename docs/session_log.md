@@ -3357,3 +3357,35 @@ Next:
 
 - Recover loops left `Running` after runtime restart, then improve inspection
   result-quality evidence.
+
+## 2026-07-14 19:31:07 CEST
+
+Conversation summary:
+
+- User asked to push all changes and merge the branch PR into `main`.
+- GitHub PR #2 was created, then latest `origin/main` was merged into the
+  branch after PR #1 had landed overlapping Agent controls and coordinated
+  apply/recovery work.
+
+Done:
+
+- Confirmed the worktree and remote branch were synchronized and GitHub CLI
+  was authenticated.
+- Created ready PR #2 from `codex/source-patch-recovery` to `main`.
+- Fetched `origin/main` at merge commit `9e5bc7e` and began integration.
+- Resolved overlapping runtime, Swift, smoke, and product documentation in
+  favor of the newer branch implementation, which supersedes the overlapping
+  PR #1 paths and has broader transactional patch, loop recovery, repository
+  inspection, malformed-output recovery, and search-mode coverage.
+- Preserved non-conflicting PR #1 documentation and task-store changes from
+  `main` for final validation.
+
+Not done:
+
+- The integration merge, full regression, branch push, and PR merge are still
+  pending at this log checkpoint.
+
+Next:
+
+- Complete the merge commit, rerun TypeScript/core smoke/Swift validation,
+  push the resolved branch, and merge PR #2 into `main`.
