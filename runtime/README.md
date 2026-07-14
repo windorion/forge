@@ -129,6 +129,13 @@ before duplicate search/read calls. Every decision is stored in
 linked target IDs, result summaries, and timestamps. This endpoint is one step
 at a time; the bounded loop endpoint chains the same safe boundary.
 
+Inspection search mode is provider-selected but runtime-enforced: `Text` uses
+fixed-string ripgrep matching, while `Symbol` adds whole-word identifier
+matching. Ripgrep runs without a shell against the bounded safe file list with
+JSON output, a five-second timeout, and bounded captured output; unavailable or
+failed ripgrep falls back to the existing substring scanner and records the
+actual engine on the step.
+
 OpenAI agent-step decision decoding has one bounded format-recovery attempt.
 Malformed JSON/schema/required-field/action-enum output is corrected with the
 same strict schema. Recovered decisions store attempt/error evidence; two bad

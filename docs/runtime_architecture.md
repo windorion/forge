@@ -472,9 +472,9 @@ back to the loop, and stops at explicit safe conditions:
 The loop does not introduce new tool permissions. It reuses `run-agent-step`
 and therefore inherits the same read budgets, command catalog, approval,
 repair brief, rerun-evidence, validation, and review gates. The next
-architecture step is to broaden runtime-owned inspection with explicit
-ripgrep/text-symbol choices and result-quality evidence, then extend safe
-format recovery to planning requests and patch artifacts.
+architecture step is to add result-quality evidence and persisted-loop restart
+recovery, then extend safe format recovery to planning requests and patch
+artifacts.
 
 Active loops also have cooperative control endpoints:
 

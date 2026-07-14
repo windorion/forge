@@ -1033,6 +1033,11 @@ private struct AgentRunStepPanel: View {
                         }
 
                         if step.action == "InspectRepository" {
+                            if let mode = step.inspectionSearchMode {
+                                Text("SEARCH MODE  \(mode) · \(step.inspectionSearchEngine ?? "pending")")
+                                    .font(.caption2.monospaced().weight(.medium))
+                                    .foregroundStyle(ForgeDesign.ink)
+                            }
                             if let budget = step.inspectionBudgetSummary {
                                 Text("BUDGET  \(budget)")
                                     .font(.caption2.monospaced())

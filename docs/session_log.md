@@ -3327,3 +3327,33 @@ Next:
 - Add explicit ripgrep-backed text/symbol inspection modes with bounded result
   evidence and safe fallback when ripgrep is unavailable.
 - Then recover persisted loops left `Running` by a runtime restart.
+
+## 2026-07-14 19:22:05 CEST
+
+Conversation summary:
+
+- User asked to push and continue; the session implemented explicit repository
+  text and symbol search modes after the prior push.
+
+Done:
+
+- Added provider-selected `Text` and `Symbol` inspection modes.
+- Added no-shell bounded `rg --json` execution: fixed-string text search and
+  whole-identifier symbol search, limited to runtime-approved files with a
+  five-second timeout and bounded output.
+- Added safe fallback to the existing substring scanner and persisted the
+  selected mode and actual engine on each step.
+- Added macOS Log evidence and smoke assertions for the symbol engine plus
+  duplicate-request suppression.
+- Verified `npm run check`, `swift build`, `npm run smoke:core`, and
+  `git diff --check`.
+
+Not done:
+
+- Match-quality metrics and similar-query suppression remain limited.
+- Persisted running-loop restart recovery remains outstanding.
+
+Next:
+
+- Recover loops left `Running` after runtime restart, then improve inspection
+  result-quality evidence.

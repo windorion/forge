@@ -950,7 +950,7 @@ async function runOpenAIRepositoryInspectionLoopFlow() {
   );
   assert(
     current.toolCalls?.some((tool) => tool.name === "list_repo_files") &&
-      current.toolCalls?.some((tool) => tool.name === "search_repo_context") &&
+      current.toolCalls?.some((tool) => tool.name === "search_repository_text") &&
       current.toolCalls?.some((tool) => tool.name === "read_context_file"),
     "Repository inspection did not execute the runtime-owned read-only tool chain."
   );
@@ -1006,7 +1006,7 @@ async function runOpenAIInspectionRepeatGuardFlow() {
   const before = await post(`/tasks/${task.id}/approve-plan`, {
     note: "Core smoke test approves the repeated-inspection guard flow."
   });
-  const searchCallsBefore = before.toolCalls?.filter((tool) => tool.name === "search_repo_context").length ?? 0;
+  const searchCallsBefore = before.toolCalls?.filter((tool) => tool.name === "search_repository_symbols").length ?? 0;
   const readCallsBefore = before.toolCalls?.filter((tool) => tool.name === "read_context_file").length ?? 0;
 
   const current = await post(`/tasks/${task.id}/run-agent-loop`, { maxSteps: 3 });
@@ -1023,8 +1023,10 @@ async function runOpenAIInspectionRepeatGuardFlow() {
     "Repeated inspection steps did not retain the same request fingerprint."
   );
   assert(steps?.[0]?.inspectionBudgetSummary?.includes("scan<=400"), "Inspection step did not retain visible budget evidence.");
+  assert(steps?.[0]?.inspectionSearchMode === "Symbol", "Inspection step did not retain the selected Symbol mode.");
+  assert(steps?.[0]?.inspectionSearchEngine === "ripgrep-word", `Expected ripgrep-word, got ${steps?.[0]?.inspectionSearchEngine}.`);
   assert(
-    (current.toolCalls?.filter((tool) => tool.name === "search_repo_context").length ?? 0) - searchCallsBefore === 1,
+    (current.toolCalls?.filter((tool) => tool.name === "search_repository_symbols").length ?? 0) - searchCallsBefore === 1,
     "Repeated inspection executed a duplicate repository search."
   );
   assert(
@@ -2302,7 +2304,8 @@ function mockOpenAIOutput(name, requests, body) {
         commandID: "",
         commandRerunEvidenceID: "",
         searchTerms: ["Keychain", "security", "provider"],
-        readPaths: ["apps/macos/Sources/ForgeApp/KeychainStore.swift"]
+        readPaths: ["apps/macos/Sources/ForgeApp/KeychainStore.swift"],
+        searchMode: "Symbol"
       };
     }
 
@@ -2354,7 +2357,8 @@ function mockOpenAIOutput(name, requests, body) {
           commandID: "",
           commandRerunEvidenceID: "",
           searchTerms: ["Keychain", "security", "provider"],
-          readPaths: ["apps/macos/Sources/ForgeApp/KeychainStore.swift", "../unsafe.txt"]
+          readPaths: ["apps/macos/Sources/ForgeApp/KeychainStore.swift", "../unsafe.txt"],
+          searchMode: "Text"
         };
       }
 

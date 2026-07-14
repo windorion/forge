@@ -158,6 +158,8 @@ export type AgentRunStepAction =
   | "WaitForHumanReview"
   | "RequestPlanApproval";
 
+export type RepositoryInspectionSearchMode = "Text" | "Symbol";
+
 export interface AgentRunStepDecision {
   action: AgentRunStepAction;
   summary: string;
@@ -166,6 +168,7 @@ export interface AgentRunStepDecision {
   commandRerunEvidenceID?: string;
   searchTerms?: string[];
   readPaths?: string[];
+  searchMode?: RepositoryInspectionSearchMode;
   providerAttemptCount?: number;
   providerOutputRecovered?: boolean;
   providerAttemptErrors?: string[];
@@ -187,6 +190,8 @@ export interface AgentRunStep {
   contextFilePaths?: string[];
   inspectionRequestFingerprint?: string;
   inspectionBudgetSummary?: string;
+  inspectionSearchMode?: RepositoryInspectionSearchMode;
+  inspectionSearchEngine?: string;
   providerAttemptCount?: number;
   providerOutputRecovered?: boolean;
   providerAttemptErrors?: string[];

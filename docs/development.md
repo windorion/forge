@@ -40,8 +40,8 @@ task lifecycle without using real project memory or provider settings.
 Product-direction note: this development slice now has the first real
 provider-selected bounded loop with cooperative pause/abort/resume checkpoints,
 but it still is not a full Codex/Claude Code style autonomous agent. The next
-app/runtime work should add explicit ripgrep/text-symbol inspection choices,
-result-quality evidence, deeper self-fix, and full diff review polish.
+app/runtime work should add result-quality evidence, restart recovery, deeper
+self-fix, and full diff review polish.
 
 The macOS app now has a first-pass coding-agent session shell: a task queue,
 `1a`-style empty composer, live agent stream, plan progress strip,
@@ -405,9 +405,8 @@ guards, or max-step protection. Pause and abort requests are audited while the
 loop is active and stop it after the current safe step. Resume creates a new
 linked loop from a paused, aborted, or failed checkpoint. These controls do not
 kill in-flight commands or model calls and do not add permissions. A complete
-V0 agent still needs explicit ripgrep/text-symbol choices, stronger repeated-
-request variation handling, and wider recovery for malformed planning/patch
-output.
+V0 agent still needs stronger query-variation handling, result-quality
+evidence, and wider recovery for malformed planning/patch output.
 
 Repository inspection steps also store a stable fingerprint of their
 normalized search terms and safe read paths plus a compact budget summary. If

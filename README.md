@@ -205,8 +205,7 @@ Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
 
 - polish the first-pass macOS coding-agent session UI toward the exact
   `design_handoff_forge` screens
-- extend `InspectRepository` with explicit ripgrep-backed text/symbol choices
-  and result-quality evidence
+- add richer search result-quality evidence and persisted-loop restart recovery
 - extend the restricted patch engine to source-file create/delete and
   no-newline edge cases after the new Unified Diff path proves stable
 - connect full diff review to durable file-level decisions once the review

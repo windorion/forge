@@ -150,6 +150,8 @@ struct AgentRunStep: Identifiable, Codable, Hashable {
     var contextFilePaths: [String]?
     var inspectionRequestFingerprint: String?
     var inspectionBudgetSummary: String?
+    var inspectionSearchMode: String?
+    var inspectionSearchEngine: String?
     var providerAttemptCount: Int?
     var providerOutputRecovered: Bool?
     var providerAttemptErrors: [String]?

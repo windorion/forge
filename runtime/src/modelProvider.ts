@@ -416,7 +416,7 @@ class OpenAIResponsesModelProvider implements ModelProvider {
     const promptParts = [
       "Choose exactly one safe next action for Forge's live coding-agent run.",
       "You are selecting the next runtime-owned action; you are not executing tools yourself.",
-      "Use InspectRepository when more read-only codebase evidence is needed before proposing or repairing an edit. Provide bounded searchTerms and optional repo-relative readPaths. The runtime validates and executes them.",
+      "Use InspectRepository when more read-only codebase evidence is needed before proposing or repairing an edit. Provide searchMode Text for fixed substring discovery or Symbol for whole-identifier discovery, plus bounded searchTerms and optional repo-relative readPaths. The runtime validates and executes them.",
       "Do not request repository evidence already present in task context or recent InspectRepository steps; wait for human review when no new safe context is needed.",
       "Use GenerateEditProposal when an execution proposal exists and there is no proposed edit awaiting review.",
       "Use RunTaskCommand only when one of the provided taskCommands has canRun true; commandID must exactly match that command id.",
@@ -697,9 +697,10 @@ const agentRunStepDecisionSchema: JsonSchema = {
     commandID: { type: "string" },
     commandRerunEvidenceID: { type: "string" },
     searchTerms: { type: "array", items: { type: "string" } },
-    readPaths: { type: "array", items: { type: "string" } }
+    readPaths: { type: "array", items: { type: "string" } },
+    searchMode: { type: "string", enum: ["Text", "Symbol"] }
   },
-  required: ["action", "summary", "rationale", "commandID", "commandRerunEvidenceID", "searchTerms", "readPaths"]
+  required: ["action", "summary", "rationale", "commandID", "commandRerunEvidenceID", "searchTerms", "readPaths", "searchMode"]
 };
 
 const editProposalGuidanceSchema: JsonSchema = {
@@ -1104,6 +1105,7 @@ function normalizeAgentRunStepDecisionOutput(
   const commandRerunEvidenceID = optionalString(output.commandRerunEvidenceID);
   const searchTerms = normalizeAgentRunStepStringList(output.searchTerms, 10, 64);
   const readPaths = normalizeAgentRunStepStringList(output.readPaths, 6, 240);
+  const searchMode = output.searchMode === "Symbol" ? "Symbol" : "Text";
   const runnableCommandIDs = new Set(request.taskCommands.filter((permission) => permission.canRun).map((permission) => permission.command.id));
   const runnableRerunEvidenceIDs = new Set(request.commandRerunEvidence.map((evidence) => evidence.id));
 
@@ -1130,7 +1132,8 @@ function normalizeAgentRunStepDecisionOutput(
     commandID: action === "RunTaskCommand" ? commandID : undefined,
     commandRerunEvidenceID: action === "RerunRepairCommand" ? commandRerunEvidenceID : undefined,
     searchTerms: action === "InspectRepository" ? searchTerms : undefined,
-    readPaths: action === "InspectRepository" ? readPaths : undefined
+    readPaths: action === "InspectRepository" ? readPaths : undefined,
+    searchMode: action === "InspectRepository" ? searchMode : undefined
   };
 }
 
@@ -1543,7 +1546,7 @@ function agentRunStepRequestContext(request: AgentRunStepRequest): string {
     ],
     taskCommandPolicy: "RunTaskCommand can only use commandID values where canRun is true.",
     rerunPolicy: "RerunRepairCommand can only use commandRerunEvidenceID values listed in commandRerunEvidence.",
-    repositoryInspectionPolicy: "InspectRepository is read-only; searchTerms and readPaths are normalized and executed by runtime-owned bounded tools.",
+    repositoryInspectionPolicy: "InspectRepository is read-only; searchMode is Text or Symbol, and searchTerms/readPaths are normalized and executed by runtime-owned bounded tools.",
     runnableCommandIDs: runnableCommands.map((permission) => permission.command.id),
     taskCommands: commandSummaries,
     commandRerunEvidence: rerunEvidence

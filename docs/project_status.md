@@ -286,8 +286,8 @@ Remaining V0 gaps:
   behavior and durable per-file decisions
 - extend the restricted Unified Diff engine to source-file create/delete and
   newline-marker edge cases after the modification path proves stable
-- extend `InspectRepository` with explicit ripgrep-backed text/symbol choices
-  and result-quality evidence
+- add richer inspection result-quality evidence and persisted-loop restart
+  recovery
 - implement full diff review with per-file reasoning and request-change loop
 - keep git/preflight work as supporting infrastructure rather than the main
   demo

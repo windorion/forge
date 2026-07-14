@@ -29,8 +29,8 @@ dashboard.
 
 ## P1: Real Agent Behavior
 
-- Extend `InspectRepository` with explicit ripgrep-backed text/symbol search
-  choices and result-quality evidence.
+- Add richer inspection result-quality evidence and safe query-variation
+  handling.
 - Extend the bounded read-only planning/execution context loops into a
   runtime-owned tool-call loop with strict allowed tools and stop conditions.
 - Extend bounded output recovery beyond Agent Run Step decisions to malformed
@@ -89,6 +89,11 @@ dashboard.
 
 ## Done Recently
 
+- Added explicit runtime-owned `Text` and `Symbol` inspection modes. Text uses
+  bounded fixed-string ripgrep search; Symbol uses whole-identifier matching.
+  Both use JSON output, no shell, safe file lists, output/time budgets, and a
+  recorded fallback engine when ripgrep is unavailable. Smoke verifies the
+  symbol engine and repeat guard.
 - Added cross-step `InspectRepository` request fingerprints and visible budget
   evidence. Normalized search terms/read paths produce a stable short SHA-256
   fingerprint; a later identical inspection is blocked before duplicate search

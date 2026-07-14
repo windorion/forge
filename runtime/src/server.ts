@@ -6094,6 +6094,7 @@ function createAgentRunStep(
     commandRerunEvidenceID: decision.commandRerunEvidenceID,
     searchTerms: decision.searchTerms,
     readPaths: decision.readPaths,
+    inspectionSearchMode: decision.searchMode,
     providerAttemptCount: decision.providerAttemptCount,
     providerOutputRecovered: decision.providerOutputRecovered,
     providerAttemptErrors: decision.providerAttemptErrors,
@@ -6237,12 +6238,14 @@ async function executeRepositoryInspectionStep(task: ForgeTask, step: AgentRunSt
   );
   const searchTerms = normalizeProviderSearchTerms({ searchTerms: step.searchTerms ?? [] }, task);
   const requestedReadPaths = normalizeProviderReadPaths(step.readPaths ?? [], projectFiles);
-  const requestFingerprint = repositoryInspectionRequestFingerprint(searchTerms, requestedReadPaths);
+  const searchMode = step.inspectionSearchMode === "Symbol" ? "Symbol" : "Text";
+  const requestFingerprint = repositoryInspectionRequestFingerprint(searchMode, searchTerms, requestedReadPaths);
   const budgetSummary = `scan<=${repositoryScanMaxFiles} search<=${repositorySearchMaxFiles} context<=${repositoryContextMaxFiles} terms=${searchTerms.length} reads=${requestedReadPaths.length}`;
   step.searchTerms = searchTerms;
   step.readPaths = requestedReadPaths;
   step.inspectionRequestFingerprint = requestFingerprint;
   step.inspectionBudgetSummary = budgetSummary;
+  step.inspectionSearchMode = searchMode;
   const repeatedStep = task.agentRunSteps.find((candidate) =>
     candidate.id !== step.id &&
     candidate.action === "InspectRepository" &&
@@ -6256,16 +6259,19 @@ async function executeRepositoryInspectionStep(task: ForgeTask, step: AgentRunSt
     );
   }
 
-  const matches = await runTool(
+  const searchResult = await runTool(
     task,
-    "search_repo_context",
-    searchTerms.join(", "),
-    () => searchRepositoryContext(
+    searchMode === "Symbol" ? "search_repository_symbols" : "search_repository_text",
+    `${searchMode}: ${searchTerms.join(", ")}`,
+    () => searchRepositoryWithRipgrep(
       projectFiles,
       searchTerms,
-      [...explicitContextPathsForTask(task), ...requestedReadPaths]
+      [...explicitContextPathsForTask(task), ...requestedReadPaths],
+      searchMode
     )
   );
+  step.inspectionSearchEngine = searchResult.engine;
+  const matches = searchResult.matches;
   const inspectedFiles = await buildContextFiles(task, projectFiles, matches, requestedReadPaths);
   const newFiles = inspectedFiles.filter((file) => !existingPaths.has(file.path));
   step.contextFilePaths = inspectedFiles.map((file) => file.path);
@@ -6303,9 +6309,9 @@ async function executeRepositoryInspectionStep(task: ForgeTask, step: AgentRunSt
   return updatedTask;
 }
 
-function repositoryInspectionRequestFingerprint(searchTerms: string[], readPaths: string[]): string {
+function repositoryInspectionRequestFingerprint(searchMode: "Text" | "Symbol", searchTerms: string[], readPaths: string[]): string {
   return createHash("sha256")
-    .update(JSON.stringify({ searchTerms, readPaths }))
+    .update(JSON.stringify({ searchMode, searchTerms, readPaths }))
     .digest("hex")
     .slice(0, 16);
 }
@@ -9604,6 +9610,150 @@ async function searchRepositoryContext(
   }
 
   return matches
+    .sort((left, right) => right.score - left.score || left.path.localeCompare(right.path))
+    .slice(0, 12);
+}
+
+async function searchRepositoryWithRipgrep(
+  files: string[],
+  searchTerms: string[],
+  explicitPaths: string[],
+  searchMode: "Text" | "Symbol"
+): Promise<{ engine: string; matches: RepositorySearchMatch[] }> {
+  try {
+    const output = await runBoundedRipgrep(files.slice(0, repositorySearchMaxFiles), searchTerms, searchMode);
+    return {
+      engine: searchMode === "Symbol" ? "ripgrep-word" : "ripgrep-fixed",
+      matches: parseRipgrepRepositoryMatches(output, files, searchTerms, explicitPaths, searchMode)
+    };
+  } catch {
+    return {
+      engine: "fallback-substring",
+      matches: await searchRepositoryContext(files, searchTerms, explicitPaths)
+    };
+  }
+}
+
+function runBoundedRipgrep(
+  files: string[],
+  searchTerms: string[],
+  searchMode: "Text" | "Symbol"
+): Promise<string> {
+  if (files.length === 0 || searchTerms.length === 0) {
+    return Promise.resolve("");
+  }
+
+  const args = ["--json", "--ignore-case", "--max-count", "6", "--fixed-strings"];
+  if (searchMode === "Symbol") {
+    args.push("--word-regexp");
+  }
+  for (const term of searchTerms) {
+    args.push("-e", term);
+  }
+  args.push("--", ...files);
+
+  return new Promise((resolve, reject) => {
+    const child = spawn("rg", args, { cwd: repoRoot, shell: false, env: { ...process.env } });
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const timeout = setTimeout(() => {
+      child.kill("SIGTERM");
+      if (!settled) {
+        settled = true;
+        reject(new Error("Bounded ripgrep search timed out."));
+      }
+    }, 5_000);
+    const append = (current: string, chunk: Buffer) => (current + chunk.toString("utf8")).slice(-240_000);
+    child.stdout.on("data", (chunk: Buffer) => { stdout = append(stdout, chunk); });
+    child.stderr.on("data", (chunk: Buffer) => { stderr = append(stderr, chunk); });
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      if (!settled) {
+        settled = true;
+        reject(error);
+      }
+    });
+    child.on("close", (code) => {
+      clearTimeout(timeout);
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (code === 0 || code === 1) {
+        resolve(stdout);
+      } else {
+        reject(new Error(`ripgrep exited with code ${code ?? "unknown"}: ${stderr.slice(-500)}`));
+      }
+    });
+  });
+}
+
+function parseRipgrepRepositoryMatches(
+  output: string,
+  files: string[],
+  searchTerms: string[],
+  explicitPaths: string[],
+  searchMode: "Text" | "Symbol"
+): RepositorySearchMatch[] {
+  const byPath = new Map<string, RepositorySearchMatch>();
+  const explicitSet = new Set(explicitPaths);
+  const ensure = (file: string) => {
+    let match = byPath.get(file);
+    if (!match) {
+      match = { path: file, score: 0, reasons: [], matchedLines: [] };
+      byPath.set(file, match);
+    }
+    return match;
+  };
+
+  for (const file of files.slice(0, repositorySearchMaxFiles)) {
+    const match = ensure(file);
+    if (explicitSet.has(file)) {
+      match.score += 100;
+      match.reasons.push("explicitly referenced by task conversation");
+    }
+    const lowerPath = file.toLowerCase();
+    for (const term of searchTerms) {
+      if (lowerPath.includes(term.toLowerCase())) {
+        match.score += 12;
+        match.reasons.push(`path matches "${term}"`);
+      }
+    }
+  }
+
+  for (const line of output.split("\n")) {
+    if (!line) {
+      continue;
+    }
+    try {
+      const record = JSON.parse(line) as {
+        type?: string;
+        data?: { path?: { text?: string }; lines?: { text?: string }; line_number?: number; submatches?: unknown[] };
+      };
+      if (record.type !== "match" || !record.data?.path?.text) {
+        continue;
+      }
+      const match = ensure(record.data.path.text);
+      const hitCount = Math.max(1, record.data.submatches?.length ?? 1);
+      match.score += Math.min(24, hitCount * (searchMode === "Symbol" ? 6 : 4));
+      const reason = searchMode === "Symbol" ? "whole-symbol match" : "fixed-text match";
+      if (!match.reasons.includes(reason)) {
+        match.reasons.push(reason);
+      }
+      if (match.matchedLines.length < 4 && record.data.lines?.text) {
+        match.matchedLines.push(
+          `${record.data.line_number ?? 0}: ${record.data.lines.text.trim().replace(/\s+/g, " ").slice(0, 160)}`
+        );
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return [...byPath.values()]
+    .filter((match) => match.score > 0)
+    .map((match) => ({ ...match, reasons: match.reasons.slice(0, 4), matchedLines: match.matchedLines.slice(0, 3) }))
     .sort((left, right) => right.score - left.score || left.path.localeCompare(right.path))
     .slice(0, 12);
 }
