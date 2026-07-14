@@ -111,6 +111,7 @@ try {
   const openAIApplyRecoveryTask = await runOpenAIApplyRecoveryFlow();
   const openAIAgentRunStepTask = await runOpenAIAgentRunStepFlow();
   const openAIRepositoryInspectionTask = await runOpenAIRepositoryInspectionLoopFlow();
+  const openAIInspectionRepeatGuardTask = await runOpenAIInspectionRepeatGuardFlow();
   const openAIAgentStepOutputRecoveryTask = await runOpenAIAgentStepOutputRecoveryFlow();
   const openAIAgentStepOutputFailureTask = await runOpenAIAgentStepOutputFailureFlow();
   const openAIAgentRunLoopTask = await runOpenAIAgentRunLoopFlow();
@@ -133,6 +134,7 @@ try {
   console.log(`- OpenAI apply recovery task: ${openAIApplyRecoveryTask.id}`);
   console.log(`- OpenAI agent run step task: ${openAIAgentRunStepTask.id}`);
   console.log(`- OpenAI repository inspection task: ${openAIRepositoryInspectionTask.id}`);
+  console.log(`- OpenAI inspection repeat guard task: ${openAIInspectionRepeatGuardTask.id}`);
   console.log(`- OpenAI agent step output recovery task: ${openAIAgentStepOutputRecoveryTask.id}`);
   console.log(`- OpenAI agent step output failure task: ${openAIAgentStepOutputFailureTask.id}`);
   console.log(`- OpenAI agent run loop task: ${openAIAgentRunLoopTask.id}`);
@@ -986,6 +988,50 @@ async function runOpenAIAgentStepOutputRecoveryFlow() {
   assert(step.providerAttemptErrors?.length === 1, "Recovered provider decision did not retain the first format error.");
   assert(current.toolCalls?.length === toolCallCountBefore, "Malformed provider output recovery unexpectedly executed a tool.");
   assert(current.taskCommandRuns?.length === commandRunCountBefore, "Malformed provider output recovery unexpectedly ran a command.");
+
+  return current;
+}
+
+async function runOpenAIInspectionRepeatGuardFlow() {
+  const task = await createTask({
+    title: "Smoke inspection repeat guard",
+    objective: "Block a repeated provider-selected repository inspection before duplicate search and read calls."
+  });
+
+  await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "inspection repeat guard task to reach plan review"
+  );
+  const before = await post(`/tasks/${task.id}/approve-plan`, {
+    note: "Core smoke test approves the repeated-inspection guard flow."
+  });
+  const searchCallsBefore = before.toolCalls?.filter((tool) => tool.name === "search_repo_context").length ?? 0;
+  const readCallsBefore = before.toolCalls?.filter((tool) => tool.name === "read_context_file").length ?? 0;
+
+  const current = await post(`/tasks/${task.id}/run-agent-loop`, { maxSteps: 3 });
+  const loop = current.agentRunLoops?.at(-1);
+  const steps = loop?.stepIDs?.map((stepID) => current.agentRunSteps?.find((step) => step.id === stepID));
+  assert(loop?.status === "Paused", `Expected repeated-inspection loop Paused, got ${loop?.status}.`);
+  assert(loop.stopReason === "StepBlocked", `Expected repeated-inspection StepBlocked, got ${loop.stopReason}.`);
+  assert(steps?.length === 2, `Expected two inspection attempts, got ${steps?.length}.`);
+  assert(steps?.every((step) => step?.action === "InspectRepository"), "Repeat guard flow did not record two inspection decisions.");
+  assert(steps?.[0]?.status === "Completed", "First inspection did not complete.");
+  assert(steps?.[1]?.status === "Blocked", "Repeated inspection was not blocked.");
+  assert(
+    steps?.[0]?.inspectionRequestFingerprint === steps?.[1]?.inspectionRequestFingerprint,
+    "Repeated inspection steps did not retain the same request fingerprint."
+  );
+  assert(steps?.[0]?.inspectionBudgetSummary?.includes("scan<=400"), "Inspection step did not retain visible budget evidence.");
+  assert(
+    (current.toolCalls?.filter((tool) => tool.name === "search_repo_context").length ?? 0) - searchCallsBefore === 1,
+    "Repeated inspection executed a duplicate repository search."
+  );
+  assert(
+    (current.toolCalls?.filter((tool) => tool.name === "read_context_file").length ?? 0) - readCallsBefore ===
+      (steps?.[0]?.contextFilePaths?.length ?? 0),
+    "Repeated inspection executed a duplicate context read."
+  );
 
   return current;
 }
@@ -2248,6 +2294,18 @@ function mockOpenAIOutput(name, requests, body) {
   }
 
   if (name === "forge_agent_run_step") {
+    if (bodyText.includes("inspection repeat guard")) {
+      return {
+        action: "InspectRepository",
+        summary: "Inspect the same Keychain boundary to exercise cross-step request suppression.",
+        rationale: "The smoke provider intentionally repeats an identical safe read-only request.",
+        commandID: "",
+        commandRerunEvidenceID: "",
+        searchTerms: ["Keychain", "security", "provider"],
+        readPaths: ["apps/macos/Sources/ForgeApp/KeychainStore.swift"]
+      };
+    }
+
     if (bodyText.includes("provider output recovery")) {
       const taskRequestCount = requests.filter((request) =>
         request.name === "forge_agent_run_step" && JSON.stringify(request.body).includes("provider output recovery")

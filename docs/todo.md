@@ -29,8 +29,8 @@ dashboard.
 
 ## P1: Real Agent Behavior
 
-- Extend `InspectRepository` with cross-step request fingerprints, explicit
-  ripgrep-backed text/symbol search choices, and clearer budget evidence.
+- Extend `InspectRepository` with explicit ripgrep-backed text/symbol search
+  choices and result-quality evidence.
 - Extend the bounded read-only planning/execution context loops into a
   runtime-owned tool-call loop with strict allowed tools and stop conditions.
 - Extend bounded output recovery beyond Agent Run Step decisions to malformed
@@ -89,6 +89,11 @@ dashboard.
 
 ## Done Recently
 
+- Added cross-step `InspectRepository` request fingerprints and visible budget
+  evidence. Normalized search terms/read paths produce a stable short SHA-256
+  fingerprint; a later identical inspection is blocked before duplicate search
+  or read tools. The macOS Log shows the fingerprint and scan/search/context
+  budgets, and smoke verifies only the first request searches and reads.
 - Added bounded malformed-output recovery for OpenAI Agent Run Step decisions.
   JSON/schema/required-field/action-enum failures get one corrective retry;
   recovered decisions store attempt evidence, while retry exhaustion creates a

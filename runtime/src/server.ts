@@ -6237,6 +6237,25 @@ async function executeRepositoryInspectionStep(task: ForgeTask, step: AgentRunSt
   );
   const searchTerms = normalizeProviderSearchTerms({ searchTerms: step.searchTerms ?? [] }, task);
   const requestedReadPaths = normalizeProviderReadPaths(step.readPaths ?? [], projectFiles);
+  const requestFingerprint = repositoryInspectionRequestFingerprint(searchTerms, requestedReadPaths);
+  const budgetSummary = `scan<=${repositoryScanMaxFiles} search<=${repositorySearchMaxFiles} context<=${repositoryContextMaxFiles} terms=${searchTerms.length} reads=${requestedReadPaths.length}`;
+  step.searchTerms = searchTerms;
+  step.readPaths = requestedReadPaths;
+  step.inspectionRequestFingerprint = requestFingerprint;
+  step.inspectionBudgetSummary = budgetSummary;
+  const repeatedStep = task.agentRunSteps.find((candidate) =>
+    candidate.id !== step.id &&
+    candidate.action === "InspectRepository" &&
+    candidate.inspectionRequestFingerprint === requestFingerprint
+  );
+  if (repeatedStep) {
+    return blockAgentRunStep(
+      task,
+      step,
+      `Repeated repository inspection request ${requestFingerprint} was blocked before search/read tools; first recorded by step ${repeatedStep.id}.`
+    );
+  }
+
   const matches = await runTool(
     task,
     "search_repo_context",
@@ -6249,8 +6268,6 @@ async function executeRepositoryInspectionStep(task: ForgeTask, step: AgentRunSt
   );
   const inspectedFiles = await buildContextFiles(task, projectFiles, matches, requestedReadPaths);
   const newFiles = inspectedFiles.filter((file) => !existingPaths.has(file.path));
-  step.searchTerms = searchTerms;
-  step.readPaths = requestedReadPaths;
   step.contextFilePaths = inspectedFiles.map((file) => file.path);
 
   if (newFiles.length === 0) {
@@ -6284,6 +6301,13 @@ async function executeRepositoryInspectionStep(task: ForgeTask, step: AgentRunSt
   inspected.createdAt = step.completedAt ?? new Date().toISOString();
   saveAndBroadcast(updatedTask, inspected);
   return updatedTask;
+}
+
+function repositoryInspectionRequestFingerprint(searchTerms: string[], readPaths: string[]): string {
+  return createHash("sha256")
+    .update(JSON.stringify({ searchTerms, readPaths }))
+    .digest("hex")
+    .slice(0, 16);
 }
 
 function completeAgentRunStepAfterAction(

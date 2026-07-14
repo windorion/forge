@@ -3290,3 +3290,40 @@ Next:
   introduce explicit ripgrep-backed text/symbol search choices.
 - Extend safe format recovery to planning tool requests and patch artifacts
   without retrying side effects.
+
+## 2026-07-14 08:22:09 CEST
+
+Conversation summary:
+
+- After pushing Agent Run Step output recovery, the session continued with
+  repeated repository-inspection suppression and visible read budgets.
+
+Done:
+
+- Added a stable short SHA-256 fingerprint derived from normalized inspection
+  search terms and safe repo-relative read paths.
+- Added persisted budget evidence for repository scan, search, context-file,
+  search-term, and requested-read limits.
+- Blocked a later matching inspection fingerprint after safe path
+  normalization but before duplicate `search_repo_context` or
+  `read_context_file` calls.
+- Exposed inspection fingerprint and budget evidence in the macOS Log.
+- Added a two-step mock OpenAI smoke flow that repeats the same inspection,
+  verifies the first completes, the second blocks, and only the first performs
+  repository search and context reads.
+- Verified `npm run check`, `swift build`, `npm run smoke:core`, and
+  `git diff --check` during implementation.
+
+Not done:
+
+- Repository inspection still uses the existing bounded substring search and
+  does not expose explicit ripgrep-backed text versus symbol search choices.
+- Similar-but-not-identical low-value queries are not deduplicated.
+- Persisted running-loop crash recovery and wider structured-output recovery
+  remain outstanding.
+
+Next:
+
+- Add explicit ripgrep-backed text/symbol inspection modes with bounded result
+  evidence and safe fallback when ripgrep is unavailable.
+- Then recover persisted loops left `Running` by a runtime restart.

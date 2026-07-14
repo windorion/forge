@@ -168,11 +168,12 @@ Major gaps:
 - Command output now has a streamed, cancellable, selectable task-scoped
   surface with reviewed self-fix rerun evidence after apply.
 - Provider-backed run loop now has bounded multi-step orchestration, but it
-  still needs cross-step request fingerprints and explicit text/symbol search
-  choices.
+  still needs explicit text/symbol search choices and result-quality evidence.
 - The provider can now choose `InspectRepository`; the runtime safely executes
   bounded read-only list/search/read tools and lets the loop continue into a
-  proposal step with persisted evidence.
+  proposal step with persisted evidence. Stable request fingerprints block an
+  identical later request before duplicate search/read calls, and the Log shows
+  the active inspection budgets.
 - Malformed Agent Run Step decisions now get one bounded correction attempt.
   Recovery and exhaustion evidence is persisted, and exhaustion fails closed
   before tools, commands, or edits.
@@ -182,8 +183,8 @@ Major gaps:
 
 ## Next Implementation Order
 
-1. Extend `InspectRepository` with cross-step request fingerprints, explicit
-   ripgrep/text-symbol choices, and visible per-step budgets.
+1. Extend `InspectRepository` with explicit ripgrep-backed text/symbol choices
+   and result-quality evidence.
 2. Implement request-change revision from full diff review.
 3. Polish `10a` with durable file-level decisions and exact split-diff behavior.
 4. Extend Unified Diff to reviewed source create/delete and newline edge cases.

@@ -41,7 +41,7 @@ Product-direction note: this development slice now has the first real
 provider-selected bounded loop with cooperative pause/abort/resume checkpoints,
 but it still is not a full Codex/Claude Code style autonomous agent. The next
 app/runtime work should add explicit ripgrep/text-symbol inspection choices,
-cross-step request fingerprints, deeper self-fix, and full diff review polish.
+result-quality evidence, deeper self-fix, and full diff review polish.
 
 The macOS app now has a first-pass coding-agent session shell: a task queue,
 `1a`-style empty composer, live agent stream, plan progress strip,
@@ -406,7 +406,14 @@ loop is active and stop it after the current safe step. Resume creates a new
 linked loop from a paused, aborted, or failed checkpoint. These controls do not
 kill in-flight commands or model calls and do not add permissions. A complete
 V0 agent still needs explicit ripgrep/text-symbol choices, stronger repeated-
-request suppression, and wider recovery for malformed planning/patch output.
+request variation handling, and wider recovery for malformed planning/patch
+output.
+
+Repository inspection steps also store a stable fingerprint of their
+normalized search terms and safe read paths plus a compact budget summary. If
+the same request fingerprint already exists on the task, Forge blocks the new
+step after path normalization but before duplicate `search_repo_context` or
+`read_context_file` calls.
 
 OpenAI Agent Run Step decisions have a narrow format-recovery boundary. If the
 response cannot be decoded or fails required-field/action-enum normalization,
@@ -501,6 +508,8 @@ It covers:
 - mock OpenAI bounded loop that first selects `InspectRepository`, filters an
   unsafe path, reads a safe macOS source file, then generates a proposal using
   the newly persisted context
+- repeated `InspectRepository` decisions with identical fingerprints, proving
+  the second step is blocked before duplicate search/read tools
 - mock OpenAI malformed agent-step output that recovers on the second bounded
   request, plus retry exhaustion that records both errors and fails closed
 - mock OpenAI bounded agent run loop that generates a proposal, applies it

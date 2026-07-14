@@ -1033,6 +1033,17 @@ private struct AgentRunStepPanel: View {
                         }
 
                         if step.action == "InspectRepository" {
+                            if let budget = step.inspectionBudgetSummary {
+                                Text("BUDGET  \(budget)")
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(ForgeDesign.muted)
+                            }
+                            if let fingerprint = step.inspectionRequestFingerprint {
+                                Text("REQUEST  \(fingerprint)")
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(ForgeDesign.muted)
+                                    .textSelection(.enabled)
+                            }
                             if let searchTerms = step.searchTerms, !searchTerms.isEmpty {
                                 Text("SEARCH  \(searchTerms.joined(separator: " · "))")
                                     .font(.caption2.monospaced())

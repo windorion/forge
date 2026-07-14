@@ -122,7 +122,9 @@ an edit proposal, run an approved task command, generate a validation repair
 proposal, rerun reviewed self-fix evidence, wait for human review, or request
 plan approval. Inspection accepts bounded provider search terms and optional
 repo-relative read paths, but the runtime filters paths and executes only its
-logged read-only list/search/read tools. Every decision is stored in
+logged read-only list/search/read tools. Normalized inspection requests retain
+a short fingerprint and visible budget summary; repeated fingerprints block
+before duplicate search/read calls. Every decision is stored in
 `agentRunSteps` with provider metadata, rationale, inspection evidence, status,
 linked target IDs, result summaries, and timestamps. This endpoint is one step
 at a time; the bounded loop endpoint chains the same safe boundary.
@@ -337,6 +339,8 @@ preview-only artifact. It also verifies a blocked-to-repaired proposal path and
 bounded stop behavior for proposals that remain preview-only. The smoke also
 verifies a provider-selected repository inspection followed by proposal
 generation, including rejection of an unsafe requested path. It then
+verifies an identical second inspection is fingerprinted and blocked before
+duplicate search/read tool calls. It then
 verifies one malformed agent-step decision recovering on its corrective
 request and a two-attempt exhaustion path that fails closed. It then
 forces a temporary TypeScript validation failure and verifies provider-backed

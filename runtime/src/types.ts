@@ -185,6 +185,8 @@ export interface AgentRunStep {
   searchTerms?: string[];
   readPaths?: string[];
   contextFilePaths?: string[];
+  inspectionRequestFingerprint?: string;
+  inspectionBudgetSummary?: string;
   providerAttemptCount?: number;
   providerOutputRecovered?: boolean;
   providerAttemptErrors?: string[];

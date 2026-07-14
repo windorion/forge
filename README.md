@@ -76,7 +76,9 @@ Implemented today:
   paths. Forge filters unsafe inputs, blocks inspections that add no new
   context, executes only its logged read-only list/search/read tools, stores
   context evidence, and can continue the bounded loop into proposal generation
-  without granting arbitrary tools.
+  without granting arbitrary tools. Normalized requests store a stable
+  cross-step fingerprint and visible scan/search/context budgets; an identical
+  later request is blocked before duplicate search or read calls.
 - Agent-step structured-output recovery: malformed JSON/schema/enum decisions
   receive one bounded correction attempt. A recovered decision records both
   attempts; retry exhaustion creates a failed, auditable step without running
@@ -203,8 +205,8 @@ Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
 
 - polish the first-pass macOS coding-agent session UI toward the exact
   `design_handoff_forge` screens
-- extend `InspectRepository` with repeated-request suppression, explicit
-  ripgrep/text-symbol choices, and clearer budget evidence
+- extend `InspectRepository` with explicit ripgrep-backed text/symbol choices
+  and result-quality evidence
 - extend the restricted patch engine to source-file create/delete and
   no-newline edge cases after the new Unified Diff path proves stable
 - connect full diff review to durable file-level decisions once the review

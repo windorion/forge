@@ -77,7 +77,10 @@ supplies bounded search terms and optional repo-relative candidate paths. The
 runtime rejects absolute, escaping, ignored, internal, generated, or otherwise
 unsafe paths and remains the sole executor of the logged read-only tools.
 Inspection adds no command, network, edit, or git permissions, and a request
-that produces no new safe context is blocked as no progress.
+that produces no new safe context is blocked as no progress. A short SHA-256
+fingerprint of normalized terms/paths also blocks an identical later request
+before duplicate search/read calls; its active budgets remain visible on the
+step audit record.
 
 Malformed Agent Run Step structured output may be requested once more only to
 repair its format. The corrective request uses the same bounded schema and

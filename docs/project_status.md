@@ -64,7 +64,10 @@ Implemented:
   search terms and candidate repo-relative reads; the runtime normalizes them,
   rejects unsafe paths, executes logged `list_repo_files`,
   `search_repo_context`, and `read_context_file`, stores context/tool evidence,
-  and lets the bounded loop continue to its next provider decision.
+  and lets the bounded loop continue to its next provider decision. Each
+  normalized request stores a short SHA-256 fingerprint and visible scan,
+  search, context, term, and read budgets. A later identical request is blocked
+  before duplicate search/read calls.
 - Bounded Agent Run Step output recovery. OpenAI structured-output decode,
   required-field, and action-enum failures receive one corrective retry. A
   successful retry stores its attempt count and first error; exhaustion stores
@@ -283,8 +286,8 @@ Remaining V0 gaps:
   behavior and durable per-file decisions
 - extend the restricted Unified Diff engine to source-file create/delete and
   newline-marker edge cases after the modification path proves stable
-- extend `InspectRepository` with repeated-request suppression, explicit
-  ripgrep/text-symbol choices, and clearer budget evidence
+- extend `InspectRepository` with explicit ripgrep-backed text/symbol choices
+  and result-quality evidence
 - implement full diff review with per-file reasoning and request-change loop
 - keep git/preflight work as supporting infrastructure rather than the main
   demo

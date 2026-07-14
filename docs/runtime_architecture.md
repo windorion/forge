@@ -426,7 +426,10 @@ search terms plus optional repo-relative read paths. The runtime owns and logs
 the actual `list_repo_files`, `search_repo_context`, and `read_context_file`
 calls. It rejects unsafe or excluded paths, keeps existing read budgets, and
 blocks an inspection step that adds no new safe context. Inspection cannot run
-commands or mutate files. For every other action, the runtime rechecks the
+commands or mutate files. Normalized search terms/read paths produce a short
+SHA-256 request fingerprint and a persisted budget summary. A matching earlier
+inspection blocks the new step before duplicate search/read tools. For every
+other action, the runtime rechecks the
 existing proposed-edit, plan, concurrency, command approval/catalog, repair
 brief, and rerun-evidence gates before doing anything.
 
@@ -470,8 +473,8 @@ The loop does not introduce new tool permissions. It reuses `run-agent-step`
 and therefore inherits the same read budgets, command catalog, approval,
 repair brief, rerun-evidence, validation, and review gates. The next
 architecture step is to broaden runtime-owned inspection with explicit
-ripgrep/text-symbol choices, suppress repeated requests more aggressively,
-and extend safe format recovery to planning requests and patch artifacts.
+ripgrep/text-symbol choices and result-quality evidence, then extend safe
+format recovery to planning requests and patch artifacts.
 
 Active loops also have cooperative control endpoints:
 
