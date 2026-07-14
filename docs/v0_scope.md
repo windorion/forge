@@ -149,8 +149,9 @@ Built foundation:
 - git status/diff/commit/push/branch/PR handoff preflights
 - app-managed runtime diagnostics
 - local smoke coverage
-- first-pass macOS session shell with task queue, new-task empty state, live
-  agent stream, plan gate/action rail, and Log/Diff/Tests tabs
+- handoff-aligned macOS session shell with a square task queue, new-task empty
+  state, embedded chat plan gate, mutually exclusive Log/Diff/Tests live-work
+  views, and shared loop-control footer
 - first usable full-screen diff review surface with file tree, main diff pane,
   reasoning, validation evidence, and existing proposal apply/request-change
   actions. Validation is split into genuinely file-specific evidence and
@@ -158,7 +159,7 @@ Built foundation:
 - `32a` clarification pauses planning and blocks approval until the active
   questions are answered. The resolving reply automatically creates the plan.
 - embedded plans expose steps, expected file areas, validation, risk notes,
-  and runtime-derived time/cost estimates in both conversation and plan rail.
+  and runtime-derived time/cost estimates directly in the conversation.
 - `Approve & Run` records the plan approval and immediately enters the bounded
   Agent Run Loop through a combined runtime endpoint.
 

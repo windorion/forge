@@ -76,10 +76,11 @@ This is the most important surface. When a task is running, the user should
 see the agent doing engineering work: reading files, matching conventions,
 editing code, running tests, and explaining skips.
 
-Current implementation: the action rail shows Pause and Abort only for an
-active Agent Run Loop, shows pending cooperative-stop feedback while the
-current step finishes, and replaces them with Resume/Abort for a user-paused
-loop. Loop Log cards show requested control state and resume lineage.
+Current implementation: the `32a` live footer shows Pause and Abort only for
+an active Agent Run Loop, shows the current loop state while a cooperative stop
+finishes, and replaces Run with Resume for a paused/aborted/failed checkpoint.
+Log, Diff, and Tests are mutually exclusive views in the same live-work column,
+so the stream is never rendered behind a second legacy log surface.
 
 ### New Session Surface
 

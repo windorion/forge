@@ -27,10 +27,12 @@ the next milestone is broader search/symbol choices and patch breadth.
 Implemented:
 
 - Native SwiftUI macOS app shell.
-- First-pass macOS coding-agent session UI based on `design_handoff_forge`:
-  task queue, `1a`-style new-task empty state, live agent stream, plan
-  progress strip, Log/Diff/Tests tabs, compact `1b`-style plan gate, and action
-  rail. Existing review/git surfaces remain available inside the new shell.
+- Handoff-aligned macOS coding-agent session UI based on
+  `design_handoff_forge` `14a`/`32a`: a square-edged task queue, compact
+  new-task input, one chat/plan column, and one live-work column that switches
+  between Log/Diff/Tests. Pause/abort/resume share the tab footer. Legacy
+  Planner, Review, decision-rail, duplicate-log, toolbar-demo, and Git
+  workbench view hierarchies have been removed rather than hidden.
 - First usable `10a`-style full-screen diff review surface with a changed-file
   tree, main diff pane, why-this-change reasoning, validation/test evidence,
   and apply/request-change actions backed by the existing proposal review
@@ -73,8 +75,7 @@ Implemented:
   reviewed self-fix evidence, or waiting for human review. Each step records
   provider metadata, action, summary, rationale, command/evidence IDs, linked
   proposal or command targets, status, result, timestamps, and SSE events.
-  The macOS action rail exposes `Run Agent Step`, and the Log tab shows the
-  recent decision trail.
+  The macOS live stream shows the recent decision/tool/event trail.
 - `InspectRepository` Agent Run Step action. The provider supplies only bounded
   search terms and candidate repo-relative reads; the runtime normalizes them,
   rejects unsafe paths, executes logged `list_repo_files`,
@@ -96,12 +97,11 @@ Implemented:
   each `AgentRunStep` back to the loop, and stops at edit-proposal review
   gates, passed commands, verified self-fix reruns, blocked/failed steps,
   busy-task guards, no-progress guards, or max-step protection. The macOS
-  action rail exposes `Run Agent Loop`, and the Log tab shows recent loop
-  status, step counts, stop reason, and summaries.
+  live footer starts/resumes the loop and exposes its current control state.
 - Cooperative loop control. Pause and abort requests are persisted and audited
   while active, then take effect after the current safe step. Resume creates a
   linked new loop instead of rewriting the paused/aborted/failed checkpoint.
-  The macOS action rail and Log tab show control state and resume lineage.
+  The macOS live footer shows control state and resume availability.
 - Safe edit proposal review flow with multi-file OpenAI proposal artifacts,
   including blocked preview-only unsupported operations.
 - `AppendText` and exact `ReplaceText` restricted edit operations for
@@ -145,8 +145,8 @@ Implemented:
   accepts only allowlisted command IDs, reuses validation-preset approvals,
   blocks concurrent validation/command execution, runs project commands with
   `spawn` and `shell:false`, streams stdout/stderr chunks over SSE, records
-  bounded output chunks plus exit code in task state, and exposes macOS Tests
-  tab/action-rail surfaces for selectable approved commands.
+  bounded output chunks plus exit code in task state, and exposes recorded
+  runs and repair evidence in the macOS Tests tab.
 - The validation permission envelope now includes a task-command chooser model.
   The macOS action rail shows runtime-known project commands, their approval/
   readiness state, command boundary, and last-run status, then runs the
@@ -179,22 +179,23 @@ Implemented:
   Diff responses now include display-mode metadata, unavailable reasons,
   byte/line counts, and app preview limits so binary and oversized files are
   presented as explicit messages rather than broken side-by-side diffs.
-- Read-only commit preparation preview from the runtime, surfaced in the macOS
-  Review UI with suggested commit message, included files, validation
+- Read-only commit preparation preview from the runtime, surfaced as a compact
+  local-commit handoff in full-screen Diff review with suggested message, files,
+  validation
   suggestions, preflight metadata, blockers, risk notes, and a non-mutating
   operation boundary. The preflight includes git author identity, staged/
   unstaged/untracked counts, line stats, large-change warnings, validation
   state, hook-risk disclosure, and the commit path limit.
-- Branch preparation preview and explicit local branch create/switch actions
-  from the macOS Review UI. The runtime validates the target branch name,
+- Branch preparation preview and explicit local branch create/switch runtime
+  actions. The runtime validates the target branch name,
   detects whether it will create or switch, exposes structured preflight
   metadata for target/current/worktree/existing/action readiness, requires
   expected HEAD and current branch values from the reviewed preview, blocks
   default-base branch targets, blocks unmerged files, blocks switching existing
   branches with dirty working trees, and records a linked task event when
   possible.
-- Branch publish preview and explicit first-push/upstream setup from the macOS
-  Review UI. The runtime chooses or validates a configured remote, compares
+- Branch publish preview and explicit first-push/upstream setup runtime actions.
+  The runtime chooses or validates a configured remote, compares
   current branch work against the default base branch, lists commits to
   publish, exposes structured preflight metadata for branch/remote/base/
   commit/worktree/action readiness, blocks default-base/detached/
@@ -204,13 +205,14 @@ Implemented:
   Failed git pushes are classified into common auth, non-fast-forward,
   protected-branch, network, remote-rejected, or unknown failure summaries
   before being shown in the app.
-- Explicit local git commit action from the macOS Review UI. The runtime
+- Explicit local git commit action from the compact full-screen Diff handoff.
+  The runtime
   requires a fresh expected-HEAD value, explicit confirmation, selected paths
   from the current working tree, no unmerged files, and no staged files outside
   the reviewed selection before it stages those paths and creates one local
   commit. It does not push.
-- Push preparation preview and explicit current-branch push action from the
-  macOS Review UI. The runtime requires expected HEAD, branch, and upstream
+- Push preparation preview and explicit current-branch push runtime action.
+  The runtime requires expected HEAD, branch, and upstream
   values to match the reviewed preview, blocks detached/no-upstream/behind/no
   ahead/unmerged states, exposes structured preflight metadata for branch/
   upstream/remote/commit/worktree/action readiness, pushes with no force,
@@ -221,7 +223,7 @@ Implemented:
   rejection, branch-publish remote branch collision, and remote policy
   rejection. Remote branch collision checks now use both local tracking refs
   and `git ls-remote --heads`.
-- Read-only PR handoff preview from the macOS Review UI. The runtime resolves
+- Read-only PR handoff preview from the runtime. The runtime resolves
   a default base branch when possible, compares current branch work against
   that base, suggests a branch name, PR title, draft body, test plan, commits,
   changed files, structured preflight metadata, blockers, and risk notes, and
@@ -252,8 +254,8 @@ Implemented:
 - App-visible runtime state and diagnostics for unchecked/checking/running,
   disconnected, wrong version, provider configuration issues, SSE stream state,
   expected endpoint, database/task count, and copy/open diagnostics actions.
-- First-pass app-managed runtime start/stop from the macOS toolbar, sidebar
-  runtime badge, and Settings window. The app builds the runtime and launches
+- App-managed runtime start/stop from the Settings window, with compact runtime
+  health in the task-queue footer. The app builds the runtime and launches
   the local Node process directly, then can stop only the process it started.
 - Runtime lifecycle diagnostics now distinguish external runtimes from
   app-managed processes, capture bounded build/launch output, list runtime

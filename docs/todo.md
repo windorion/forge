@@ -78,6 +78,14 @@ the core runtime smoke. Preserve these completed boundaries:
 
 ## Done Recently
 
+- Reconciled the macOS main workspace with the latest `design_handoff_forge`
+  `14a`/`32a` surfaces. Removed the old Planner, Review, decision rail,
+  duplicate Log, toolbar demo controls, and full Git workbench hierarchy;
+  replaced the native rounded task list with the square handoff queue; made
+  Log/Diff/Tests mutually exclusive in one live-work column; combined tabs and
+  cooperative loop controls into one footer; retained local commit V0 through
+  a compact handoff inside full-screen Diff review. Verified with direct Swift
+  type-check, SwiftPM build, TypeScript check, and runtime build.
 - Added reviewed source/text `CreateFile` and `DeleteFile`. Create never
   overwrites; delete requires an existing bounded text target and retains a
   pre-delete snapshot. Apply/rollback verify file presence or absence as a

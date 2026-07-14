@@ -3674,3 +3674,39 @@ Next:
 - Commit and push the completed V0 slice directly to `main`; then use the
   running local app for manual product inspection and begin alpha work in the
   next task.
+
+## 2026-07-14 22:38:08 CEST
+
+Conversation summary:
+
+- Investigated the user's report that Forge looked visually doubled, traced it
+  to legacy and current workspace hierarchies rendering together, and rebuilt
+  the primary macOS shell against the latest local design handoff.
+
+Done:
+
+- Removed the obsolete Planner, Review, decision rail, duplicate Log, toolbar
+  demo/runtime controls, and full legacy Git-workbench view hierarchy rather
+  than merely hiding them.
+- Rebuilt the main task surface as the `32a` chat/plan column plus one `14a`
+  live-work column. Log, Diff, and Tests now replace one another instead of
+  stacking, and loop controls share their footer.
+- Removed doubled outer borders, converted plan progress to handoff-style
+  segments, flattened the chat composer, and replaced the native rounded task
+  list with the square neo-brutalist queue from the handoff.
+- Kept the V0 local-commit acceptance path through a compact reviewed handoff
+  in full-screen Diff without restoring the old Git dashboard.
+- Updated V0, workspace, development, status, and TODO documentation.
+- Passed direct full-app Swift type-check, SwiftPM build, TypeScript check and
+  runtime build, plus diff-format checks.
+
+Not done:
+
+- Screen capture remains unavailable until macOS Screen Recording permission
+  is granted to Codex; visual verification is therefore through the rebuilt
+  live app rather than an automated screenshot artifact.
+
+Next:
+
+- Build and relaunch `dist/Forge.app`, inspect the live handoff-aligned shell,
+  then commit and push this UI reconciliation directly to `main`.

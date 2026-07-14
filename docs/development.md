@@ -43,11 +43,12 @@ but it still is not a full Codex/Claude Code style autonomous agent. The next
 app/runtime work should add result-quality evidence, broader patch operations,
 deeper self-fix, and final review polish.
 
-The macOS app now has a first-pass coding-agent session shell: a task queue,
-`1a`-style empty composer, live agent stream, plan progress strip,
-Log/Diff/Tests tabs, compact plan gate, and action rail. The first continuous
-orchestration slice is now present; broader source patching and richer loop
-controls remain the main gap before the shell behaves like the finished V0.
+The macOS app now follows the handoff's `14a`/`32a` structure: a square-edged
+task queue, compact composer, one conversation/plan column, and one live-work
+column that switches between Log/Diff/Tests. The live footer owns loop
+run/pause/abort/resume controls. The former Planner, Review, action-rail,
+duplicate-log, toolbar-demo, and Git-workbench view trees were removed to avoid
+rendering old and new product concepts together.
 
 The shell also includes a first usable `10a`-style full-screen diff review
 surface. It opens from the Diff tab or review state card, shows a file tree,
@@ -148,35 +149,22 @@ You can also build the SwiftPM target directly:
 swift run ForgeApp
 ```
 
-Use the toolbar buttons:
-
-- `Start Runtime`: builds the TypeScript runtime and launches the local Node
-  runtime process from the app when the repository checkout can be resolved.
-- `Stop Runtime`: stops the app-managed runtime process. It only controls the
-  process started by Forge, not an unrelated terminal-launched runtime.
-- `Check Runtime`: calls `GET /health` and refreshes tasks.
-- `Start Demo Agent`: calls `POST /tasks` and starts Agent Loop v0.
-
-The sidebar runtime badge shows app-level runtime state: unchecked, checking,
-running, disconnected, wrong version, provider configuration issues, endpoint,
-and event-stream state. It also provides actions to refresh health, open the
-runtime status page, copy a diagnostics bundle, and start/stop the app-managed
-runtime process. The Settings runtime tab shows the same state plus service,
+The task-queue footer shows compact runtime health plus a refresh action.
+Start/stop and detailed diagnostics live in Settings so runtime administration
+does not compete with the task flow. The Settings runtime tab shows service,
 version, uptime, database path, task count, last checked time, last error, and
 the runtime process status, PID, directory, launch command, checked runtime
 directory candidates, and bounded build/launch output. If a runtime is already
 reachable but was not started by the app, Forge marks it as external and does
 not offer to stop that process.
 
-The Review panel also shows a `Working Tree` section backed by runtime git
-endpoints. It refreshes `GET /git/status`, highlights files related to the
-selected task, shows staged/unstaged/untracked state plus line stats when git
-provides them, and can load a bounded side-by-side diff from
+Full-screen Diff review is backed by runtime git endpoints. It refreshes
+`GET /git/status` and can load a bounded unified or side-by-side diff from
 `GET /git/diff?path=<repo-relative-path>`. File actions are read-only: open
 the file or reveal it in Finder. Diff responses include display mode,
 unavailable reason, byte/line counts, and app preview limits so binary or
 oversized files are shown as explicit messages instead of broken textual
-diffs. The same section can prepare a Branch Review
+diffs. Runtime APIs can also prepare a Branch Review
 through `GET /git/branch-preview`, showing current branch, target branch,
 create/switch mode, structured preflight metadata, blockers, and risk notes.
 The preflight card summarizes target branch validity, current branch/default
