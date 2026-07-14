@@ -15,6 +15,7 @@ import {
 import { SqliteTaskStore } from "./taskStore.js";
 import type {
   AgentRunLoop,
+  AgentRunLoopControlRequest,
   AgentRunStep,
   AgentRunStepDecision,
   AgentState,
@@ -86,7 +87,7 @@ const rollbackSnapshotRoot = path.join(repoRoot, ".forge", "rollback-snapshots")
 const taskStore = new SqliteTaskStore(resolveDatabasePath());
 const tasks = new Map<string, ForgeTask>(taskStore.loadTasks().map((task) => [task.id, task]));
 const activeTaskCommands = new Map<string, ActiveTaskCommand>();
-const activeAgentRunLoopTaskIDs = new Set<string>();
+const activeAgentRunLoops = new Map<string, ActiveAgentRunLoopControl>();
 let modelProviderSettings = loadModelProviderRuntimeSettings();
 let modelProvider = createModelProvider(modelProviderSettings);
 const validationCommandTimeoutMs = 60_000;
@@ -659,6 +660,30 @@ const server = createServer(async (request, response) => {
     if (request.method === "POST" && runAgentLoopTaskID) {
       const input = await readJson<RunAgentLoopRequest>(request);
       const task = await runAgentLoop(runAgentLoopTaskID, input);
+      writeJson(response, 200, task);
+      return;
+    }
+
+    const pauseAgentLoopTaskID = taskIDFromActionPath(url.pathname, "pause-agent-loop");
+    if (request.method === "POST" && pauseAgentLoopTaskID) {
+      const input = await readJson<AgentRunLoopControlRequest>(request);
+      const task = requestAgentRunLoopControl(pauseAgentLoopTaskID, input, "Pause");
+      writeJson(response, 200, task);
+      return;
+    }
+
+    const abortAgentLoopTaskID = taskIDFromActionPath(url.pathname, "abort-agent-loop");
+    if (request.method === "POST" && abortAgentLoopTaskID) {
+      const input = await readJson<AgentRunLoopControlRequest>(request);
+      const task = requestAgentRunLoopControl(abortAgentLoopTaskID, input, "Abort");
+      writeJson(response, 200, task);
+      return;
+    }
+
+    const resumeAgentLoopTaskID = taskIDFromActionPath(url.pathname, "resume-agent-loop");
+    if (request.method === "POST" && resumeAgentLoopTaskID) {
+      const input = await readJson<RunAgentLoopRequest>(request);
+      const task = await resumeAgentRunLoop(resumeAgentLoopTaskID, input);
       writeJson(response, 200, task);
       return;
     }
@@ -5562,33 +5587,68 @@ interface RunAgentStepOptions {
   loopID?: string;
 }
 
+interface ActiveAgentRunLoopControl {
+  loopID: string;
+  requestedAction?: "Pause" | "Abort";
+  requestedAt?: string;
+  note?: string;
+}
+
 async function runAgentLoop(taskID: string, input: RunAgentLoopRequest = {}): Promise<ForgeTask> {
   const task = tasks.get(taskID);
   if (!task) {
     throw new HttpError(404, `Task not found: ${taskID}`);
   }
 
-  if (activeAgentRunLoopTaskIDs.has(taskID)) {
+  if (activeAgentRunLoops.has(taskID)) {
     throw new HttpError(409, "An agent run loop is already active for this task.");
   }
+
+  const resumedFrom = input.resumeLoopID ? requireResumableAgentRunLoop(task, input.resumeLoopID) : undefined;
 
   if (hasRunningValidationRun(task) || hasRunningTaskCommandRun(task) || task.status === "Testing") {
     const loop = createAgentRunLoop(task, input, "Task is currently busy.");
     return finishAgentRunLoop(task, loop.id, "Paused", "TaskBusy", "Task is currently running another operation.");
   }
 
-  const loop = createAgentRunLoop(task, input, "Starting bounded provider-selected agent loop.");
-  activeAgentRunLoopTaskIDs.add(taskID);
+  const loopSummary = resumedFrom
+    ? `Resuming bounded agent loop from ${resumedFrom.id} at its last safe checkpoint.`
+    : "Starting bounded provider-selected agent loop.";
+  const loop = createAgentRunLoop(task, input, loopSummary);
+  activeAgentRunLoops.set(taskID, { loopID: loop.id });
   try {
     saveAndBroadcast(
       task,
-      withCreatedAt(event("agent.run_loop.started", `Agent loop started with up to ${loop.maxSteps} step(s).`), loop.startedAt)
+      withCreatedAt(
+        event(
+          resumedFrom ? "agent.run_loop.resumed" : "agent.run_loop.started",
+          resumedFrom
+            ? `Agent loop resumed from ${resumedFrom.id} with up to ${loop.maxSteps} step(s).`
+            : `Agent loop started with up to ${loop.maxSteps} step(s).`
+        ),
+        loop.startedAt
+      )
     );
 
     let current = task;
     for (let index = 0; index < loop.maxSteps; index += 1) {
+      const beforeStepControl = requestedAgentRunLoopStop(current, loop.id);
+      if (beforeStepControl) {
+        return finishAgentRunLoop(
+          current,
+          loop.id,
+          beforeStepControl.status,
+          beforeStepControl.reason,
+          beforeStepControl.summary
+        );
+      }
+
       const beforeStepIDs = new Set(current.agentRunSteps.map((step) => step.id));
-      current = await runAgentStep(taskID, { preferredCommandID: input.preferredCommandID }, { loopID: loop.id });
+      current = await runAgentStep(
+        taskID,
+        { preferredCommandID: loop.preferredCommandID },
+        { loopID: loop.id }
+      );
       const updatedLoop = requireAgentRunLoop(current, loop.id);
       const newSteps = current.agentRunSteps.filter((step) => !beforeStepIDs.has(step.id));
       for (const step of newSteps) {
@@ -5598,6 +5658,17 @@ async function runAgentLoop(taskID: string, input: RunAgentLoopRequest = {}): Pr
       }
       updatedLoop.stepsRun = updatedLoop.stepIDs.length;
       updatedLoop.summary = summarizeAgentRunLoopProgress(current, updatedLoop);
+
+      const afterStepControl = requestedAgentRunLoopStop(current, loop.id);
+      if (afterStepControl) {
+        return finishAgentRunLoop(
+          current,
+          loop.id,
+          afterStepControl.status,
+          afterStepControl.reason,
+          afterStepControl.summary
+        );
+      }
 
       const stop = agentRunLoopStopAfterStep(current, newSteps.at(-1));
       if (stop) {
@@ -5622,12 +5693,15 @@ async function runAgentLoop(taskID: string, input: RunAgentLoopRequest = {}): Pr
       error instanceof Error ? error.message : String(error)
     );
   } finally {
-    activeAgentRunLoopTaskIDs.delete(taskID);
+    if (activeAgentRunLoops.get(taskID)?.loopID === loop.id) {
+      activeAgentRunLoops.delete(taskID);
+    }
   }
 }
 
 function createAgentRunLoop(task: ForgeTask, input: RunAgentLoopRequest, summary: string): AgentRunLoop {
-  const maxSteps = normalizeAgentRunLoopMaxSteps(input.maxSteps);
+  const resumedFrom = input.resumeLoopID ? requireAgentRunLoop(task, input.resumeLoopID) : undefined;
+  const maxSteps = normalizeAgentRunLoopMaxSteps(input.maxSteps ?? resumedFrom?.maxSteps);
   const loop: AgentRunLoop = {
     id: randomUUID(),
     provider: modelProvider.info,
@@ -5635,9 +5709,14 @@ function createAgentRunLoop(task: ForgeTask, input: RunAgentLoopRequest, summary
     maxSteps,
     stepsRun: 0,
     stepIDs: [],
+    preferredCommandID: input.preferredCommandID ?? resumedFrom?.preferredCommandID,
+    resumedFromLoopID: resumedFrom?.id,
     summary,
     startedAt: new Date().toISOString()
   };
+  if (resumedFrom) {
+    resumedFrom.resumedByLoopID = loop.id;
+  }
   task.agentRunLoops.push(loop);
   task.status = "Running";
   task.currentPhase = "Agent Loop";
@@ -5652,6 +5731,124 @@ function createAgentRunLoop(task: ForgeTask, input: RunAgentLoopRequest, summary
     summary
   });
   return loop;
+}
+
+function requestAgentRunLoopControl(
+  taskID: string,
+  input: AgentRunLoopControlRequest,
+  action: "Pause" | "Abort"
+): ForgeTask {
+  const task = requireTask(taskID);
+  const control = activeAgentRunLoops.get(taskID);
+  if (!control) {
+    throw new HttpError(409, "No active agent run loop is available for control.");
+  }
+
+  if (input.loopID && input.loopID !== control.loopID) {
+    throw new HttpError(409, `Active agent loop does not match requested loop ${input.loopID}.`);
+  }
+
+  const loop = requireAgentRunLoop(task, control.loopID);
+  if (loop.status !== "Running") {
+    throw new HttpError(409, `Agent loop is not running: ${loop.id}`);
+  }
+
+  if (control.requestedAction === "Abort" || control.requestedAction === action) {
+    return task;
+  }
+
+  const now = new Date().toISOString();
+  const note = input.note?.trim() || undefined;
+  control.requestedAction = action;
+  control.requestedAt = now;
+  control.note = note;
+  loop.controlState = action === "Pause" ? "PauseRequested" : "AbortRequested";
+  loop.controlRequestedAt = now;
+  loop.controlNote = note;
+  task.currentPhase = action === "Pause" ? "Agent Loop Pause Requested" : "Agent Loop Abort Requested";
+  task.reviewSummary = `${action} requested. Forge will stop after the current safe agent step.`;
+  task.approvals.push({
+    id: randomUUID(),
+    action: `${action} Agent Loop`,
+    decision: "Approved",
+    summary: `${action} requested for active agent loop ${loop.id}.`,
+    targetID: loop.id,
+    decidedAt: now,
+    userNote: note
+  });
+  setAgent(task, "Manager", "Active", `${action} requested; waiting for the current safe step checkpoint.`);
+
+  saveAndBroadcast(
+    task,
+    withCreatedAt(
+      event(
+        action === "Pause" ? "agent.run_loop.pause.requested" : "agent.run_loop.abort.requested",
+        task.reviewSummary
+      ),
+      now
+    )
+  );
+  return task;
+}
+
+async function resumeAgentRunLoop(taskID: string, input: RunAgentLoopRequest): Promise<ForgeTask> {
+  const task = requireTask(taskID);
+  if (activeAgentRunLoops.has(taskID)) {
+    throw new HttpError(409, "Cannot resume while an agent run loop is already active.");
+  }
+
+  const source = input.resumeLoopID
+    ? requireResumableAgentRunLoop(task, input.resumeLoopID)
+    : [...task.agentRunLoops].reverse().find((loop) => isResumableAgentRunLoop(loop));
+  if (!source) {
+    throw new HttpError(409, "No paused, aborted, or failed agent loop is available to resume.");
+  }
+
+  return runAgentLoop(taskID, {
+    preferredCommandID: input.preferredCommandID ?? source.preferredCommandID,
+    maxSteps: input.maxSteps ?? source.maxSteps,
+    resumeLoopID: source.id
+  });
+}
+
+function isResumableAgentRunLoop(loop: AgentRunLoop): boolean {
+  return loop.status === "Paused" || loop.status === "Aborted" || loop.status === "Failed";
+}
+
+function requireResumableAgentRunLoop(task: ForgeTask, loopID: string): AgentRunLoop {
+  const loop = requireAgentRunLoop(task, loopID);
+  if (!isResumableAgentRunLoop(loop)) {
+    throw new HttpError(409, `Agent loop is not resumable from status ${loop.status}: ${loop.id}`);
+  }
+  return loop;
+}
+
+function requestedAgentRunLoopStop(
+  task: ForgeTask,
+  loopID: string
+): { status: AgentRunLoop["status"]; reason: AgentRunLoop["stopReason"]; summary: string } | undefined {
+  const control = activeAgentRunLoops.get(task.id);
+  if (!control || control.loopID !== loopID || !control.requestedAction) {
+    return undefined;
+  }
+
+  if (control.requestedAction === "Abort") {
+    return {
+      status: "Aborted",
+      reason: "UserAborted",
+      summary: control.note
+        ? `Agent loop aborted at a safe checkpoint: ${control.note}`
+        : "Agent loop aborted at the next safe checkpoint."
+    };
+  }
+
+  return {
+    status: "Paused",
+    reason: "UserPaused",
+    summary: control.note
+      ? `Agent loop paused at a safe checkpoint: ${control.note}`
+      : "Agent loop paused at the next safe checkpoint."
+  };
 }
 
 function normalizeAgentRunLoopMaxSteps(value: unknown): number {
@@ -5762,6 +5959,12 @@ function finishAgentRunLoop(
     setAgent(task, "Manager", "Done", "Agent loop reached a safe completion condition.");
     setAgent(task, "Coder", "Done", summary);
     setAgent(task, "Reviewer", "Active", "Review the completed loop output.");
+  } else if (status === "Aborted") {
+    task.status = "Human Review";
+    task.currentPhase = "Agent Loop Aborted";
+    setAgent(task, "Manager", "Idle", "Agent loop was aborted at a safe checkpoint.");
+    setAgent(task, "Coder", "Idle", summary);
+    setAgent(task, "Reviewer", "Active", "Review completed steps before resuming or starting another loop.");
   } else {
     task.status = "Human Review";
     if (stopReason !== "HumanReviewRequired" && stopReason !== "StepBlocked") {
@@ -5774,7 +5977,7 @@ function finishAgentRunLoop(
   upsertPlanStep(task, {
     id: "run-agent-loop",
     title: "Run agent loop",
-    status: status === "Completed" ? "Done" : status === "Failed" ? "Blocked" : "Active",
+    status: status === "Completed" ? "Done" : status === "Failed" || status === "Aborted" ? "Blocked" : "Active",
     summary
   });
 
@@ -5782,7 +5985,9 @@ function finishAgentRunLoop(
     ? "agent.run_loop.completed"
     : status === "Failed"
       ? "agent.run_loop.failed"
-      : "agent.run_loop.paused";
+      : status === "Aborted"
+        ? "agent.run_loop.aborted"
+        : "agent.run_loop.paused";
   saveAndBroadcast(task, withCreatedAt(event(type, summary), completedAt));
   return task;
 }
@@ -9841,6 +10046,9 @@ function renderRuntimeHome(): string {
       <li><code>POST /tasks/:taskID/approve-plan</code></li>
       <li><code>POST /tasks/:taskID/run-agent-step</code></li>
       <li><code>POST /tasks/:taskID/run-agent-loop</code></li>
+      <li><code>POST /tasks/:taskID/pause-agent-loop</code></li>
+      <li><code>POST /tasks/:taskID/abort-agent-loop</code></li>
+      <li><code>POST /tasks/:taskID/resume-agent-loop</code></li>
       <li><code>POST /tasks/:taskID/generate-edit-proposal</code></li>
       <li><code>POST /tasks/:taskID/revise-edit-proposal</code></li>
       <li><code>POST /tasks/:taskID/generate-validation-repair-proposal</code></li>

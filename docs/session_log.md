@@ -3167,3 +3167,45 @@ Next:
 - Add pause/abort/resume and visible stuck-task recovery to Agent Run Loop.
 - Then extend runtime-owned read/search tool choices inside the same safety
   boundary.
+
+## 2026-07-14 07:48:04 CEST
+
+Conversation summary:
+
+- User asked to commit and push the completed patch/recovery slice, then
+  continue immediately with the next task. Commit `75a2ee1` was pushed to
+  `origin/codex/source-patch-recovery`, then the session implemented Agent Run
+  Loop controls on the same branch.
+
+Done:
+
+- Added `pause-agent-loop`, `abort-agent-loop`, and `resume-agent-loop`
+  endpoints with active-loop ID checks and persisted request notes/timestamps.
+- Pause and abort now take effect after the current safe step, without killing
+  an in-flight provider request or approved command.
+- Added `UserPaused` and `UserAborted` stop reasons, `Aborted` loop status,
+  approval/audit records, and requested/paused/aborted/resumed SSE events.
+- Resume accepts paused, aborted, or failed checkpoints and creates a new loop
+  with `resumedFromLoopID`/`resumedByLoopID` history instead of rewriting the
+  old record.
+- Added macOS Pause, Abort, and Resume Loop actions plus Log-tab control state
+  and resume-lineage display.
+- Extended `npm run smoke:core` with concurrent controls around real approved
+  five-second commands, verifying pause, resume, abort, audit, events, and
+  inactive-loop rejection.
+- Verified `npm run check`, `npm run smoke:core`, and `swift build`.
+
+Not done:
+
+- Controls are cooperative between safe steps; they do not interrupt an
+  in-flight command. Command cancellation remains a separate explicit action.
+- Runtime restart does not yet convert persisted `Running` loops into a
+  recoverable interrupted checkpoint.
+- Richer runtime-owned read/search choices and malformed provider output retry
+  remain outstanding.
+
+Next:
+
+- Add runtime-owned read/search actions inside the bounded loop with strict
+  budgets and no mutation permissions.
+- Add malformed-output normalization/retry and crash-restart loop recovery.

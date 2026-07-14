@@ -111,6 +111,7 @@ try {
   const openAIApplyRecoveryTask = await runOpenAIApplyRecoveryFlow();
   const openAIAgentRunStepTask = await runOpenAIAgentRunStepFlow();
   const openAIAgentRunLoopTask = await runOpenAIAgentRunLoopFlow();
+  const openAIAgentLoopControlsTask = await runOpenAIAgentLoopControlsFlow();
   const openAIAutoRepairTask = await runOpenAIAutoRepairFlow();
   const openAIValidationRepairTask = await runOpenAIValidationFailureRepairFlow();
   const openAITaskCommandRepairTask = await runOpenAITaskCommandFailureRepairFlow();
@@ -129,6 +130,7 @@ try {
   console.log(`- OpenAI apply recovery task: ${openAIApplyRecoveryTask.id}`);
   console.log(`- OpenAI agent run step task: ${openAIAgentRunStepTask.id}`);
   console.log(`- OpenAI agent run loop task: ${openAIAgentRunLoopTask.id}`);
+  console.log(`- OpenAI agent loop controls task: ${openAIAgentLoopControlsTask.id}`);
   console.log(`- OpenAI auto-repair task: ${openAIAutoRepairTask.id}`);
   console.log(`- OpenAI validation repair task: ${openAIValidationRepairTask.id}`);
   console.log(`- OpenAI task command repair task: ${openAITaskCommandRepairTask.id}`);
@@ -1003,6 +1005,109 @@ async function runOpenAIAgentRunLoopFlow() {
   return current;
 }
 
+async function runOpenAIAgentLoopControlsFlow() {
+  const task = await createTask({
+    title: "Smoke agent loop controls",
+    objective: "Pause, resume, and abort a bounded agent loop at safe checkpoints."
+  });
+
+  await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "agent loop controls task to reach initial plan review"
+  );
+
+  let current = await post(`/tasks/${task.id}/approve-plan`, {
+    note: "Core smoke test approves the agent loop controls plan."
+  });
+  current = await post(`/tasks/${task.id}/approve-validation-preset`, {
+    presetID: "smoke-task-commands",
+    note: "Core smoke test approves the long command used for cooperative loop controls."
+  });
+
+  const firstLoopPromise = post(`/tasks/${task.id}/run-agent-loop`, {
+    preferredCommandID: "smoke-long-task-command",
+    maxSteps: 2
+  });
+  const firstRunning = await waitForTask(
+    task.id,
+    (candidate) =>
+      candidate.agentRunLoops?.at(-1)?.status === "Running" &&
+      candidate.taskCommandRuns?.at(-1)?.commandID === "smoke-long-task-command" &&
+      candidate.taskCommandRuns?.at(-1)?.status === "Running",
+    "first controlled agent loop to run its long command"
+  );
+  const firstLoop = firstRunning.agentRunLoops.at(-1);
+  const pauseRequested = await post(`/tasks/${task.id}/pause-agent-loop`, {
+    loopID: firstLoop.id,
+    note: "Pause after the current approved command."
+  });
+  assert(
+    pauseRequested.agentRunLoops.at(-1)?.controlState === "PauseRequested",
+    "Pause request did not persist on the active loop."
+  );
+  current = await firstLoopPromise;
+  const pausedLoop = current.agentRunLoops.find((loop) => loop.id === firstLoop.id);
+  assert(pausedLoop?.status === "Paused", `Expected controlled loop Paused, got ${pausedLoop?.status}.`);
+  assert(pausedLoop.stopReason === "UserPaused", `Expected UserPaused, got ${pausedLoop.stopReason}.`);
+  assert(
+    current.approvals?.some((approval) => approval.action === "Pause Agent Loop" && approval.targetID === firstLoop.id),
+    "Pause request did not record an approval/audit entry."
+  );
+  assert(
+    current.events?.some((event) => event.type === "agent.run_loop.pause.requested") &&
+      current.events?.some((event) => event.type === "agent.run_loop.paused"),
+    "Pause lifecycle events were not recorded."
+  );
+
+  const resumePromise = post(`/tasks/${task.id}/resume-agent-loop`, {
+    resumeLoopID: firstLoop.id,
+    preferredCommandID: "smoke-long-task-command",
+    maxSteps: 2
+  });
+  const resumedRunning = await waitForTask(
+    task.id,
+    (candidate) =>
+      candidate.agentRunLoops?.length >= 2 &&
+      candidate.agentRunLoops?.at(-1)?.status === "Running" &&
+      candidate.agentRunLoops?.at(-1)?.resumedFromLoopID === firstLoop.id &&
+      candidate.taskCommandRuns?.at(-1)?.status === "Running",
+    "resumed agent loop to run its long command"
+  );
+  const resumedLoop = resumedRunning.agentRunLoops.at(-1);
+  const abortRequested = await post(`/tasks/${task.id}/abort-agent-loop`, {
+    loopID: resumedLoop.id,
+    note: "Abort after the current approved command."
+  });
+  assert(
+    abortRequested.agentRunLoops.at(-1)?.controlState === "AbortRequested",
+    "Abort request did not persist on the resumed loop."
+  );
+  current = await resumePromise;
+  const abortedLoop = current.agentRunLoops.find((loop) => loop.id === resumedLoop.id);
+  const linkedSourceLoop = current.agentRunLoops.find((loop) => loop.id === firstLoop.id);
+  assert(abortedLoop?.status === "Aborted", `Expected resumed loop Aborted, got ${abortedLoop?.status}.`);
+  assert(abortedLoop.stopReason === "UserAborted", `Expected UserAborted, got ${abortedLoop.stopReason}.`);
+  assert(linkedSourceLoop?.resumedByLoopID === resumedLoop.id, "Paused loop did not link to the resumed loop.");
+  assert(
+    current.approvals?.some((approval) => approval.action === "Abort Agent Loop" && approval.targetID === resumedLoop.id),
+    "Abort request did not record an approval/audit entry."
+  );
+  assert(
+    current.events?.some((event) => event.type === "agent.run_loop.resumed") &&
+      current.events?.some((event) => event.type === "agent.run_loop.abort.requested") &&
+      current.events?.some((event) => event.type === "agent.run_loop.aborted"),
+    "Resume/abort lifecycle events were not recorded."
+  );
+
+  const inactiveControl = await postExpectError(`/tasks/${task.id}/pause-agent-loop`, {
+    loopID: resumedLoop.id
+  });
+  assert(inactiveControl.status === 409, "Controlling an inactive loop should be rejected.");
+
+  return current;
+}
+
 async function runOpenAIPreviewBlockedFlow() {
   const task = await createTask({
     title: "Smoke preview-only blocked proposal",
@@ -1369,6 +1474,12 @@ async function assertRuntimeDiagnosticsAndSettings() {
   assert(
     home.includes("POST /tasks/:taskID/run-agent-loop"),
     "Runtime home page did not link the agent run loop endpoint."
+  );
+  assert(
+    home.includes("POST /tasks/:taskID/pause-agent-loop") &&
+      home.includes("POST /tasks/:taskID/abort-agent-loop") &&
+      home.includes("POST /tasks/:taskID/resume-agent-loop"),
+    "Runtime home page did not link the agent run loop control endpoints."
   );
 
   const initialHealth = await get("/health");
@@ -2023,6 +2134,16 @@ function mockOpenAIOutput(name, requests, body) {
   }
 
   if (name === "forge_agent_run_step") {
+    if (bodyText.includes("agent loop controls")) {
+      return {
+        action: "RunTaskCommand",
+        summary: "Run the approved long smoke command so loop control can stop at a safe checkpoint.",
+        rationale: "The command is runtime-known and already approved for this task.",
+        commandID: "smoke-long-task-command",
+        commandRerunEvidenceID: ""
+      };
+    }
+
     if (bodyText.includes("agent run loop smoke")) {
       if (bodyText.includes("Command Failed")) {
         return {

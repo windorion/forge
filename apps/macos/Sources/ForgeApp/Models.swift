@@ -159,6 +159,12 @@ struct AgentRunLoop: Identifiable, Codable, Hashable {
     var maxSteps: Int
     var stepsRun: Int
     var stepIDs: [String]
+    var preferredCommandID: String?
+    var resumedFromLoopID: String?
+    var resumedByLoopID: String?
+    var controlState: String?
+    var controlRequestedAt: String?
+    var controlNote: String?
     var stopReason: String?
     var summary: String
     var startedAt: String
@@ -912,6 +918,12 @@ struct RunAgentStepRequest: Encodable {
 struct RunAgentLoopRequest: Encodable {
     var preferredCommandID: String?
     var maxSteps: Int?
+    var resumeLoopID: String?
+}
+
+struct AgentRunLoopControlRequest: Encodable {
+    var loopID: String?
+    var note: String?
 }
 
 struct CancelTaskCommandRequest: Encodable {

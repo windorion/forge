@@ -493,8 +493,58 @@ struct RuntimeClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(
-            RunAgentLoopRequest(preferredCommandID: preferredCommandID, maxSteps: maxSteps)
+            RunAgentLoopRequest(preferredCommandID: preferredCommandID, maxSteps: maxSteps, resumeLoopID: nil)
         )
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response, data: data)
+        return try JSONDecoder().decode(ForgeTask.self, from: data)
+    }
+
+    func pauseAgentLoop(taskID: ForgeTask.ID, loopID: AgentRunLoop.ID, note: String? = nil) async throws -> ForgeTask {
+        try await controlAgentLoop(taskID: taskID, loopID: loopID, action: "pause-agent-loop", note: note)
+    }
+
+    func abortAgentLoop(taskID: ForgeTask.ID, loopID: AgentRunLoop.ID, note: String? = nil) async throws -> ForgeTask {
+        try await controlAgentLoop(taskID: taskID, loopID: loopID, action: "abort-agent-loop", note: note)
+    }
+
+    func resumeAgentLoop(
+        taskID: ForgeTask.ID,
+        loopID: AgentRunLoop.ID,
+        preferredCommandID: String? = nil,
+        maxSteps: Int? = nil
+    ) async throws -> ForgeTask {
+        let url = baseURL
+            .appending(path: "tasks")
+            .appending(path: taskID)
+            .appending(path: "resume-agent-loop")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(
+            RunAgentLoopRequest(preferredCommandID: preferredCommandID, maxSteps: maxSteps, resumeLoopID: loopID)
+        )
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response, data: data)
+        return try JSONDecoder().decode(ForgeTask.self, from: data)
+    }
+
+    private func controlAgentLoop(
+        taskID: ForgeTask.ID,
+        loopID: AgentRunLoop.ID,
+        action: String,
+        note: String?
+    ) async throws -> ForgeTask {
+        let url = baseURL
+            .appending(path: "tasks")
+            .appending(path: taskID)
+            .appending(path: action)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(AgentRunLoopControlRequest(loopID: loopID, note: note))
 
         let (data, response) = try await URLSession.shared.data(for: request)
         try validate(response, data: data)

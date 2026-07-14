@@ -168,13 +168,16 @@ Major gaps:
 - Command output now has a streamed, cancellable, selectable task-scoped
   surface with reviewed self-fix rerun evidence after apply.
 - Provider-backed run loop now has bounded multi-step orchestration, but it
-  still lacks richer read/search tool choice, broader patch generation, and
-  pause/abort/resume controls.
+  still lacks richer runtime-owned read/search choices and malformed-output
+  recovery.
+- The live session now exposes cooperative pause/abort/resume controls. Pause
+  and abort stop after the current safe step; resume preserves the prior loop
+  and creates a linked recovery run.
 
 ## Next Implementation Order
 
-1. Extend the bounded agent loop with richer read/search tool choices and
-   pause/abort/resume controls.
+1. Extend the bounded agent loop with richer runtime-owned read/search tool
+   choices and malformed-output retry/recovery.
 2. Implement request-change revision from full diff review.
 3. Polish `10a` with durable file-level decisions and exact split-diff behavior.
 4. Extend Unified Diff to reviewed source create/delete and newline edge cases.

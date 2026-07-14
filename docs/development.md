@@ -38,10 +38,10 @@ The runtime core has an automated smoke regression that exercises the main
 task lifecycle without using real project memory or provider settings.
 
 Product-direction note: this development slice now has the first real
-provider-selected bounded loop, but it still is not a full Codex/Claude Code
-style autonomous agent. The next app/runtime work should make the local
-walkthrough stronger with richer read/search choices, broader source patches,
-pause/abort/resume, self-fix, and full diff review.
+provider-selected bounded loop with cooperative pause/abort/resume checkpoints,
+but it still is not a full Codex/Claude Code style autonomous agent. The next
+app/runtime work should add richer runtime-owned read/search choices,
+malformed-output recovery, self-fix, and full diff review polish.
 
 The macOS app now has a first-pass coding-agent session shell: a task queue,
 `1a`-style empty composer, live agent stream, plan progress strip,
@@ -377,6 +377,9 @@ The action rail exposes Agent Run Step v0 and Agent Run Loop v0:
 ```text
 POST /tasks/:taskID/run-agent-step
 POST /tasks/:taskID/run-agent-loop
+POST /tasks/:taskID/pause-agent-loop
+POST /tasks/:taskID/abort-agent-loop
+POST /tasks/:taskID/resume-agent-loop
 ```
 
 The request can include an optional `preferredCommandID`, but the runtime only
@@ -395,11 +398,12 @@ timestamps. SSE emits `agent.run_step.started`, `agent.run_step.completed`,
 `run-agent-loop` repeatedly invokes the same step boundary up to a bounded
 `maxSteps` value. It stops at edit-proposal review gates, passed commands,
 verified self-fix reruns, blocked/failed steps, busy-task guards, no-progress
-guards, or max-step protection. It does not add new permissions; it only
-chains existing step actions until the runtime reaches a safe stop. A complete
-V0 agent still needs pause/resume/abort and richer read/search/patch tool
-choices.
-choices.
+guards, or max-step protection. Pause and abort requests are audited while the
+loop is active and stop it after the current safe step. Resume creates a new
+linked loop from a paused, aborted, or failed checkpoint. These controls do not
+kill in-flight commands or model calls and do not add permissions. A complete
+V0 agent still needs richer runtime-owned read/search choices and malformed-
+output recovery.
 
 Current validation presets:
 
@@ -486,6 +490,8 @@ It covers:
 - mock OpenAI bounded agent run loop that generates a proposal, applies it
   after review, then runs an approved command, creates a repair brief from the
   failed command, and generates a self-fix proposal inside one loop
+- concurrent pause/resume/abort requests around approved five-second task
+  commands, including checkpoint lineage, audit records, and SSE events
 - read-only branch, branch-publish, commit, push, and PR handoff preview
   endpoints plus stale-head rejection checks for high-risk git actions
 - commit preview preflight metadata for author identity, staged/unstaged/

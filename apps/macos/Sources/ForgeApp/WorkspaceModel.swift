@@ -42,6 +42,9 @@ final class WorkspaceModel: ObservableObject {
     @Published private var rollingBackEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var rejectingEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var runningAgentLoopTaskIDs = Set<ForgeTask.ID>()
+    @Published private var pausingAgentLoopIDs = Set<AgentRunLoop.ID>()
+    @Published private var abortingAgentLoopIDs = Set<AgentRunLoop.ID>()
+    @Published private var resumingAgentLoopIDs = Set<AgentRunLoop.ID>()
     @Published private var runningAgentStepTaskIDs = Set<ForgeTask.ID>()
     @Published private var runningValidationTaskIDs = Set<ForgeTask.ID>()
     @Published private var runningTaskCommandTaskIDs = Set<ForgeTask.ID>()
@@ -643,6 +646,70 @@ final class WorkspaceModel: ObservableObject {
 
     func isRunningAgentLoop(taskID: ForgeTask.ID) -> Bool {
         runningAgentLoopTaskIDs.contains(taskID)
+    }
+
+    func pauseAgentLoop(for task: ForgeTask, loop: AgentRunLoop) {
+        pausingAgentLoopIDs.insert(loop.id)
+        Task {
+            do {
+                let updatedTask = try await runtime.pauseAgentLoop(taskID: task.id, loopID: loop.id)
+                upsert(updatedTask)
+                statusMessage = "Agent loop pause requested."
+            } catch {
+                statusMessage = "Pause agent loop failed: \(error.localizedDescription)"
+            }
+            pausingAgentLoopIDs.remove(loop.id)
+        }
+    }
+
+    func abortAgentLoop(for task: ForgeTask, loop: AgentRunLoop) {
+        abortingAgentLoopIDs.insert(loop.id)
+        Task {
+            do {
+                let updatedTask = try await runtime.abortAgentLoop(taskID: task.id, loopID: loop.id)
+                upsert(updatedTask)
+                statusMessage = "Agent loop abort requested."
+            } catch {
+                statusMessage = "Abort agent loop failed: \(error.localizedDescription)"
+            }
+            abortingAgentLoopIDs.remove(loop.id)
+        }
+    }
+
+    func resumeAgentLoop(for task: ForgeTask, loop: AgentRunLoop, preferredCommandID: String? = nil) {
+        resumingAgentLoopIDs.insert(loop.id)
+        runningAgentLoopTaskIDs.insert(task.id)
+        Task {
+            do {
+                let updatedTask = try await runtime.resumeAgentLoop(
+                    taskID: task.id,
+                    loopID: loop.id,
+                    preferredCommandID: preferredCommandID,
+                    maxSteps: loop.maxSteps
+                )
+                upsert(updatedTask)
+                statusMessage = "Agent loop resume completed."
+                await refreshGitStatusSnapshot()
+                await refreshValidationPermissionSnapshotIfPossible(for: updatedTask.id)
+                startEventStream()
+            } catch {
+                statusMessage = "Resume agent loop failed: \(error.localizedDescription)"
+            }
+            resumingAgentLoopIDs.remove(loop.id)
+            runningAgentLoopTaskIDs.remove(task.id)
+        }
+    }
+
+    func isPausingAgentLoop(loopID: AgentRunLoop.ID?) -> Bool {
+        loopID.map(pausingAgentLoopIDs.contains) ?? false
+    }
+
+    func isAbortingAgentLoop(loopID: AgentRunLoop.ID?) -> Bool {
+        loopID.map(abortingAgentLoopIDs.contains) ?? false
+    }
+
+    func isResumingAgentLoop(loopID: AgentRunLoop.ID?) -> Bool {
+        loopID.map(resumingAgentLoopIDs.contains) ?? false
     }
 
     func rerunRepairCommand(for task: ForgeTask, evidence: CommandRerunEvidence) {

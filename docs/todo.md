@@ -30,15 +30,15 @@ dashboard.
 ## P1: Real Agent Behavior
 
 - Extend the bounded Agent Run Loop with richer runtime-owned read/search tool
-  choices, pause/abort/resume controls, and visible stuck-task recovery.
+  choices and malformed-output retry/recovery.
 - Extend the bounded read-only planning/execution context loops into a
   runtime-owned tool-call loop with strict allowed tools and stop conditions.
 - Add stricter model output normalization, retry rules, and failure recovery
   for malformed tool calls or patch artifacts.
 - Add request-change revision loops that operate from full diff review, not
   only the current review stack.
-- Make pause, abort, resume, and stuck-task recovery visible in the live
-  session.
+- Add crash-restart recovery for loops persisted as running when the runtime
+  terminated.
 
 ## P2: Review, Diff, And Git
 
@@ -89,6 +89,13 @@ dashboard.
 
 ## Done Recently
 
+- Added cooperative Agent Run Loop pause/abort/resume controls. Pause and abort
+  requests are audited and take effect after the current safe step; resume
+  creates a linked new loop from paused/aborted/failed checkpoints. The macOS
+  action rail and Log tab expose control state, stop reason, and resume
+  lineage. `npm run smoke:core` controls a loop concurrently with a real
+  five-second approved command and verifies `UserPaused`, resume links, and
+  `UserAborted` lifecycles.
 - Added restricted `UnifiedDiff` source modifications for normal model-backed
   edits beyond exact text hunks. The runtime validates single-file headers,
   allowlisted paths, hunk bounds/counts/order, and exact context/deletion lines

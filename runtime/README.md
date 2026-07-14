@@ -28,6 +28,9 @@ This first slice is intentionally small:
 - `POST /tasks/:taskID/approve-plan`
 - `POST /tasks/:taskID/run-agent-step`
 - `POST /tasks/:taskID/run-agent-loop`
+- `POST /tasks/:taskID/pause-agent-loop`
+- `POST /tasks/:taskID/abort-agent-loop`
+- `POST /tasks/:taskID/resume-agent-loop`
 - `POST /tasks/:taskID/generate-edit-proposal`
 - `POST /tasks/:taskID/revise-edit-proposal`
 - `POST /tasks/:taskID/generate-validation-repair-proposal`
@@ -128,6 +131,11 @@ records `agentRunLoops`, links each step by ID, and stops at edit-proposal
 review gates, passed commands, verified self-fix reruns, blocked/failed
 steps, busy-task guards, no-progress guards, or max-step protection. It does
 not add new permissions and does not apply patches automatically.
+
+Pause and abort can target only the runtime-owned active loop ID and take
+effect after the current safe step; they do not kill an in-flight provider call
+or command. Resume accepts a paused, aborted, or failed loop ID and creates a
+new bounded loop linked in both directions so history remains auditable.
 
 OpenAI-backed edit proposals can include multiple file changes and
 preview-only unsupported operations. Unsupported changes are kept as review

@@ -139,6 +139,13 @@ blocked/failed steps, busy-task guards, no-progress guards, or max-step
 protection. It cannot apply a proposed patch, invent raw shell commands,
 commit, push, or publish anything.
 
+Pause and abort are cooperative controls, not arbitrary process control. They
+can target only the runtime-owned active loop ID for the task and take effect
+after the current safe step. Resume accepts only a persisted paused, aborted,
+or failed loop and creates a linked new bounded loop under the same permissions.
+None of these endpoints cancels a child process, applies edits, or expands the
+provider action enum.
+
 ### High Risk
 
 Examples:

@@ -454,8 +454,20 @@ back to the loop, and stops at explicit safe conditions:
 The loop does not introduce new tool permissions. It reuses `run-agent-step`
 and therefore inherits the same command catalog, approval, repair brief,
 rerun-evidence, validation, and review gates. The next architecture step is to
-add pause/abort/resume controls and richer read/search/patch tool choices
-inside the same runtime-owned safety model.
+add richer runtime-owned read/search tool choices and malformed-output
+recovery inside the same safety model.
+
+Active loops also have cooperative control endpoints:
+
+- `pause-agent-loop` records `PauseRequested` and stops after the current safe
+  step with `UserPaused`.
+- `abort-agent-loop` records `AbortRequested` and stops after the current safe
+  step with `UserAborted`; it does not kill an in-flight command or model call.
+- `resume-agent-loop` accepts a paused, aborted, or failed loop checkpoint and
+  creates a new bounded loop with preserved forward/backward lineage.
+
+Control requests, notes, timestamps, approvals, and SSE lifecycle events are
+persisted. History is append-only: resume never rewrites the source loop.
 
 ### Permission Manager
 

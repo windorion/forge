@@ -929,6 +929,17 @@ private struct AgentRunLoopPanel: View {
                                 .font(.caption2.monospaced())
                                 .foregroundStyle(ForgeDesign.muted)
                         }
+                        if let controlState = loop.controlState {
+                            Text(controlState)
+                                .font(.caption2.monospaced().weight(.bold))
+                                .foregroundStyle(controlState == "AbortRequested" ? ForgeDesign.danger : ForgeDesign.warning)
+                        }
+                        if let resumedFromLoopID = loop.resumedFromLoopID {
+                            Text("RESUMED FROM \(resumedFromLoopID)")
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(ForgeDesign.muted)
+                                .lineLimit(1)
+                        }
                         Text(loop.completedAt ?? loop.startedAt)
                             .font(.caption2.monospaced())
                             .foregroundStyle(.secondary)
@@ -949,6 +960,8 @@ private struct AgentRunLoopPanel: View {
             return "checkmark.circle"
         case "Paused":
             return "pause.circle"
+        case "Aborted":
+            return "stop.circle"
         case "Failed":
             return "exclamationmark.triangle"
         default:
@@ -962,6 +975,8 @@ private struct AgentRunLoopPanel: View {
             return ForgeDesign.success
         case "Paused":
             return ForgeDesign.warning
+        case "Aborted":
+            return ForgeDesign.danger
         case "Failed":
             return ForgeDesign.danger
         default:
@@ -2120,6 +2135,41 @@ private struct AgentRunActionsCard: View {
             .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.accent, foreground: ForgeDesign.ink))
             .disabled(!canRunAgentLoop)
 
+            if let loop = latestAgentRunLoop, loop.status == "Running" {
+                HStack(spacing: 8) {
+                    Button {
+                        workspace.pauseAgentLoop(for: task, loop: loop)
+                    } label: {
+                        Label(pauseAgentLoopTitle, systemImage: "pause.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(ForgeSecondaryButtonStyle())
+                    .disabled(!canPauseAgentLoop)
+
+                    Button {
+                        workspace.abortAgentLoop(for: task, loop: loop)
+                    } label: {
+                        Label(abortAgentLoopTitle, systemImage: "stop.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(ForgeSecondaryButtonStyle())
+                    .disabled(!canAbortAgentLoop)
+                }
+            } else if let loop = latestAgentRunLoop, isResumableAgentLoop(loop) {
+                Button {
+                    workspace.resumeAgentLoop(
+                        for: task,
+                        loop: loop,
+                        preferredCommandID: selectedTaskCommandPermission?.command.id
+                    )
+                } label: {
+                    Label(resumeAgentLoopTitle, systemImage: "play.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.accent, foreground: ForgeDesign.ink))
+                .disabled(!canResumeAgentLoop)
+            }
+
             Button {
                 workspace.runAgentStep(for: task, preferredCommandID: selectedTaskCommandPermission?.command.id)
             } label: {
@@ -2654,6 +2704,38 @@ private struct AgentRunActionsCard: View {
         canRunAgentStep
     }
 
+    private var latestAgentRunLoop: AgentRunLoop? {
+        task.agentRunLoops.last
+    }
+
+    private var canPauseAgentLoop: Bool {
+        guard let loop = latestAgentRunLoop else { return false }
+        return loop.status == "Running" &&
+            loop.controlState == nil &&
+            !workspace.isPausingAgentLoop(loopID: loop.id) &&
+            !workspace.isAbortingAgentLoop(loopID: loop.id)
+    }
+
+    private var canAbortAgentLoop: Bool {
+        guard let loop = latestAgentRunLoop else { return false }
+        return loop.status == "Running" &&
+            loop.controlState != "AbortRequested" &&
+            !workspace.isAbortingAgentLoop(loopID: loop.id)
+    }
+
+    private var canResumeAgentLoop: Bool {
+        guard let loop = latestAgentRunLoop else { return false }
+        return isResumableAgentLoop(loop) &&
+            !isRunningAgentActivity &&
+            !workspace.isResumingAgentLoop(loopID: loop.id) &&
+            !isRunningTaskCommand &&
+            !isRunningValidation
+    }
+
+    private func isResumableAgentLoop(_ loop: AgentRunLoop) -> Bool {
+        loop.status == "Paused" || loop.status == "Aborted" || loop.status == "Failed"
+    }
+
     private var hasAgentStepCandidate: Bool {
         task.executionProposal != nil ||
             latestRunnableCommandRerunEvidence != nil ||
@@ -2684,6 +2766,18 @@ private struct AgentRunActionsCard: View {
             return "Approve Plan First"
         }
         return "Run Agent Loop"
+    }
+
+    private var pauseAgentLoopTitle: String {
+        workspace.isPausingAgentLoop(loopID: latestAgentRunLoop?.id) ? "Requesting" : "Pause"
+    }
+
+    private var abortAgentLoopTitle: String {
+        workspace.isAbortingAgentLoop(loopID: latestAgentRunLoop?.id) ? "Requesting" : "Abort"
+    }
+
+    private var resumeAgentLoopTitle: String {
+        workspace.isResumingAgentLoop(loopID: latestAgentRunLoop?.id) ? "Resuming" : "Resume Loop"
     }
 }
 

@@ -10,15 +10,15 @@ Last updated: 2026-07-14
 Forge is a strong trust/runtime foundation with a first-pass coding-agent
 session shell and a usable full-screen diff review surface in the macOS app.
 It can create tasks, inspect bounded repo context, hold review gates, generate
-  safe edit proposals, apply restricted Markdown edits, exact source/text
-  replacements, multi-hunk patches, and context-anchored unified diffs across
-  reviewed source files, validate work, expose
-guarded git actions, run approved task-scoped commands with streamed output,
+safe edit proposals, apply restricted Markdown edits, exact source/text
+replacements, multi-hunk patches, and context-anchored unified diffs across
+reviewed source files, validate work, expose guarded git actions, run approved
+task-scoped commands with streamed output,
 record rerun evidence after reviewed self-fixes, let a model provider choose
 safe next agent steps inside a bounded multi-step loop, and persist task state
-locally. The next milestone is to make that loop more capable: richer
-read/search/patch orchestration, pause/abort/resume, and broader patch
-recovery.
+locally. The loop now has cooperative pause/abort/resume checkpoints; the next
+milestone is richer runtime-owned read/search orchestration, malformed-output
+recovery, and broader patch behavior.
 
 ## Current Implementation
 
@@ -66,6 +66,10 @@ Implemented:
   busy-task guards, no-progress guards, or max-step protection. The macOS
   action rail exposes `Run Agent Loop`, and the Log tab shows recent loop
   status, step counts, stop reason, and summaries.
+- Cooperative loop control. Pause and abort requests are persisted and audited
+  while active, then take effect after the current safe step. Resume creates a
+  linked new loop instead of rewriting the paused/aborted/failed checkpoint.
+  The macOS action rail and Log tab show control state and resume lineage.
 - Safe edit proposal review flow with multi-file OpenAI proposal artifacts,
   including blocked preview-only unsupported operations.
 - `AppendText` and exact `ReplaceText` restricted edit operations for
@@ -202,7 +206,7 @@ Implemented:
   apply, SQLite restart recovery, runtime health diagnostics, model-provider
   settings GET/POST, fake-key handling without secret persistence, a mock
   OpenAI model-guided context loop, provider-selected agent run step and
-  bounded agent run loop,
+  bounded agent run loop with concurrent pause/resume/abort checkpoints,
   blocked-to-repaired proposal handling, and bounded blocked preview-only
   proposal handling, plus failed project validation repair brief generation
   and follow-up repair proposal generation.
@@ -229,7 +233,7 @@ These percentages are product-readiness estimates, not calendar estimates.
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 80-84% | Has a first-pass session UI shell, full-screen diff review, context-anchored cross-file source patches with verified recovery, streamed/cancellable commands, self-fix rerun evidence, and a bounded provider-selected loop; richer read/search orchestration, loop controls, and UI polish remain. |
+| Coding-agent demo V0 | 82-86% | Has a first-pass session UI shell, full-screen diff review, context-anchored cross-file source patches with verified recovery, streamed/cancellable commands, self-fix rerun evidence, and a pause/abort/resume-capable bounded loop; richer read/search orchestration and UI polish remain. |
 | Useful developer alpha | 40-50% | Forge can now apply guarded normal source modifications, but still needs richer autonomous tool use, source create/delete, restart recovery, and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
@@ -269,7 +273,7 @@ Remaining V0 gaps:
 - extend the restricted Unified Diff engine to source-file create/delete and
   newline-marker edge cases after the modification path proves stable
 - extend the bounded agent loop with richer read/search tool choices,
-  pause/abort/resume, and broader patch/recovery behavior
+  malformed-output recovery, and broader patch/recovery behavior
 - implement full diff review with per-file reasoning and request-change loop
 - keep git/preflight work as supporting infrastructure rather than the main
   demo

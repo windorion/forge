@@ -29,6 +29,8 @@ export interface ApprovalRecord {
     | "Reject Edit Proposal"
     | "Approve Validation Preset"
     | "Cancel Task Command"
+    | "Pause Agent Loop"
+    | "Abort Agent Loop"
     | "Create Git Commit"
     | "Push Git Branch"
     | "Create Git Branch"
@@ -189,15 +191,23 @@ export type AgentRunLoopStopReason =
   | "StepFailed"
   | "MaxStepsReached"
   | "TaskBusy"
-  | "NoProgress";
+  | "NoProgress"
+  | "UserPaused"
+  | "UserAborted";
 
 export interface AgentRunLoop {
   id: string;
   provider: ModelProviderInfo;
-  status: "Running" | "Completed" | "Paused" | "Failed";
+  status: "Running" | "Completed" | "Paused" | "Aborted" | "Failed";
   maxSteps: number;
   stepsRun: number;
   stepIDs: string[];
+  preferredCommandID?: string;
+  resumedFromLoopID?: string;
+  resumedByLoopID?: string;
+  controlState?: "PauseRequested" | "AbortRequested";
+  controlRequestedAt?: string;
+  controlNote?: string;
   stopReason?: AgentRunLoopStopReason;
   summary: string;
   startedAt: string;
@@ -881,6 +891,12 @@ export interface RunAgentStepRequest {
 export interface RunAgentLoopRequest {
   preferredCommandID?: string;
   maxSteps?: number;
+  resumeLoopID?: string;
+}
+
+export interface AgentRunLoopControlRequest {
+  loopID?: string;
+  note?: string;
 }
 
 export interface CancelTaskCommandRequest {

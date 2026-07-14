@@ -77,6 +77,10 @@ Implemented today:
   failures, or max-step protection. The macOS action rail now exposes
   `Run Agent Loop`, and the Log tab shows loop summaries plus the linked step
   trail.
+- Cooperative Agent Run Loop controls: pause and abort requests are audited
+  while active and stop after the current safe step; resume starts a new
+  bounded loop linked to the prior paused/aborted/failed checkpoint. The
+  macOS action rail and Log tab expose control state and resume lineage.
 - Explicit human review gates for plans and edits.
 - Safe edit proposals with multi-file OpenAI proposal artifacts, including
   blocked preview-only operations. Apply supports Markdown `AppendText`,
@@ -175,7 +179,7 @@ Product-readiness estimate:
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 80-84% | Has a first-pass session UI shell, full-screen diff review, context-anchored cross-file source patches with verified recovery, streamed/cancellable commands, self-fix rerun evidence, and a bounded provider-selected loop; richer read/search orchestration, loop controls, and UI polish remain. |
+| Coding-agent demo V0 | 82-86% | Has a first-pass session UI shell, full-screen diff review, context-anchored cross-file source patches with verified recovery, streamed/cancellable commands, self-fix rerun evidence, and a pause/abort/resume-capable bounded loop; richer read/search orchestration and UI polish remain. |
 | Useful developer alpha | 40-50% | Forge can now apply guarded normal source modifications, but still needs richer autonomous tool use, source create/delete, restart recovery, and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, memory, MCP/GitHub, and product polish. |
@@ -190,7 +194,7 @@ Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
 - polish the first-pass macOS coding-agent session UI toward the exact
   `design_handoff_forge` screens
 - extend the bounded agent loop with richer read/search tool choices,
-  pause/abort/resume controls, and broader patch/recovery behavior
+  malformed-output recovery, and broader patch/recovery behavior
 - extend the restricted patch engine to source-file create/delete and
   no-newline edge cases after the new Unified Diff path proves stable
 - connect full diff review to durable file-level decisions once the review
