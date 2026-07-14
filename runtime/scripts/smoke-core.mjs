@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
+import { DatabaseSync } from "node:sqlite";
 
 const runtimeRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const repoRoot = resolve(runtimeRoot, "..");
@@ -120,6 +121,17 @@ try {
   const openAIValidationRepairTask = await runOpenAIValidationFailureRepairFlow();
   const openAITaskCommandRepairTask = await runOpenAITaskCommandFailureRepairFlow();
   const openAIPreviewBlockedTask = await runOpenAIPreviewBlockedFlow();
+  const restartFixtureTask = await prepareOpenAIAgentLoopRestartFixture();
+  await stopRuntime(runtime);
+  runtime = undefined;
+  markAgentLoopRunningInDatabase(restartFixtureTask.id);
+  runtime = await startRuntime({
+    providerID: "openai",
+    modelName: "openai-context-smoke",
+    openAIBaseURL: mockOpenAI.baseURL,
+    openAIAPIKey: "sk-forge-smoke"
+  });
+  const openAIAgentLoopRestartTask = await assertOpenAIAgentLoopRestartRecovery(restartFixtureTask.id);
 
   console.log("Core runtime smoke passed.");
   console.log(`- Runtime: ${baseURL}`);
@@ -143,6 +155,7 @@ try {
   console.log(`- OpenAI validation repair task: ${openAIValidationRepairTask.id}`);
   console.log(`- OpenAI task command repair task: ${openAITaskCommandRepairTask.id}`);
   console.log(`- OpenAI preview-blocked task: ${openAIPreviewBlockedTask.id}`);
+  console.log(`- OpenAI agent loop restart task: ${openAIAgentLoopRestartTask.id}`);
   console.log(`- Temporary database: ${dbPath}`);
 } finally {
   await stopRuntime(runtime);
@@ -1612,6 +1625,88 @@ async function assertRestartRecovery(taskID, expectedChangedFile) {
   assertCompletedTask(recovered, expectedChangedFile);
 }
 
+async function prepareOpenAIAgentLoopRestartFixture() {
+  const task = await createTask({
+    title: "Smoke agent loop restart recovery",
+    objective: "Recover a persisted running agent loop after runtime restart."
+  });
+  return waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "agent loop restart fixture to reach plan review"
+  );
+}
+
+function markAgentLoopRunningInDatabase(taskID) {
+  const database = new DatabaseSync(dbPath);
+  try {
+    const row = database.prepare("SELECT payload_json FROM tasks WHERE id = ?").get(taskID);
+    assert(row?.payload_json, "Restart fixture task was not persisted.");
+    const task = JSON.parse(row.payload_json);
+    const now = new Date().toISOString();
+    const loopID = `restart-loop-${smokeID}`;
+    const stepID = `restart-step-${smokeID}`;
+    task.agentRunLoops.push({
+      id: loopID,
+      provider: { id: "openai", name: "OpenAI Responses", model: "openai-context-smoke", mode: "remote" },
+      status: "Running",
+      maxSteps: 3,
+      stepsRun: 1,
+      stepIDs: [stepID],
+      summary: "Persisted running loop fixture.",
+      startedAt: now
+    });
+    task.agentRunSteps.push({
+      id: stepID,
+      provider: { id: "openai", name: "OpenAI Responses", model: "openai-context-smoke", mode: "remote" },
+      loopID,
+      action: "InspectRepository",
+      status: "Running",
+      summary: "Persisted running step fixture.",
+      rationale: "Exercise restart recovery.",
+      createdAt: now
+    });
+    task.toolCalls.push({
+      id: `restart-tool-${smokeID}`,
+      name: "search_repository_text",
+      status: "Started",
+      input: "restart fixture",
+      outputSummary: "Running",
+      startedAt: now
+    });
+    task.status = "Running";
+    task.currentPhase = "Agent Loop";
+    task.reviewSummary = "Persisted running loop fixture.";
+    database.prepare("UPDATE tasks SET status = ?, current_phase = ?, payload_json = ? WHERE id = ?")
+      .run(task.status, task.currentPhase, JSON.stringify(task), taskID);
+  } finally {
+    database.close();
+  }
+}
+
+async function assertOpenAIAgentLoopRestartRecovery(taskID) {
+  let current = await waitForTask(
+    taskID,
+    (candidate) => candidate.currentPhase === "Agent Loop Interrupted",
+    "running agent loop to recover after restart"
+  );
+  const interruptedLoop = current.agentRunLoops.at(-1);
+  const interruptedStep = current.agentRunSteps.find((step) => step.id === interruptedLoop.stepIDs[0]);
+  assert(interruptedLoop.status === "Paused", `Expected recovered loop Paused, got ${interruptedLoop.status}.`);
+  assert(interruptedLoop.stopReason === "RuntimeRestarted", `Expected RuntimeRestarted, got ${interruptedLoop.stopReason}.`);
+  assert(interruptedStep?.status === "Failed", "Interrupted running step was not finalized as failed evidence.");
+  assert(current.toolCalls.at(-1)?.status === "Failed", "Interrupted tool call was not finalized as failed evidence.");
+  assert(current.events.some((event) => event.type === "agent.run_loop.interrupted"), "Restart recovery event was not persisted.");
+
+  current = await post(`/tasks/${taskID}/resume-agent-loop`, { resumeLoopID: interruptedLoop.id, maxSteps: 1 });
+  const resumedLoop = current.agentRunLoops.at(-1);
+  const sourceLoop = current.agentRunLoops.find((loop) => loop.id === interruptedLoop.id);
+  assert(resumedLoop.resumedFromLoopID === interruptedLoop.id, "Restarted loop did not resume from the interrupted checkpoint.");
+  assert(sourceLoop?.resumedByLoopID === resumedLoop.id, "Interrupted loop did not retain forward resume lineage.");
+  assert(resumedLoop.status === "Paused" && resumedLoop.stopReason === "StepBlocked", "Resumed loop did not stop at the plan review gate.");
+  return current;
+}
+
 async function createTask(body) {
   const task = await post("/tasks", body);
   assert(task.id, "Create task response did not include an id.");
@@ -2296,6 +2391,19 @@ function mockOpenAIOutput(name, requests, body) {
   }
 
   if (name === "forge_agent_run_step") {
+    if (bodyText.includes("agent loop restart recovery")) {
+      return {
+        action: "RequestPlanApproval",
+        summary: "Pause at plan review after restart recovery.",
+        rationale: "The interrupted loop recovered safely and still requires plan approval.",
+        commandID: "",
+        commandRerunEvidenceID: "",
+        searchTerms: [],
+        readPaths: [],
+        searchMode: "Text"
+      };
+    }
+
     if (bodyText.includes("inspection repeat guard")) {
       return {
         action: "InspectRepository",

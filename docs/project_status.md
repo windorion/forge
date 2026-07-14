@@ -247,8 +247,8 @@ These percentages are product-readiness estimates, not calendar estimates.
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 85-89% | Has a first-pass session UI shell, full-screen diff review, verified cross-file source patches, streamed/cancellable commands, self-fix evidence, pause/abort/resume, a provider-selected read/search→proposal loop, and bounded bad-output recovery; richer tool breadth and UI polish remain. |
-| Useful developer alpha | 40-50% | Forge can now apply guarded normal source modifications, but still needs richer autonomous tool use, source create/delete, restart recovery, and repeated success on real repositories. |
+| Coding-agent demo V0 | 87-91% | Adds restart-safe Agent Loop checkpoints to the session shell, full-screen review, transactional source patches, commands, self-fix, loop controls, repository inspection, and bad-output recovery; review closure and UI polish remain. |
+| Useful developer alpha | 42-52% | Forge can now recover interrupted agent loops and apply guarded normal source modifications, but still needs broader autonomous tool use, source create/delete, transaction crash recovery, and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
 

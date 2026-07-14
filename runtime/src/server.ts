@@ -191,6 +191,8 @@ const repositoryImportantFiles = [
   "runtime/src/types.ts",
   "Package.swift"
 ];
+
+recoverInterruptedAgentRunLoopsOnStartup();
 const repositorySearchStopWords = new Set([
   "about",
   "after",
@@ -5813,6 +5815,97 @@ async function resumeAgentRunLoop(taskID: string, input: RunAgentLoopRequest): P
 
 function isResumableAgentRunLoop(loop: AgentRunLoop): boolean {
   return loop.status === "Paused" || loop.status === "Aborted" || loop.status === "Failed";
+}
+
+function recoverInterruptedAgentRunLoopsOnStartup(): void {
+  const recoveredAt = new Date().toISOString();
+  for (const task of tasks.values()) {
+    const interruptedLoops = task.agentRunLoops.filter((loop) => loop.status === "Running");
+    if (interruptedLoops.length === 0) {
+      continue;
+    }
+
+    for (const loop of interruptedLoops) {
+      loop.status = "Paused";
+      loop.stopReason = "RuntimeRestarted";
+      loop.completedAt = recoveredAt;
+      loop.summary = `Runtime restarted while agent loop ${loop.id} was running. Forge recovered it as a resumable safe checkpoint.`;
+      delete loop.controlState;
+      delete loop.controlRequestedAt;
+
+      for (const stepID of loop.stepIDs) {
+        const step = task.agentRunSteps.find((candidate) => candidate.id === stepID);
+        if (step?.status === "Running") {
+          step.status = "Failed";
+          step.completedAt = recoveredAt;
+          step.error = "Runtime restarted before this agent step reached a terminal state.";
+          step.resultSummary = step.error;
+        }
+      }
+    }
+
+    for (const run of task.taskCommandRuns) {
+      if (run.status === "Running") {
+        run.status = "Failed";
+        run.endedAt = recoveredAt;
+        run.outputSummary = "Runtime restarted before the task command reached a terminal state.";
+        run.outputChunks.push({
+          id: randomUUID(),
+          stream: "system",
+          text: `${run.outputSummary}\n`,
+          createdAt: recoveredAt
+        });
+      }
+    }
+    for (const run of task.validationRuns) {
+      if (run.status === "Running") {
+        run.status = "Failed";
+        run.endedAt = recoveredAt;
+        run.summary = "Runtime restarted before validation reached a terminal state.";
+        for (const command of run.commands) {
+          if (command.status === "Running") {
+            command.status = "Failed";
+            command.endedAt = recoveredAt;
+            command.outputSummary = run.summary;
+          }
+        }
+      }
+    }
+    for (const evidence of task.commandRerunEvidence) {
+      if (evidence.status === "Running") {
+        evidence.status = "Failed";
+        evidence.updatedAt = recoveredAt;
+        evidence.summary = "Runtime restarted before repaired-command verification completed.";
+      }
+    }
+    for (const toolCall of task.toolCalls) {
+      if (toolCall.status === "Started") {
+        toolCall.status = "Failed";
+        toolCall.endedAt = recoveredAt;
+        toolCall.outputSummary = "Runtime restarted before the tool call reached a terminal state.";
+      }
+    }
+
+    const latestLoop = interruptedLoops.at(-1) as AgentRunLoop;
+    task.status = "Human Review";
+    task.currentPhase = "Agent Loop Interrupted";
+    task.reviewSummary = latestLoop.summary;
+    setAgent(task, "Manager", "Ready", "Recovered interrupted agent loop at startup.");
+    setAgent(task, "Coder", "Idle", "No in-flight process was resumed after runtime restart.");
+    setAgent(task, "Reviewer", "Active", "Review the interrupted checkpoint before resuming.");
+    upsertPlanStep(task, {
+      id: "run-agent-loop",
+      title: "Run agent loop",
+      status: "Blocked",
+      summary: latestLoop.summary
+    });
+    const recoveredEvent = event("agent.run_loop.interrupted", latestLoop.summary);
+    recoveredEvent.createdAt = recoveredAt;
+    task.events.push(recoveredEvent);
+    task.updatedAt = recoveredAt;
+    tasks.set(task.id, task);
+    taskStore.saveTask(task);
+  }
 }
 
 function requireResumableAgentRunLoop(task: ForgeTask, loopID: string): AgentRunLoop {

@@ -168,7 +168,10 @@ Major gaps:
 - Command output now has a streamed, cancellable, selectable task-scoped
   surface with reviewed self-fix rerun evidence after apply.
 - Provider-backed run loop now has bounded multi-step orchestration, but it
-  still needs richer search result-quality evidence and restart recovery.
+  still needs richer search result-quality evidence and review-loop polish.
+- Agent Loops left `Running` by runtime shutdown now recover at startup as
+  `Paused / RuntimeRestarted` checkpoints with finalized transient evidence and
+  resumable lineage.
 - The provider can now choose `InspectRepository`; the runtime safely executes
   bounded read-only list/search/read tools and lets the loop continue into a
   proposal step with persisted evidence. Stable request fingerprints block an
@@ -183,7 +186,7 @@ Major gaps:
 
 ## Next Implementation Order
 
-1. Add inspection result-quality evidence and persisted-loop restart recovery.
+1. Add inspection result-quality evidence and durable full-diff decisions.
 2. Implement request-change revision from full diff review.
 3. Polish `10a` with durable file-level decisions and exact split-diff behavior.
 4. Extend Unified Diff to reviewed source create/delete and newline edge cases.

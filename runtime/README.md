@@ -155,6 +155,12 @@ effect after the current safe step; they do not kill an in-flight provider call
 or command. Resume accepts a paused, aborted, or failed loop ID and creates a
 new bounded loop linked in both directions so history remains auditable.
 
+On runtime startup, persisted `Running` loops are recovered as
+`Paused / RuntimeRestarted` checkpoints. Linked running steps and stale
+in-memory-only tool, task-command, validation, and rerun records are finalized
+as failed evidence, an interruption event is persisted, and Resume creates a
+new linked loop rather than continuing unknown process state.
+
 OpenAI-backed edit proposals can include multiple file changes and
 preview-only unsupported operations. Unsupported changes are kept as review
 artifacts; validation blocks apply until every proposed change fits the current

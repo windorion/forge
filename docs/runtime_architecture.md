@@ -488,6 +488,14 @@ Active loops also have cooperative control endpoints:
 Control requests, notes, timestamps, approvals, and SSE lifecycle events are
 persisted. History is append-only: resume never rewrites the source loop.
 
+At startup, any loop still persisted as `Running` cannot have a matching live
+runtime coroutine. Forge converts it to `Paused / RuntimeRestarted`, finalizes
+linked running steps and other in-memory-only transient records as failed
+evidence, clears stale control requests, records
+`agent.run_loop.interrupted`, and returns the task to human review. Resume then
+creates a new linked loop; it never silently continues an unknown in-flight
+command or tool call.
+
 ### Permission Manager
 
 Decides whether an action can run automatically or requires user approval.

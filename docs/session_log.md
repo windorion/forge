@@ -3389,3 +3389,38 @@ Next:
 
 - Complete the merge commit, rerun TypeScript/core smoke/Swift validation,
   push the resolved branch, and merge PR #2 into `main`.
+
+## 2026-07-14 19:47:10 CEST
+
+Conversation summary:
+
+- User directed future work to happen directly on `main`, then asked Forge to
+  continue autonomously until V0 is complete. This slice implemented the top
+  restart-recovery gap directly on `main`.
+
+Done:
+
+- Added startup detection for Agent Loops persisted as `Running` without a
+  corresponding live runtime coroutine.
+- Recovered those loops as `Paused / RuntimeRestarted` safe checkpoints,
+  cleared stale controls, and persisted interruption events.
+- Finalized linked running steps plus stale tool, task-command, validation, and
+  command-rerun records as failed evidence so Resume cannot remain blocked by
+  dead in-memory work.
+- Preserved append-only resume lineage by creating a new bounded loop from the
+  recovered checkpoint.
+- Added a SQLite mutation/restart smoke path that verifies recovery evidence,
+  `RuntimeRestarted`, and successful Resume to the plan-review gate.
+- Verified `npm run check`, `swift build`, `npm run smoke:core`, and
+  `git diff --check`.
+
+Not done:
+
+- Apply transactions interrupted by process death still need startup recovery.
+- Full-diff per-file decisions, request-change closure, and richer inspection
+  result-quality evidence remain V0 gaps.
+
+Next:
+
+- Implement durable per-file full-diff decisions and request-change revision,
+  then add apply-transaction crash recovery and remaining UI polish.

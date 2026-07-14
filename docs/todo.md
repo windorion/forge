@@ -37,8 +37,6 @@ dashboard.
   planning tool requests and patch artifacts without retrying side effects.
 - Add request-change revision loops that operate from full diff review, not
   only the current review stack.
-- Add crash-restart recovery for loops persisted as running when the runtime
-  terminated.
 
 ## P2: Review, Diff, And Git
 
@@ -89,6 +87,11 @@ dashboard.
 
 ## Done Recently
 
+- Added startup recovery for Agent Loops persisted as `Running`. Startup marks
+  the loop `Paused / RuntimeRestarted`, finalizes linked running steps and
+  in-memory-only tool/command/validation evidence, persists an interruption
+  event, and allows a new loop to resume with append-only lineage. Smoke edits
+  the SQLite fixture, restarts the runtime, and verifies recovery plus Resume.
 - Added explicit runtime-owned `Text` and `Symbol` inspection modes. Text uses
   bounded fixed-string ripgrep search; Symbol uses whole-identifier matching.
   Both use JSON output, no shell, safe file lists, output/time budgets, and a

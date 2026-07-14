@@ -40,8 +40,8 @@ task lifecycle without using real project memory or provider settings.
 Product-direction note: this development slice now has the first real
 provider-selected bounded loop with cooperative pause/abort/resume checkpoints,
 but it still is not a full Codex/Claude Code style autonomous agent. The next
-app/runtime work should add result-quality evidence, restart recovery, deeper
-self-fix, and full diff review polish.
+app/runtime work should add result-quality evidence, deeper self-fix, durable
+full-diff decisions, and review polish.
 
 The macOS app now has a first-pass coding-agent session shell: a task queue,
 `1a`-style empty composer, live agent stream, plan progress strip,

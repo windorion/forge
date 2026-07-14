@@ -212,7 +212,8 @@ export type AgentRunLoopStopReason =
   | "TaskBusy"
   | "NoProgress"
   | "UserPaused"
-  | "UserAborted";
+  | "UserAborted"
+  | "RuntimeRestarted";
 
 export interface AgentRunLoop {
   id: string;
