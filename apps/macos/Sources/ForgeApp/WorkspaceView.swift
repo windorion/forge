@@ -7341,6 +7341,8 @@ private struct OperationSummaryRow: View {
             return "UnifiedDiff / \(operation.patch?.count ?? 0) chars"
         case "CreateFile":
             return "CreateFile / \(operation.content?.count ?? 0) chars"
+        case "DeleteFile":
+            return "DeleteFile / explicit reviewed deletion"
         case "PreviewOnly":
             return "PreviewOnly / not apply-ready in v0"
         default:
@@ -7360,6 +7362,8 @@ private struct OperationSummaryRow: View {
             return "arrow.triangle.branch"
         case "CreateFile":
             return "doc.badge.plus"
+        case "DeleteFile":
+            return "doc.badge.minus"
         case "PreviewOnly":
             return "eye"
         default:
@@ -7383,7 +7387,9 @@ private struct OperationSummaryRow: View {
         case "UnifiedDiff":
             return "Apply-ready only when file headers, ranges, counts, and context lines match the current file."
         case "CreateFile":
-            return "Apply-ready only for new docs/*.md files after runtime validation."
+            return "Apply-ready only for a new allowlisted source/text path; existing files are never overwritten."
+        case "DeleteFile":
+            return "High-risk file deletion requires explicit per-file review and retains a verified rollback snapshot."
         case "PreviewOnly":
             return "Review artifact only; revise or wait for a future patch engine before applying."
         default:

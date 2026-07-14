@@ -6110,11 +6110,11 @@ function recoverInterruptedRollbackTransaction(task: ForgeTask, proposal: EditPr
 function inspectPersistedEditFileState(appliedChange: AppliedFileChange): PersistedEditFileState {
   const { absolutePath, relativePath } = resolveEditableWorkspacePath(appliedChange.path);
   const currentContent = readTextFileIfExists(absolutePath);
-  if (!appliedChange.afterSha256) {
-    throw new Error(`Journal entry is missing the after hash for ${relativePath}.`);
-  }
 
   if (appliedChange.rollbackKind === "DeleteCreatedFile") {
+    if (!appliedChange.afterSha256) {
+      throw new Error(`Journal entry is missing the after hash for ${relativePath}.`);
+    }
     if (currentContent === undefined) {
       return { appliedChange, state: "RolledBack" };
     }
@@ -6124,11 +6124,27 @@ function inspectPersistedEditFileState(appliedChange: AppliedFileChange): Persis
     throw new Error(`Current file hash for ${relativePath} matches neither the journaled created file nor its absent before state.`);
   }
 
+  if (appliedChange.rollbackKind === "RestoreDeletedFile") {
+    if (!appliedChange.beforeSha256) {
+      throw new Error(`Deleted-file journal entry is missing the before hash for ${relativePath}.`);
+    }
+    if (currentContent === undefined) {
+      return { appliedChange, state: "Applied" };
+    }
+    if (sha256Text(currentContent) === appliedChange.beforeSha256) {
+      return { appliedChange, state: "RolledBack", currentContent };
+    }
+    throw new Error(`Current file hash for ${relativePath} matches neither the journaled deleted state nor its before hash.`);
+  }
+
   if (currentContent === undefined) {
     throw new Error(`Journaled modified file is missing: ${relativePath}.`);
   }
   if (!appliedChange.beforeSha256) {
     throw new Error(`Journal entry is missing the before hash for ${relativePath}.`);
+  }
+  if (!appliedChange.afterSha256) {
+    throw new Error(`Journal entry is missing the after hash for ${relativePath}.`);
   }
 
   const currentSha = sha256Text(currentContent);
@@ -6156,7 +6172,11 @@ function restorePersistedFileToBeforeState(appliedChange: AppliedFileChange): vo
   if (sha256Text(snapshot) !== appliedChange.beforeSha256) {
     throw new Error(`Rollback snapshot hash does not match the journaled before hash for ${relativePath}.`);
   }
-  writeFileSync(absolutePath, snapshot, "utf8");
+  if (appliedChange.rollbackKind === "RestoreDeletedFile") {
+    writeFileSync(absolutePath, snapshot, { encoding: "utf8", flag: "wx" });
+  } else {
+    writeFileSync(absolutePath, snapshot, "utf8");
+  }
 }
 
 function reapplyPersistedFileChange(proposal: EditProposal, entry: PersistedEditFileState): void {
@@ -6170,6 +6190,10 @@ function reapplyPersistedFileChange(proposal: EditProposal, entry: PersistedEdit
   }
 
   const { absolutePath, relativePath } = resolveEditableWorkspacePath(appliedChange.path);
+  if (appliedChange.rollbackKind === "RestoreDeletedFile") {
+    unlinkSync(absolutePath);
+    return;
+  }
   const nextContent = materializeProposedContentForRecovery(change, entry.currentContent);
   if (!appliedChange.afterSha256 || sha256Text(nextContent) !== appliedChange.afterSha256) {
     throw new Error(`Reconstructed applied content does not match the journaled after hash for ${relativePath}.`);
@@ -8630,6 +8654,19 @@ async function validateChangedFiles(task: ForgeTask): Promise<string> {
   const validatedFiles: string[] = [];
   for (const changedFile of task.changedFiles) {
     const { absolutePath, relativePath } = resolveEditableWorkspacePath(changedFile);
+    const appliedChange = task.editProposal?.appliedFileChanges?.find((change) => change.path === relativePath);
+    if (appliedChange?.rollbackKind === "RestoreDeletedFile") {
+      try {
+        await stat(absolutePath);
+        throw new Error(`Deleted file unexpectedly exists after apply: ${relativePath}`);
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith("Deleted file unexpectedly")) throw error;
+        if (!isNodeError(error) || error.code !== "ENOENT") throw error;
+      }
+      validatedFiles.push(`${relativePath} (deleted)`);
+      continue;
+    }
+
     const fileStat = await stat(absolutePath);
     if (!fileStat.isFile()) {
       throw new Error(`Changed file is no longer an editable text file: ${relativePath}`);
@@ -8710,11 +8747,8 @@ async function validateProposedFileChange(change: ProposedFileChange): Promise<F
         return blockedValidation(change, `Create changes require a CreateFile operation in v0: ${change.path}`, checks);
       }
 
-      const { absolutePath, relativePath } = resolveMarkdownWorkspacePath(change.path);
-      if (!relativePath.startsWith("docs/")) {
-        return blockedValidation(change, `CreateFile can only create docs/*.md files in v0: ${relativePath}`, checks);
-      }
-      checks.push("Path is inside the createable docs Markdown boundary.");
+      const { absolutePath, relativePath } = resolveEditableWorkspacePath(change.path);
+      checks.push("Path is inside the createable source/text workspace boundary.");
 
       if (operation.content.length === 0) {
         return blockedValidation(change, `CreateFile content is empty: ${relativePath}`, checks);
@@ -8747,13 +8781,42 @@ async function validateProposedFileChange(change: ProposedFileChange): Promise<F
         id: change.id,
         path: relativePath,
         status: "Ready",
-        summary: `${relativePath} is ready for restricted Markdown file creation.`,
+        summary: `${relativePath} is ready for restricted source/text file creation.`,
+        checks
+      };
+    }
+
+    if (change.changeType === "Delete") {
+      checks.push("Change type is delete.");
+      if (operation.kind !== "DeleteFile") {
+        return blockedValidation(change, `Delete changes require a DeleteFile operation: ${change.path}`, checks);
+      }
+
+      const { absolutePath, relativePath } = resolveEditableWorkspacePath(change.path);
+      checks.push("Path is inside the deletable source/text workspace boundary.");
+      const fileStat = await stat(absolutePath);
+      if (!fileStat.isFile()) {
+        return blockedValidation(change, `Can only delete an existing regular file: ${relativePath}`, checks);
+      }
+      if (fileStat.size > editProposalEditableFileMaxBytes) {
+        return blockedValidation(change, `Delete target is too large for restricted source apply: ${relativePath}`, checks);
+      }
+      const currentContent = await readFile(absolutePath, "utf8");
+      if (currentContent.includes("\0")) {
+        return blockedValidation(change, `Delete target appears to be binary: ${relativePath}`, checks);
+      }
+      checks.push("Delete target is an existing bounded text file.");
+      return {
+        id: change.id,
+        path: relativePath,
+        status: "Ready",
+        summary: `${relativePath} is ready for explicit reviewed deletion with rollback snapshot.`,
         checks
       };
     }
 
     if (change.changeType !== "Modify") {
-      return blockedValidation(change, `Only create and modify changes can be applied in v0: ${change.path}`, checks);
+      return blockedValidation(change, `Unsupported change type: ${change.path}`, checks);
     }
     checks.push("Change type is modify.");
 
@@ -9081,10 +9144,7 @@ async function applyProposedFileChange(
       throw new HttpError(409, `Create changes require a CreateFile operation in v0: ${change.path}`);
     }
 
-    const { absolutePath, relativePath } = resolveMarkdownWorkspacePath(change.path);
-    if (!relativePath.startsWith("docs/")) {
-      throw new HttpError(409, `CreateFile can only create docs/*.md files in v0: ${relativePath}`);
-    }
+    const { absolutePath, relativePath } = resolveEditableWorkspacePath(change.path);
 
     if (operation.content.length === 0) {
       throw new HttpError(409, `CreateFile content is empty: ${relativePath}`);
@@ -9130,8 +9190,42 @@ async function applyProposedFileChange(
     return appliedChange;
   }
 
+  if (change.changeType === "Delete") {
+    if (operation.kind !== "DeleteFile") {
+      throw new HttpError(409, `Delete changes require a DeleteFile operation: ${change.path}`);
+    }
+
+    const { absolutePath, relativePath } = resolveEditableWorkspacePath(change.path);
+    const fileStat = await stat(absolutePath);
+    if (!fileStat.isFile()) {
+      throw new HttpError(409, `Can only delete an existing regular file: ${relativePath}`);
+    }
+    if (fileStat.size > editProposalEditableFileMaxBytes) {
+      throw new HttpError(409, `Delete target is too large for restricted source apply: ${relativePath}`);
+    }
+    const currentContent = await readFile(absolutePath, "utf8");
+    if (currentContent.includes("\0")) {
+      throw new HttpError(409, `Delete target appears to be binary: ${relativePath}`);
+    }
+
+    const rollbackSnapshotPath = await writeRollbackSnapshot(proposalID, change.id, currentContent);
+    const appliedChange = buildAppliedFileChange({
+      relativePath,
+      proposalFileChangeID: change.id,
+      operationKind: operation.kind,
+      appliedAt,
+      beforeContent: currentContent,
+      rollbackSnapshotPath,
+      rollbackKind: "RestoreDeletedFile",
+      rollbackSummary: `Restore the deleted file ${relativePath}.`
+    });
+    onPrepared(appliedChange);
+    await unlink(absolutePath);
+    return appliedChange;
+  }
+
   if (change.changeType !== "Modify") {
-    throw new HttpError(409, `Only create and modify changes can be applied in v0: ${change.path}`);
+    throw new HttpError(409, `Unsupported change type: ${change.path}`);
   }
 
   const { absolutePath, relativePath } = resolveEditableWorkspacePath(change.path);
@@ -9285,6 +9379,16 @@ type PreparedRollbackOperation = {
 
 async function verifyAppliedFileChange(appliedChange: AppliedFileChange): Promise<string> {
   const { absolutePath, relativePath } = resolveEditableWorkspacePath(appliedChange.path);
+  if (appliedChange.rollbackKind === "RestoreDeletedFile") {
+    try {
+      await stat(absolutePath);
+      throw new HttpError(409, `Apply verification expected deleted file ${relativePath} to be absent.`);
+    } catch (error) {
+      if (error instanceof HttpError) throw error;
+      if (!isNodeError(error) || error.code !== "ENOENT") throw error;
+    }
+    return new Date().toISOString();
+  }
   const currentContent = await readFile(absolutePath, "utf8");
   verifyCurrentContentForRollback(appliedChange, currentContent, relativePath);
   return new Date().toISOString();
@@ -9356,7 +9460,7 @@ async function prepareAppliedFileRollback(appliedChange: AppliedFileChange): Pro
   }
 
   if (appliedChange.rollbackKind === "DeleteCreatedFile") {
-    const { absolutePath, relativePath } = resolveMarkdownWorkspacePath(appliedChange.path);
+    const { absolutePath, relativePath } = resolveEditableWorkspacePath(appliedChange.path);
     const currentContent = await readFile(absolutePath, "utf8");
     verifyCurrentContentForRollback(appliedChange, currentContent, relativePath);
 
@@ -9384,6 +9488,51 @@ async function prepareAppliedFileRollback(appliedChange: AppliedFileChange): Pro
       verifyApplied: async () => {
         const content = await readFile(absolutePath, "utf8");
         verifyCurrentContentForRollback(appliedChange, content, relativePath);
+      }
+    };
+  }
+
+  if (appliedChange.rollbackKind === "RestoreDeletedFile") {
+    const { absolutePath, relativePath } = resolveEditableWorkspacePath(appliedChange.path);
+    const snapshotPath = appliedChange.rollbackSnapshotPath;
+    if (!snapshotPath || !appliedChange.beforeSha256) {
+      throw new HttpError(409, `Deleted-file rollback snapshot is missing for ${relativePath}.`);
+    }
+    try {
+      await stat(absolutePath);
+      throw new HttpError(409, `Deleted-file rollback expected ${relativePath} to remain absent.`);
+    } catch (error) {
+      if (error instanceof HttpError) throw error;
+      if (!isNodeError(error) || error.code !== "ENOENT") throw error;
+    }
+
+    const snapshot = await readFile(resolveRollbackSnapshotPath(snapshotPath), "utf8");
+    if (sha256Text(snapshot) !== appliedChange.beforeSha256) {
+      throw new HttpError(409, `Deleted-file rollback snapshot hash mismatch for ${relativePath}.`);
+    }
+
+    return {
+      relativePath,
+      rollback: async () => {
+        await writeFile(absolutePath, snapshot, { encoding: "utf8", flag: "wx" });
+      },
+      reapply: async () => {
+        await unlink(absolutePath);
+      },
+      verifyRolledBack: async () => {
+        const restored = await readFile(absolutePath, "utf8");
+        if (sha256Text(restored) !== appliedChange.beforeSha256) {
+          throw new HttpError(409, `Deleted-file rollback verification failed for ${relativePath}.`);
+        }
+      },
+      verifyApplied: async () => {
+        try {
+          await stat(absolutePath);
+          throw new HttpError(409, `Deleted-file applied-state verification expected ${relativePath} to be absent.`);
+        } catch (error) {
+          if (error instanceof HttpError) throw error;
+          if (!isNodeError(error) || error.code !== "ENOENT") throw error;
+        }
       }
     };
   }
@@ -9647,7 +9796,8 @@ function validateUnifiedDiffOperation(
   }
   checks?.push("Unified diff size is within the restricted apply limit.");
 
-  const { oldPath, newPath, hunks } = parseUnifiedDiff(operation.patch, relativePath);
+  const { oldPath, newPath, hunks, oldNoNewline, newNoNewline, hasNewlineMarker } =
+    parseUnifiedDiff(operation.patch, relativePath);
   if (oldPath !== relativePath || newPath !== relativePath) {
     throw new HttpError(
       409,
@@ -9668,6 +9818,9 @@ function validateUnifiedDiffOperation(
   const lineEnding = currentContent.includes("\r\n") ? "\r\n" : "\n";
   const normalizedContent = lineEnding === "\r\n" ? currentContent.replaceAll("\r\n", "\n") : currentContent;
   const trailingNewline = normalizedContent.endsWith("\n");
+  if (oldNoNewline && trailingNewline) {
+    throw new HttpError(409, `UnifiedDiff old-side no-newline marker does not match current file: ${relativePath}`);
+  }
   const sourceLines = normalizedContent.length === 0 ? [] : normalizedContent.split("\n");
   if (trailingNewline && sourceLines.length > 0) {
     sourceLines.pop();
@@ -9712,14 +9865,25 @@ function validateUnifiedDiffOperation(
 
   outputLines.push(...sourceLines.slice(sourceCursor));
   checks?.push("Every unified diff context and deletion line matches the current file at its declared range.");
-  const normalizedNextContent = `${outputLines.join("\n")}${trailingNewline ? "\n" : ""}`;
+  const nextTrailingNewline = hasNewlineMarker ? !newNoNewline : trailingNewline;
+  checks?.push(hasNewlineMarker
+    ? "Unified diff no-newline markers were validated and applied."
+    : "Unified diff preserves the target file's existing trailing-newline state.");
+  const normalizedNextContent = `${outputLines.join("\n")}${nextTrailingNewline ? "\n" : ""}`;
   return lineEnding === "\r\n" ? normalizedNextContent.replaceAll("\n", "\r\n") : normalizedNextContent;
 }
 
 function parseUnifiedDiff(
   patchText: string,
   relativePath: string
-): { oldPath: string; newPath: string; hunks: UnifiedDiffHunk[] } {
+): {
+  oldPath: string;
+  newPath: string;
+  hunks: UnifiedDiffHunk[];
+  oldNoNewline: boolean;
+  newNoNewline: boolean;
+  hasNewlineMarker: boolean;
+} {
   const lines = patchText.replaceAll("\r\n", "\n").split("\n");
   if (lines.at(-1) === "") {
     lines.pop();
@@ -9732,6 +9896,9 @@ function parseUnifiedDiff(
   const oldPath = normalizeUnifiedDiffHeaderPath(lines[0].slice(4), relativePath);
   const newPath = normalizeUnifiedDiffHeaderPath(lines[1].slice(4), relativePath);
   const hunks: UnifiedDiffHunk[] = [];
+  let oldNoNewline = false;
+  let newNoNewline = false;
+  let hasNewlineMarker = false;
   let index = 2;
   while (index < lines.length) {
     const header = lines[index];
@@ -9754,7 +9921,15 @@ function parseUnifiedDiff(
     while (index < lines.length && !lines[index].startsWith("@@ ")) {
       const line = lines[index];
       if (line === "\\ No newline at end of file") {
-        throw new HttpError(409, `UnifiedDiff newline-marker changes are not supported: ${relativePath}`);
+        const previous = hunkLines.at(-1);
+        if (!previous) {
+          throw new HttpError(409, `UnifiedDiff no-newline marker has no preceding hunk line: ${relativePath}`);
+        }
+        hasNewlineMarker = true;
+        if (previous.kind !== "Add") oldNoNewline = true;
+        if (previous.kind !== "Delete") newNoNewline = true;
+        index += 1;
+        continue;
       }
 
       const prefix = line[0];
@@ -9784,7 +9959,7 @@ function parseUnifiedDiff(
     hunks.push({ oldStart, oldCount, newStart, newCount, lines: hunkLines });
   }
 
-  return { oldPath, newPath, hunks };
+  return { oldPath, newPath, hunks, oldNoNewline, newNoNewline, hasNewlineMarker };
 }
 
 function normalizeUnifiedDiffHeaderPath(value: string, relativePath: string): string {

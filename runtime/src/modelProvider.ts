@@ -479,9 +479,10 @@ class OpenAIResponsesModelProvider implements ModelProvider {
         "Use AppendText only for bounded appends to README.md or docs/*.md.",
         "Use ReplaceText only when the task explicitly asks for an exact quoted replacement and you can provide the exact find text. It may target README.md, docs/*.md, or normal allowlisted source/text files such as .ts, .swift, .js, .json, .css, .html, .yml, .toml, .py, .go, .rs, .java, .kt, .c, .cpp, .h, and .hpp.",
         "Use PatchText only when the task explicitly asks for multiple exact quoted replacements in one existing allowlisted Markdown/source/text file. Every patchHunks item must include exact findText and replaceWith text that should appear once in the original target file.",
-        "Use UnifiedDiff for normal edits to an existing allowlisted source/text file when exact replacement is too narrow. Provide one standard single-file unified diff with --- a/path and +++ b/path headers, line-numbered @@ hunks, and exact context lines. The header path must match the file change path. Do not use it to create or delete files.",
-        "Use CreateFile only for new docs/*.md files with bounded Markdown content.",
-        "Use PreviewOnly for deletes, new source files, unsupported paths, overwrite attempts, multi-file content inside one diff, or anything that should be reviewed but not applied by the current engine.",
+        "Use UnifiedDiff for normal edits to an existing allowlisted source/text file when exact replacement is too narrow. Provide one standard single-file unified diff with --- a/path and +++ b/path headers, line-numbered @@ hunks, exact context lines, and standard no-newline markers when required. The header path must match the file change path. Do not use it to create or delete files.",
+        "Use CreateFile for a new bounded allowlisted source/text file. It never overwrites an existing path.",
+        "Use DeleteFile only for an existing allowlisted source/text file whose deletion is explicitly required by the task. Deletion remains separately file-reviewed and rollbackable.",
+        "Use PreviewOnly for unsupported paths, overwrite attempts, multi-file content inside one diff, or anything that should be reviewed but not applied by the current engine.",
         request.validationFeedback
           ? "The previous proposal failed runtime validation. Generate a corrected proposal that addresses every blocked check while staying inside the supported operation boundary."
           : request.validationRepairBrief
@@ -724,7 +725,7 @@ const editProposalFileChangeSchema: JsonSchema = {
     changeType: { type: "string", enum: ["Create", "Modify", "Delete"] },
     rationale: { type: "string" },
     diffPreview: { type: "string" },
-    operationKind: { type: "string", enum: ["AppendText", "ReplaceText", "PatchText", "UnifiedDiff", "CreateFile", "PreviewOnly"] },
+    operationKind: { type: "string", enum: ["AppendText", "ReplaceText", "PatchText", "UnifiedDiff", "CreateFile", "DeleteFile", "PreviewOnly"] },
     appendText: { type: "string" },
     findText: { type: "string" },
     replaceWith: { type: "string" },
@@ -1261,6 +1262,8 @@ function normalizeRichEditProposalFileChange(output: unknown): RichEditProposalF
       kind: "CreateFile",
       content: optionalMultilineString(output.content, 20_000)
     };
+  } else if (operationKind === "DeleteFile") {
+    applyOperation = { kind: "DeleteFile" };
   } else {
     applyOperation = { kind: "PreviewOnly" };
   }
@@ -1842,6 +1845,14 @@ function editOperationLabel(operation: ProposedFileOperation): string {
 
   if (operation.kind === "UnifiedDiff") {
     return "a context-anchored unified diff";
+  }
+
+  if (operation.kind === "CreateFile") {
+    return "a new source/text file";
+  }
+
+  if (operation.kind === "DeleteFile") {
+    return "an explicit file deletion";
   }
 
   return "a small append-only note";

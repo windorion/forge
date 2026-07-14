@@ -98,7 +98,8 @@ Implemented today:
   blocked preview-only operations. Apply supports Markdown `AppendText`,
   exact `ReplaceText` and multi-hunk `PatchText` for Markdown and allowlisted
   source/text files, context-anchored single-file `UnifiedDiff` operations for
-  normal source modifications, and new `docs/*.md` `CreateFile` changes.
+  normal source modifications including EOF newline markers, plus reviewed
+  allowlisted source/text `CreateFile` and `DeleteFile` changes.
   Cross-file apply and rollback record durable transaction evidence, verify
   every resulting hash, and compensate already-written files after a partial
   failure. Apply persists a per-file write-ahead journal before mutation;
@@ -179,8 +180,7 @@ Not finished yet:
   file-specific test evidence, and polished live-run states.
 - Rich autonomous model-backed read/search/patch/run/repair beyond the current
   bounded loop and restricted unified-diff patch engine.
-- Source-file create/delete and newline-marker patch support, plus richer diff
-  review.
+- Richer file-specific test evidence and inspection result-quality evidence.
 - Actual PR creation/publication after explicit review.
 - Durable repository index with symbols and semantic search.
 - Full workspace picker and commercial packaging/signing path.
@@ -193,8 +193,8 @@ Product-readiness estimate:
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 94-97% | Adds a real aligned split-diff review with keyboard navigation to restart-safe loops/transactions, per-file decisions, source patches, commands, self-fix, repository inspection, and bad-output recovery; patch edge cases and final UI/evidence polish remain. |
-| Useful developer alpha | 45-55% | Forge can now recover interrupted agent loops and edit transactions and apply guarded normal source modifications, but still needs broader autonomous tool use, source create/delete, and repeated success on real repositories. |
+| Coding-agent demo V0 | 97-98% | Adds reviewed source create/delete and EOF-marker handling to real aligned split review, restart-safe loops/transactions, per-file decisions, commands, self-fix, repository inspection, and bad-output recovery; final evidence and chat-to-task polish remain. |
+| Useful developer alpha | 50-60% | Forge can recover interrupted loops/transactions and apply guarded source create/modify/delete changes, but still needs broader autonomous tool use and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, memory, MCP/GitHub, and product polish. |
 
@@ -208,8 +208,6 @@ Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
 - polish the first-pass macOS coding-agent session UI toward the exact
   `design_handoff_forge` screens
 - add richer inspection result-quality evidence
-- extend the restricted patch engine to source-file create/delete and
-  no-newline edge cases after the new Unified Diff path proves stable
 - strengthen file-specific test evidence in full diff review
 - return to PR/GitHub publication after the agent coding loop feels real
 

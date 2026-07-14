@@ -20,9 +20,9 @@ dashboard.
   more faithful live-run copy.
 - Strengthen tests-covering-this-file evidence in the `10a` full-screen diff
   review and finish its final visual-density pass.
-- Harden the new restricted Unified Diff engine after real-repo use, then add
-  reviewed source-file create/delete and no-newline edge cases without
-  weakening strict path, context, pre-apply, or recovery checks.
+- Harden reviewed source create/modify/delete and EOF-marker handling after
+  real-repo use without weakening strict path, context, pre-apply, or recovery
+  checks.
 - Keep the current trust gates: plan approval before mutation, human review
   before apply, explicit command approval, and explicit git actions.
 
@@ -84,6 +84,13 @@ dashboard.
 
 ## Done Recently
 
+- Added reviewed source/text `CreateFile` and `DeleteFile`. Create never
+  overwrites; delete requires an existing bounded text target and retains a
+  pre-delete snapshot. Apply/rollback verify file presence or absence as a
+  first-class transaction state. Standard Unified Diff no-newline markers now
+  validate and control the resulting EOF newline state. Core smoke covers a
+  cross-file source create+delete transaction with rollback and a no-newline
+  to newline patch with exact rollback.
 - Replaced the placeholder split view with a parsed, aligned two-column diff
   renderer using standard unified hunk ranges and exact old/new line numbers.
   Full-screen review now prefers the pending proposal diff before Apply,

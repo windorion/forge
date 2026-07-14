@@ -110,7 +110,12 @@ Implemented:
   and recovery back to the applied state after partial rollback. Startup also
   reconciles transactions interrupted by process death from recorded
   before/after hashes; unknown states fail closed as `RecoveryFailed`.
-- Restricted `CreateFile` apply for new Markdown files under `docs/`.
+- Restricted `CreateFile` apply for new allowlisted source/text files and
+  `DeleteFile` apply for existing bounded text files. Both are per-file
+  reviewed, journaled before mutation, hash/absence verified, and rollbackable.
+- Unified Diff accepts standard `No newline at end of file` markers, validates
+  their old-side state, applies the requested new EOF state, and restores exact
+  prior bytes on rollback.
 - Edit proposal validation before apply and immediate revalidation during
   apply.
 - Applied edit proposals now record per-file rollback metadata: operation kind,
@@ -253,8 +258,8 @@ These percentages are product-readiness estimates, not calendar estimates.
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 94-97% | Adds a real aligned split-diff review with keyboard navigation to restart-safe loops/transactions, per-file decisions, source patches, commands, self-fix, repository inspection, and bad-output recovery; patch edge cases and final UI/evidence polish remain. |
-| Useful developer alpha | 45-55% | Forge can now recover interrupted agent loops and edit transactions and apply guarded normal source modifications, but still needs broader autonomous tool use, source create/delete, and repeated success on real repositories. |
+| Coding-agent demo V0 | 97-98% | Adds reviewed source create/delete and EOF-marker handling to real aligned split review, restart-safe loops/transactions, per-file decisions, commands, self-fix, repository inspection, and bad-output recovery; final evidence and chat-to-task polish remain. |
+| Useful developer alpha | 50-60% | Forge can recover interrupted loops/transactions and apply guarded source create/modify/delete changes, but still needs broader autonomous tool use and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
 
@@ -289,8 +294,6 @@ Remaining V0 gaps:
 
 - polish the first-pass `1a`/`1b`/`14a` shell toward the exact handoff
 - strengthen tests-covering-this-file evidence in the `10a` review
-- extend the restricted Unified Diff engine to source-file create/delete and
-  newline-marker edge cases after the modification path proves stable
 - add richer inspection result-quality evidence
 - keep git/preflight work as supporting infrastructure rather than the main
   demo
@@ -303,7 +306,7 @@ with a model provider while preserving human review.
 Alpha requires:
 
 - richer provider-backed read/search/patch/run/repair in normal flows
-- source-file create/delete support and crash-time transaction recovery
+- richer provider-backed tool use and repeated real-repository success
 - full diff review matching the design handoff
 - streamed terminal/test output in the task
 - git status, changed-file inspection, commit preparation, local commit,

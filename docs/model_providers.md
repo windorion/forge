@@ -67,9 +67,10 @@ read-only execution-context pass before asking for the execution proposal, so
 the provider sees updated context without directly running tools. During edit
 proposal generation, the runtime can also feed blocked validation checks back
 to the provider for a bounded repair loop. OpenAI proposals may use restricted
-single-file `UnifiedDiff` operations for normal modifications; the runtime,
-not the provider, validates headers, paths, hunk ranges/counts, current-file
-context, cross-file transaction safety, and recovery. When validation commands or
+single-file `UnifiedDiff` operations for normal modifications and EOF markers,
+plus reviewed source/text create/delete operations; the runtime, not the
+provider, validates headers, paths, hunk ranges/counts, current-file context,
+presence/absence, cross-file transaction safety, and recovery. When validation commands or
 task-scoped commands fail, the runtime can ask the provider for a repair brief
 from compact command summaries. A later edit proposal request can include that
 repair brief so the provider proposes a narrow follow-up repair artifact. The

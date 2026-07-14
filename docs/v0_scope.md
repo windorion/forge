@@ -81,8 +81,7 @@ It should not feel like:
 - plan progress strip
 - Log/Diff/Tests tabs
 - model-provider-backed normal run path
-- source-file create/delete support beyond the current restricted Unified Diff
-  modification path
+- reviewed source-file create/modify/delete with exact EOF handling
 - crash-time recovery checkpoints for agent loops and compensated
   apply/rollback transactions
 - approved task-scoped command runner for checks/tests
@@ -165,8 +164,8 @@ Major gaps:
   navigation. File-specific test evidence still needs a stronger mapping.
 - Patch apply now supports exact replacements, multi-hunk text patches, and
   strict context-anchored Unified Diff modifications across reviewed source
-  files, with verified compensated apply/rollback transactions. Source-file
-  create/delete and newline-marker edge cases remain unsupported.
+  files, reviewed source create/delete, and standard EOF newline markers, with
+  verified compensated apply/rollback transactions.
 - Command output now has a streamed, cancellable, selectable task-scoped
   surface with reviewed self-fix rerun evidence after apply.
 - Provider-backed run loop now has bounded multi-step orchestration, but it
@@ -192,6 +191,5 @@ Major gaps:
 
 ## Next Implementation Order
 
-1. Extend Unified Diff to reviewed source create/delete and newline edge cases.
-2. Add richer inspection result-quality and file-specific test evidence.
-3. Add `32a` chat-to-task polish once the live run works.
+1. Add richer inspection result-quality and file-specific test evidence.
+2. Add `32a` chat-to-task polish once the live run works.

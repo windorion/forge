@@ -3545,3 +3545,46 @@ Next:
 
 - Commit and push the full-screen diff slice directly to `main`, then extend
   reviewed source patching to create/delete and newline edge cases.
+
+## 2026-07-14 20:51:16 CEST
+
+Conversation summary:
+
+- After pushing the full-screen diff slice, continued directly on `main` with
+  the last major patch-engine V0 gap: reviewed source create/delete and EOF
+  newline-marker handling.
+
+Done:
+
+- Extended `CreateFile` from docs-only creation to new allowlisted source/text
+  paths while retaining bounded content, path, binary, and no-overwrite checks.
+- Added explicit `DeleteFile` proposals for existing bounded allowlisted text
+  files. Every delete remains per-file reviewed, snapshots the exact prior
+  bytes before unlink, and journals the deletion before mutation.
+- Added `RestoreDeletedFile` rollback evidence and made file absence a
+  first-class verified Apply state across normal verification, partial
+  compensation, rollback, and startup transaction recovery.
+- Updated built-in changed-file validation so a reviewed deleted file passes
+  only when it remains absent and linked deletion evidence exists.
+- Added standard Unified Diff `No newline at end of file` parsing. Old-side
+  markers are checked against the current EOF state; marker presence controls
+  the next trailing-newline state while rollback restores exact prior bytes.
+- Updated OpenAI Structured Output instructions/schema/normalization and the
+  macOS operation summary for source create/delete and EOF behavior.
+- Extended core smoke with a two-file source Create+Delete transaction,
+  presence/absence/hash metadata, post-apply validation, exact rollback, and a
+  no-newline-to-newline Unified Diff followed by exact no-newline rollback.
+- Updated runtime, provider, proposal, security, development, V0, status, TODO,
+  and root docs. Coding-Agent Demo V0 estimate is now 97-98%.
+- Verified `npm run check`, `npm run build`, full `npm run smoke:core`, direct
+  Swift type-check across all app sources, and `git diff --check`.
+
+Not done:
+
+- Inspection result-quality evidence and file-specific test mapping remain.
+- Final `32a` chat-to-task/product polish remains before declaring V0 100%.
+
+Next:
+
+- Commit and push source create/delete and EOF handling directly to `main`,
+  then close inspection/test evidence and final chat-to-task polish.

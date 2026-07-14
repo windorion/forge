@@ -95,8 +95,10 @@ current apply path is intentionally narrow: it supports append-text on
 existing Markdown files, exact replace and multi-hunk exact patch operations
 on existing Markdown and allowlisted source/text files, strict single-file
 Unified Diff modifications for normal source edits, plus create-file operations
-for new `docs/*.md` files. Unified Diffs require matching paths, ordered/count-
-correct hunks, and exact current-file context. Cross-file apply/rollback
+for new allowlisted source/text files and explicit reviewed deletions of
+existing bounded text files. Unified Diffs require matching paths,
+ordered/count-correct hunks, exact current-file context, and validated standard
+EOF newline markers. Cross-file apply/rollback
 records transaction evidence, verifies hashes, and compensates partial
 failures back to the last verified state. Apply persists each file's expected
 before/after hashes and rollback snapshot before mutation. Startup reconciles

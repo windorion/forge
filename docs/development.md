@@ -287,9 +287,11 @@ For the OpenAI provider, edit proposals can now include multiple file changes.
 `docs/*.md`, exact `ReplaceText` and multi-hunk `PatchText` can validate for
 existing allowlisted source/text files when every find text appears exactly
 once, and `UnifiedDiff` handles normal context-anchored modifications to one
-existing allowlisted source/text file. Restricted `CreateFile` remains limited
-to new `docs/*.md` files. Source create/delete, unsafe or stale diffs,
-unsupported paths, and preview-only operations block apply until revised.
+existing allowlisted source/text file, including standard EOF markers.
+Restricted `CreateFile` creates new allowlisted source/text paths without
+overwriting; `DeleteFile` removes an existing bounded text file only after
+per-file review and snapshot journaling. Unsafe or stale diffs, unsupported
+paths, and preview-only operations block apply until revised.
 If generated validation is blocked, the runtime can run a bounded repair loop:
 it archives the blocked proposal as `Superseded`, sends the failed checks back
 to the provider, and validates the repaired proposal before returning to human
@@ -576,13 +578,13 @@ cd runtime && npm run smoke:git-remote
   operations on existing Markdown files in `README.md` or `docs/`, exact
   replace-text and multi-hunk patch-text operations on existing Markdown or
   allowlisted source/text files, strict Unified Diff modifications to existing
-  allowlisted source/text files, and create-file operations for new `docs/*.md`
-  files only. Validation blocks duplicate targets, unsupported paths, generated directories,
+  allowlisted source/text files with EOF markers, and reviewed create/delete
+  operations for allowlisted bounded text files. Validation blocks duplicate targets, unsupported paths, generated directories,
   lockfiles, secret-like files, unsupported operations, oversized edits,
   missing files, existing create targets, duplicate append text at the file
   end, replace operations whose find text is missing or appears more than
   once, patch hunks that cannot be matched exactly once, and Unified Diffs with
-  mismatched paths, counts, ranges, context, or newline markers. Richer OpenAI proposals can include unsupported
+  mismatched paths, counts, ranges, context, or malformed newline markers. Richer OpenAI proposals can include unsupported
   preview-only operations for review, but those proposals are blocked from
   apply until revised to an apply-ready subset.
 - Rollback is explicit and guarded. The runtime stores restore snapshots under

@@ -127,10 +127,13 @@ Current restricted operation kinds:
   existing allowlisted source/text file. Both headers must match the proposed
   path; hunk counts/ranges must be ordered and exact; every context/deletion
   line must match the current file at its declared location. It supports line
-  additions, replacements, and deletions, but not file create/delete or
-  `No newline at end of file` markers.
-- `CreateFile`: creates a new bounded Markdown file under `docs/` only; it
-  never overwrites an existing target.
+  additions, replacements, and line deletions. Standard
+  `No newline at end of file` markers are validated against the current EOF
+  state and control the resulting trailing newline.
+- `CreateFile`: creates a new bounded allowlisted source/text file; it never
+  overwrites an existing target.
+- `DeleteFile`: deletes one existing bounded allowlisted text file after
+  per-file review, write-ahead snapshot persistence, and pre-delete hashing.
 - `PreviewOnly`: review artifact only; validation blocks apply.
 
 After apply, the proposal records `appliedFileChanges` metadata for every
@@ -198,7 +201,7 @@ Post-apply validation stores:
   bounded attempt limit and only by producing another review artifact.
 - Current v0 apply behavior supports `AppendText`, exact `ReplaceText`,
   multi-hunk exact `PatchText`, context-anchored `UnifiedDiff`, and
-  `CreateFile`.
+  reviewed `CreateFile`/`DeleteFile`.
 - Current v0 append behavior only writes existing Markdown files in
   `README.md` or `docs/*.md`.
 - Current v0 exact replace behavior can write existing allowlisted source/text
@@ -209,9 +212,10 @@ Post-apply validation stores:
 - Current Unified Diff behavior can modify existing allowlisted source/text
   files after strict path/header, size, hunk-count, declared-range/count, and
   exact context checks.
-- Current v0 create behavior only writes new `docs/*.md` files.
-- Preview-only, file delete, unsupported path, overwrite-create, or unsupported
-  source create
+- Current v0 create behavior only writes new allowlisted source/text paths and
+  never overwrites. Delete only removes an existing bounded text file after a
+  durable rollback snapshot is journaled.
+- Preview-only, unsupported path, overwrite-create, or unsupported operation
   proposals may be shown for review but must validate as `Blocked`.
 - Absolute paths, parent-directory traversal, `.git`, and `.forge` paths are
   rejected.
@@ -224,7 +228,7 @@ Post-apply validation stores:
   to its replacement, or if any hunk/patch exceeds size limits.
 - Apply is blocked if a Unified Diff contains multiple file sections, unsafe
   or mismatched headers, overlapping ranges, incorrect counts, stale context,
-  unsupported newline markers, or exceeds patch limits.
+  malformed/mismatched newline markers, or exceeds patch limits.
 - Apply is blocked for source/text targets outside the allowlist, generated
   directories, lockfiles, secret-like files, oversized files, or binary-looking
   content.
@@ -253,4 +257,5 @@ Post-apply validation stores:
 - Add reviewed source-file creation/deletion after the modification path is
   proven on real repositories.
 - Add crash-time recovery checkpoints for runtime termination mid-transaction.
-- Support newline-marker changes without weakening exact pre-apply checks.
+- Broaden real-repository fixture coverage without weakening exact pre-apply
+  checks.

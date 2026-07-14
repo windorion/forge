@@ -23,6 +23,9 @@ const sourceReplaceSmokePath = `runtime/src/${smokeID}-source-replace.ts`;
 const sourcePatchSmokePath = `runtime/src/${smokeID}-source-patch.ts`;
 const unifiedDiffSmokePathOne = `runtime/src/${smokeID}-unified-one.ts`;
 const unifiedDiffSmokePathTwo = `runtime/src/${smokeID}-unified-two.ts`;
+const sourceCreateSmokePath = `runtime/src/${smokeID}-source-created.ts`;
+const sourceDeleteSmokePath = `runtime/src/${smokeID}-source-deleted.ts`;
+const noNewlineSmokePath = `runtime/src/${smokeID}-no-newline.ts`;
 const createSmokePath = `docs/${smokeID}-openai-created.md`;
 const binarySmokePath = `docs/${smokeID}-binary.bin`;
 const largeDiffSmokePath = `docs/${smokeID}-large-diff.txt`;
@@ -69,6 +72,14 @@ const smokeFiles = [
       "};",
       ""
     ].join("\n")
+  },
+  {
+    relativePath: sourceDeleteSmokePath,
+    initialContent: "export const forgeSourceDeleteSmoke = true;\n"
+  },
+  {
+    relativePath: noNewlineSmokePath,
+    initialContent: "export const forgeNoNewlineSmoke = \"OLD\";"
   }
 ];
 
@@ -109,6 +120,8 @@ try {
   });
   const openAIContextTask = await runOpenAIContextFlow();
   const openAIUnifiedDiffTask = await runOpenAIUnifiedDiffTransactionFlow();
+  const openAISourceCreateDeleteTask = await runOpenAISourceCreateDeleteFlow();
+  const openAINoNewlineTask = await runOpenAINoNewlineFlow();
   const openAIApplyRecoveryTask = await runOpenAIApplyRecoveryFlow();
   const openAIAgentRunStepTask = await runOpenAIAgentRunStepFlow();
   const openAIRepositoryInspectionTask = await runOpenAIRepositoryInspectionLoopFlow();
@@ -160,6 +173,8 @@ try {
   console.log(`- Cancelled task command task: ${cancelledTaskCommandTask.id}`);
   console.log(`- OpenAI context task: ${openAIContextTask.id}`);
   console.log(`- OpenAI unified diff task: ${openAIUnifiedDiffTask.id}`);
+  console.log(`- OpenAI source create/delete task: ${openAISourceCreateDeleteTask.id}`);
+  console.log(`- OpenAI no-newline task: ${openAINoNewlineTask.id}`);
   console.log(`- OpenAI apply recovery task: ${openAIApplyRecoveryTask.id}`);
   console.log(`- OpenAI agent run step task: ${openAIAgentRunStepTask.id}`);
   console.log(`- OpenAI repository inspection task: ${openAIRepositoryInspectionTask.id}`);
@@ -818,6 +833,99 @@ async function runOpenAIUnifiedDiffTransactionFlow() {
   assert(secondRestored.includes("attempts: 2"), "Unified diff rollback did not restore the second-file value.");
   assert(secondRestored.includes("backoff: true"), "Unified diff rollback did not restore the deleted line.");
 
+  return current;
+}
+
+async function runOpenAISourceCreateDeleteFlow() {
+  const task = await createTask({
+    title: "OpenAI source create delete smoke",
+    objective: `Create @${sourceCreateSmokePath} and delete @${sourceDeleteSmokePath} through one reviewed transaction.`
+  });
+  await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "source create/delete task to reach plan review"
+  );
+
+  let current = await post(`/tasks/${task.id}/generate-plan-revision`, {});
+  current = await post(`/tasks/${task.id}/approve-plan`, {
+    note: "Core smoke approves source create/delete."
+  });
+  current = await post(`/tasks/${task.id}/generate-edit-proposal`, {});
+  assert(current.editProposal?.fileChanges?.length === 2, "Source create/delete proposal did not contain two files.");
+  assert(
+    current.editProposal.fileChanges.some((change) =>
+      change.path === sourceCreateSmokePath && change.changeType === "Create" && change.applyOperation?.kind === "CreateFile"
+    ),
+    "Source create proposal was not apply-ready."
+  );
+  assert(
+    current.editProposal.fileChanges.some((change) =>
+      change.path === sourceDeleteSmokePath && change.changeType === "Delete" && change.applyOperation?.kind === "DeleteFile"
+    ),
+    "Source delete proposal was not apply-ready."
+  );
+
+  current = await approveAllProposalFiles(current);
+  current = await post(`/tasks/${task.id}/apply-edit-proposal`, {
+    note: "Core smoke applies source create/delete."
+  });
+  assertState(current, "Completed", "Validation Passed");
+  const created = await readFile(join(repoRoot, sourceCreateSmokePath), "utf8");
+  assert(created.includes("forgeSourceCreateSmoke"), "Source CreateFile did not write expected content.");
+  await assertFileMissing(sourceDeleteSmokePath, "Source DeleteFile did not remove its target.");
+  assertAppliedChangeMetadata(current, sourceCreateSmokePath, "CreateFile");
+  const deletedChange = current.editProposal?.appliedFileChanges?.find((change) => change.path === sourceDeleteSmokePath);
+  assert(deletedChange?.operationKind === "DeleteFile", "Deleted source metadata did not record DeleteFile.");
+  assert(deletedChange?.rollbackKind === "RestoreDeletedFile", "Deleted source metadata did not record restore rollback.");
+  assert(deletedChange?.beforeSha256?.length === 64, "Deleted source metadata did not record the before hash.");
+  assert(!deletedChange?.afterSha256, "Deleted source metadata should represent an absent after state without a hash.");
+  assert(deletedChange?.applyVerifiedAt, "Deleted source apply did not verify absence.");
+  if (deletedChange?.rollbackSnapshotPath) {
+    rollbackSnapshotDirectories.add(dirname(deletedChange.rollbackSnapshotPath));
+  }
+
+  current = await post(`/tasks/${task.id}/rollback-edit-proposal`, {
+    note: "Core smoke rolls back source create/delete."
+  });
+  assertState(current, "Human Review", "Rollback Applied");
+  await assertFileMissing(sourceCreateSmokePath, "Rollback did not remove the created source file.");
+  const restored = await readFile(join(repoRoot, sourceDeleteSmokePath), "utf8");
+  assert(restored === "export const forgeSourceDeleteSmoke = true;\n", "Rollback did not exactly restore deleted source content.");
+  return current;
+}
+
+async function runOpenAINoNewlineFlow() {
+  const task = await createTask({
+    title: "OpenAI no newline marker smoke",
+    objective: `Apply a standard no-newline marker patch to @${noNewlineSmokePath}.`
+  });
+  await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "no-newline task to reach plan review"
+  );
+
+  let current = await post(`/tasks/${task.id}/generate-plan-revision`, {});
+  current = await post(`/tasks/${task.id}/approve-plan`, { note: "Core smoke approves no-newline patch." });
+  current = await post(`/tasks/${task.id}/generate-edit-proposal`, {});
+  const change = current.editProposal?.fileChanges?.[0];
+  assert(change?.applyOperation?.kind === "UnifiedDiff", "No-newline proposal was not UnifiedDiff.");
+  assert(change.applyOperation.patch.includes("\\ No newline at end of file"), "No-newline proposal omitted the standard marker.");
+  assert(
+    current.editProposal.validation?.fileResults?.[0]?.checks?.some((check) => check.includes("no-newline markers")),
+    "No-newline validation did not retain marker evidence."
+  );
+
+  current = await approveAllProposalFiles(current);
+  current = await post(`/tasks/${task.id}/apply-edit-proposal`, { note: "Core smoke applies no-newline patch." });
+  assertState(current, "Completed", "Validation Passed");
+  const applied = await readFile(join(repoRoot, noNewlineSmokePath), "utf8");
+  assert(applied === "export const forgeNoNewlineSmoke = \"NEW\";\n", "No-newline patch did not add the expected trailing newline.");
+
+  current = await post(`/tasks/${task.id}/rollback-edit-proposal`, { note: "Core smoke rolls back no-newline patch." });
+  const restored = await readFile(join(repoRoot, noNewlineSmokePath), "utf8");
+  assert(restored === "export const forgeNoNewlineSmoke = \"OLD\";", "No-newline rollback did not restore exact EOF state.");
   return current;
 }
 
@@ -2381,6 +2489,7 @@ async function cleanupSmokeFiles() {
   await rm(join(repoRoot, binarySmokePath), { force: true });
   await rm(join(repoRoot, largeDiffSmokePath), { force: true });
   await rm(join(repoRoot, createSmokePath), { force: true });
+  await rm(join(repoRoot, sourceCreateSmokePath), { force: true });
   await rm(join(repoRoot, brokenTypeScriptSmokePath), { force: true });
   for (const directory of rollbackSnapshotDirectories) {
     await rm(join(repoRoot, directory), { recursive: true, force: true });
@@ -2815,6 +2924,81 @@ function mockOpenAIOutput(name, requests, body) {
             replaceWith: "",
             patchHunks: [],
             unifiedDiff: "",
+            content: ""
+          }
+        ]
+      };
+    }
+
+    if (bodyText.includes("source create delete smoke")) {
+      return {
+        summary: "Create one reviewed source file and delete another with rollback evidence.",
+        riskLevel: "High",
+        fileChanges: [
+          {
+            path: sourceCreateSmokePath,
+            changeType: "Create",
+            rationale: "Exercise restricted source creation without overwriting.",
+            diffPreview: [
+              "--- /dev/null",
+              `+++ b/${sourceCreateSmokePath}`,
+              "@@ -0,0 +1 @@",
+              "+export const forgeSourceCreateSmoke = true;"
+            ].join("\n"),
+            operationKind: "CreateFile",
+            appendText: "",
+            findText: "",
+            replaceWith: "",
+            patchHunks: [],
+            unifiedDiff: "",
+            content: "export const forgeSourceCreateSmoke = true;\n"
+          },
+          {
+            path: sourceDeleteSmokePath,
+            changeType: "Delete",
+            rationale: "Exercise explicit reviewed source deletion with snapshot rollback.",
+            diffPreview: [
+              `--- a/${sourceDeleteSmokePath}`,
+              "+++ /dev/null",
+              "@@ -1 +0,0 @@",
+              "-export const forgeSourceDeleteSmoke = true;"
+            ].join("\n"),
+            operationKind: "DeleteFile",
+            appendText: "",
+            findText: "",
+            replaceWith: "",
+            patchHunks: [],
+            unifiedDiff: "",
+            content: ""
+          }
+        ]
+      };
+    }
+
+    if (bodyText.includes("no newline marker smoke")) {
+      const patch = [
+        `--- a/${noNewlineSmokePath}`,
+        `+++ b/${noNewlineSmokePath}`,
+        "@@ -1 +1 @@",
+        "-export const forgeNoNewlineSmoke = \"OLD\";",
+        "\\ No newline at end of file",
+        "+export const forgeNoNewlineSmoke = \"NEW\";"
+      ].join("\n");
+      return {
+        summary: "Replace a no-newline source line and add a trailing newline.",
+        riskLevel: "Medium",
+        fileChanges: [
+          {
+            path: noNewlineSmokePath,
+            changeType: "Modify",
+            rationale: "Exercise standard unified diff EOF marker semantics.",
+            diffPreview: patch,
+            operationKind: "UnifiedDiff",
+            appendText: "",
+            findText: "",
+            replaceWith: "",
+            patchHunks: [],
+            unifiedDiff: patch,
             content: ""
           }
         ]
@@ -3527,6 +3711,20 @@ function assertState(task, status, phase) {
 function assert(condition, message) {
   if (!condition) {
     throw new Error(message);
+  }
+}
+
+async function assertFileMissing(relativePath, message) {
+  try {
+    await readFile(join(repoRoot, relativePath), "utf8");
+    throw new Error(message);
+  } catch (error) {
+    if (error instanceof Error && error.message === message) {
+      throw error;
+    }
+    if (error?.code !== "ENOENT") {
+      throw error;
+    }
   }
 }
 

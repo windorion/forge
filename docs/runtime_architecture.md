@@ -220,7 +220,8 @@ The v0 implementation supports append-text edits to existing Markdown files in
 `README.md` or `docs/`, exact replace-text edits to existing Markdown or
 allowlisted source/text files, multi-hunk exact patch-text edits to one
 existing Markdown or allowlisted source/text file, strict context-anchored
-Unified Diff modifications, plus create-file edits for new `docs/*.md` files.
+Unified Diff modifications with EOF marker handling, plus reviewed create and
+delete operations for allowlisted source/text files.
 It revalidates the full proposal before writing, records a cross-file
 transaction, verifies every resulting SHA-256, and compensates already-written
 files if a later write fails. Each file's before/after hashes and rollback

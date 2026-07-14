@@ -275,6 +275,10 @@ export interface CreateFileOperation {
   content: string;
 }
 
+export interface DeleteFileOperation {
+  kind: "DeleteFile";
+}
+
 export interface PreviewOnlyOperation {
   kind: "PreviewOnly";
 }
@@ -285,6 +289,7 @@ export type ProposedFileOperation =
   | PatchTextOperation
   | UnifiedDiffOperation
   | CreateFileOperation
+  | DeleteFileOperation
   | PreviewOnlyOperation;
 
 export interface EditProposalDecisionRequest {
@@ -325,7 +330,7 @@ export interface EditProposalValidation {
 export interface AppliedFileChange {
   path: string;
   operationKind: ProposedFileOperation["kind"];
-  rollbackKind: "RestorePreviousContent" | "DeleteCreatedFile";
+  rollbackKind: "RestorePreviousContent" | "DeleteCreatedFile" | "RestoreDeletedFile";
   rollbackSummary: string;
   appliedAt: string;
   proposalFileChangeID?: string;

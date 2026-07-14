@@ -104,8 +104,10 @@ New proposals also require a persisted approval decision for every proposed
 file; whole-proposal Apply cannot bypass pending or requested-change files.
 It supports Markdown append/create operations plus exact single-match
 replacements and multi-hunk exact text patches for allowlisted source/text
-files, plus strict single-file Unified Diffs whose headers, ranges/counts, and
-context match the current allowlisted target. Multi-file apply and rollback
+files, strict single-file Unified Diffs whose headers, ranges/counts, context,
+and EOF markers match the current allowlisted target, new source/text files
+that cannot overwrite, and explicit per-file reviewed deletion of an existing
+bounded text file. Delete snapshots are journaled before unlink. Multi-file apply and rollback
 are compensated transactions with per-file SHA-256 verification; partial
 failures are returned to the last verified state when possible and recorded
 as `Recovered` or `RecoveryFailed`. Rollback remains an explicit medium-risk
