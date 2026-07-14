@@ -756,6 +756,7 @@ struct ProposedFileOperation: Codable, Hashable {
     var findText: String?
     var replaceWith: String?
     var hunks: [PatchTextHunk]?
+    var patch: String?
     var content: String?
 }
 
@@ -782,6 +783,20 @@ struct EditProposal: Identifiable, Codable, Hashable {
     var rollbackNote: String?
     var validation: EditProposalValidation?
     var appliedFileChanges: [AppliedFileChange]?
+    var applyTransaction: EditProposalFileTransaction?
+    var rollbackTransaction: EditProposalFileTransaction?
+}
+
+struct EditProposalFileTransaction: Identifiable, Codable, Hashable {
+    var id: String
+    var kind: String
+    var status: String
+    var paths: [String]
+    var summary: String
+    var startedAt: String
+    var completedAt: String?
+    var verifiedAt: String?
+    var recoverySummary: String?
 }
 
 struct AppliedFileChange: Identifiable, Codable, Hashable {
@@ -797,7 +812,9 @@ struct AppliedFileChange: Identifiable, Codable, Hashable {
     var beforeByteLength: Int?
     var afterByteLength: Int?
     var rollbackSnapshotPath: String?
+    var applyVerifiedAt: String?
     var rolledBackAt: String?
+    var rollbackVerifiedAt: String?
 }
 
 struct EditProposalValidation: Codable, Hashable {

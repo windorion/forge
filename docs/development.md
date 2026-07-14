@@ -283,9 +283,10 @@ For the OpenAI provider, edit proposals can now include multiple file changes.
 `AppendText` remains limited to existing Markdown files in `README.md` or
 `docs/*.md`, exact `ReplaceText` and multi-hunk `PatchText` can validate for
 existing allowlisted source/text files when every find text appears exactly
-once, and restricted `CreateFile` remains limited to new `docs/*.md` files.
-Delete, broad patch, unsupported path, or preview-only operations remain
-review artifacts and block apply until revised.
+once, and `UnifiedDiff` handles normal context-anchored modifications to one
+existing allowlisted source/text file. Restricted `CreateFile` remains limited
+to new `docs/*.md` files. Source create/delete, unsafe or stale diffs,
+unsupported paths, and preview-only operations block apply until revised.
 If generated validation is blocked, the runtime can run a bounded repair loop:
 it archives the blocked proposal as `Superseded`, sends the failed checks back
 to the provider, and validates the repaired proposal before returning to human
@@ -297,10 +298,13 @@ and `Request Changes`. It also exposes `Validate Proposal`, which calls
 without writing files. Applying calls `POST /tasks/:taskID/apply-edit-proposal`,
 revalidates the current workspace, runs the restricted v0 edit operation,
 records the changed file plus before/after rollback metadata, and marks the
-task completed. Applied proposals with rollback metadata can be explicitly
+task completed. Multi-file apply records transaction state, verifies every
+resulting hash, and restores already-written files if a later file fails.
+Applied proposals with rollback metadata can be explicitly
 rolled back with `POST /tasks/:taskID/rollback-edit-proposal`; the runtime
-checks current file hashes before restoring snapshots or deleting files created
-by the proposal.
+checks current hashes before restoring snapshots or deleting created files,
+verifies restored results, and compensates a partial rollback back to the
+verified applied state when possible. Full diff review shows this evidence.
 Requesting changes calls `POST /tasks/:taskID/reject-edit-proposal`, records
 the rejection, leaves files unchanged, and allows another edit proposal to be
 generated. After a rejection, the same Review action area exposes
@@ -466,8 +470,10 @@ It covers:
 - built-in post-apply validation
 - SQLite restart recovery
 - `AppendText`, Markdown exact `ReplaceText`, source-file exact `ReplaceText`,
-  multi-hunk source `PatchText`, applied-file rollback metadata, and explicit
-  rollback for source replace/patch flows
+  multi-hunk source `PatchText`, two-file `UnifiedDiff` apply/rollback,
+  applied-file hash verification, and explicit rollback
+- a real cross-file partial-apply failure caused by a read-only second fixture,
+  with automatic restoration and verification of the first written file
 - runtime home page, health diagnostics, persistence metadata, and model
   provider settings GET/POST paths
 - provider settings key handling with a fake OpenAI key, including verification
@@ -532,20 +538,22 @@ cd runtime && npm run smoke:git-remote
 - Edit proposal application is intentionally narrow: v0 supports append-text
   operations on existing Markdown files in `README.md` or `docs/`, exact
   replace-text and multi-hunk patch-text operations on existing Markdown or
+  allowlisted source/text files, strict Unified Diff modifications to existing
   allowlisted source/text files, and create-file operations for new `docs/*.md`
-  files only. Validation blocks unsupported paths, generated directories,
+  files only. Validation blocks duplicate targets, unsupported paths, generated directories,
   lockfiles, secret-like files, unsupported operations, oversized edits,
   missing files, existing create targets, duplicate append text at the file
   end, replace operations whose find text is missing or appears more than
-  once, and patch hunks that cannot be matched exactly once in the original
-  file and applied in order. Richer OpenAI proposals can include unsupported
+  once, patch hunks that cannot be matched exactly once, and Unified Diffs with
+  mismatched paths, counts, ranges, context, or newline markers. Richer OpenAI proposals can include unsupported
   preview-only operations for review, but those proposals are blocked from
   apply until revised to an apply-ready subset.
 - Rollback is explicit and guarded. The runtime stores restore snapshots under
   `.forge/rollback-snapshots/`, verifies the current file still matches the
   recorded post-apply hash, and then restores prior contents or deletes a
-  created file. Rollback does not yet run a dedicated post-rollback validation
-  preset automatically.
+  created file. Restores are hash-verified and partial rollback is compensated
+  back to the applied state when possible. Rollback does not yet run a
+  dedicated project validation preset automatically.
 - Proposal repair is bounded and proposal-only. It can ask the provider to
   revise a blocked artifact from runtime validation feedback, but it does not
   apply files or run commands.

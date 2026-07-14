@@ -3,7 +3,7 @@
 Document role: define the first end-to-end product target for Forge so early
 implementation has a clear finish line.
 
-Last updated: 2026-07-13
+Last updated: 2026-07-14
 
 ## Scope Reset
 
@@ -81,8 +81,10 @@ It should not feel like:
 - plan progress strip
 - Log/Diff/Tests tabs
 - model-provider-backed normal run path
-- source-file patch proposal format beyond exact text hunks
-- controlled patch apply with rollback, revalidation, and recovery states
+- source-file create/delete support beyond the current restricted Unified Diff
+  modification path
+- crash-time recovery checkpoints beyond the current in-process compensated
+  apply/rollback transactions
 - approved task-scoped command runner for checks/tests
 - command output streaming into the task
 - failed-check self-fix loop
@@ -159,8 +161,10 @@ Major gaps:
 - UI has a first-pass shell but does not yet fully match `design_handoff_forge`.
 - Full-screen diff review exists but still needs exact split-diff polish,
   keyboard shortcuts, and durable file-level review decisions.
-- Patch apply now has exact source replacement and multi-hunk text patch
-  paths, but it is still too narrow for normal source-code tasks.
+- Patch apply now supports exact replacements, multi-hunk text patches, and
+  strict context-anchored Unified Diff modifications across reviewed source
+  files, with verified compensated apply/rollback transactions. Source-file
+  create/delete and newline-marker edge cases remain unsupported.
 - Command output now has a streamed, cancellable, selectable task-scoped
   surface with reviewed self-fix rerun evidence after apply.
 - Provider-backed run loop now has bounded multi-step orchestration, but it
@@ -169,10 +173,9 @@ Major gaps:
 
 ## Next Implementation Order
 
-1. Broaden source-file patch proposal/apply beyond exact text hunks and harden
-   rollback revalidation/recovery.
-2. Extend the bounded agent loop with richer read/search tool choices and
+1. Extend the bounded agent loop with richer read/search tool choices and
    pause/abort/resume controls.
-3. Implement request-change revision from full diff review.
-4. Polish `10a` with durable file-level decisions and exact split-diff behavior.
+2. Implement request-change revision from full diff review.
+3. Polish `10a` with durable file-level decisions and exact split-diff behavior.
+4. Extend Unified Diff to reviewed source create/delete and newline edge cases.
 5. Add `32a` chat-to-task polish once the live run works.

@@ -3,7 +3,7 @@
 Document role: maintain the active backlog, priority order, and next concrete
 engineering tasks for Forge.
 
-Last updated: 2026-07-13
+Last updated: 2026-07-14
 
 ## Rule
 
@@ -21,10 +21,9 @@ dashboard.
 - Polish the first usable `10a` full-screen diff review: exact split-diff
   behavior, keyboard shortcuts, file-level approval persistence, and stronger
   tests-covering-this-file evidence.
-- Broaden source-file patch proposals beyond exact text hunks: add cross-file
-  patch orchestration, rollback revalidation/recovery, and provider-driven
-  source repair flows while keeping strict path validation and pre-apply
-  checks.
+- Harden the new restricted Unified Diff engine after real-repo use, then add
+  reviewed source-file create/delete and no-newline edge cases without
+  weakening strict path, context, pre-apply, or recovery checks.
 - Keep the current trust gates: plan approval before mutation, human review
   before apply, explicit command approval, and explicit git actions.
 
@@ -90,6 +89,17 @@ dashboard.
 
 ## Done Recently
 
+- Added restricted `UnifiedDiff` source modifications for normal model-backed
+  edits beyond exact text hunks. The runtime validates single-file headers,
+  allowlisted paths, hunk bounds/counts/order, and exact context/deletion lines
+  against the current file before applying additions, replacements, or
+  deletions.
+- Added durable cross-file apply/rollback transactions with duplicate-target
+  rejection, per-file apply/rollback SHA-256 verification, unique rollback
+  snapshots, partial-apply compensation, and partial-rollback recovery. The
+  macOS full diff review shows transaction/recovery evidence, and
+  `npm run smoke:core` covers a two-file apply/rollback plus a real second-file
+  permission failure that automatically restores the first file.
 - Added bounded Agent Run Loop v0. `POST /tasks/:taskID/run-agent-loop`
   repeatedly runs provider-selected safe steps up to a runtime-enforced limit,
   links each step to an `AgentRunLoop`, and stops at review gates, passed

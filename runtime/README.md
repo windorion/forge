@@ -90,9 +90,12 @@ provider; blocked intermediate proposals are archived as `Superseded`. The
 apply path revalidates against the current workspace before writing. The
 current apply path is intentionally narrow: it supports append-text on
 existing Markdown files, exact replace and multi-hunk exact patch operations
-on existing Markdown and allowlisted source/text files, plus create-file
-operations for new `docs/*.md` files. Exact replace and patch hunks require
-the find text to appear once.
+on existing Markdown and allowlisted source/text files, strict single-file
+Unified Diff modifications for normal source edits, plus create-file operations
+for new `docs/*.md` files. Unified Diffs require matching paths, ordered/count-
+correct hunks, and exact current-file context. Cross-file apply/rollback
+records transaction evidence, verifies hashes, and compensates partial
+failures back to the last verified state.
 After apply, the runtime runs controlled built-in validation commands and only
 marks the task completed if validation passes.
 If validation fails, the runtime asks the model provider for a repair brief

@@ -39,7 +39,7 @@ should no longer feel like a generic workflow dashboard.
 
 ## Current Status
 
-Last updated: 2026-07-13
+Last updated: 2026-07-14
 
 Direction reset: the trust/runtime foundation is strong, but the next milestone
 is a redesigned coding-agent demo based on `design_handoff_forge/`, especially
@@ -81,8 +81,11 @@ Implemented today:
 - Safe edit proposals with multi-file OpenAI proposal artifacts, including
   blocked preview-only operations. Apply supports Markdown `AppendText`,
   exact `ReplaceText` and multi-hunk `PatchText` for Markdown and allowlisted
-  source/text files, new `docs/*.md` `CreateFile` changes, applied-file
-  rollback metadata, and an explicit rollback action.
+  source/text files, context-anchored single-file `UnifiedDiff` operations for
+  normal source modifications, and new `docs/*.md` `CreateFile` changes.
+  Cross-file apply and rollback record durable transaction evidence, verify
+  every resulting hash, and compensate already-written files after a partial
+  failure. The macOS diff review shows apply/rollback/recovery evidence.
 - Edit proposal validation, bounded validation-feedback repair, apply/reject
   flow, revision loop, and post-apply validation.
 - Approved task-scoped command execution for runtime-known command IDs. The
@@ -157,9 +160,9 @@ Not finished yet:
   file-level review persistence, decision prompts, and polished live-run
   states.
 - Rich autonomous model-backed read/search/patch/run/repair beyond the current
-  bounded loop and exact-text patch engine.
-- General source-code patch engine, richer rollback/revalidation, and richer
-  diff review.
+  bounded loop and restricted unified-diff patch engine.
+- Source-file create/delete and newline-marker patch support, plus richer diff
+  review.
 - Actual PR creation/publication after explicit review.
 - Durable repository index with symbols and semantic search.
 - Full workspace picker and commercial packaging/signing path.
@@ -172,8 +175,8 @@ Product-readiness estimate:
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 76-80% | Has a first-pass session UI shell, full-screen diff review surface, exact source replace, multi-hunk source patches, streamed/cancellable selectable task commands, failed-command self-fix rerun evidence, and a bounded provider-selected multi-step loop, but still needs richer read/search/patch orchestration and UI polish before it feels like Codex or Claude Code. |
-| Useful developer alpha | 35-45% | A developer cannot yet rely on Forge like Codex or Claude Code for normal coding tasks. It needs real patching, command execution, recovery, and a stronger model-backed run loop. |
+| Coding-agent demo V0 | 80-84% | Has a first-pass session UI shell, full-screen diff review, context-anchored cross-file source patches with verified recovery, streamed/cancellable commands, self-fix rerun evidence, and a bounded provider-selected loop; richer read/search orchestration, loop controls, and UI polish remain. |
+| Useful developer alpha | 40-50% | Forge can now apply guarded normal source modifications, but still needs richer autonomous tool use, source create/delete, restart recovery, and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, memory, MCP/GitHub, and product polish. |
 
@@ -186,10 +189,10 @@ Top priorities are tracked in `docs/todo.md`. Current P0/P1 themes:
 
 - polish the first-pass macOS coding-agent session UI toward the exact
   `design_handoff_forge` screens
-- broaden source-file patch proposal/apply beyond exact multi-hunk text patches
-  and harden rollback/revalidation
 - extend the bounded agent loop with richer read/search tool choices,
   pause/abort/resume controls, and broader patch/recovery behavior
+- extend the restricted patch engine to source-file create/delete and
+  no-newline edge cases after the new Unified Diff path proves stable
 - connect full diff review to durable file-level decisions once the review
   model supports them
 - return to PR/GitHub publication after the agent coding loop feels real

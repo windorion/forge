@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -20,6 +20,8 @@ const appendSmokePath = `docs/${smokeID}-append.md`;
 const replaceSmokePath = `docs/${smokeID}-replace.md`;
 const sourceReplaceSmokePath = `runtime/src/${smokeID}-source-replace.ts`;
 const sourcePatchSmokePath = `runtime/src/${smokeID}-source-patch.ts`;
+const unifiedDiffSmokePathOne = `runtime/src/${smokeID}-unified-one.ts`;
+const unifiedDiffSmokePathTwo = `runtime/src/${smokeID}-unified-two.ts`;
 const createSmokePath = `docs/${smokeID}-openai-created.md`;
 const binarySmokePath = `docs/${smokeID}-binary.bin`;
 const largeDiffSmokePath = `docs/${smokeID}-large-diff.txt`;
@@ -44,6 +46,26 @@ const smokeFiles = [
     initialContent: [
       "export const forgePatchSmokeOne = \"PATCH_OLD_ONE\";",
       "export const forgePatchSmokeTwo = \"PATCH_OLD_TWO\";",
+      ""
+    ].join("\n")
+  },
+  {
+    relativePath: unifiedDiffSmokePathOne,
+    initialContent: [
+      "export function forgeUnifiedGreeting(name: string) {",
+      "  const label = \"hello\";",
+      "  return `${label}, ${name}`;",
+      "}",
+      ""
+    ].join("\n")
+  },
+  {
+    relativePath: unifiedDiffSmokePathTwo,
+    initialContent: [
+      "export const forgeUnifiedRetry = {",
+      "  attempts: 2,",
+      "  backoff: true",
+      "};",
       ""
     ].join("\n")
   }
@@ -85,6 +107,8 @@ try {
     openAIAPIKey: "sk-forge-smoke"
   });
   const openAIContextTask = await runOpenAIContextFlow();
+  const openAIUnifiedDiffTask = await runOpenAIUnifiedDiffTransactionFlow();
+  const openAIApplyRecoveryTask = await runOpenAIApplyRecoveryFlow();
   const openAIAgentRunStepTask = await runOpenAIAgentRunStepFlow();
   const openAIAgentRunLoopTask = await runOpenAIAgentRunLoopFlow();
   const openAIAutoRepairTask = await runOpenAIAutoRepairFlow();
@@ -101,6 +125,8 @@ try {
   console.log(`- Task command task: ${taskCommandTask.id}`);
   console.log(`- Cancelled task command task: ${cancelledTaskCommandTask.id}`);
   console.log(`- OpenAI context task: ${openAIContextTask.id}`);
+  console.log(`- OpenAI unified diff task: ${openAIUnifiedDiffTask.id}`);
+  console.log(`- OpenAI apply recovery task: ${openAIApplyRecoveryTask.id}`);
   console.log(`- OpenAI agent run step task: ${openAIAgentRunStepTask.id}`);
   console.log(`- OpenAI agent run loop task: ${openAIAgentRunLoopTask.id}`);
   console.log(`- OpenAI auto-repair task: ${openAIAutoRepairTask.id}`);
@@ -662,6 +688,136 @@ async function runOpenAIContextFlow() {
   );
   const created = await readFile(join(repoRoot, createSmokePath), "utf8");
   assert(created.includes("Preview created by the OpenAI smoke flow."), "CreateFile smoke did not write expected content.");
+
+  return current;
+}
+
+async function runOpenAIUnifiedDiffTransactionFlow() {
+  const task = await createTask({
+    title: "OpenAI unified diff transaction smoke",
+    objective: `Apply a reviewed cross-file unified diff to @${unifiedDiffSmokePathOne} and @${unifiedDiffSmokePathTwo}, then verify rollback.`
+  });
+
+  await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "unified diff task to reach initial plan review"
+  );
+
+  let current = await post(`/tasks/${task.id}/generate-plan-revision`, {});
+  assertState(current, "Human Review", "Plan Review");
+
+  current = await post(`/tasks/${task.id}/approve-plan`, {
+    note: "Core smoke test approves the cross-file unified diff plan."
+  });
+  assert(current.executionProposal, "Unified diff flow did not create an execution proposal.");
+
+  current = await post(`/tasks/${task.id}/generate-edit-proposal`, {});
+  assert(current.editProposal?.status === "Proposed", "Unified diff flow did not create a proposed edit.");
+  assert(current.editProposal?.fileChanges?.length === 2, "Unified diff flow did not propose two file changes.");
+  assert(
+    current.editProposal.fileChanges.every((change) => change.applyOperation?.kind === "UnifiedDiff"),
+    "Unified diff flow did not normalize both operations as UnifiedDiff."
+  );
+  assert(
+    current.editProposal.validation?.fileResults?.every((result) =>
+      result.status === "Ready" &&
+      result.checks?.some((check) => check.includes("context and deletion line matches"))
+    ),
+    "Unified diff validation did not record strict context matching for both files."
+  );
+
+  current = await post(`/tasks/${task.id}/apply-edit-proposal`, {
+    note: "Core smoke test applies the cross-file unified diff transaction."
+  });
+  assertState(current, "Completed", "Validation Passed");
+  assert(current.editProposal?.applyTransaction?.status === "Completed", "Unified diff apply transaction did not complete.");
+  assert(current.editProposal.applyTransaction.paths?.length === 2, "Unified diff apply transaction did not record two paths.");
+  assert(current.editProposal.applyTransaction.verifiedAt, "Unified diff apply transaction did not record verification.");
+
+  const firstApplied = await readFile(join(repoRoot, unifiedDiffSmokePathOne), "utf8");
+  const secondApplied = await readFile(join(repoRoot, unifiedDiffSmokePathTwo), "utf8");
+  assert(firstApplied.includes('const punctuation = "!";'), "Unified diff did not add the first-file line.");
+  assert(firstApplied.includes("${name}${punctuation}"), "Unified diff did not rewrite the first-file return line.");
+  assert(secondApplied.includes("attempts: 3"), "Unified diff did not update the second-file value.");
+  assert(!secondApplied.includes("backoff"), "Unified diff did not delete the second-file line.");
+  for (const expectedPath of [unifiedDiffSmokePathOne, unifiedDiffSmokePathTwo]) {
+    const applied = assertAppliedChangeMetadata(current, expectedPath, "UnifiedDiff");
+    assert(applied.applyVerifiedAt, `Unified diff apply did not verify ${expectedPath}.`);
+  }
+
+  current = await post(`/tasks/${task.id}/rollback-edit-proposal`, {
+    note: "Core smoke test rolls back the cross-file unified diff transaction."
+  });
+  assertState(current, "Human Review", "Rollback Applied");
+  assert(current.editProposal?.rollbackTransaction?.status === "Completed", "Unified diff rollback transaction did not complete.");
+  assert(current.editProposal.rollbackTransaction.verifiedAt, "Unified diff rollback transaction did not record verification.");
+  for (const expectedPath of [unifiedDiffSmokePathOne, unifiedDiffSmokePathTwo]) {
+    const applied = assertAppliedChangeMetadata(current, expectedPath, "UnifiedDiff");
+    assert(applied.rollbackVerifiedAt, `Unified diff rollback did not verify ${expectedPath}.`);
+  }
+
+  const firstRestored = await readFile(join(repoRoot, unifiedDiffSmokePathOne), "utf8");
+  const secondRestored = await readFile(join(repoRoot, unifiedDiffSmokePathTwo), "utf8");
+  assert(firstRestored.includes('const label = "hello";'), "Unified diff rollback did not restore the first file.");
+  assert(!firstRestored.includes("punctuation"), "Unified diff rollback left added first-file content.");
+  assert(secondRestored.includes("attempts: 2"), "Unified diff rollback did not restore the second-file value.");
+  assert(secondRestored.includes("backoff: true"), "Unified diff rollback did not restore the deleted line.");
+
+  return current;
+}
+
+async function runOpenAIApplyRecoveryFlow() {
+  const task = await createTask({
+    title: "OpenAI apply recovery smoke",
+    objective: `Verify automatic cross-file apply recovery for @${unifiedDiffSmokePathOne} and @${unifiedDiffSmokePathTwo}.`
+  });
+
+  await waitForTask(
+    task.id,
+    (candidate) => candidate.status === "Human Review" && candidate.currentPhase === "Plan Review",
+    "apply recovery task to reach initial plan review"
+  );
+
+  let current = await post(`/tasks/${task.id}/generate-plan-revision`, {});
+  current = await post(`/tasks/${task.id}/approve-plan`, {
+    note: "Core smoke test approves the recoverable cross-file apply."
+  });
+  current = await post(`/tasks/${task.id}/generate-edit-proposal`, {});
+  assert(current.editProposal?.validation?.status === "Ready", "Apply recovery proposal was not ready before fault injection.");
+
+  const protectedPath = join(repoRoot, unifiedDiffSmokePathTwo);
+  await chmod(protectedPath, 0o444);
+  try {
+    const failedApply = await postExpectError(`/tasks/${task.id}/apply-edit-proposal`, {
+      note: "Core smoke test intentionally makes the second file read-only."
+    });
+    assert(failedApply.status === 500, `Expected recoverable apply to fail with 500, got ${failedApply.status}.`);
+    assert(
+      failedApply.text.includes("Automatic recovery restored and verified 1 previously written file"),
+      `Apply recovery response did not include compensation evidence: ${failedApply.text}`
+    );
+
+    const taskList = await get("/tasks");
+    current = taskList.tasks?.find((candidate) => candidate.id === task.id);
+    assert(current, "Recovered apply task was not present in the task list.");
+    assertState(current, "Failed", "Apply Recovered");
+    assert(current.editProposal?.status === "Proposed", "Recovered apply should keep the proposal reviewable.");
+    assert(current.editProposal?.applyTransaction?.status === "Recovered", "Apply transaction was not marked Recovered.");
+    assert(current.editProposal.applyTransaction.verifiedAt, "Recovered apply transaction did not record verification.");
+    assert(
+      current.events?.some((event) => event.type === "edit.proposal.apply.recovered"),
+      "Recovered apply did not record the recovery event."
+    );
+
+    const firstRestored = await readFile(join(repoRoot, unifiedDiffSmokePathOne), "utf8");
+    const secondUntouched = await readFile(protectedPath, "utf8");
+    assert(firstRestored.includes('const label = "hello";'), "Apply recovery did not restore the first file.");
+    assert(!firstRestored.includes("punctuation"), "Apply recovery left the first file partially changed.");
+    assert(secondUntouched.includes("attempts: 2"), "Faulted second file should remain unchanged.");
+  } finally {
+    await chmod(protectedPath, 0o644);
+  }
 
   return current;
 }
@@ -1956,6 +2112,63 @@ function mockOpenAIOutput(name, requests, body) {
   }
 
   if (name === "forge_edit_proposal") {
+    if (bodyText.includes("unified diff transaction smoke") || bodyText.includes("apply recovery smoke")) {
+      const firstPatch = [
+        `--- a/${unifiedDiffSmokePathOne}`,
+        `+++ b/${unifiedDiffSmokePathOne}`,
+        "@@ -1,4 +1,5 @@",
+        " export function forgeUnifiedGreeting(name: string) {",
+        "-  const label = \"hello\";",
+        "+  const label = \"Hello\";",
+        "+  const punctuation = \"!\";",
+        "-  return `${label}, ${name}`;",
+        "+  return `${label}, ${name}${punctuation}`;",
+        " }"
+      ].join("\n");
+      const secondPatch = [
+        `--- a/${unifiedDiffSmokePathTwo}`,
+        `+++ b/${unifiedDiffSmokePathTwo}`,
+        "@@ -1,4 +1,3 @@",
+        " export const forgeUnifiedRetry = {",
+        "-  attempts: 2,",
+        "+  attempts: 3,",
+        "-  backoff: true",
+        " };"
+      ].join("\n");
+      return {
+        summary: "Apply a reviewable two-file source change through strict unified diffs.",
+        riskLevel: "Medium",
+        fileChanges: [
+          {
+            path: unifiedDiffSmokePathOne,
+            changeType: "Modify",
+            rationale: "Exercise context-anchored additions and replacements in a source file.",
+            diffPreview: firstPatch,
+            operationKind: "UnifiedDiff",
+            appendText: "",
+            findText: "",
+            replaceWith: "",
+            patchHunks: [],
+            unifiedDiff: firstPatch,
+            content: ""
+          },
+          {
+            path: unifiedDiffSmokePathTwo,
+            changeType: "Modify",
+            rationale: "Exercise a second-file replacement and deletion in the same reviewed transaction.",
+            diffPreview: secondPatch,
+            operationKind: "UnifiedDiff",
+            appendText: "",
+            findText: "",
+            replaceWith: "",
+            patchHunks: [],
+            unifiedDiff: secondPatch,
+            content: ""
+          }
+        ]
+      };
+    }
+
     if (bodyText.includes("Agent run loop smoke command repair")) {
       return {
         summary: "Fix the broken TypeScript fixture from the agent run loop command failure.",

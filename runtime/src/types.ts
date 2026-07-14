@@ -234,6 +234,11 @@ export interface PatchTextOperation {
   hunks: PatchTextHunk[];
 }
 
+export interface UnifiedDiffOperation {
+  kind: "UnifiedDiff";
+  patch: string;
+}
+
 export interface CreateFileOperation {
   kind: "CreateFile";
   content: string;
@@ -247,6 +252,7 @@ export type ProposedFileOperation =
   | AppendTextOperation
   | ReplaceTextOperation
   | PatchTextOperation
+  | UnifiedDiffOperation
   | CreateFileOperation
   | PreviewOnlyOperation;
 
@@ -283,7 +289,21 @@ export interface AppliedFileChange {
   beforeByteLength?: number;
   afterByteLength?: number;
   rollbackSnapshotPath?: string;
+  applyVerifiedAt?: string;
   rolledBackAt?: string;
+  rollbackVerifiedAt?: string;
+}
+
+export interface EditProposalFileTransaction {
+  id: string;
+  kind: "Apply" | "Rollback";
+  status: "Running" | "Completed" | "Recovered" | "RecoveryFailed";
+  paths: string[];
+  summary: string;
+  startedAt: string;
+  completedAt?: string;
+  verifiedAt?: string;
+  recoverySummary?: string;
 }
 
 export interface EditProposal {
@@ -304,6 +324,8 @@ export interface EditProposal {
   rollbackNote?: string;
   validation?: EditProposalValidation;
   appliedFileChanges?: AppliedFileChange[];
+  applyTransaction?: EditProposalFileTransaction;
+  rollbackTransaction?: EditProposalFileTransaction;
 }
 
 export interface ToolCall {

@@ -207,13 +207,11 @@ all later file changes.
 ### Edit Proposal Validator
 
 Checks proposed file changes against the current workspace before apply. The
-v0 validator confirms supported operation type, safe Markdown paths for append
-and create operations, safe allowlisted source/text paths for exact replace and
-patch operations, existing target file for modify operations, non-existing docs
-target for create operations, operation size, whether append text is already
-present at the file end, whether exact replace text appears exactly once, and
-whether every patch hunk appears exactly once in the original file and applies
-cleanly in order.
+validator confirms supported operation type, safe paths, unique proposal
+targets, existing modification targets, non-existing docs create targets, and
+bounded operation sizes. Unified Diff validation requires one matching file
+section, ordered ranges, exact hunk counts, and current-file context/deletion
+lines at every declared location.
 
 ### Edit Proposal Applier
 
@@ -221,19 +219,21 @@ Applies an explicitly approved proposal through restricted file operations.
 The v0 implementation supports append-text edits to existing Markdown files in
 `README.md` or `docs/`, exact replace-text edits to existing Markdown or
 allowlisted source/text files, multi-hunk exact patch-text edits to one
-existing Markdown or allowlisted source/text file, plus create-file edits for
-new `docs/*.md` files. It revalidates before writing, records before/after
-apply metadata for rollback, and records rejected or superseded proposals
-without touching files.
+existing Markdown or allowlisted source/text file, strict context-anchored
+Unified Diff modifications, plus create-file edits for new `docs/*.md` files.
+It revalidates the full proposal before writing, records a cross-file
+transaction, verifies every resulting SHA-256, and compensates already-written
+files if a later write fails. Recovery state remains persisted and auditable.
 
 ### Edit Proposal Rollback
 
 Rolls back an explicitly applied proposal through another guarded mutation
 endpoint. The runtime stores restore snapshots in `.forge/rollback-snapshots/`
 during apply, verifies current file hashes before rollback, restores previous
-contents or deletes files created by the proposal, records a rollback approval,
-and marks the proposal `RolledBack`. Rollback is blocked when the current file
-no longer matches the recorded post-apply hash.
+contents or deletes files created by the proposal, and verifies every result
+before marking the proposal `RolledBack`. If a later rollback file fails, the
+runtime attempts to reapply and verify already-restored files so the workspace
+returns to the prior applied state.
 
 ### Git Review Surface
 

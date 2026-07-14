@@ -123,6 +123,12 @@ Current restricted operation kinds:
   non-empty find and replacement text, each find text must appear exactly once
   in the original target file, and the runtime simulates the ordered patch
   before applying it.
+- `UnifiedDiff`: applies one standard context-anchored unified diff to one
+  existing allowlisted source/text file. Both headers must match the proposed
+  path; hunk counts/ranges must be ordered and exact; every context/deletion
+  line must match the current file at its declared location. It supports line
+  additions, replacements, and deletions, but not file create/delete or
+  `No newline at end of file` markers.
 - `CreateFile`: creates a new bounded Markdown file under `docs/` only; it
   never overwrites an existing target.
 - `PreviewOnly`: review artifact only; validation blocks apply.
@@ -134,6 +140,13 @@ before/after byte lengths when available, and the rollback strategy
 a local snapshot path under `.forge/rollback-snapshots/`. The runtime exposes
 `POST /tasks/:taskID/rollback-edit-proposal` to apply that rollback after
 current-file hash verification.
+
+Multi-file proposals use one compensated transaction. Validation rejects
+duplicate targets and simulates every operation before the first write. Each
+completed write is SHA-256 verified. If a later file fails, Forge restores and
+verifies files already written and records `Recovered`; compensation failures
+record `RecoveryFailed`. Explicit rollback uses the inverse boundary and
+attempts to return partially restored files to the verified applied state.
 
 Validation stores:
 
@@ -167,7 +180,8 @@ Post-apply validation stores:
 - A blocked generated proposal can be repaired automatically only within a
   bounded attempt limit and only by producing another review artifact.
 - Current v0 apply behavior supports `AppendText`, exact `ReplaceText`,
-  multi-hunk exact `PatchText`, and `CreateFile`.
+  multi-hunk exact `PatchText`, context-anchored `UnifiedDiff`, and
+  `CreateFile`.
 - Current v0 append behavior only writes existing Markdown files in
   `README.md` or `docs/*.md`.
 - Current v0 exact replace behavior can write existing allowlisted source/text
@@ -175,8 +189,12 @@ Post-apply validation stores:
 - Current v0 patch behavior can write existing allowlisted source/text files
   after strict path, size, hunk-count, original single-occurrence, and ordered
   simulation checks.
+- Current Unified Diff behavior can modify existing allowlisted source/text
+  files after strict path/header, size, hunk-count, declared-range/count, and
+  exact context checks.
 - Current v0 create behavior only writes new `docs/*.md` files.
-- Preview-only, delete, unsupported path, overwrite-create, or broad patch
+- Preview-only, file delete, unsupported path, overwrite-create, or unsupported
+  source create
   proposals may be shown for review but must validate as `Blocked`.
 - Absolute paths, parent-directory traversal, `.git`, and `.forge` paths are
   rejected.
@@ -187,6 +205,9 @@ Post-apply validation stores:
 - Apply is blocked if any patch hunk find text is missing, duplicated, appears
   more than once in the original file, cannot be applied in order, is identical
   to its replacement, or if any hunk/patch exceeds size limits.
+- Apply is blocked if a Unified Diff contains multiple file sections, unsafe
+  or mismatched headers, overlapping ranges, incorrect counts, stale context,
+  unsupported newline markers, or exceeds patch limits.
 - Apply is blocked for source/text targets outside the allowlist, generated
   directories, lockfiles, secret-like files, oversized files, or binary-looking
   content.
@@ -212,9 +233,7 @@ Post-apply validation stores:
 
 ## Future Work
 
-- Add richer cross-file patch orchestration after exact text-hunk validation is
-  mature.
-- Generate broader model-backed patch content while keeping runtime-owned
-  validation and review gates.
-- Add richer rollback revalidation and recovery UI for partially failed or
-  user-modified rollback attempts.
+- Add reviewed source-file creation/deletion after the modification path is
+  proven on real repositories.
+- Add crash-time recovery checkpoints for runtime termination mid-transaction.
+- Support newline-marker changes without weakening exact pre-apply checks.

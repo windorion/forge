@@ -3,15 +3,16 @@
 Document role: record the current product state, objective completion estimate,
 major gaps, and what "finished" means at each product horizon.
 
-Last updated: 2026-07-13
+Last updated: 2026-07-14
 
 ## One-Line Status
 
 Forge is a strong trust/runtime foundation with a first-pass coding-agent
 session shell and a usable full-screen diff review surface in the macOS app.
 It can create tasks, inspect bounded repo context, hold review gates, generate
-safe edit proposals, apply restricted Markdown edits, exact source/text
-replacements, and multi-hunk source/text patches, validate work, expose
+  safe edit proposals, apply restricted Markdown edits, exact source/text
+  replacements, multi-hunk patches, and context-anchored unified diffs across
+  reviewed source files, validate work, expose
 guarded git actions, run approved task-scoped commands with streamed output,
 record rerun evidence after reviewed self-fixes, let a model provider choose
 safe next agent steps inside a bounded multi-step loop, and persist task state
@@ -76,6 +77,15 @@ Implemented:
   source/text files. Each hunk must have exact find/replace text, the find
   text must appear exactly once in the original file, and hunks are simulated
   in order before apply.
+- Restricted `UnifiedDiff` operations for normal modifications to existing
+  allowlisted source/text files. The runtime requires one file per diff,
+  matching `---`/`+++` paths, bounded ordered hunks, exact declared line
+  counts, and current-file context/deletion matches before apply.
+- Cross-file apply/rollback transactions with duplicate-path rejection,
+  per-file apply and rollback hash verification, durable transaction status,
+  automatic compensation after partial apply, and recovery back to the
+  applied state after partial rollback. The full diff review shows this
+  recovery evidence.
 - Restricted `CreateFile` apply for new Markdown files under `docs/`.
 - Edit proposal validation before apply and immediate revalidation during
   apply.
@@ -186,8 +196,9 @@ Implemented:
 - Core runtime smoke regression command covering create task, file-reference
   messages, plan revision, plan approval, edit proposal generation,
   validation, apply, built-in post-apply validation, append/replace operations,
-  exact source-file replace, multi-hunk source patch, applied-file rollback
-  metadata, explicit source replace/patch rollback, restricted docs create-file
+  exact source-file replace, multi-hunk and two-file Unified Diff source
+  patches, applied-file/rollback hash verification, automatic partial-apply
+  recovery, explicit source patch rollback, restricted docs create-file
   apply, SQLite restart recovery, runtime health diagnostics, model-provider
   settings GET/POST, fake-key handling without secret persistence, a mock
   OpenAI model-guided context loop, provider-selected agent run step and
@@ -218,8 +229,8 @@ These percentages are product-readiness estimates, not calendar estimates.
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 76-80% | Has a first-pass session UI shell, full-screen diff review surface, exact source replace, multi-hunk source patches, streamed/cancellable selectable task commands, failed-command self-fix rerun evidence, and a bounded provider-selected multi-step loop, but still needs richer read/search/patch orchestration and UI polish before it feels like Codex or Claude Code. |
-| Useful developer alpha | 35-45% | A developer cannot yet rely on Forge like Codex or Claude Code for normal coding tasks. It needs real patching, command execution, recovery, and a stronger model-backed run loop. |
+| Coding-agent demo V0 | 80-84% | Has a first-pass session UI shell, full-screen diff review, context-anchored cross-file source patches with verified recovery, streamed/cancellable commands, self-fix rerun evidence, and a bounded provider-selected loop; richer read/search orchestration, loop controls, and UI polish remain. |
+| Useful developer alpha | 40-50% | Forge can now apply guarded normal source modifications, but still needs richer autonomous tool use, source create/delete, restart recovery, and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
 
@@ -255,8 +266,8 @@ Remaining V0 gaps:
 - polish the first-pass `1a`/`1b`/`14a` shell toward the exact handoff
 - polish the first usable `10a` full-screen diff review toward exact handoff
   behavior and durable per-file decisions
-- broaden source-file patch proposals beyond exact text hunks and harden
-  rollback revalidation/recovery
+- extend the restricted Unified Diff engine to source-file create/delete and
+  newline-marker edge cases after the modification path proves stable
 - extend the bounded agent loop with richer read/search tool choices,
   pause/abort/resume, and broader patch/recovery behavior
 - implement full diff review with per-file reasoning and request-change loop
@@ -271,7 +282,7 @@ with a model provider while preserving human review.
 Alpha requires:
 
 - richer provider-backed read/search/patch/run/repair in normal flows
-- a richer patch format and rollback/recovery
+- source-file create/delete support and crash-time transaction recovery
 - full diff review matching the design handoff
 - streamed terminal/test output in the task
 - git status, changed-file inspection, commit preparation, local commit,

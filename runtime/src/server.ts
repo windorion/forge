@@ -104,6 +104,8 @@ const repositoryContextMaxFileBytes = 220_000;
 const editProposalTextOperationMaxChars = 10_000;
 const editProposalPatchMaxHunks = 8;
 const editProposalPatchMaxTotalChars = 40_000;
+const editProposalUnifiedDiffMaxHunks = 16;
+const editProposalUnifiedDiffMaxChars = 60_000;
 const editProposalCreateFileMaxChars = 20_000;
 const editProposalEditableFileMaxBytes = 220_000;
 const gitDiffMaxBytes = 48_000;
@@ -6465,16 +6467,29 @@ async function applyEditProposal(
 
   const started = event("edit.proposal.apply.started", "Applying approved edit proposal.");
   started.createdAt = new Date().toISOString();
+  task.editProposal.applyTransaction = {
+    id: randomUUID(),
+    kind: "Apply",
+    status: "Running",
+    paths: task.editProposal.fileChanges.map((change) => change.path),
+    summary: "Preflight passed; applying the reviewed cross-file change set.",
+    startedAt: started.createdAt
+  };
   saveAndBroadcast(task, started);
 
+  const appliedFileChanges: AppliedFileChange[] = [];
   try {
-    const appliedFileChanges: AppliedFileChange[] = [];
     for (const change of task.editProposal.fileChanges) {
       const appliedChange = await applyProposedFileChange(task.editProposal.id, change);
       appliedFileChanges.push(appliedChange);
+      appliedChange.applyVerifiedAt = await verifyAppliedFileChange(appliedChange);
     }
 
     const now = new Date().toISOString();
+    task.editProposal.applyTransaction.status = "Completed";
+    task.editProposal.applyTransaction.summary = `Applied and hash-verified ${appliedFileChanges.length} file change(s).`;
+    task.editProposal.applyTransaction.completedAt = now;
+    task.editProposal.applyTransaction.verifiedAt = now;
     task.editProposal.status = "Applied";
     task.editProposal.decidedAt = now;
     task.editProposal.decisionNote = input.note?.trim() || undefined;
@@ -6521,9 +6536,30 @@ async function applyEditProposal(
     }
     return runValidation(task.id, "PostApply");
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const originalMessage = error instanceof Error ? error.message : String(error);
+    const recovery = await recoverPartialApply(appliedFileChanges);
+    const now = new Date().toISOString();
+    task.editProposal.applyTransaction.status = recovery.succeeded ? "Recovered" : "RecoveryFailed";
+    task.editProposal.applyTransaction.completedAt = now;
+    task.editProposal.applyTransaction.recoverySummary = recovery.summary;
+    task.editProposal.applyTransaction.summary = recovery.succeeded
+      ? "Cross-file apply failed; already-written files were restored and verified."
+      : "Cross-file apply failed and automatic recovery could not restore every written file.";
+    if (recovery.succeeded) {
+      task.editProposal.applyTransaction.verifiedAt = now;
+      task.editProposal.status = "Proposed";
+      task.editProposal.decidedAt = undefined;
+      task.editProposal.decisionNote = undefined;
+      task.changedFiles = [];
+      const applyApproval = [...task.approvals].reverse().find((approval) => approval.action === "Apply Edit Proposal");
+      if (applyApproval) {
+        applyApproval.summary = `Apply was approved but automatically recovered after a cross-file failure: ${recovery.summary}`;
+      }
+    }
+    task.editProposal.appliedFileChanges = appliedFileChanges;
+    const message = `${originalMessage} ${recovery.summary}`.trim();
     task.status = "Failed";
-    task.currentPhase = "Apply Failed";
+    task.currentPhase = recovery.succeeded ? "Apply Recovered" : "Apply Recovery Required";
     task.reviewSummary = message;
     setAgent(task, "Coder", "Blocked", "Could not apply the approved edit proposal.");
     setAgent(task, "Reviewer", "Active", "Review the apply failure before retrying.");
@@ -6534,10 +6570,10 @@ async function applyEditProposal(
       summary: message
     });
 
-    const failed = event("edit.proposal.apply.failed", message);
-    failed.createdAt = new Date().toISOString();
+    const failed = event(recovery.succeeded ? "edit.proposal.apply.recovered" : "edit.proposal.apply.recovery_failed", message);
+    failed.createdAt = now;
     saveAndBroadcast(task, failed);
-    throw error;
+    throw new HttpError(error instanceof HttpError ? error.status : 500, message);
   }
 }
 
@@ -6573,25 +6609,41 @@ async function rollbackEditProposal(
 
   const started = event("edit.proposal.rollback.started", "Rolling back applied edit proposal.");
   started.createdAt = new Date().toISOString();
+  task.editProposal.rollbackTransaction = {
+    id: randomUUID(),
+    kind: "Rollback",
+    status: "Running",
+    paths: appliedFileChanges.map((change) => change.path),
+    summary: "Verifying applied hashes before restoring the reviewed change set.",
+    startedAt: started.createdAt
+  };
   saveAndBroadcast(task, started);
 
+  let attemptedRollbackOperations: PreparedRollbackOperation[] = [];
   try {
-    const rollbackOperations = [];
+    const rollbackOperations: PreparedRollbackOperation[] = [];
     for (const appliedChange of appliedFileChanges) {
       rollbackOperations.push(await prepareAppliedFileRollback(appliedChange));
     }
 
     for (const operation of rollbackOperations) {
+      attemptedRollbackOperations.push(operation);
       await operation.rollback();
+      await operation.verifyRolledBack();
     }
 
     const now = new Date().toISOString();
     for (const appliedChange of appliedFileChanges) {
       appliedChange.rolledBackAt = now;
+      appliedChange.rollbackVerifiedAt = now;
     }
 
     const rolledBackFiles = [...new Set(rollbackOperations.map((operation) => operation.relativePath))];
     task.editProposal.status = "RolledBack";
+    task.editProposal.rollbackTransaction.status = "Completed";
+    task.editProposal.rollbackTransaction.summary = `Restored and hash-verified ${rollbackOperations.length} file change(s).`;
+    task.editProposal.rollbackTransaction.completedAt = now;
+    task.editProposal.rollbackTransaction.verifiedAt = now;
     task.editProposal.rolledBackAt = now;
     task.editProposal.rollbackNote = input.note?.trim() || undefined;
     task.status = "Human Review";
@@ -6622,9 +6674,21 @@ async function rollbackEditProposal(
     saveAndBroadcast(task, rolledBack);
     return task;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const originalMessage = error instanceof Error ? error.message : String(error);
+    const recovery = await recoverPartialRollback(attemptedRollbackOperations);
+    const now = new Date().toISOString();
+    task.editProposal.rollbackTransaction.status = recovery.succeeded ? "Recovered" : "RecoveryFailed";
+    task.editProposal.rollbackTransaction.completedAt = now;
+    task.editProposal.rollbackTransaction.recoverySummary = recovery.summary;
+    task.editProposal.rollbackTransaction.summary = recovery.succeeded
+      ? "Rollback failed; the already-restored files were returned to the verified applied state."
+      : "Rollback failed and automatic recovery could not restore the applied state.";
+    if (recovery.succeeded) {
+      task.editProposal.rollbackTransaction.verifiedAt = now;
+    }
+    const message = `${originalMessage} ${recovery.summary}`.trim();
     task.status = "Failed";
-    task.currentPhase = "Rollback Failed";
+    task.currentPhase = recovery.succeeded ? "Rollback Recovered" : "Rollback Recovery Required";
     task.reviewSummary = message;
     setAgent(task, "Coder", "Blocked", "Could not roll back the applied edit proposal.");
     setAgent(task, "Reviewer", "Active", "Review the rollback failure before retrying.");
@@ -6635,10 +6699,10 @@ async function rollbackEditProposal(
       summary: message
     });
 
-    const failed = event("edit.proposal.rollback.failed", message);
-    failed.createdAt = new Date().toISOString();
+    const failed = event(recovery.succeeded ? "edit.proposal.rollback.recovered" : "edit.proposal.rollback.recovery_failed", message);
+    failed.createdAt = now;
     saveAndBroadcast(task, failed);
-    throw error;
+    throw new HttpError(error instanceof HttpError ? error.status : 500, message);
   }
 }
 
@@ -7740,6 +7804,20 @@ async function validateReadyProposalValidation(task: ForgeTask): Promise<string>
 
 async function buildEditProposalValidation(fileChanges: ProposedFileChange[]): Promise<EditProposalValidation> {
   const fileResults = await Promise.all(fileChanges.map(validateProposedFileChange));
+  const pathCounts = new Map<string, number>();
+  for (const result of fileResults) {
+    const normalizedPath = path.posix.normalize(result.path.replaceAll("\\", "/").replace(/^\.\/+/, ""));
+    pathCounts.set(normalizedPath, (pathCounts.get(normalizedPath) ?? 0) + 1);
+  }
+
+  for (const result of fileResults) {
+    const normalizedPath = path.posix.normalize(result.path.replaceAll("\\", "/").replace(/^\.\/+/, ""));
+    if ((pathCounts.get(normalizedPath) ?? 0) > 1) {
+      result.status = "Blocked";
+      result.summary = `Proposal contains more than one change for ${normalizedPath}; cross-file apply requires one operation per path.`;
+      result.checks.push("Duplicate target paths are blocked before cross-file apply.");
+    }
+  }
   const blockedCount = fileResults.filter((result) => result.status === "Blocked").length;
   const status: EditProposalValidation["status"] = blockedCount > 0 ? "Blocked" : "Ready";
   const summary =
@@ -7929,6 +8007,22 @@ async function validateProposedFileChange(change: ProposedFileChange): Promise<F
         path: relativePath,
         status: "Ready",
         summary: `${relativePath} is ready for ${operation.hunks.length} restricted patch-text hunk(s).`,
+        checks
+      };
+    }
+
+    if (operation.kind === "UnifiedDiff") {
+      checks.push("Apply operation is unified-diff.");
+      const nextContent = validateUnifiedDiffOperation(operation, currentContent, relativePath, checks);
+      if (nextContent === currentContent) {
+        return blockedValidation(change, `Unified diff would not change ${relativePath}.`, checks);
+      }
+
+      return {
+        id: change.id,
+        path: relativePath,
+        status: "Ready",
+        summary: `${relativePath} is ready for a context-anchored unified diff apply.`,
         checks
       };
     }
@@ -8290,13 +8384,105 @@ async function applyProposedFileChange(
     });
   }
 
+  if (operation.kind === "UnifiedDiff") {
+    const nextContent = validateUnifiedDiffOperation(operation, currentContent, relativePath);
+    if (nextContent === currentContent) {
+      throw new HttpError(409, `Unified diff would not change ${relativePath}.`);
+    }
+
+    const rollbackSnapshotPath = await writeRollbackSnapshot(proposalID, change.id, currentContent);
+    await writeFile(absolutePath, nextContent, "utf8");
+    const afterContent = await readFile(absolutePath, "utf8");
+    return buildAppliedFileChange({
+      relativePath,
+      proposalFileChangeID: change.id,
+      operationKind: operation.kind,
+      appliedAt,
+      beforeContent: currentContent,
+      afterContent,
+      rollbackSnapshotPath,
+      rollbackKind: "RestorePreviousContent",
+      rollbackSummary: `Restore the previous full contents of ${relativePath}.`
+    });
+  }
+
   throw new HttpError(409, `Unsupported apply operation for ${relativePath}.`);
 }
 
 type PreparedRollbackOperation = {
   relativePath: string;
   rollback: () => Promise<void>;
+  reapply: () => Promise<void>;
+  verifyRolledBack: () => Promise<void>;
+  verifyApplied: () => Promise<void>;
 };
+
+async function verifyAppliedFileChange(appliedChange: AppliedFileChange): Promise<string> {
+  const { absolutePath, relativePath } = resolveEditableWorkspacePath(appliedChange.path);
+  const currentContent = await readFile(absolutePath, "utf8");
+  verifyCurrentContentForRollback(appliedChange, currentContent, relativePath);
+  return new Date().toISOString();
+}
+
+async function recoverPartialApply(
+  appliedFileChanges: AppliedFileChange[]
+): Promise<{ succeeded: boolean; summary: string }> {
+  if (appliedFileChanges.length === 0) {
+    return { succeeded: true, summary: "No file write completed before the failure." };
+  }
+
+  try {
+    const operations: PreparedRollbackOperation[] = [];
+    for (const appliedChange of [...appliedFileChanges].reverse()) {
+      operations.push(await prepareAppliedFileRollback(appliedChange));
+    }
+
+    const recoveredAt = new Date().toISOString();
+    for (const operation of operations) {
+      await operation.rollback();
+      await operation.verifyRolledBack();
+    }
+    for (const appliedChange of appliedFileChanges) {
+      appliedChange.rolledBackAt = recoveredAt;
+      appliedChange.rollbackVerifiedAt = recoveredAt;
+    }
+    return {
+      succeeded: true,
+      summary: `Automatic recovery restored and verified ${appliedFileChanges.length} previously written file(s).`
+    };
+  } catch (recoveryError) {
+    const detail = recoveryError instanceof Error ? recoveryError.message : String(recoveryError);
+    return {
+      succeeded: false,
+      summary: `Automatic apply recovery failed: ${detail}`
+    };
+  }
+}
+
+async function recoverPartialRollback(
+  attemptedOperations: PreparedRollbackOperation[]
+): Promise<{ succeeded: boolean; summary: string }> {
+  if (attemptedOperations.length === 0) {
+    return { succeeded: true, summary: "Rollback stopped before any file restore was attempted." };
+  }
+
+  try {
+    for (const operation of [...attemptedOperations].reverse()) {
+      await operation.reapply();
+      await operation.verifyApplied();
+    }
+    return {
+      succeeded: true,
+      summary: `Automatic rollback recovery restored and verified the applied state for ${attemptedOperations.length} file(s).`
+    };
+  } catch (recoveryError) {
+    const detail = recoveryError instanceof Error ? recoveryError.message : String(recoveryError);
+    return {
+      succeeded: false,
+      summary: `Automatic rollback recovery failed: ${detail}`
+    };
+  }
+}
 
 async function prepareAppliedFileRollback(appliedChange: AppliedFileChange): Promise<PreparedRollbackOperation> {
   if (appliedChange.rolledBackAt) {
@@ -8312,6 +8498,26 @@ async function prepareAppliedFileRollback(appliedChange: AppliedFileChange): Pro
       relativePath,
       rollback: async () => {
         await unlink(absolutePath);
+      },
+      reapply: async () => {
+        await writeFile(absolutePath, currentContent, { encoding: "utf8", flag: "wx" });
+      },
+      verifyRolledBack: async () => {
+        try {
+          await stat(absolutePath);
+          throw new HttpError(409, `Rollback verification expected ${relativePath} to be absent.`);
+        } catch (error) {
+          if (error instanceof HttpError) {
+            throw error;
+          }
+          if (!isNodeError(error) || error.code !== "ENOENT") {
+            throw error;
+          }
+        }
+      },
+      verifyApplied: async () => {
+        const content = await readFile(absolutePath, "utf8");
+        verifyCurrentContentForRollback(appliedChange, content, relativePath);
       }
     };
   }
@@ -8335,6 +8541,19 @@ async function prepareAppliedFileRollback(appliedChange: AppliedFileChange): Pro
       relativePath,
       rollback: async () => {
         await writeFile(absolutePath, snapshot, "utf8");
+      },
+      reapply: async () => {
+        await writeFile(absolutePath, currentContent, "utf8");
+      },
+      verifyRolledBack: async () => {
+        const restoredContent = await readFile(absolutePath, "utf8");
+        if (!appliedChange.beforeSha256 || sha256Text(restoredContent) !== appliedChange.beforeSha256) {
+          throw new HttpError(409, `Rollback verification failed for restored file ${relativePath}.`);
+        }
+      },
+      verifyApplied: async () => {
+        const reappliedContent = await readFile(absolutePath, "utf8");
+        verifyCurrentContentForRollback(appliedChange, reappliedContent, relativePath);
       }
     };
   }
@@ -8368,7 +8587,7 @@ async function writeRollbackSnapshot(
   const directory = path.join(rollbackSnapshotRoot, safeSnapshotSegment(proposalID));
   await mkdir(directory, { recursive: true });
 
-  const absolutePath = path.join(directory, `${safeSnapshotSegment(fileChangeID)}.before`);
+  const absolutePath = path.join(directory, `${safeSnapshotSegment(fileChangeID)}-${randomUUID()}.before`);
   await writeFile(absolutePath, content, { encoding: "utf8", flag: "wx" });
   return repoRelativePath(absolutePath);
 }
@@ -8535,6 +8754,185 @@ function validatePatchTextOperation(
   checks?.push("Patch hunks apply cleanly in order.");
 
   return nextContent;
+}
+
+type UnifiedDiffLine = { kind: "Context" | "Add" | "Delete"; text: string };
+
+type UnifiedDiffHunk = {
+  oldStart: number;
+  oldCount: number;
+  newStart: number;
+  newCount: number;
+  lines: UnifiedDiffLine[];
+};
+
+function validateUnifiedDiffOperation(
+  operation: Extract<NonNullable<ProposedFileChange["applyOperation"]>, { kind: "UnifiedDiff" }>,
+  currentContent: string,
+  relativePath: string,
+  checks?: string[]
+): string {
+  if (operation.patch.length === 0) {
+    throw new HttpError(409, `UnifiedDiff patch is empty: ${relativePath}`);
+  }
+
+  if (operation.patch.length > editProposalUnifiedDiffMaxChars) {
+    throw new HttpError(409, `UnifiedDiff patch is too large for restricted apply: ${relativePath}`);
+  }
+  checks?.push("Unified diff size is within the restricted apply limit.");
+
+  const { oldPath, newPath, hunks } = parseUnifiedDiff(operation.patch, relativePath);
+  if (oldPath !== relativePath || newPath !== relativePath) {
+    throw new HttpError(
+      409,
+      `UnifiedDiff headers must both target ${relativePath}; received ${oldPath} and ${newPath}.`
+    );
+  }
+  checks?.push("Unified diff headers match the proposed file path.");
+
+  if (hunks.length === 0) {
+    throw new HttpError(409, `UnifiedDiff requires at least one hunk: ${relativePath}`);
+  }
+
+  if (hunks.length > editProposalUnifiedDiffMaxHunks) {
+    throw new HttpError(409, `UnifiedDiff has too many hunks for restricted apply: ${relativePath}`);
+  }
+  checks?.push(`Unified diff hunk count is within the limit (${hunks.length}/${editProposalUnifiedDiffMaxHunks}).`);
+
+  const lineEnding = currentContent.includes("\r\n") ? "\r\n" : "\n";
+  const normalizedContent = lineEnding === "\r\n" ? currentContent.replaceAll("\r\n", "\n") : currentContent;
+  const trailingNewline = normalizedContent.endsWith("\n");
+  const sourceLines = normalizedContent.length === 0 ? [] : normalizedContent.split("\n");
+  if (trailingNewline && sourceLines.length > 0) {
+    sourceLines.pop();
+  }
+
+  const outputLines: string[] = [];
+  let sourceCursor = 0;
+  for (const [hunkIndex, hunk] of hunks.entries()) {
+    const sourceStart = hunk.oldCount === 0 ? hunk.oldStart : hunk.oldStart - 1;
+    const outputStart = hunk.newCount === 0 ? hunk.newStart : hunk.newStart - 1;
+    if (sourceStart < sourceCursor || sourceStart > sourceLines.length) {
+      throw new HttpError(409, `UnifiedDiff hunk ${hunkIndex + 1} has an invalid or overlapping old range: ${relativePath}`);
+    }
+
+    outputLines.push(...sourceLines.slice(sourceCursor, sourceStart));
+    if (outputLines.length !== outputStart) {
+      throw new HttpError(409, `UnifiedDiff hunk ${hunkIndex + 1} new range does not follow prior hunks: ${relativePath}`);
+    }
+
+    let hunkSourceCursor = sourceStart;
+    for (const line of hunk.lines) {
+      if (line.kind === "Add") {
+        outputLines.push(line.text);
+        continue;
+      }
+
+      const currentLine = sourceLines[hunkSourceCursor];
+      if (currentLine !== line.text) {
+        throw new HttpError(
+          409,
+          `UnifiedDiff hunk ${hunkIndex + 1} context mismatch at source line ${hunkSourceCursor + 1}: ${relativePath}`
+        );
+      }
+
+      if (line.kind === "Context") {
+        outputLines.push(currentLine);
+      }
+      hunkSourceCursor += 1;
+    }
+    sourceCursor = hunkSourceCursor;
+  }
+
+  outputLines.push(...sourceLines.slice(sourceCursor));
+  checks?.push("Every unified diff context and deletion line matches the current file at its declared range.");
+  const normalizedNextContent = `${outputLines.join("\n")}${trailingNewline ? "\n" : ""}`;
+  return lineEnding === "\r\n" ? normalizedNextContent.replaceAll("\n", "\r\n") : normalizedNextContent;
+}
+
+function parseUnifiedDiff(
+  patchText: string,
+  relativePath: string
+): { oldPath: string; newPath: string; hunks: UnifiedDiffHunk[] } {
+  const lines = patchText.replaceAll("\r\n", "\n").split("\n");
+  if (lines.at(-1) === "") {
+    lines.pop();
+  }
+
+  if (!lines[0]?.startsWith("--- ") || !lines[1]?.startsWith("+++ ")) {
+    throw new HttpError(409, `UnifiedDiff requires --- and +++ file headers: ${relativePath}`);
+  }
+
+  const oldPath = normalizeUnifiedDiffHeaderPath(lines[0].slice(4), relativePath);
+  const newPath = normalizeUnifiedDiffHeaderPath(lines[1].slice(4), relativePath);
+  const hunks: UnifiedDiffHunk[] = [];
+  let index = 2;
+  while (index < lines.length) {
+    const header = lines[index];
+    if (!header) {
+      index += 1;
+      continue;
+    }
+
+    const match = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?: .*)?$/.exec(header);
+    if (!match) {
+      throw new HttpError(409, `UnifiedDiff contains unsupported content outside a hunk: ${relativePath}`);
+    }
+
+    const oldStart = Number(match[1]);
+    const oldCount = match[2] === undefined ? 1 : Number(match[2]);
+    const newStart = Number(match[3]);
+    const newCount = match[4] === undefined ? 1 : Number(match[4]);
+    index += 1;
+    const hunkLines: UnifiedDiffLine[] = [];
+    while (index < lines.length && !lines[index].startsWith("@@ ")) {
+      const line = lines[index];
+      if (line === "\\ No newline at end of file") {
+        throw new HttpError(409, `UnifiedDiff newline-marker changes are not supported: ${relativePath}`);
+      }
+
+      const prefix = line[0];
+      if (prefix !== " " && prefix !== "+" && prefix !== "-") {
+        throw new HttpError(409, `UnifiedDiff hunk contains an invalid line prefix: ${relativePath}`);
+      }
+
+      hunkLines.push({
+        kind: prefix === " " ? "Context" : prefix === "+" ? "Add" : "Delete",
+        text: line.slice(1)
+      });
+      index += 1;
+    }
+
+    const actualOldCount = hunkLines.filter((line) => line.kind !== "Add").length;
+    const actualNewCount = hunkLines.filter((line) => line.kind !== "Delete").length;
+    if (actualOldCount !== oldCount || actualNewCount !== newCount) {
+      throw new HttpError(
+        409,
+        `UnifiedDiff hunk line counts do not match its header (${actualOldCount}/${oldCount} old, ${actualNewCount}/${newCount} new): ${relativePath}`
+      );
+    }
+
+    if (hunkLines.length === 0) {
+      throw new HttpError(409, `UnifiedDiff hunk is empty: ${relativePath}`);
+    }
+    hunks.push({ oldStart, oldCount, newStart, newCount, lines: hunkLines });
+  }
+
+  return { oldPath, newPath, hunks };
+}
+
+function normalizeUnifiedDiffHeaderPath(value: string, relativePath: string): string {
+  const rawPath = value.split("\t", 1)[0].trim();
+  if (rawPath === "/dev/null") {
+    throw new HttpError(409, `UnifiedDiff cannot create or delete files: ${relativePath}`);
+  }
+
+  const withoutPrefix = rawPath.startsWith("a/") || rawPath.startsWith("b/") ? rawPath.slice(2) : rawPath;
+  const normalized = path.posix.normalize(withoutPrefix.replaceAll("\\", "/"));
+  if (!normalized || normalized === "." || normalized === ".." || normalized.startsWith("../") || normalized.startsWith("/")) {
+    throw new HttpError(409, `UnifiedDiff contains an unsafe file header: ${relativePath}`);
+  }
+  return normalized;
 }
 
 function resolveMarkdownWorkspacePath(inputPath: string): { absolutePath: string; relativePath: string } {

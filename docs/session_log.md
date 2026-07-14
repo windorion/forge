@@ -3124,3 +3124,46 @@ Next:
 - Broaden source patch proposal/apply beyond exact text hunks and harden
   rollback revalidation/recovery.
 - Add pause/abort/resume and stuck-task recovery controls for bounded loops.
+
+## 2026-07-14 07:38:07 CEST
+
+Conversation summary:
+
+- User asked to inspect the repository from `main`, choose the next long task,
+  avoid unnecessary questions, and complete as much as possible. The session
+  implemented the top V0 patch/recovery item after the bounded agent loop.
+
+Done:
+
+- Added a restricted `UnifiedDiff` operation for normal modifications to
+  existing allowlisted source/text files, including strict file-header, path,
+  size, hunk-count, range/count, order, and current-context validation.
+- Added duplicate-target rejection and durable cross-file apply/rollback
+  transaction records with per-file SHA-256 verification.
+- Added automatic compensation after partial apply and recovery back to the
+  applied state after partial rollback, with `Recovered`/`RecoveryFailed`
+  phases and SSE audit events.
+- Added unique rollback snapshots plus apply/rollback verification timestamps
+  to persisted file-change evidence.
+- Updated macOS decoding and full diff review with Unified Diff summaries and
+  visible changeset transaction/recovery evidence.
+- Extended `npm run smoke:core` with a two-file Unified Diff apply/rollback and
+  a real read-only second-file failure that verifies the first file is restored
+  automatically.
+- Verified `npm run check`, `npm run smoke:core`, `swift build`, and
+  `git diff --check`.
+
+Not done:
+
+- Source-file create/delete and Unified Diff newline-marker changes remain
+  preview-only/blocked.
+- Crash-time recovery for a runtime terminated mid-transaction is not yet
+  implemented; current compensation handles in-process failures.
+- Agent Run Loop pause/abort/resume and richer runtime-owned read/search tools
+  remain outstanding.
+
+Next:
+
+- Add pause/abort/resume and visible stuck-task recovery to Agent Run Loop.
+- Then extend runtime-owned read/search tool choices inside the same safety
+  boundary.

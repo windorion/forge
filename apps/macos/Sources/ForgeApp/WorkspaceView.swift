@@ -1366,6 +1366,11 @@ private struct FullscreenDiffReview: View {
                 .padding(12)
                 .forgeCard(shadow: false)
 
+                if let proposal = task.editProposal,
+                   proposal.applyTransaction != nil || proposal.rollbackTransaction != nil {
+                    ProposalTransactionEvidenceCard(proposal: proposal)
+                }
+
                 VStack(alignment: .leading, spacing: 8) {
                     Text("FILE REVIEW")
                         .font(.system(size: 10, weight: .bold, design: .monospaced))
@@ -6616,6 +6621,8 @@ private struct OperationSummaryRow: View {
             return "ReplaceText / \(operation.findText?.count ?? 0) -> \(operation.replaceWith?.count ?? 0) chars"
         case "PatchText":
             return "PatchText / \(operation.hunks?.count ?? 0) hunk(s)"
+        case "UnifiedDiff":
+            return "UnifiedDiff / \(operation.patch?.count ?? 0) chars"
         case "CreateFile":
             return "CreateFile / \(operation.content?.count ?? 0) chars"
         case "PreviewOnly":
@@ -6633,6 +6640,8 @@ private struct OperationSummaryRow: View {
             return "arrow.left.arrow.right"
         case "PatchText":
             return "rectangle.stack.badge.plus"
+        case "UnifiedDiff":
+            return "arrow.triangle.branch"
         case "CreateFile":
             return "doc.badge.plus"
         case "PreviewOnly":
@@ -6655,12 +6664,95 @@ private struct OperationSummaryRow: View {
         switch operation.kind {
         case "PatchText":
             return "Apply-ready only when every hunk has one exact match in the original file."
+        case "UnifiedDiff":
+            return "Apply-ready only when file headers, ranges, counts, and context lines match the current file."
         case "CreateFile":
             return "Apply-ready only for new docs/*.md files after runtime validation."
         case "PreviewOnly":
             return "Review artifact only; revise or wait for a future patch engine before applying."
         default:
             return nil
+        }
+    }
+}
+
+private struct ProposalTransactionEvidenceCard: View {
+    var proposal: EditProposal
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("CHANGESET RECOVERY")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(ForgeDesign.muted)
+
+            if let transaction = proposal.applyTransaction {
+                transactionRow(transaction)
+            }
+
+            if let transaction = proposal.rollbackTransaction {
+                transactionRow(transaction)
+            }
+
+            let verifiedApplyCount = proposal.appliedFileChanges?.filter { $0.applyVerifiedAt != nil }.count ?? 0
+            let verifiedRollbackCount = proposal.appliedFileChanges?.filter { $0.rollbackVerifiedAt != nil }.count ?? 0
+            if verifiedApplyCount > 0 || verifiedRollbackCount > 0 {
+                Text("HASH VERIFIED  APPLY \(verifiedApplyCount)  /  ROLLBACK \(verifiedRollbackCount)")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(ForgeDesign.muted)
+            }
+        }
+        .padding(12)
+        .forgeCard(shadow: false)
+    }
+
+    @ViewBuilder
+    private func transactionRow(_ transaction: EditProposalFileTransaction) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Label(transaction.kind.uppercased(), systemImage: transactionIcon(transaction))
+                    .font(.caption.weight(.bold))
+                Spacer()
+                Text(transaction.status.uppercased())
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(transactionColor(transaction))
+            }
+            Text(transaction.summary)
+                .font(.caption)
+                .foregroundStyle(ForgeDesign.ink)
+            Text("\(transaction.paths.count) file(s) / \(transaction.verifiedAt == nil ? "verification pending" : "hash verified")")
+                .font(.caption2.monospaced())
+                .foregroundStyle(ForgeDesign.muted)
+            if let recoverySummary = transaction.recoverySummary {
+                Text(recoverySummary)
+                    .font(.caption2)
+                    .foregroundStyle(transactionColor(transaction))
+            }
+        }
+    }
+
+    private func transactionIcon(_ transaction: EditProposalFileTransaction) -> String {
+        switch transaction.status {
+        case "Completed":
+            return "checkmark.shield"
+        case "Recovered":
+            return "arrow.uturn.backward.circle"
+        case "RecoveryFailed":
+            return "exclamationmark.triangle"
+        default:
+            return "hourglass"
+        }
+    }
+
+    private func transactionColor(_ transaction: EditProposalFileTransaction) -> Color {
+        switch transaction.status {
+        case "Completed":
+            return ForgeDesign.success
+        case "Recovered":
+            return ForgeDesign.warning
+        case "RecoveryFailed":
+            return ForgeDesign.danger
+        default:
+            return ForgeDesign.accent
         }
     }
 }
