@@ -90,6 +90,9 @@ import type {
 const startedAt = Date.now();
 const port = Number(process.env.FORGE_RUNTIME_PORT ?? 17373);
 const observerMode = process.env.FORGE_RUNTIME_MODE === "observer";
+const runtimeAuthorizationID = process.env.FORGE_RUNTIME_AUTHORIZATION_ID?.trim();
+const runtimeAuthorizedAt = process.env.FORGE_RUNTIME_AUTHORIZED_AT?.trim();
+const modelProviderLock = process.env.FORGE_MODEL_PROVIDER_LOCK === "local" ? "local" : undefined;
 const eventClients = new Set<ServerResponse>();
 const runtimeDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolveRepoRoot(runtimeDir);
@@ -526,6 +529,9 @@ const server = createServer(async (request, response) => {
         version: "0.1.0",
         runtimeMode: observerMode ? "observer" : "primary",
         readOnly: observerMode,
+        runtimeAuthorization: runtimeAuthorizationID && runtimeAuthorizedAt
+          ? { id: runtimeAuthorizationID, authorizedAt: runtimeAuthorizedAt, scope: "repository-active" }
+          : undefined,
         uptimeSeconds: (Date.now() - startedAt) / 1000,
         modelProvider: modelProvider.info,
         modelProviderConfiguration: getModelProviderConfiguration(modelProviderSettings),
@@ -4673,19 +4679,19 @@ function loadModelProviderRuntimeSettings(): ModelProviderRuntimeSettings {
     parsed = JSON.parse(readFileSync(settingsPath, "utf8"));
   } catch (error) {
     if (isNodeError(error) && error.code === "ENOENT") {
-      return defaults;
+      return applyModelProviderLock(defaults);
     }
 
     console.warn(`Forge model provider settings ignored: ${error instanceof Error ? error.message : String(error)}`);
-    return defaults;
+    return applyModelProviderLock(defaults);
   }
 
   if (!isRecord(parsed)) {
     console.warn("Forge model provider settings ignored: root value must be an object.");
-    return defaults;
+    return applyModelProviderLock(defaults);
   }
 
-  return {
+  return applyModelProviderLock({
     ...defaults,
     providerID: providerIDFromPersistedSetting(parsed.providerID, defaults.providerID),
     modelName: stringSettingFromUnknown(parsed.modelName) ?? defaults.modelName,
@@ -4694,12 +4700,25 @@ function loadModelProviderRuntimeSettings(): ModelProviderRuntimeSettings {
     openAIMaxOutputTokens: positiveIntegerFromUnknown(parsed.openAIMaxOutputTokens)
       ?? defaults.openAIMaxOutputTokens,
     openAIAPIKey: defaults.openAIAPIKey
+  });
+}
+
+function applyModelProviderLock(settings: ModelProviderRuntimeSettings): ModelProviderRuntimeSettings {
+  if (modelProviderLock !== "local") return settings;
+  return {
+    ...settings,
+    providerID: "local",
+    modelName: undefined,
+    openAIAPIKey: undefined
   };
 }
 
 async function updateModelProviderSettings(
   input: ModelProviderSettingsUpdateRequest
 ): Promise<ReturnType<typeof getModelProviderConfiguration>> {
+  if (modelProviderLock) {
+    throw new HttpError(403, "Model provider settings are locked to local for this authorized background runtime.");
+  }
   if (!isRecord(input)) {
     throw new HttpError(400, "Model provider settings update must be an object.");
   }

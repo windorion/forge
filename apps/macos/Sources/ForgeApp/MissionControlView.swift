@@ -24,10 +24,12 @@ struct MissionControlRepositorySnapshot: Identifiable, Codable, Hashable {
     var runtimePort: Int? = nil
     var runtimeProcessID: Int32? = nil
     var observerReadOnly: Bool? = nil
+    var runtimeAuthorizationID: String? = nil
 }
 
 struct MissionControlView: View {
     @EnvironmentObject private var workspace: WorkspaceModel
+    @State private var runtimePrompt: MissionControlRuntimePrompt?
     let newTask: () -> Void
     let openTask: (ForgeTask.ID) -> Void
 
@@ -37,7 +39,7 @@ struct MissionControlView: View {
 
     private var currentPath: String? { workspace.missionControlCurrentRepositoryPath }
     private var liveRepositories: [MissionControlRepositorySnapshot] {
-        repositories.filter { $0.path == currentPath || isLiveObserver($0) }
+        repositories.filter { $0.path == currentPath || isLiveObserver($0) || isActiveRuntime($0) }
     }
     private var liveTasks: [MissionControlTaskSnapshot] {
         liveRepositories.flatMap(\.tasks)
@@ -53,6 +55,9 @@ struct MissionControlView: View {
         .background(ForgeDesign.paper)
         .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
         .onAppear { workspace.refreshMissionControl() }
+        .alert(item: $runtimePrompt) { prompt in
+            runtimeAuthorizationAlert(prompt)
+        }
     }
 
     private var missionTitleBar: some View {
@@ -88,7 +93,7 @@ struct MissionControlView: View {
             Spacer()
             Button("⏸ PAUSE ALL") { workspace.pauseAllMissionControlLoops() }
                 .buttonStyle(MissionSecondaryButtonStyle())
-                .disabled(primaryRunningCount == 0)
+                .disabled(currentRunningCount == 0)
             Button("+ NEW TASK", action: newTask)
                 .buttonStyle(MissionPrimaryButtonStyle())
                 .keyboardShortcut("n", modifiers: [.command, .shift])
@@ -115,7 +120,7 @@ struct MissionControlView: View {
 
     private func repositoryColumn(_ repository: MissionControlRepositorySnapshot, index: Int) -> some View {
         let isCurrent = repository.path == currentPath
-        let hasLiveData = isCurrent || isLiveObserver(repository)
+        let hasLiveData = isCurrent || isLiveObserver(repository) || isActiveRuntime(repository)
         return VStack(spacing: 0) {
             Button { workspace.activateMissionControlRepository(repository.path) } label: {
                 HStack(spacing: 10) {
@@ -150,9 +155,14 @@ struct MissionControlView: View {
             }
             .background(Color.white)
 
-            Text(repositoryFooter(repository, isCurrent: isCurrent))
-                .font(ForgeDesign.mono(9.5)).foregroundStyle(ForgeDesign.muted)
-                .lineLimit(1).padding(.horizontal, 18).frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
+            HStack(spacing: 8) {
+                Text(repositoryFooter(repository, isCurrent: isCurrent))
+                    .font(ForgeDesign.mono(9.5)).foregroundStyle(ForgeDesign.muted)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                runtimeAccessButton(repository, isCurrent: isCurrent)
+            }
+                .padding(.horizontal, 12).frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
                 .background(Color.white)
                 .overlay(alignment: .top) { Rectangle().fill(ForgeDesign.divider).frame(height: 1.5) }
         }
@@ -204,9 +214,9 @@ struct MissionControlView: View {
 
     private var bottomBar: some View {
         HStack {
-            Text("one primary runtime · background observers are live + read-only · Pause All affects primary repo")
+            Text("\(activeRuntimeCount) active runtime\(activeRuntimeCount == 1 ? "" : "s") · other repos read-only · authorization lasts this app session")
             Spacer()
-            Text("⌘1–3 focus repo · ⌘⇧N new task")
+            Text("Pause All covers authorized runtimes · ⌘1–3 focus repo")
         }
         .font(ForgeDesign.mono(10)).foregroundStyle(ForgeDesign.muted)
         .padding(.horizontal, 22).frame(height: 42)
@@ -215,7 +225,7 @@ struct MissionControlView: View {
     }
 
     private var currentRunningCount: Int { liveTasks.filter { $0.tag == "RUNNING" }.count }
-    private var primaryRunningCount: Int { workspace.taskQueueSnapshot?.running.count ?? 0 }
+    private var activeRuntimeCount: Int { 1 + repositories.filter(isActiveRuntime).count }
     private var currentNeedsYouCount: Int { liveTasks.filter { $0.tag.contains("WAIT") }.count }
     private var currentQueuedCount: Int { liveTasks.filter { $0.tag == "QUEUED" }.count }
     private var readyCount: Int { liveTasks.filter { $0.tag == "COMPLETE" || $0.tag == "REVIEW" }.count }
@@ -243,24 +253,85 @@ struct MissionControlView: View {
     private func isLiveObserver(_ repository: MissionControlRepositorySnapshot) -> Bool {
         repository.runtimeState == "LIVE OBSERVER" && repository.observerReadOnly == true
     }
+    private func isActiveRuntime(_ repository: MissionControlRepositorySnapshot) -> Bool {
+        repository.runtimeState == "ACTIVE RUNTIME" && repository.observerReadOnly == false
+    }
     private func observerLabel(_ repository: MissionControlRepositorySnapshot) -> String {
         switch repository.runtimeState {
         case "STARTING", "CONNECTING": return "CONNECTING"
+        case "AUTHORIZING", "ACTIVATING": return "AUTHORIZING"
+        case "RETURNING READ-ONLY": return "READ-ONLY"
         case "FAILED", "UNAVAILABLE", "STOPPED": return "OFFLINE"
         default: return "CACHED"
         }
     }
     private func repositoryFooter(_ repository: MissionControlRepositorySnapshot, isCurrent: Bool) -> String {
         if isCurrent { return repository.footer }
+        if isActiveRuntime(repository) {
+            let authorization = repository.runtimeAuthorizationID.map { "auth \($0.prefix(8))" } ?? "authorization pending"
+            return "active · \(authorization) · \(repository.footer)"
+        }
         if isLiveObserver(repository) { return "live read-only · \(repository.footer)" }
         if let error = repository.runtimeState, ["FAILED", "UNAVAILABLE", "STOPPED"].contains(error) {
             return "observer \(error.lowercased()) · showing last snapshot"
         }
         return "cached \(relativeDate(repository.capturedAt)) · observer connecting"
     }
+
+    @ViewBuilder
+    private func runtimeAccessButton(_ repository: MissionControlRepositorySnapshot, isCurrent: Bool) -> some View {
+        if !isCurrent && isLiveObserver(repository) {
+            Button("AUTHORIZE ACTIVE") {
+                runtimePrompt = MissionControlRuntimePrompt(repository: repository, action: .authorize)
+            }
+            .buttonStyle(MissionRuntimeButtonStyle(fill: ForgeDesign.ink, foreground: ForgeDesign.accent))
+        } else if !isCurrent && isActiveRuntime(repository) {
+            let hasRunningTask = repository.tasks.contains { $0.tag == "RUNNING" }
+            Button(hasRunningTask ? "PAUSE BEFORE READ-ONLY" : "RETURN READ-ONLY") {
+                runtimePrompt = MissionControlRuntimePrompt(repository: repository, action: .revoke)
+            }
+            .buttonStyle(MissionRuntimeButtonStyle(fill: Color.white, foreground: ForgeDesign.ink))
+            .disabled(hasRunningTask)
+        }
+    }
+
+    private func runtimeAuthorizationAlert(_ prompt: MissionControlRuntimePrompt) -> Alert {
+        let port = prompt.repository.runtimePort ?? 0
+        switch prompt.action {
+        case .authorize:
+            return Alert(
+                title: Text("Authorize active runtime?"),
+                message: Text("Repository: \(prompt.repository.path)\nPort: \(port)\n\nForge will replace the read-only observer with a writable local runtime for this app session. It may recover interrupted work and dispatch persisted queued Agent Loops. Background runtimes use the local deterministic provider and remain isolated to this repository."),
+                primaryButton: .default(Text("Authorize Active Runtime")) {
+                    workspace.setMissionControlRuntimeActive(path: prompt.repository.path, isActive: true)
+                },
+                secondaryButton: .cancel()
+            )
+        case .revoke:
+            return Alert(
+                title: Text("Return repository to read-only?"),
+                message: Text("Forge will stop the writable runtime for \(prompt.repository.path) and restart its read-only observer. Queued work remains persisted but will not dispatch until active access is authorized again."),
+                primaryButton: .destructive(Text("Return to Read-Only")) {
+                    workspace.setMissionControlRuntimeActive(path: prompt.repository.path, isActive: false)
+                },
+                secondaryButton: .cancel()
+            )
+        }
+    }
     private func relativeDate(_ date: Date) -> String {
         RelativeDateTimeFormatter().localizedString(for: date, relativeTo: Date())
     }
+}
+
+private struct MissionControlRuntimePrompt: Identifiable {
+    enum Action: String {
+        case authorize
+        case revoke
+    }
+
+    var id: String { "\(repository.path):\(action.rawValue)" }
+    var repository: MissionControlRepositorySnapshot
+    var action: Action
 }
 
 private struct MissionPrimaryButtonStyle: ButtonStyle {
@@ -276,6 +347,22 @@ private struct MissionSecondaryButtonStyle: ButtonStyle {
         configuration.label.font(ForgeDesign.mono(10.5, weight: .bold)).tracking(0.5)
             .foregroundStyle(configuration.isPressed ? ForgeDesign.muted : ForgeDesign.ink)
             .padding(.horizontal, 13).padding(.vertical, 8).background(Color.white)
+            .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+    }
+}
+
+private struct MissionRuntimeButtonStyle: ButtonStyle {
+    var fill: Color
+    var foreground: Color
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(ForgeDesign.mono(8, weight: .bold))
+            .tracking(0.3)
+            .foregroundStyle(configuration.isPressed ? ForgeDesign.muted : foreground)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 5)
+            .background(fill)
             .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
     }
 }

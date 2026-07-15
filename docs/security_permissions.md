@@ -194,6 +194,17 @@ the exact expected repository root. Focusing an observer repository is a
 separate primary-runtime transition; viewing it cannot run a tool, command,
 edit, validation, git action, or queued Agent Loop.
 
+Promoting an observer is a separate medium-risk approval. Mission Control must
+show the exact repository path, loopback port, session duration, forced-local
+provider, and the consequence that recovery and persisted queue dispatch will
+resume. Approval creates a per-session authorization ID. The child must echo
+that ID with `repository-active` scope plus primary/read-write mode and the
+exact repo root before its data is trusted; a mismatch terminates the process.
+The child locks provider selection to local, strips inherited remote-provider
+configuration/secrets, and rejects provider-setting mutation for its lifetime.
+Authorization is memory-only, does not persist across app launches, and can be
+revoked back to observer mode only after visible running work is paused.
+
 ### High Risk
 
 Examples:

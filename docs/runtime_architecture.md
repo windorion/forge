@@ -110,6 +110,17 @@ root before accepting an observer. It polls health, tasks, queue, and Git every
 two seconds and owns only the child processes it launched. Observers cannot be
 promoted implicitly into mutation runtimes.
 
+An explicit Mission Control confirmation may replace one observer with an
+active runtime for the current app session. The supervisor generates a unique
+authorization ID and timestamp, passes them only to that child, forces the
+local deterministic provider with a runtime lock that ignores persisted remote
+provider selection and rejects provider-setting changes, and expects health to return `primary`,
+`readOnly: false`, the scoped authorization evidence, and the exact repository
+root. A mismatch terminates the process. Active startup intentionally restores
+normal recovery and queue dispatch for that repository. Revocation terminates
+the active child and starts a fresh read-only observer on the same unique port;
+the authorization is not persisted across app launches.
+
 ### Agent Orchestrator
 
 Coordinates planning, execution, testing, review, and user approval states.

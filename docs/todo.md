@@ -21,9 +21,10 @@ of truth and the delivered HTML/CSS as the exact visual/content specification.
 - Render-verify the implemented compact task states `1c`, `1d`, and `1e`.
 - Finish GitHub OAuth/device flow and runtime shortcut remapping; Account/Usage,
   General, Guardrails, Model, and API Key settings structures are implemented.
-- Finish explicitly authorized active-agent Mission Control, then continue through quick entry and native
-  integrations, onboarding, updates, sharing, cost, and templates until all 43
-  named HTML screens/states are verified.
+- Finish background task creation/detail/review routing for authorized Mission
+  Control runtimes, then continue through quick entry and native integrations,
+  onboarding, updates, sharing, cost, and templates until all 43 named HTML
+  screens/states are verified.
 - Render-verify the implemented `⌘K` Command Palette and extend the new native
   Forge menu from its core commands to the complete `21a` handoff command set.
 - Render-verify the implemented full Plan Approval expansion, including its
@@ -109,6 +110,18 @@ the core runtime smoke. Preserve these completed boundaries:
 
 ## Done Recently
 
+- Added explicit, session-scoped active-runtime authorization to `4a` Mission
+  Control. Each background repository still starts read-only; its visible
+  `AUTHORIZE ACTIVE` action confirms exact path, port, queue recovery/dispatch,
+  local-provider, and session consequences before replacing the observer with
+  a read-write process. Health echoes a generated scoped authorization ID, and
+  the supervisor validates that ID, mode, read-write state, and exact repo root
+  or terminates the process fail-closed. Active access can be revoked back to
+  observer mode after running work is paused. Pause All now covers primary and
+  every authorized runtime. The observer smoke exercises the complete
+  observer → active → observer cycle and proves writes are accepted only in the
+  explicitly active interval.
+
 - Added supervised multi-repository observer runtimes to `4a` Mission Control.
   Up to two non-primary repositories now receive app-owned Node processes on
   deterministic unique loopback ports. `FORGE_RUNTIME_MODE=observer` opens an
@@ -125,11 +138,9 @@ the core runtime smoke. Preserve these completed boundaries:
   persists compact snapshots for up to two recently connected repositories.
   The app exposes `⌘⇧M`, `⌘1–3` focus, `⌘⇧N` New Task, cooperative Pause All,
   repository-slot selection, real status/progress cards, and cached timestamps.
-  Non-current repositories are labeled `CACHED` and remain read-only because
-  the current architecture owns one active mutation runtime. Observer
-  supervision and live aggregation are now implemented; the remaining `4a`
-  step is explicit promotion/authorization of independent active runtimes.
-  Strict rendered comparison also remains.
+  Observer supervision, live aggregation, and explicit session activation are
+  now implemented. Full task creation/detail/review routing into a background
+  active runtime and strict rendered comparison remain.
 
 - Implemented `26a` Task Queue as real runtime scheduling rather than a static
   task list. Approved Agent Loops now persist ordered queue requests whenever

@@ -69,8 +69,11 @@ slots. The active repository shows live task, queue, progress, review, and
 git-derived evidence. Non-current repositories may show live data only through
 an independently supervised read-only observer runtime whose repository
 identity is verified. Repository focus and new-task actions may switch the
-primary workspace; observer cards may not pretend to support pause, mutation,
-or review actions until separately authorized as active runtimes.
+primary workspace. Observer cards remain read-only by default. Their explicit
+active-runtime action must show repository, port, queue recovery/dispatch, and
+session consequences before transition; accepted active state displays scoped
+authorization evidence and joins Pause All. Background task creation and full
+review routing remain separate from authorization itself.
 
 ### Center: Live Agent Session
 

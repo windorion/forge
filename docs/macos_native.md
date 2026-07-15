@@ -18,9 +18,11 @@ focus and `⌘⇧N` new-task access, and preserves up to three local repository
 slots in app preferences. The primary repository uses the normal runtime; up
 to two others use app-owned read-only observer runtimes on unique loopback
 ports. The supervisor polls them, validates repository identity, shows PID and
-port evidence, and terminates only its own children. Future active multi-repo
-work must require explicit authorization rather than silently promoting an
-observer into a mutation runtime.
+port evidence, and terminates only its own children. A visible confirmation can
+authorize one of those repositories as active for this app session. The
+transition shows its exact path/port/consequences, verifies a generated health
+authorization ID, displays shortened evidence in the footer, permits safe
+return to read-only, and extends Pause All across accepted active runtimes.
 
 ### Menu Bar Agent
 

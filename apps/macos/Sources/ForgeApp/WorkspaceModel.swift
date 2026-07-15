@@ -96,7 +96,15 @@ final class WorkspaceModel: ObservableObject {
     init() {
         if let data = UserDefaults.standard.data(forKey: Self.missionControlRepositoriesKey),
            let decoded = try? JSONDecoder().decode([MissionControlRepositorySnapshot].self, from: data) {
-            missionControlRepositories = Array(decoded.prefix(3))
+            missionControlRepositories = decoded.prefix(3).map { snapshot in
+                var sanitized = snapshot
+                sanitized.runtimeState = nil
+                sanitized.runtimePort = nil
+                sanitized.runtimeProcessID = nil
+                sanitized.observerReadOnly = nil
+                sanitized.runtimeAuthorizationID = nil
+                return sanitized
+            }
         }
         if let path = UserDefaults.standard.string(forKey: Self.repositoryPreferenceKey), !path.isEmpty {
             preferredRepositoryRoot = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
@@ -847,10 +855,49 @@ final class WorkspaceModel: ObservableObject {
             guard let loop = task.agentRunLoops.last(where: { $0.status == "Running" }) else { return nil }
             return (task, loop)
         }
-        for (task, loop) in running {
-            pauseAgentLoop(for: task, loop: loop)
+        Task {
+            var primaryFailures = 0
+            for (task, loop) in running {
+                pausingAgentLoopIDs.insert(loop.id)
+                do {
+                    let updatedTask = try await runtime.pauseAgentLoop(
+                        taskID: task.id,
+                        loopID: loop.id,
+                        note: "Pause All from Mission Control"
+                    )
+                    upsert(updatedTask)
+                } catch {
+                    primaryFailures += 1
+                }
+                pausingAgentLoopIDs.remove(loop.id)
+            }
+            let background = await missionControlSupervisor.pauseAllActiveLoops()
+            let requested = running.count + background.requested
+            let failures = primaryFailures + background.failed
+            if requested == 0 {
+                statusMessage = "No active Agent Loops to pause across authorized runtimes."
+            } else if failures == 0 {
+                statusMessage = "Pause requested for \(requested) Agent Loop(s) across authorized runtimes."
+            } else {
+                statusMessage = "Pause requested for \(requested) Agent Loop(s); \(failures) request(s) failed."
+            }
+            refreshMissionControl()
         }
-        statusMessage = running.isEmpty ? "No active Agent Loops to pause." : "Pause requested for \(running.count) active Agent Loop(s)."
+    }
+
+    func setMissionControlRuntimeActive(path: String, isActive: Bool) {
+        guard path != missionControlCurrentRepositoryPath else {
+            statusMessage = "The focused repository already uses the primary runtime."
+            return
+        }
+        missionControlSupervisor.setActiveAuthorization(
+            path: path,
+            isActive: isActive,
+            runtimeDirectory: resolveRuntimeLaunch()?.runtimeDirectory
+        )
+        statusMessage = isActive
+            ? "Authorized an active local runtime for \(missionControlRepositoryName(path: path)) this session."
+            : "Returning \(missionControlRepositoryName(path: path)) to read-only observation."
     }
 
     func activateMissionControlRepository(_ path: String) {
@@ -2206,7 +2253,8 @@ final class WorkspaceModel: ObservableObject {
                 runtimeState: observation.status,
                 runtimePort: observation.port,
                 runtimeProcessID: observation.processID,
-                observerReadOnly: observation.health?.readOnly
+                observerReadOnly: observation.health?.readOnly,
+                runtimeAuthorizationID: observation.health?.runtimeAuthorization?.id
             )
             missionControlRepositories[index] = snapshot
         }
@@ -2262,7 +2310,16 @@ final class WorkspaceModel: ObservableObject {
     }
 
     private func persistMissionControlRepositories() {
-        guard let data = try? JSONEncoder().encode(Array(missionControlRepositories.prefix(3))) else { return }
+        let durableSnapshots = missionControlRepositories.prefix(3).map { snapshot in
+            var durable = snapshot
+            durable.runtimeState = nil
+            durable.runtimePort = nil
+            durable.runtimeProcessID = nil
+            durable.observerReadOnly = nil
+            durable.runtimeAuthorizationID = nil
+            return durable
+        }
+        guard let data = try? JSONEncoder().encode(durableSnapshots) else { return }
         UserDefaults.standard.set(data, forKey: Self.missionControlRepositoriesKey)
     }
 

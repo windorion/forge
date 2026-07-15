@@ -978,10 +978,17 @@ struct RuntimeHealth: Codable, Hashable {
     var uptimeSeconds: Double
     var runtimeMode: String?
     var readOnly: Bool?
+    var runtimeAuthorization: RuntimeAuthorizationInfo?
     var modelProvider: ModelProviderInfo?
     var modelProviderConfiguration: ModelProviderConfiguration?
     var workspace: RuntimeWorkspaceInfo?
     var persistence: RuntimePersistenceInfo?
+}
+
+struct RuntimeAuthorizationInfo: Codable, Hashable {
+    var id: String
+    var authorizedAt: String
+    var scope: String
 }
 
 struct RuntimeWorkspaceInfo: Codable, Hashable {

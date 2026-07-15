@@ -65,10 +65,15 @@ surface instead of replacing the main task workspace. The primary column uses
 the main runtime; up to two additional repositories receive app-supervised
 observer runtimes on ports 17374 and 17375. Observers are verified read-only,
 poll tasks/queue/git/health every two seconds, and display live/offline PID and
-port evidence. `⌘1–3` focuses a repository, `⌘⇧N` opens a new task, and Pause
-All requests cooperative pause only for live loops in the primary runtime.
-Observer columns cannot mutate until an explicit future active-runtime
-authorization path exists.
+port evidence. Each observer exposes `AUTHORIZE ACTIVE`; confirming the exact
+repository, port, queue-dispatch consequence, and session boundary restarts it
+as a local-provider read-write runtime. Health must return the generated
+`repository-active` authorization ID before the app accepts it. Mismatched
+mode, ID, or repo root terminates the child. Active access is session-only and
+its provider is locked local even if that repository saved a remote choice;
+provider-setting mutation is rejected. It can return to read-only after running work is paused. `⌘1–3` focuses a
+repository, `⌘⇧N` opens a new task, and Pause All covers primary plus every
+authorized active runtime.
 
 Run the observer safety regression with:
 
@@ -76,6 +81,10 @@ Run the observer safety regression with:
 cd runtime
 npm run smoke:observer
 ```
+
+That fixture now verifies observer → authorized active → observer mode on one
+port: writes are rejected before authorization, accepted and persisted while
+active, then rejected again after read-only restoration.
 
 The shell also includes a first usable `10a`-style full-screen diff review
 surface. It opens from the Diff tab or review state card, shows a file tree,

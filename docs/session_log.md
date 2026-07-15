@@ -4270,3 +4270,54 @@ Next:
 - Add an explicit promotion/authorization flow that safely transfers a
   repository from observer status to an active mutation runtime, then continue
   with the remaining quick-entry and native handoff surfaces.
+
+## 2026-07-15 22:08:28 +0200 (CEST)
+
+Conversation summary:
+
+- Continued `4a` Mission Control from live read-only observation into explicit,
+  session-scoped active runtimes for background repositories.
+
+Done:
+
+- Added an observer/active state machine to the macOS runtime supervisor. Each
+  background repository remains read-only by default and can transition only
+  after a visible path/port/consequence confirmation.
+- Added per-session authorization IDs and timestamps. Active health must echo
+  the exact `repository-active` evidence, primary/read-write mode, and expected
+  repo root; mismatches terminate the child process fail-closed.
+- Locked authorized background runtimes to the local deterministic provider,
+  removed inherited remote-provider configuration and secrets, ignored saved
+  remote-provider selection, and rejected provider-setting changes.
+- Added visible Authorize Active / Return Read-Only controls, transitional and
+  active states, shortened authorization evidence, safe revocation gating while
+  work is running, and cooperative Pause All across primary plus all accepted
+  active runtimes.
+- Kept authorization grants and transient PID/port/read-write evidence out of
+  durable Mission Control preferences. App restart always returns background
+  repositories to observer mode while retaining only offline task summaries.
+- Extended `npm run smoke:observer` through observer → authorized active →
+  observer. It proves pre-authorization and post-revocation POST rejection,
+  active mutation persistence, unchanged read-only database bytes, correct
+  authorization health evidence, and the immutable local-provider lock.
+- Passed TypeScript checking, observer smoke, queue smoke, the full V0 core
+  smoke, SwiftPM compilation, and packaged app verification. Rebuilt and
+  launched `dist/Forge.app`, replaced the stale primary runtime, and verified
+  the latest app/runtime pair is live locally.
+- Updated README, status, backlog, handoff coverage, development, architecture,
+  security, native macOS, and workspace design docs. Full handoff readiness is
+  now approximately 63-66%; cumulative polished-v1 readiness is approximately
+  20-25%.
+
+Not done:
+
+- `4a` remains Partial because creating, opening, and completing full plan/diff/
+  review flows directly against a background active runtime is not routed yet.
+- Strict rendered screenshot comparison remains required before `4a` or any
+  other handoff screen can be marked Verified.
+
+Next:
+
+- Route Mission Control's focused repository New Task, task detail, plan
+  approval, and review actions to its authorized runtime endpoint, then continue
+  to the remaining quick-entry and native handoff screens.
