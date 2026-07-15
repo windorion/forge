@@ -43,6 +43,12 @@ Implemented:
   prefers the pending proposal diff before Apply, falls back to the working
   tree afterward, and supports `J`/`K` hunk navigation, `⌘←`/`⌘→` file
   navigation, and `⌘↵` per-file approval.
+- Full-page handoff destinations no longer use SwiftUI Sheets. Mission Control,
+  Queue, History, Batch Questions, Full Plan, Full Diff, and Audit Log now share
+  one root-owned opaque surface coordinator. Opening one hides the prior
+  workspace from rendering, hit testing, and the accessibility tree; each
+  surface has an explicit Close/Escape route. The dimmed `5a` Command Palette
+  remains the only intentional product overlay.
 - Real `18a` merge-conflict recovery surface backed by Git index stages. The
   runtime reads Base/Ours/Theirs and working text with size/binary guards,
   fingerprints the reviewed conflict, requires exact confirmation, supports
@@ -58,7 +64,7 @@ Implemented:
   PR until hosted PR publication provides that fact.
 - Real `26a` multi-task queue and scheduler. Approved Agent Loops occupy one
   repository execution slot or persist an ordered queue request in the task
-  snapshot. The 1240px Queue sheet exposes running, queued, and needs-you
+  snapshot. The opaque 1240px Queue surface exposes running, queued, and needs-you
   lanes; persisted 1-3 global ceiling controls; reordering, removal, pause,
   estimates, and the explicit same-repository serialization boundary. Startup
   automatically dispatches the first persisted request. A dedicated smoke
@@ -311,7 +317,7 @@ use different denominators and must not be added together.
 | Trust/runtime foundation | 81-86% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, explicit multi-runtime authorization, diagnostics, and smoke coverage are real. |
 | Coding-agent demo V0 behavior | 100% | All documented functional acceptance criteria are implemented and smoke-covered. |
 | Primary V0 handoff UI | 95-98% | Five primary screens are substantially implemented; exact typography and rendered comparison remain. |
-| Full 43-screen handoff UI | 63-66% | Twenty-five screens are implemented, three partial, and fifteen missing; none has passed strict rendered verification yet. |
+| Full 43-screen handoff UI | 63-66% | Twenty-five screens are implemented, five partial, and thirteen missing; none has passed strict rendered verification yet. |
 | Useful developer alpha | 50-60% | Forge can recover interrupted loops/transactions and apply guarded source create/modify/delete changes, but still needs broader autonomous tool use and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 product | 20-25% | The real queue and session-authorized active multi-repository runtimes exist; full background task/review routing, indexing, packaging, updates, onboarding, billing, and integrations remain. |

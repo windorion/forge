@@ -110,6 +110,13 @@ the core runtime smoke. Preserve these completed boundaries:
 
 ## Done Recently
 
+- Removed every SwiftUI Sheet from the macOS product hierarchy. Mission
+  Control, Queue, History, Batch Questions, Full Plan, Full Diff, and Audit Log
+  now open through one root-owned opaque exclusive surface coordinator. The
+  prior workspace becomes opacity-zero, non-interactive, and accessibility
+  hidden until Close/Escape. This removes the visible old-workspace/new-screen
+  overlap while preserving the handoff's intentional dimmed Command Palette.
+
 - Added explicit, session-scoped active-runtime authorization to `4a` Mission
   Control. Each background repository still starts read-only; its visible
   `AUTHORIZE ACTIVE` action confirms exact path, port, queue recovery/dispatch,
@@ -147,7 +154,7 @@ the core runtime smoke. Preserve these completed boundaries:
   the single-repository execution slot is occupied; a stored 1-3 global
   ceiling, same-repository serialization, automatic next-task dispatch, queue
   reorder/removal, and restart recovery are runtime-enforced. The 1240px macOS
-  Queue sheet uses real running/queued/needs-you data and exposes priority,
+  Queue surface uses real running/queued/needs-you data and exposes priority,
   pause, removal, estimates, and the safety boundary. `npm run smoke:queue`
   verifies serialization, reorder, removal, setting persistence, restart
   dispatch, and queue drain. Pointer-drag and exact screenshot comparison

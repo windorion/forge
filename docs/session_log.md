@@ -4321,3 +4321,46 @@ Next:
 - Route Mission Control's focused repository New Task, task detail, plan
   approval, and review actions to its authorized runtime endpoint, then continue
   to the remaining quick-entry and native handoff screens.
+
+## 2026-07-15 23:18:32 +0200 (CEST)
+
+Conversation summary:
+
+- Audited every handoff destination for presentation overlap and removed the
+  remaining code paths that could leave old workspace UI visible beneath a
+  second full-page interface.
+
+Done:
+
+- Replaced all seven full-page SwiftUI sheet presentations with one root-owned
+  exclusive-surface coordinator covering Mission Control, History, Answer
+  Queue, Task Queue, Diff, Audit, and Full Plan.
+- Made every exclusive surface opaque, disabled and accessibility-hid the
+  workspace below it, added consistent Close/Escape handling, and dismissed an
+  active surface before New Task or Switch Repository transitions.
+- Removed every `.sheet` modifier from the macOS app source. Command Palette is
+  the only intentional dimmed workspace overlay and Settings remains a native
+  separate window.
+- Classified all 43 handoff entries by presentation model in the coverage
+  document and corrected the measured inventory to 25 Implemented, 5 Partial,
+  and 13 Missing.
+- Passed SwiftPM compilation, runtime TypeScript compilation, packaged-app
+  verification, and `git diff --check`; rebuilt and launched `dist/Forge.app`.
+- Used macOS Accessibility inspection as a no-screenshot runtime fallback:
+  Mission Control exposed one AXWindow, no AXSheet, and only Mission Control
+  content; Escape returned to the same single main window.
+
+Not done:
+
+- Strict rendered reference-versus-app screenshot comparison is still blocked
+  by unavailable Screen Recording capture and remains required before any
+  handoff screen can be marked visually Verified.
+- The 13 Missing and 5 Partial handoff entries still require their documented
+  functional/design implementation; they do not currently create ghost layers.
+
+Next:
+
+- Once screen capture is available, compare each implemented handoff state at
+  its specified viewport against the reference and fix measured visual deltas.
+- Continue the active V0 backlog after the presentation-isolation changes are
+  committed.

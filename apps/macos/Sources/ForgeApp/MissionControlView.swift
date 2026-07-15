@@ -32,6 +32,7 @@ struct MissionControlView: View {
     @State private var runtimePrompt: MissionControlRuntimePrompt?
     let newTask: () -> Void
     let openTask: (ForgeTask.ID) -> Void
+    let close: () -> Void
 
     private var repositories: [MissionControlRepositorySnapshot] {
         Array(workspace.missionControlRepositories.prefix(3))
@@ -76,6 +77,10 @@ struct MissionControlView: View {
             HStack {
                 Spacer()
                 Text(ForgeDesign.appVersion).font(ForgeDesign.mono(10)).foregroundStyle(ForgeDesign.muted)
+                Button("CLOSE", action: close)
+                    .font(ForgeDesign.mono(9, weight: .bold))
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(.cancelAction)
             }.padding(.trailing, 16)
         }
         .frame(height: 42)

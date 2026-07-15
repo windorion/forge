@@ -92,14 +92,124 @@ private struct DiffReviewFile: Identifiable, Hashable {
     var validationStatus: String?
 }
 
+private enum WorkspaceSurface: Equatable {
+    case missionControl
+    case history
+    case answerQueue
+    case taskQueue
+    case diff(taskID: ForgeTask.ID)
+    case audit(taskID: ForgeTask.ID)
+    case fullPlan(taskID: ForgeTask.ID, revisionID: PlanRevision.ID)
+
+    var windowMode: WorkspaceWindowMode {
+        switch self {
+        case .history, .audit:
+            return .recovery
+        case .missionControl, .answerQueue, .taskQueue, .fullPlan:
+            return .review
+        case .diff:
+            return .session
+        }
+    }
+}
+
+@MainActor
+private final class WorkspaceSurfaceCoordinator: ObservableObject {
+    @Published private(set) var surface: WorkspaceSurface?
+
+    func present(_ surface: WorkspaceSurface) {
+        self.surface = surface
+    }
+
+    func dismiss() {
+        surface = nil
+    }
+}
+
 struct WorkspaceView: View {
     @EnvironmentObject private var workspace: WorkspaceModel
+    @StateObject private var surfaceCoordinator = WorkspaceSurfaceCoordinator()
     @State private var recoveryDismissed = false
     @State private var showCommandPalette = false
-    @State private var showMissionControl = false
     @AppStorage("forge.didShowFirstTaskSuccess") private var didShowFirstTaskSuccess = false
 
     var body: some View {
+        ZStack {
+            workspaceContent
+                .opacity(surfaceCoordinator.surface == nil ? 1 : 0)
+                .allowsHitTesting(surfaceCoordinator.surface == nil)
+                .accessibilityHidden(surfaceCoordinator.surface != nil)
+
+            if let surface = surfaceCoordinator.surface {
+                exclusiveSurface(surface)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(ForgeDesign.paper.ignoresSafeArea())
+                    .transition(.opacity)
+                    .zIndex(10)
+            }
+        }
+        .background(ForgeDesign.paper)
+        .environmentObject(surfaceCoordinator)
+        .task {
+            if workspace.runtimeState == .unchecked {
+                workspace.refreshRuntimeHealth()
+            }
+        }
+        .onChange(of: workspace.selectedTaskID) { _, taskID in
+            workspace.refreshValidationPermissions(for: taskID)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .forgeToggleCommandPalette)) { _ in
+            showCommandPalette.toggle()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .forgeNewTask)) { _ in
+            surfaceCoordinator.dismiss()
+            workspace.selectedTaskID = nil
+            showCommandPalette = false
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .forgeSwitchRepository)) { _ in
+            surfaceCoordinator.dismiss()
+            showCommandPalette = false
+            workspace.connectRepository()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .forgeToggleMissionControl)) { _ in
+            showCommandPalette = false
+            surfaceCoordinator.present(.missionControl)
+            workspace.refreshMissionControl()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .forgeApplicationWillTerminate)) { _ in
+            workspace.stopMissionControlObservers()
+        }
+        .overlay {
+            if showCommandPalette {
+                CommandPaletteView(isPresented: $showCommandPalette)
+                    .environmentObject(workspace)
+                    .transition(.opacity)
+            }
+        }
+        .background(
+            WindowSizingView(
+                mode: surfaceCoordinator.surface?.windowMode ?? (!recoveryDismissed && !recoveryTasks.isEmpty
+                    ? .recovery
+                    : shouldShowNoRepository
+                        ? .compact
+                    : shouldShowOffline
+                        ? .review
+                        : workspace.gitConflictSnapshot?.files.isEmpty == false
+                            ? .review
+                        : workspace.selectedTask.map(shouldShowFirstTaskSuccess) == true
+                            ? .recovery
+                        : windowMode(for: workspace.selectedTask))
+            )
+        )
+        .onExitCommand {
+            if surfaceCoordinator.surface != nil {
+                surfaceCoordinator.dismiss()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var workspaceContent: some View {
         VStack(spacing: 0) {
             ForgeTitleBar()
 
@@ -136,7 +246,7 @@ struct WorkspaceView: View {
                     TaskWorkspaceView(task: task)
                 } else {
                     HStack(spacing: 0) {
-                        SidebarView(showMissionControl: $showMissionControl)
+                        SidebarView()
                             .frame(width: 300)
 
                         Rectangle()
@@ -151,66 +261,73 @@ struct WorkspaceView: View {
             }
         }
         .background(ForgeDesign.paper)
-        .task {
-            if workspace.runtimeState == .unchecked {
-                workspace.refreshRuntimeHealth()
-            }
-        }
-        .onChange(of: workspace.selectedTaskID) { _, taskID in
-            workspace.refreshValidationPermissions(for: taskID)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .forgeToggleCommandPalette)) { _ in
-            showCommandPalette.toggle()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .forgeNewTask)) { _ in
-            workspace.selectedTaskID = nil
-            showCommandPalette = false
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .forgeSwitchRepository)) { _ in
-            showCommandPalette = false
-            workspace.connectRepository()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .forgeToggleMissionControl)) { _ in
-            showCommandPalette = false
-            showMissionControl = true
-            workspace.refreshMissionControl()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .forgeApplicationWillTerminate)) { _ in
-            workspace.stopMissionControlObservers()
-        }
-        .sheet(isPresented: $showMissionControl) {
-            MissionControlView {
-                workspace.selectedTaskID = nil
-                showMissionControl = false
-            } openTask: { taskID in
-                workspace.selectedTaskID = taskID
-                showMissionControl = false
-            }
-            .environmentObject(workspace)
-            .frame(width: 1240, height: 650)
-        }
-        .overlay {
-            if showCommandPalette {
-                CommandPaletteView(isPresented: $showCommandPalette)
-                    .environmentObject(workspace)
-                    .transition(.opacity)
-            }
-        }
-        .background(
-            WindowSizingView(
-                mode: !recoveryDismissed && !recoveryTasks.isEmpty
-                    ? .recovery
-                    : shouldShowNoRepository
-                        ? .compact
-                    : shouldShowOffline
-                        ? .review
-                        : workspace.gitConflictSnapshot?.files.isEmpty == false
-                            ? .review
-                        : workspace.selectedTask.map(shouldShowFirstTaskSuccess) == true
-                            ? .recovery
-                        : windowMode(for: workspace.selectedTask)
+    }
+
+    @ViewBuilder
+    private func exclusiveSurface(_ surface: WorkspaceSurface) -> some View {
+        switch surface {
+        case .missionControl:
+            MissionControlView(
+                newTask: {
+                    workspace.selectedTaskID = nil
+                    surfaceCoordinator.dismiss()
+                },
+                openTask: { taskID in
+                    workspace.selectedTaskID = taskID
+                    surfaceCoordinator.dismiss()
+                },
+                close: surfaceCoordinator.dismiss
             )
-        )
+        case .history:
+            TaskHistoryView(tasks: workspace.tasks) { task in
+                workspace.selectedTaskID = task.id
+                surfaceCoordinator.dismiss()
+            }
+        case .answerQueue:
+            AgentAnswerQueueView(tasks: waitingQuestionTasks)
+        case .taskQueue:
+            TaskQueueView { taskID in
+                workspace.selectedTaskID = taskID
+                surfaceCoordinator.dismiss()
+            }
+        case let .diff(taskID):
+            if let task = workspace.tasks.first(where: { $0.id == taskID }) {
+                FullscreenDiffReview(task: task, close: surfaceCoordinator.dismiss)
+            } else {
+                unavailableSurface("The task for this diff is no longer available.")
+            }
+        case let .audit(taskID):
+            if let task = workspace.tasks.first(where: { $0.id == taskID }) {
+                TaskAuditLogView(task: task)
+            } else {
+                unavailableSurface("The task for this audit log is no longer available.")
+            }
+        case let .fullPlan(taskID, revisionID):
+            if let task = workspace.tasks.first(where: { $0.id == taskID }),
+               let revision = task.planRevisions.first(where: { $0.id == revisionID }) {
+                FullPlanApprovalView(task: task, revision: revision, close: surfaceCoordinator.dismiss)
+            } else {
+                unavailableSurface("The plan revision is no longer available.")
+            }
+        }
+    }
+
+    private func unavailableSurface(_ message: String) -> some View {
+        VStack(spacing: 16) {
+            ContentUnavailableView("Surface unavailable", systemImage: "rectangle.slash", description: Text(message))
+            Button("CLOSE", action: surfaceCoordinator.dismiss)
+                .buttonStyle(ForgeSecondaryButtonStyle())
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(ForgeDesign.paper)
+    }
+
+    private var waitingQuestionTasks: [ForgeTask] {
+        workspace.tasks.filter {
+            $0.status == "Human Review" &&
+                $0.currentPhase != "Plan Review" &&
+                $0.agentRunSteps.last?.action == "WaitForHumanReview"
+        }
     }
 
     private func usesNewSessionLayout(_ task: ForgeTask) -> Bool {
@@ -652,10 +769,7 @@ private struct CommandPaletteView: View {
 
 private struct SidebarView: View {
     @EnvironmentObject private var workspace: WorkspaceModel
-    @Binding var showMissionControl: Bool
-    @State private var showHistory = false
-    @State private var showAnswerQueue = false
-    @State private var showTaskQueue = false
+    @EnvironmentObject private var surfaceCoordinator: WorkspaceSurfaceCoordinator
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -705,7 +819,7 @@ private struct SidebarView: View {
 
             if !waitingQuestionTasks.isEmpty {
                 Button {
-                    showAnswerQueue = true
+                    surfaceCoordinator.present(.answerQueue)
                 } label: {
                     HStack {
                         Text("NEEDS YOU")
@@ -731,7 +845,7 @@ private struct SidebarView: View {
             }
 
             Button {
-                showMissionControl = true
+                surfaceCoordinator.present(.missionControl)
                 workspace.refreshMissionControl()
             } label: {
                 HStack {
@@ -749,7 +863,7 @@ private struct SidebarView: View {
             .keyboardShortcut("m", modifiers: [.command, .shift])
 
             Button {
-                showTaskQueue = true
+                surfaceCoordinator.present(.taskQueue)
                 workspace.refreshTaskQueue()
             } label: {
                 HStack {
@@ -771,7 +885,7 @@ private struct SidebarView: View {
             .keyboardShortcut("q", modifiers: [.command, .shift])
 
             Button {
-                showHistory = true
+                surfaceCoordinator.present(.history)
             } label: {
                 HStack {
                     Text("HISTORY")
@@ -797,26 +911,6 @@ private struct SidebarView: View {
                 }
         }
         .background(ForgeDesign.paper)
-        .sheet(isPresented: $showHistory) {
-            TaskHistoryView(tasks: workspace.tasks) { task in
-                workspace.selectedTaskID = task.id
-                showHistory = false
-            }
-            .frame(width: 980, height: 600)
-        }
-        .sheet(isPresented: $showAnswerQueue) {
-            AgentAnswerQueueView(tasks: waitingQuestionTasks)
-                .environmentObject(workspace)
-                .frame(width: 1240, height: 680)
-        }
-        .sheet(isPresented: $showTaskQueue) {
-            TaskQueueView { taskID in
-                workspace.selectedTaskID = taskID
-                showTaskQueue = false
-            }
-            .environmentObject(workspace)
-            .frame(width: 1240, height: 680)
-        }
     }
 
     private var waitingQuestionTasks: [ForgeTask] {
@@ -887,7 +981,8 @@ private enum HistoryFilter: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-private struct HandoffSheetTitleBar: View {
+private struct HandoffSurfaceTitleBar: View {
+    @EnvironmentObject private var surfaceCoordinator: WorkspaceSurfaceCoordinator
     var title: String
 
     var body: some View {
@@ -903,8 +998,14 @@ private struct HandoffSheetTitleBar: View {
                 Text(ForgeDesign.appVersion)
                     .font(.custom("JetBrains Mono", fixedSize: 10))
                     .foregroundStyle(ForgeDesign.muted)
-                    .padding(.trailing, 16)
+                Button("CLOSE") {
+                    surfaceCoordinator.dismiss()
+                }
+                .font(ForgeDesign.mono(9, weight: .bold))
+                .buttonStyle(.plain)
+                .keyboardShortcut(.cancelAction)
             }
+            .padding(.trailing, 16)
         }
         .frame(height: 42)
         .background(Color(red: 236 / 255, green: 236 / 255, blue: 234 / 255))
@@ -922,7 +1023,7 @@ private struct TaskQueueView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HandoffSheetTitleBar(title: "QUEUE")
+            HandoffSurfaceTitleBar(title: "QUEUE")
             queueHeader
 
             ScrollView {
@@ -1083,7 +1184,7 @@ private struct TaskHistoryView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HandoffSheetTitleBar(title: "HISTORY")
+            HandoffSurfaceTitleBar(title: "HISTORY")
 
             HStack(spacing: 12) {
                 HStack(spacing: 0) {
@@ -1247,7 +1348,7 @@ private struct TaskAuditLogView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HandoffSheetTitleBar(title: "#\(task.id.prefix(6)) AUDIT LOG")
+            HandoffSurfaceTitleBar(title: "#\(task.id.prefix(6)) AUDIT LOG")
             HStack(spacing: 12) {
                 StatusPill(label: task.status, color: statusColor)
                 Text(task.title)
@@ -1446,9 +1547,9 @@ private struct TaskRow: View {
 }
 
 private struct TaskWorkspaceView: View {
+    @EnvironmentObject private var surfaceCoordinator: WorkspaceSurfaceCoordinator
     var task: ForgeTask
     @State private var selectedTab: SessionTab = .log
-    @State private var showDiffReview = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -1464,7 +1565,7 @@ private struct TaskWorkspaceView: View {
                         tab: selectedTab,
                         task: task,
                         openDiffReview: {
-                            showDiffReview = true
+                            surfaceCoordinator.present(.diff(taskID: task.id))
                         }
                     )
                     HStack(spacing: 0) {
@@ -1473,7 +1574,7 @@ private struct TaskWorkspaceView: View {
                         LiveRunControlBar(
                             task: task,
                             openDiffReview: {
-                                showDiffReview = true
+                                surfaceCoordinator.present(.diff(taskID: task.id))
                             }
                         )
                     }
@@ -1482,10 +1583,6 @@ private struct TaskWorkspaceView: View {
             }
         }
         .background(ForgeDesign.paper)
-        .sheet(isPresented: $showDiffReview) {
-            FullscreenDiffReview(task: task)
-                .frame(minWidth: 1180, minHeight: 760)
-        }
     }
 }
 
@@ -1522,27 +1619,23 @@ private struct LiveWorkStatusHeader: View {
 }
 
 private struct RunningTaskWorkspaceView: View {
+    @EnvironmentObject private var surfaceCoordinator: WorkspaceSurfaceCoordinator
     var task: ForgeTask
     @State private var selectedTab: SessionTab = .log
-    @State private var showDiffReview = false
 
     var body: some View {
         VStack(spacing: 0) {
-            RunningTaskHeader(task: task, openDiffReview: { showDiffReview = true })
+            RunningTaskHeader(task: task, openDiffReview: { surfaceCoordinator.present(.diff(taskID: task.id)) })
             PlanProgressStrip(task: task)
             SessionTabContent(
                 tab: selectedTab,
                 task: task,
-                openDiffReview: { showDiffReview = true }
+                openDiffReview: { surfaceCoordinator.present(.diff(taskID: task.id)) }
             )
             RunningSessionFooter(selectedTab: $selectedTab, task: task)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.white)
-        .sheet(isPresented: $showDiffReview) {
-            FullscreenDiffReview(task: task)
-                .frame(minWidth: 1180, minHeight: 760)
-        }
     }
 }
 
@@ -1763,9 +1856,9 @@ private struct FirstSuccessConfetti: View {
 
 private struct RunCompleteState: View {
     @EnvironmentObject private var workspace: WorkspaceModel
+    @EnvironmentObject private var surfaceCoordinator: WorkspaceSurfaceCoordinator
 
     var task: ForgeTask
-    @State private var showDiffReview = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1853,7 +1946,7 @@ private struct RunCompleteState: View {
                     .lineLimit(1)
                 Spacer()
                 Button("VIEW FULL DIFF") {
-                    showDiffReview = true
+                    surfaceCoordinator.present(.diff(taskID: task.id))
                 }
                 .buttonStyle(ForgeSecondaryButtonStyle())
                 Button("⇡ OPEN PR ON GITHUB →") {
@@ -1870,10 +1963,6 @@ private struct RunCompleteState: View {
             }
         }
         .background(ForgeDesign.paper)
-        .sheet(isPresented: $showDiffReview) {
-            FullscreenDiffReview(task: task)
-                .frame(minWidth: 1240, minHeight: 700)
-        }
     }
 
     private func completionMetric(
@@ -1936,12 +2025,12 @@ private struct RunCompleteState: View {
 
 private struct AgentQuestionState: View {
     @EnvironmentObject private var workspace: WorkspaceModel
+    @EnvironmentObject private var surfaceCoordinator: WorkspaceSurfaceCoordinator
 
     var task: ForgeTask
     @State private var selectedAnswer: String?
     @State private var ownAnswer = ""
     @State private var confirmAbort = false
-    @State private var showAnswerQueue = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1955,7 +2044,7 @@ private struct AgentQuestionState: View {
                 Spacer()
                 if waitingQuestionTasks.count > 1 {
                     Button("ANSWER QUEUE · \(waitingQuestionTasks.count)") {
-                        showAnswerQueue = true
+                        surfaceCoordinator.present(.answerQueue)
                     }
                     .font(ForgeDesign.mono(9, weight: .bold))
                     .padding(.horizontal, 10)
@@ -1991,11 +2080,6 @@ private struct AgentQuestionState: View {
             Button("Abort Task", role: .destructive, action: abort)
         } message: {
             Text("The paused loop will stop. Existing reviewed changes and audit evidence remain local.")
-        }
-        .sheet(isPresented: $showAnswerQueue) {
-            AgentAnswerQueueView(tasks: waitingQuestionTasks)
-                .environmentObject(workspace)
-                .frame(width: 1240, height: 680)
         }
     }
 
@@ -2258,6 +2342,7 @@ private struct AgentQuestionState: View {
 
 private struct AgentAnswerQueueView: View {
     @EnvironmentObject private var workspace: WorkspaceModel
+    @EnvironmentObject private var surfaceCoordinator: WorkspaceSurfaceCoordinator
 
     var tasks: [ForgeTask]
     @State private var answers: [ForgeTask.ID: String] = [:]
@@ -2277,6 +2362,12 @@ private struct AgentAnswerQueueView: View {
                 Text("↹ tab between questions · each resumes on its own")
                     .font(ForgeDesign.mono(9.5))
                     .foregroundStyle(ForgeDesign.ink.opacity(0.65))
+                Button("CLOSE") {
+                    surfaceCoordinator.dismiss()
+                }
+                .font(ForgeDesign.mono(9, weight: .bold))
+                .buttonStyle(.plain)
+                .keyboardShortcut(.cancelAction)
             }
             .padding(.horizontal, 24)
             .frame(height: 44)
@@ -3618,10 +3709,10 @@ private struct OfflineWorkspaceState: View {
 
 private struct RunningTaskHeader: View {
     @EnvironmentObject private var workspace: WorkspaceModel
+    @EnvironmentObject private var surfaceCoordinator: WorkspaceSurfaceCoordinator
 
     var task: ForgeTask
     var openDiffReview: () -> Void
-    @State private var showAudit = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -3636,7 +3727,7 @@ private struct RunningTaskHeader: View {
                     .buttonStyle(ForgeSecondaryButtonStyle())
             }
 
-            Button("AUDIT") { showAudit = true }
+            Button("AUDIT") { surfaceCoordinator.present(.audit(taskID: task.id)) }
                 .buttonStyle(ForgeSecondaryButtonStyle())
 
             if canStartLoop {
@@ -3662,10 +3753,6 @@ private struct RunningTaskHeader: View {
         .background(Color.white)
         .overlay(alignment: .bottom) {
             Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
-        }
-        .sheet(isPresented: $showAudit) {
-            TaskAuditLogView(task: task)
-                .frame(width: 980, height: 600)
         }
     }
 
@@ -4271,9 +4358,9 @@ private struct DiffReviewSummary: View {
 
 private struct FullscreenDiffReview: View {
     @EnvironmentObject private var workspace: WorkspaceModel
-    @Environment(\.dismiss) private var dismiss
 
     var task: ForgeTask
+    var close: () -> Void
 
     @State private var selectedPath: String?
     @State private var mode: DiffReviewMode = .unified
@@ -4370,11 +4457,12 @@ private struct FullscreenDiffReview: View {
             .disabled(workspace.isRefreshingGitStatus())
 
             Button {
-                dismiss()
+                close()
             } label: {
                 Label("Close", systemImage: "xmark")
             }
             .buttonStyle(ForgeSecondaryButtonStyle())
+            .keyboardShortcut(.cancelAction)
         }
         .padding(14)
         .background(Color.white)
@@ -5582,6 +5670,7 @@ private struct FullPlanApprovalView: View {
 
     var task: ForgeTask
     var revision: PlanRevision
+    var close: () -> Void
     @State private var selectedStepID: PlanStep.ID?
     @State private var revisionInstruction = ""
     @State private var approvalMode = 0
@@ -5597,6 +5686,10 @@ private struct FullPlanApprovalView: View {
                 Text(ForgeDesign.appVersion)
                     .font(ForgeDesign.mono(10))
                     .foregroundStyle(ForgeDesign.muted)
+                Button("CLOSE", action: close)
+                    .font(ForgeDesign.mono(9, weight: .bold))
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(.cancelAction)
             }
             .padding(.horizontal, 16)
             .frame(height: 44)
@@ -5844,11 +5937,11 @@ private struct FullPlanApprovalView: View {
 
 private struct EmbeddedConversationPlanCard: View {
     @EnvironmentObject private var workspace: WorkspaceModel
+    @EnvironmentObject private var surfaceCoordinator: WorkspaceSurfaceCoordinator
 
     var task: ForgeTask
     var revision: PlanRevision
     @Binding var draft: String
-    @State private var showFullPlan = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -5863,7 +5956,9 @@ private struct EmbeddedConversationPlanCard: View {
                     .font(.callout.weight(.bold))
                     .lineLimit(2)
                 Spacer()
-                Button("EXPAND") { showFullPlan = true }
+                Button("EXPAND") {
+                    surfaceCoordinator.present(.fullPlan(taskID: task.id, revisionID: revision.id))
+                }
                     .font(ForgeDesign.mono(9, weight: .bold))
                     .buttonStyle(.plain)
             }
@@ -5927,11 +6022,6 @@ private struct EmbeddedConversationPlanCard: View {
         .background(Color.white)
         .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
         .shadow(color: ForgeDesign.ink, radius: 0, x: 4, y: 4)
-        .sheet(isPresented: $showFullPlan) {
-            FullPlanApprovalView(task: task, revision: revision)
-                .environmentObject(workspace)
-                .frame(width: 1240, height: 680)
-        }
     }
 
     private var approved: Bool {

@@ -53,6 +53,14 @@ The former Planner, Review, action-rail, duplicate-log, toolbar-demo, and
 Git-workbench view trees were removed to avoid rendering old and new product
 concepts together.
 
+Full-page secondary handoff destinations also use one root-owned presentation
+coordinator rather than SwiftUI Sheets. Mission Control, Queue, History, Batch
+Questions, Full Plan, Full Diff, and Audit Log are opaque window-filling
+surfaces. While one is open, the underlying workspace is opacity-zero, ignores
+pointer input, and is hidden from accessibility; every surface closes through
+its visible Close control or Escape. The Command Palette intentionally keeps
+its handoff-specified dimmed overlay behavior.
+
 The sidebar Queue button (`⌘⇧Q`) now opens the handoff `26a` 1240px queue
 surface backed by `GET /queue`. Running, queued, and needs-you lanes use real
 task/loop state. The runtime persists queue priority and its 1-3 global ceiling,
@@ -60,8 +68,8 @@ but deliberately enforces one active Agent Loop for this single repository.
 Priority arrows call the exact-order reorder endpoint; remove returns an
 approved task to `Execution Ready`; pause reuses the cooperative loop gate.
 
-Mission Control (`⌘⇧M`) opens a separate handoff `4a` 1240px three-column
-surface instead of replacing the main task workspace. The primary column uses
+Mission Control (`⌘⇧M`) opens the exclusive handoff `4a` 1240px three-column
+surface while preserving the main task workspace state underneath. The primary column uses
 the main runtime; up to two additional repositories receive app-supervised
 observer runtimes on ports 17374 and 17375. Observers are verified read-only,
 poll tasks/queue/git/health every two seconds, and display live/offline PID and

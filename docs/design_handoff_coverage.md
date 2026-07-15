@@ -31,13 +31,13 @@ the actual visual source of truth.
 | Core | `14a` Main window | Implemented | Exact rendered comparison and typography remain. |
 | Core | `1a` New task empty state | Implemented | Exact rendered comparison and typography remain. |
 | Core | `1b` Plan approval | Implemented | Standalone state and exact rendered comparison remain. |
-| Core | `20a` Full plan approval | Implemented | Compact plan cards expand into the 1240px steps/context/risk/validation/revision layout; Run All uses the bounded six-step loop and Step by Step uses the runtime's real one-step limit. |
+| Core | `20a` Full plan approval | Implemented | Compact plan cards expand into an opaque, window-filling 1240px steps/context/risk/validation/revision surface; the underlying session is hidden from drawing, hit testing, and accessibility while open. Run All uses the bounded six-step loop and Step by Step uses the runtime's real one-step limit. |
 | Core | `32a` New session | Implemented | Exact rendered comparison and responsive verification remain. |
-| Core | `10a` Fullscreen diff review | Implemented | Exact rendered comparison and larger diff edge states remain. |
-| Core | `26a` Task queue | Implemented | The 1240px real-data surface has running/queued/needs-you lanes, 1-3 persisted concurrency settings, ordered priority controls, removal, pause, estimates, automatic restart dispatch, and enforced same-repository serialization. Pointer drag polish and exact rendered comparison remain. |
-| Core | `4a` Mission control | Partial | The 1240px three-column surface, verified observers, explicit session-scoped active-runtime authorization, authorization evidence, live health/task/queue/git aggregation, focus shortcuts, New Task, and cross-runtime Pause All are real. Full background task creation/detail/review routing and rendered comparison remain. |
+| Core | `10a` Fullscreen diff review | Implemented | Opens as an opaque exclusive workspace surface instead of a Sheet, with the prior session hidden and a real Close/Escape path. Exact rendered comparison and larger diff edge states remain. |
+| Core | `26a` Task queue | Implemented | The opaque exclusive 1240px real-data surface has running/queued/needs-you lanes, 1-3 persisted concurrency settings, ordered priority controls, removal, pause, estimates, automatic restart dispatch, and enforced same-repository serialization. Pointer drag polish and exact rendered comparison remain. |
+| Core | `4a` Mission control | Partial | The opaque exclusive 1240px three-column surface, verified observers, explicit session-scoped active-runtime authorization, authorization evidence, live health/task/queue/git aggregation, focus shortcuts, New Task, and cross-runtime Pause All are real. Full background task creation/detail/review routing and rendered comparison remain. |
 | Decisions | `33a` Agent question | Implemented | Context-backed `WaitForHumanReview` steps open the 1240px choice/consequence/frozen-context layout; answer-and-resume and confirmed abort are real, while rendered comparison remains. |
-| Decisions | `34a` Batch questions | Implemented | The sidebar and detailed question state open a 1240px answer queue backed by all waiting tasks; partial submit leaves unanswered tasks paused and resumes answered loops independently. |
+| Decisions | `34a` Batch questions | Implemented | The sidebar and detailed question state open an opaque exclusive 1240px answer queue backed by all waiting tasks; partial submit leaves unanswered tasks paused and resumes answered loops independently. |
 | Decisions | `18a` Merge conflict | Implemented | Actual unmerged index entries open the 1240px conflicted-file/three-way/draft/action layout; Base/Ours/Theirs/working contents, explicit confirmation, stale-review protection, manual/side selection, single-file staging, and no-auto-continue boundary are real. Rendered comparison remains. |
 | Decisions | `19a` Failed/rollback | Implemented | Failed tasks open a dedicated evidence/diagnosis/repo-state/reviewed-repair surface with guarded rollback/reject actions. |
 | Decisions | `24a` First success | Implemented | The first persisted Completed task opens the one-time 980px celebration/receipt/next-step layout with real elapsed/agent/diff/check/review/cost evidence; Queue Next is real and GitHub opens only a safely derived GitHub remote. True merged-PR wording/URL and rendered comparison remain. |
@@ -66,8 +66,8 @@ the actual visual source of truth.
 | Recovery | `13a` Update dialog | Missing | Sparkle update dialog is missing. |
 | Recovery | `28a` Update ready | Missing | Deferred restart banner and mini-window status are missing. |
 | Recovery | `23a` Share/collaboration | Missing | Read-only web review link flow is missing. |
-| Recovery | `2a` Task history | Implemented | Dedicated filter/search table uses persisted task status, phases, changed files, and timestamps. |
-| Recovery | `2b` Audit log | Implemented | Dedicated terminal-style event log uses real task events and exports a local clipboard record. |
+| Recovery | `2a` Task history | Implemented | Dedicated opaque filter/search surface uses persisted task status, phases, changed files, and timestamps without leaving the workspace visible behind it. |
+| Recovery | `2b` Audit log | Implemented | Dedicated opaque terminal-style event surface uses real task events, exports a local clipboard record, and does not layer over a visible task screen. |
 | Compact states | `1c` Needs decision | Implemented | Runtime `WaitForHumanReview` decisions now open the compact two-route/freeform state; rendered comparison remains. |
 | Compact states | `1d` PR ready | Implemented | Completed tasks now open a compact metrics/files/diff/PR-handoff state backed by real task/git data; hosted PR publication remains. |
 | Compact states | `1e` Guardrails | Implemented | Shared settings navigation now exposes the exact always-on/toggle guardrail pattern; rendered comparison remains. |
@@ -77,12 +77,36 @@ the actual visual source of truth.
 - Functional Coding-Agent Demo V0: 100% of its documented behavior criteria.
 - Primary V0 screen implementation: 5 of 5 substantially implemented, none
   yet marked `Verified` under the strict rule above.
-- Full handoff: 25 `Implemented`, 3 `Partial`, 15 `Missing`, 0 `Verified` out
+- Full handoff: 25 `Implemented`, 5 `Partial`, 13 `Missing`, 0 `Verified` out
   of 43 named screens/states.
 - Weighted full-handoff UI readiness: approximately 63-66%.
 
 These metrics must remain separate. Functional completion never implies design
 completion.
+
+## Presentation Isolation Audit
+
+All 43 named handoff entries have a documented presentation class. This audit
+checks hierarchy and opacity only; it does not replace screenshot comparison.
+
+- Direct, mutually exclusive workspace states: `14a`, `1a`, `1b`, `32a`,
+  `33a`, `18a`, `19a`, `24a`, `17a`, `29a`, `31a`, `1c`, and `1d`.
+- Opaque exclusive workspace surfaces: `20a`, `10a`, `26a`, `4a`, `34a`,
+  `2a`, and `2b`. A single root coordinator owns these surfaces. While one is
+  visible, the prior workspace is opacity-zero, ignores pointer input, and is
+  removed from the accessibility tree. No SwiftUI `.sheet` remains in the
+  macOS app source.
+- Intentional dimmed overlay: `5a` Command Palette. The visible background is
+  part of the handoff interaction rather than obsolete UI.
+- Dedicated native Settings scene with an opaque root: `22a`, `3a`, `6a`,
+  `30a`, `5b`, `16a`, and `1e`.
+- Native menu surface without a second content hierarchy: `21a`.
+- Partial or missing dedicated product surfaces that cannot currently create
+  duplicate UI: `37a`, `12a`, `7a`, `27a`, `36a`, `8a`, `9a`, `11a`, `35a`,
+  `15a`, `25a`, `13a`, `28a`, and `23a`.
+
+System alerts and confirmation dialogs remain intentional native modal layers.
+They are not counted as obsolete or duplicate product interfaces.
 
 ## Design-First Implementation Order
 
