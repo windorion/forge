@@ -355,6 +355,53 @@ final class WorkspaceModel: ObservableObject {
         sendingMessageTaskIDs.contains(taskID)
     }
 
+    func answerAgentQuestion(for task: ForgeTask, content: String) {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        sendingMessageTaskIDs.insert(task.id)
+        if let loop = task.agentRunLoops.last {
+            resumingAgentLoopIDs.insert(loop.id)
+            runningAgentLoopTaskIDs.insert(task.id)
+        }
+
+        Task {
+            do {
+                let answeredTask = try await runtime.sendTaskMessage(taskID: task.id, content: trimmed)
+                let pausedLoop = answeredTask.agentRunLoops.last(where: { ["Paused", "Failed"].contains($0.status) }) ??
+                    task.agentRunLoops.last(where: { ["Paused", "Failed"].contains($0.status) })
+
+                if let pausedLoop {
+                    let resumedTask = try await runtime.resumeAgentLoop(
+                        taskID: answeredTask.id,
+                        loopID: pausedLoop.id,
+                        preferredCommandID: nil,
+                        maxSteps: pausedLoop.maxSteps
+                    )
+                    upsert(resumedTask)
+                    selectedTaskID = resumedTask.id
+                    statusMessage = "Decision recorded and agent loop resumed."
+                } else {
+                    upsert(answeredTask)
+                    selectedTaskID = answeredTask.id
+                    statusMessage = "Decision recorded. No paused loop required resuming."
+                }
+
+                await refreshGitStatusSnapshot()
+                await refreshValidationPermissionSnapshotIfPossible(for: task.id)
+                startEventStream()
+            } catch {
+                statusMessage = "Answer & resume failed: \(error.localizedDescription)"
+            }
+
+            sendingMessageTaskIDs.remove(task.id)
+            if let loop = task.agentRunLoops.last {
+                resumingAgentLoopIDs.remove(loop.id)
+            }
+            runningAgentLoopTaskIDs.remove(task.id)
+        }
+    }
+
     func generatePlanRevision(for task: ForgeTask) {
         generatingPlanRevisionTaskIDs.insert(task.id)
 

@@ -36,7 +36,7 @@ the actual visual source of truth.
 | Core | `10a` Fullscreen diff review | Implemented | Exact rendered comparison and larger diff edge states remain. |
 | Core | `26a` Task queue | Partial | Basic task list exists; concurrency lanes, limits, drag order, and repo serialization are missing. |
 | Core | `4a` Mission control | Missing | Multi-repository three-column view is missing. |
-| Decisions | `33a` Agent question | Partial | Clarification messages exist; dedicated choice/consequence layout is missing. |
+| Decisions | `33a` Agent question | Implemented | Context-backed `WaitForHumanReview` steps open the 1240px choice/consequence/frozen-context layout; answer-and-resume and confirmed abort are real, while rendered comparison remains. |
 | Decisions | `34a` Batch questions | Missing | Decision inbox and submit-all flow are missing. |
 | Decisions | `18a` Merge conflict | Missing | Three-way conflict resolver is missing. |
 | Decisions | `19a` Failed/rollback | Implemented | Failed tasks open a dedicated evidence/diagnosis/repo-state/reviewed-repair surface with guarded rollback/reject actions. |
@@ -77,9 +77,9 @@ the actual visual source of truth.
 - Functional Coding-Agent Demo V0: 100% of its documented behavior criteria.
 - Primary V0 screen implementation: 5 of 5 substantially implemented, none
   yet marked `Verified` under the strict rule above.
-- Full handoff: 17 `Implemented`, 5 `Partial`, 21 `Missing`, 0 `Verified` out
+- Full handoff: 18 `Implemented`, 4 `Partial`, 21 `Missing`, 0 `Verified` out
   of 43 named screens/states.
-- Weighted full-handoff UI readiness: approximately 44-47%.
+- Weighted full-handoff UI readiness: approximately 46-49%.
 
 These metrics must remain separate. Functional completion never implies design
 completion.

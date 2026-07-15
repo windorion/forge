@@ -113,6 +113,8 @@ struct WorkspaceView: View {
                     RunCompleteState(task: task)
                 } else if task.status == "Failed" {
                     TaskFailureState(task: task)
+                } else if needsDetailedQuestionLayout(task) {
+                    AgentQuestionState(task: task)
                 } else if needsDecisionLayout(task) {
                     NeedsDecisionState(task: task)
                 } else if usesNewSessionLayout(task) {
@@ -165,8 +167,16 @@ struct WorkspaceView: View {
             task.agentRunSteps.last?.action == "WaitForHumanReview"
     }
 
+    private func needsDetailedQuestionLayout(_ task: ForgeTask) -> Bool {
+        guard needsDecisionLayout(task), let step = task.agentRunSteps.last else { return false }
+        return !(step.contextFilePaths ?? []).isEmpty ||
+            !(step.readPaths ?? []).isEmpty ||
+            !(step.searchTerms ?? []).isEmpty
+    }
+
     private func windowMode(for task: ForgeTask?) -> WorkspaceWindowMode {
         guard let task else { return .compact }
+        if needsDetailedQuestionLayout(task) { return .review }
         if task.status == "Completed" || needsDecisionLayout(task) { return .compact }
         if task.status == "Failed" { return .review }
         return .session
@@ -1138,6 +1148,348 @@ private struct RunCompleteState: View {
         }
         let prefix = file.status == "Added" || file.untracked ? "new · " : ""
         return "\(prefix)+\(file.additions ?? 0) −\(file.deletions ?? 0)"
+    }
+}
+
+private struct AgentQuestionState: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
+
+    var task: ForgeTask
+    @State private var selectedAnswer: String?
+    @State private var ownAnswer = ""
+    @State private var confirmAbort = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Text("⏸ PAUSED — WAITING FOR YOUR ANSWER")
+                    .font(ForgeDesign.mono(10, weight: .heavy))
+                    .tracking(0.5)
+                Text("timer runs, budget doesn't — no model calls while paused")
+                    .font(ForgeDesign.mono(10))
+                    .foregroundStyle(ForgeDesign.ink.opacity(0.65))
+                Spacer()
+                Text(otherTaskNote)
+                    .font(ForgeDesign.mono(9.5))
+                    .foregroundStyle(ForgeDesign.ink.opacity(0.65))
+            }
+            .padding(.horizontal, 24)
+            .frame(height: 43)
+            .background(ForgeDesign.warning)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+            }
+
+            HStack(spacing: 0) {
+                questionColumn
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                Rectangle().fill(ForgeDesign.ink).frame(width: 1.5)
+
+                contextColumn
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .background(Color.white)
+        .alert("Abort this task?", isPresented: $confirmAbort) {
+            Button("Cancel", role: .cancel) {}
+            Button("Abort Task", role: .destructive, action: abort)
+        } message: {
+            Text("The paused loop will stop. Existing reviewed changes and audit evidence remain local.")
+        }
+    }
+
+    private var questionColumn: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                ForgeLogo(size: 26)
+                Text("QUESTION — \(stepProgress) · \(task.currentPhase.uppercased())")
+                    .font(ForgeDesign.mono(9, weight: .bold))
+                    .tracking(1)
+                    .foregroundStyle(ForgeDesign.muted)
+                    .lineLimit(1)
+            }
+            .padding(.bottom, 16)
+
+            Text(question)
+                .font(.system(size: 20, weight: .heavy))
+                .tracking(-0.4)
+                .lineSpacing(3)
+                .padding(.bottom, 10)
+
+            Text(questionContext)
+                .font(.system(size: 13))
+                .foregroundStyle(Color(red: 42 / 255, green: 42 / 255, blue: 38 / 255))
+                .lineSpacing(5)
+                .padding(.bottom, 18)
+
+            AgentQuestionChoice(
+                title: "FOLLOW RECOMMENDATION",
+                detail: recommendation,
+                badge: "AGENT LEANS THIS WAY",
+                selected: selectedAnswer == recommendation
+            ) {
+                selectedAnswer = recommendation
+                ownAnswer = ""
+            }
+            .padding(.bottom, 12)
+
+            AgentQuestionChoice(
+                title: "REQUEST A SAFER ALTERNATIVE",
+                detail: alternative,
+                badge: nil,
+                selected: selectedAnswer == alternative
+            ) {
+                selectedAnswer = alternative
+                ownAnswer = ""
+            }
+            .padding(.bottom, 18)
+
+            TextField("or answer in your own words…", text: $ownAnswer)
+                .textFieldStyle(.plain)
+                .font(ForgeDesign.mono(12))
+                .padding(.horizontal, 15)
+                .frame(height: 44)
+                .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                .onChange(of: ownAnswer) { _, value in
+                    if !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        selectedAnswer = nil
+                    }
+                }
+
+            Spacer(minLength: 16)
+
+            HStack(spacing: 12) {
+                Button("▸ ANSWER & RESUME", action: answerAndResume)
+                    .buttonStyle(ForgePrimaryButtonStyle(foreground: ForgeDesign.accent))
+                    .disabled(resolvedAnswer.isEmpty || workspace.isSendingTaskMessage(taskID: task.id))
+
+                Text(answerStatus)
+                    .font(ForgeDesign.mono(10))
+                    .foregroundStyle(Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255))
+                    .lineLimit(1)
+
+                Spacer()
+
+                Button("✕ ABORT TASK") { confirmAbort = true }
+                    .font(ForgeDesign.mono(10, weight: .bold))
+                    .foregroundStyle(ForgeDesign.danger)
+                    .padding(.horizontal, 14)
+                    .frame(height: 38)
+                    .background(Color.white)
+                    .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                    .buttonStyle(.plain)
+                    .disabled(task.agentRunLoops.last == nil)
+            }
+        }
+        .padding(.horizontal, 28)
+        .padding(.vertical, 26)
+        .background(Color.white)
+    }
+
+    private var contextColumn: some View {
+        VStack(spacing: 0) {
+            Text("WHY IT'S ASKING — CONTEXT")
+                .font(ForgeDesign.mono(9, weight: .bold))
+                .tracking(1)
+                .foregroundStyle(ForgeDesign.muted)
+                .padding(.horizontal, 18)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(height: 36)
+                .background(Color(red: 247 / 255, green: 247 / 255, blue: 244 / 255))
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+                }
+
+            VStack(alignment: .leading, spacing: 7) {
+                ForEach(recentContextEvents) { event in
+                    Text("\(event.createdAt.prefix(19))  \(event.message)")
+                }
+                Text("⏸ decision point reached — asking instead of guessing")
+                    .foregroundStyle(ForgeDesign.warning)
+            }
+            .font(ForgeDesign.mono(10.5))
+            .foregroundStyle(Color(red: 232 / 255, green: 232 / 255, blue: 228 / 255))
+            .padding(.horizontal, 20)
+            .padding(.vertical, 13)
+            .frame(maxWidth: .infinity, minHeight: 122, alignment: .topLeading)
+            .background(ForgeDesign.ink)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("WHAT EACH ANSWER CHANGES")
+                    .font(ForgeDesign.mono(9, weight: .bold))
+                    .tracking(1)
+                    .foregroundStyle(ForgeDesign.muted)
+
+                VStack(spacing: 0) {
+                    comparisonRow("", "RECOMMENDED", "ALTERNATIVE", header: true)
+                    comparisonRow("next action", "resume reviewed path", "return for revision")
+                    comparisonRow("context", contextSummary, contextSummary)
+                    comparisonRow("mutation", "review gates remain", "no work resumes")
+                }
+                .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+
+                Text("INSPECTED CONTEXT")
+                    .font(ForgeDesign.mono(9, weight: .bold))
+                    .tracking(1)
+                    .foregroundStyle(ForgeDesign.muted)
+                    .padding(.top, 4)
+
+                if contextSources.isEmpty {
+                    Text("No stored file paths — the question is based on the persisted task rationale.")
+                        .font(ForgeDesign.mono(10))
+                        .foregroundStyle(ForgeDesign.muted)
+                } else {
+                    ForEach(contextSources.prefix(5), id: \.self) { path in
+                        HStack(spacing: 8) {
+                            Text("▸").foregroundStyle(ForgeDesign.accent)
+                            Text(path).lineLimit(1).truncationMode(.middle)
+                        }
+                        .font(ForgeDesign.mono(10))
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+
+            Spacer()
+
+            Text("▸ the task remains paused until an explicit answer\n▸ this question card and its answer are retained in the local audit trail")
+                .font(ForgeDesign.mono(9.5))
+                .foregroundStyle(ForgeDesign.muted)
+                .lineSpacing(4)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(red: 247 / 255, green: 247 / 255, blue: 244 / 255))
+                .overlay(alignment: .top) {
+                    Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+                }
+        }
+        .background(Color.white)
+    }
+
+    private var latestStep: AgentRunStep? { task.agentRunSteps.last }
+    private var question: String {
+        latestStep?.summary ?? task.reviewSummary ?? "Forge reached a decision point. Which direction should it take?"
+    }
+    private var questionContext: String {
+        latestStep?.rationale ?? "The choice changes the next reviewed step, so Forge paused instead of guessing."
+    }
+    private var recommendation: String {
+        "Follow the inspected repository evidence: \(latestStep?.rationale ?? "continue with the narrow reviewed approach")"
+    }
+    private var alternative: String {
+        "Keep the task paused and produce a revised approach with narrower risk before continuing."
+    }
+    private var resolvedAnswer: String {
+        let own = ownAnswer.trimmingCharacters(in: .whitespacesAndNewlines)
+        return own.isEmpty ? (selectedAnswer ?? "") : own
+    }
+    private var answerStatus: String {
+        if workspace.isSendingTaskMessage(taskID: task.id) { return "recording answer…" }
+        return resolvedAnswer.isEmpty ? "choose one or write your own" : "selected · explicit approval required"
+    }
+    private var stepProgress: String {
+        guard let loop = task.agentRunLoops.last else { return task.currentPhase.uppercased() }
+        return "STEP \(max(loop.stepsRun, 1))/\(loop.maxSteps)"
+    }
+    private var otherTaskNote: String {
+        let active = workspace.tasks.filter { $0.id != task.id && ["Running", "Testing"].contains($0.status) }.count
+        return active == 0 ? "other tasks unaffected" : "other tasks unaffected: \(active) still running"
+    }
+    private var recentContextEvents: [RuntimeEvent] {
+        Array(task.events.suffix(3))
+    }
+    private var contextSources: [String] {
+        guard let step = latestStep else { return [] }
+        var seen = Set<String>()
+        return ((step.contextFilePaths ?? []) + (step.readPaths ?? [])).filter { seen.insert($0).inserted }
+    }
+    private var contextSummary: String {
+        let count = contextSources.count
+        return count == 0 ? "persisted rationale" : "\(count) inspected file\(count == 1 ? "" : "s")"
+    }
+
+    private func comparisonRow(_ label: String, _ recommended: String, _ alternative: String, header: Bool = false) -> some View {
+        HStack(spacing: 0) {
+            Text(label)
+                .foregroundStyle(header ? ForgeDesign.ink : ForgeDesign.muted)
+                .frame(width: 90, alignment: .leading)
+                .padding(.horizontal, 10)
+            Text(recommended)
+                .fontWeight(header ? .bold : .regular)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 10)
+                .overlay(alignment: .leading) { Rectangle().fill(header ? ForgeDesign.ink : ForgeDesign.divider).frame(width: 1.5) }
+            Text(alternative)
+                .fontWeight(header ? .bold : .regular)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 10)
+                .overlay(alignment: .leading) { Rectangle().fill(header ? ForgeDesign.ink : ForgeDesign.divider).frame(width: 1.5) }
+        }
+        .font(ForgeDesign.mono(9.5))
+        .frame(minHeight: 34)
+        .background(header ? Color(red: 247 / 255, green: 247 / 255, blue: 244 / 255) : Color.white)
+        .overlay(alignment: .bottom) { Rectangle().fill(ForgeDesign.divider).frame(height: 1.5) }
+    }
+
+    private func answerAndResume() {
+        guard !resolvedAnswer.isEmpty else { return }
+        workspace.answerAgentQuestion(for: task, content: resolvedAnswer)
+    }
+
+    private func abort() {
+        guard let loop = task.agentRunLoops.last else { return }
+        workspace.abortAgentLoop(for: task, loop: loop)
+    }
+}
+
+private struct AgentQuestionChoice: View {
+    var title: String
+    var detail: String
+    var badge: String?
+    var selected: Bool
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 10) {
+                    Rectangle()
+                        .fill(selected ? ForgeDesign.accent : Color.white)
+                        .frame(width: 15, height: 15)
+                        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                    Text(title)
+                        .font(ForgeDesign.mono(12.5, weight: .heavy))
+                    if let badge {
+                        Text(badge)
+                            .font(ForgeDesign.mono(8.5, weight: .bold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.white)
+                            .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                    }
+                }
+                Text(detail)
+                    .font(ForgeDesign.mono(10.5))
+                    .foregroundStyle(Color(red: 42 / 255, green: 42 / 255, blue: 38 / 255))
+                    .lineSpacing(4)
+                    .padding(.leading, 25)
+                    .lineLimit(3)
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(selected ? Color(red: 247 / 255, green: 242 / 255, blue: 255 / 255) : Color.white)
+            .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+            .shadow(color: selected ? ForgeDesign.ink : .clear, radius: 0, x: 4, y: 4)
+        }
+        .buttonStyle(.plain)
     }
 }
 
