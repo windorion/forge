@@ -10,7 +10,7 @@ Last updated: 2026-07-14
 Forge is a strong trust/runtime foundation with a handoff-driven coding-agent
 session shell and a usable full-screen diff review surface in the macOS app.
 The documented Coding-Agent Demo V0 functional criteria are complete, but the
-full delivered design handoff is approximately 30-35% implemented.
+full delivered design handoff is approximately 38-42% implemented.
 It can create tasks, inspect bounded repo context, hold review gates, generate
 safe edit proposals, apply restricted Markdown edits, exact source/text
 replacements, multi-hunk patches, and context-anchored unified diffs across
@@ -279,7 +279,7 @@ use different denominators and must not be added together.
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
 | Coding-agent demo V0 behavior | 100% | All documented functional acceptance criteria are implemented and smoke-covered. |
 | Primary V0 handoff UI | 95-98% | Five primary screens are substantially implemented; exact typography and rendered comparison remain. |
-| Full 43-screen handoff UI | 30-35% | Eleven screens are implemented, eight partial, and twenty-four missing; none has passed strict rendered verification yet. |
+| Full 43-screen handoff UI | 38-42% | Twelve screens are implemented, ten partial, and twenty-one missing; none has passed strict rendered verification yet. |
 | Useful developer alpha | 50-60% | Forge can recover interrupted loops/transactions and apply guarded source create/modify/delete changes, but still needs broader autonomous tool use and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |

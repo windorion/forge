@@ -3791,3 +3791,37 @@ Next:
 
 - Commit and push this batch to `main`, then implement Shortcuts, GitHub,
   Account/Usage, and the remaining decision/recovery handoff states.
+
+## 2026-07-15 07:45:09 CEST
+
+Conversation summary:
+
+- Continued directly into the remaining shared settings designs after pushing
+  compact states and the initial settings shell.
+
+Done:
+
+- Implemented `16a` Account/Usage with persisted task counts, completed-run
+  count, estimated provider spend, budget fraction, activity bars, and current
+  repository breakdown instead of handoff placeholder data.
+- Implemented the `6a` GitHub structure with the exact three least-privilege
+  scopes, current local git/upstream state, and repository visibility toggle;
+  the UI explicitly reports that OAuth/device flow is still required.
+- Implemented the `5b` Shortcuts groups and keycap layout from active app
+  command bindings while explicitly keeping remapping disabled until the
+  command system can honor it.
+- Updated measured full-handoff implementation readiness to approximately
+  38-42%: 12 Implemented, 10 Partial, 21 Missing, 0 strictly Verified.
+- Passed direct Swift type-check, diff-format validation, full SwiftPM build,
+  and packaged local `Forge.app` rebuild/start verification.
+
+Not done:
+
+- GitHub OAuth/device-flow authorization and dynamic shortcut remapping remain.
+- Rendered pixel comparison is still unavailable, so the new screens remain
+  Implemented/Partial rather than Verified.
+
+Next:
+
+- Commit and push this settings batch to `main`, then move to dedicated
+  history/audit and failure/recovery states.

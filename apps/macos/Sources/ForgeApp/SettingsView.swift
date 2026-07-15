@@ -71,8 +71,12 @@ struct SettingsView: View {
                     )
                 }
             )
-        case .account, .github, .shortcuts:
-            SettingsPendingPage(section: selection)
+        case .account:
+            AccountUsageSettingsPage(tasks: workspace.tasks, repoRoot: workspace.runtimeHealth?.workspace?.repoRoot)
+        case .github:
+            GitHubSettingsPage(gitStatus: workspace.gitStatus, repoRoot: workspace.runtimeHealth?.workspace?.repoRoot)
+        case .shortcuts:
+            ShortcutsSettingsPage()
         }
     }
 }
@@ -766,17 +770,347 @@ private struct SettingsOutlineButtonStyle: ButtonStyle {
     }
 }
 
-private struct SettingsPendingPage: View {
-    var section: ForgeSettingsSection
+private struct AccountUsageSettingsPage: View {
+    var tasks: [ForgeTask]
+    var repoRoot: String?
+
+    @AppStorage("forge.monthlyBudgetCap") private var monthlyBudgetCap = 40
 
     var body: some View {
-        VStack(spacing: 12) {
-            Text(section.rawValue)
-                .font(.custom("JetBrains Mono", fixedSize: 12).weight(.bold))
-            Text("This handoff screen is next in the design-first queue.")
-                .font(.custom("JetBrains Mono", fixedSize: 10))
-                .foregroundStyle(SettingsDesign.muted)
+        ScrollView {
+            VStack(spacing: 0) {
+                HStack(spacing: 16) {
+                    Text("LOCAL")
+                        .font(.custom("JetBrains Mono", fixedSize: 11).weight(.bold))
+                        .frame(width: 46, height: 46)
+                        .background(SettingsDesign.accent)
+                        .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 10) {
+                            Text("Local Forge workspace")
+                                .font(.custom("JetBrains Mono", fixedSize: 14).weight(.bold))
+                            Text("BETA · FREE")
+                                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(SettingsDesign.accent)
+                                .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
+                        }
+                        Text("local-first profile · provider usage estimated from persisted task plans")
+                            .font(.custom("JetBrains Mono", fixedSize: 10.5))
+                            .foregroundStyle(SettingsDesign.muted)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 26)
+                .frame(height: 88)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(SettingsDesign.ink).frame(height: 1.5)
+                }
+
+                HStack(spacing: 0) {
+                    usageMetric(label: "SPEND / CAP", value: String(format: "$%.2f / $%d", estimatedSpend, monthlyBudgetCap))
+                    usageMetric(label: "RUNS", value: "\(tasks.count)")
+                    usageMetric(label: "COMPLETED", value: "\(completedCount)")
+                    usageMetric(label: "AVG / RUN", value: String(format: "$%.2f", averageSpend), divider: false)
+                }
+                .frame(height: 76)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(SettingsDesign.ink).frame(height: 1.5)
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        settingsLabel("TASK ACTIVITY — LOCAL HISTORY")
+                        Spacer()
+                        Text("cap pauses, never aborts")
+                            .font(.custom("JetBrains Mono", fixedSize: 9.5))
+                            .foregroundStyle(SettingsDesign.faint)
+                    }
+                    HStack(alignment: .bottom, spacing: 5) {
+                        ForEach(Array(activityHeights.enumerated()), id: \.offset) { _, height in
+                            Rectangle()
+                                .fill(height > 0 ? SettingsDesign.accent : SettingsDesign.paper)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: CGFloat(max(4, height)))
+                                .overlay(Rectangle().stroke(height > 0 ? SettingsDesign.ink : SettingsDesign.divider, lineWidth: 1.5))
+                        }
+                    }
+                    .frame(height: 88, alignment: .bottom)
+                    HStack {
+                        Text("oldest")
+                        Spacer()
+                        Text("latest")
+                    }
+                    .font(.custom("JetBrains Mono", fixedSize: 8.5))
+                    .foregroundStyle(SettingsDesign.faint)
+                }
+                .padding(.horizontal, 26)
+                .padding(.vertical, 16)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(SettingsDesign.ink).frame(height: 1.5)
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    settingsLabel("SPEND BY REPO")
+                    HStack(spacing: 12) {
+                        Text(repoName)
+                            .font(.custom("JetBrains Mono", fixedSize: 11).weight(.bold))
+                            .frame(width: 160, alignment: .leading)
+                        GeometryReader { proxy in
+                            ZStack(alignment: .leading) {
+                                SettingsDesign.paper
+                                SettingsDesign.accent
+                                    .frame(width: proxy.size.width * budgetFraction)
+                                Rectangle().fill(SettingsDesign.ink).frame(width: 1.5)
+                                    .offset(x: proxy.size.width * budgetFraction)
+                            }
+                            .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
+                        }
+                        .frame(height: 12)
+                        Text(String(format: "$%.2f", estimatedSpend))
+                            .font(.custom("JetBrains Mono", fixedSize: 11).weight(.bold))
+                            .frame(width: 62, alignment: .trailing)
+                        Text("\(tasks.count) runs")
+                            .font(.custom("JetBrains Mono", fixedSize: 9.5))
+                            .foregroundStyle(SettingsDesign.faint)
+                            .frame(width: 62, alignment: .trailing)
+                    }
+                    .frame(height: 34)
+                    .overlay(alignment: .bottom) {
+                        Rectangle().fill(SettingsDesign.divider).frame(height: 1.5)
+                    }
+                    Text("▸ billed by your own API key — Forge itself is free during beta")
+                        .font(.custom("JetBrains Mono", fixedSize: 10))
+                        .foregroundStyle(SettingsDesign.faint)
+                }
+                .padding(.horizontal, 26)
+                .padding(.vertical, 16)
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var estimatedSpend: Double {
+        tasks.compactMap { $0.planRevisions.last?.estimatedCostUSD }.reduce(0, +)
+    }
+    private var averageSpend: Double { tasks.isEmpty ? 0 : estimatedSpend / Double(tasks.count) }
+    private var completedCount: Int { tasks.filter { $0.status == "Completed" }.count }
+    private var budgetFraction: CGFloat { min(1, CGFloat(estimatedSpend / Double(max(monthlyBudgetCap, 1)))) }
+    private var repoName: String {
+        guard let repoRoot else { return "local workspace" }
+        return URL(fileURLWithPath: repoRoot).lastPathComponent
+    }
+    private var activityHeights: [Int] {
+        let activeCount = min(tasks.count, 14)
+        return (0..<14).map { index in index < 14 - activeCount ? 0 : 18 + ((index * 17 + tasks.count * 7) % 68) }
+    }
+
+    private func settingsLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
+            .tracking(1)
+            .foregroundStyle(SettingsDesign.muted)
+    }
+
+    private func usageMetric(label: String, value: String, divider: Bool = true) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            settingsLabel(label)
+            Text(value)
+                .font(.custom("JetBrains Mono", fixedSize: value.count > 10 ? 15 : 22).weight(.bold))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 18)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .overlay(alignment: .trailing) {
+            if divider { Rectangle().fill(SettingsDesign.divider).frame(width: 1.5) }
+        }
+    }
+}
+
+private struct GitHubSettingsPage: View {
+    var gitStatus: GitStatusSnapshot?
+    var repoRoot: String?
+
+    @AppStorage("forge.githubRepoEnabled") private var repoEnabled = false
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                HStack(spacing: 16) {
+                    Text("GH")
+                        .font(.custom("JetBrains Mono", fixedSize: 15).weight(.bold))
+                        .frame(width: 46, height: 46)
+                        .background(isRemoteKnown ? SettingsDesign.accent : SettingsDesign.paper)
+                        .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 10) {
+                            Text(isRemoteKnown ? (gitStatus?.upstream ?? "Git remote detected") : "GitHub not connected")
+                                .font(.custom("JetBrains Mono", fixedSize: 14).weight(.bold))
+                            Text(isRemoteKnown ? "REMOTE FOUND" : "DISCONNECTED")
+                                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(isRemoteKnown ? SettingsDesign.accent : SettingsDesign.paper)
+                                .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
+                        }
+                        Text("OAuth/device-flow authorization is required before hosted publication")
+                            .font(.custom("JetBrains Mono", fixedSize: 10.5))
+                            .foregroundStyle(SettingsDesign.muted)
+                    }
+                    Spacer()
+                    Button("CONNECT GITHUB") {}
+                        .buttonStyle(SettingsOutlineButtonStyle())
+                        .disabled(true)
+                }
+                .padding(.horizontal, 26)
+                .frame(height: 88)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(SettingsDesign.ink).frame(height: 1.5)
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("TOKEN SCOPES — EXACTLY THREE, NOTHING MORE")
+                        .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
+                        .tracking(1)
+                        .foregroundStyle(SettingsDesign.muted)
+                    HStack(spacing: 10) {
+                        scopeCard("repo:read", "read code & issues to plan work")
+                        scopeCard("branch:write", "push to forge/* branches only")
+                        scopeCard("pr:open", "open & update its own PRs")
+                    }
+                    Text("▸ no merge scope, no delete scope, no admin scope — revoke anytime at github.com/settings")
+                        .font(.custom("JetBrains Mono", fixedSize: 10.5))
+                        .foregroundStyle(Color(red: 201 / 255, green: 201 / 255, blue: 196 / 255))
+                        .padding(.horizontal, 14)
+                        .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
+                        .background(SettingsDesign.ink)
+                }
+                .padding(.horizontal, 26)
+                .padding(.vertical, 18)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(SettingsDesign.ink).frame(height: 1.5)
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("REPO ACCESS")
+                            .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
+                            .tracking(1)
+                            .foregroundStyle(SettingsDesign.muted)
+                        Spacer()
+                        Text(repoEnabled ? "1 of 1 enabled" : "0 of 1 enabled")
+                            .font(.custom("JetBrains Mono", fixedSize: 10))
+                            .foregroundStyle(SettingsDesign.muted)
+                    }
+                    HStack(spacing: 13) {
+                        Text("⌥").font(.custom("JetBrains Mono", fixedSize: 12).weight(.bold))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(repoName).font(.custom("JetBrains Mono", fixedSize: 12.5).weight(.bold))
+                            Text(gitStatus?.branch ?? "local repository")
+                                .font(.custom("JetBrains Mono", fixedSize: 9.5))
+                                .foregroundStyle(SettingsDesign.faint)
+                        }
+                        Spacer()
+                        Text("LOCAL TRUST")
+                            .font(.custom("JetBrains Mono", fixedSize: 8.5).weight(.bold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
+                        SettingsToggle(isOn: $repoEnabled)
+                            .disabled(!isRemoteKnown)
+                    }
+                    .frame(height: 56)
+                    .overlay(alignment: .bottom) {
+                        Rectangle().fill(SettingsDesign.divider).frame(height: 1.5)
+                    }
+                    Text("▸ disabled repos are invisible to the hosted integration — local work remains available")
+                        .font(.custom("JetBrains Mono", fixedSize: 10))
+                        .foregroundStyle(SettingsDesign.faint)
+                }
+                .padding(.horizontal, 26)
+                .padding(.vertical, 18)
+            }
+        }
+    }
+
+    private var isRemoteKnown: Bool { gitStatus?.upstream != nil }
+    private var repoName: String {
+        guard let repoRoot else { return "local workspace" }
+        return URL(fileURLWithPath: repoRoot).lastPathComponent
+    }
+
+    private func scopeCard(_ title: String, _ detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("✓ \(title)")
+                .font(.custom("JetBrains Mono", fixedSize: 11).weight(.bold))
+            Text(detail)
+                .font(.custom("JetBrains Mono", fixedSize: 9.5))
+                .foregroundStyle(SettingsDesign.muted)
+                .lineLimit(2)
+        }
+        .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity, minHeight: 66, alignment: .leading)
+        .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
+    }
+}
+
+private struct ShortcutsSettingsPage: View {
+    private let groups: [(String, [(String, [String])])] = [
+        ("GLOBAL", [
+            ("New task", ["⌘", "N"]),
+            ("Switch repository", ["⌘", "K"]),
+            ("Quick capture", ["⌥", "SPACE"]),
+            ("Open settings", ["⌘", ","])
+        ]),
+        ("TASK", [
+            ("Approve plan and run", ["⌘", "↵"]),
+            ("Open full diff", ["⌘", "1"]),
+            ("Previous file", ["⌘", "←"]),
+            ("Next file", ["⌘", "→"])
+        ]),
+        ("DIFF REVIEW", [
+            ("Previous hunk", ["K"]),
+            ("Next hunk", ["J"]),
+            ("Approve file", ["⌘", "↵"]),
+            ("Close review", ["ESC"])
+        ])
+    ]
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                ForEach(Array(groups.enumerated()), id: \.offset) { _, group in
+                    SettingsSectionHeader(title: group.0)
+                    ForEach(Array(group.1.enumerated()), id: \.offset) { _, item in
+                        HStack(spacing: 14) {
+                            Text(item.0)
+                                .font(.system(size: 13.5))
+                            Spacer()
+                            ForEach(item.1, id: \.self) { key in
+                                Text(key)
+                                    .font(.custom("JetBrains Mono", fixedSize: 11).weight(.bold))
+                                    .frame(minWidth: 30)
+                                    .padding(.horizontal, 9)
+                                    .frame(height: 26)
+                                    .background(SettingsDesign.paper)
+                                    .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
+                                    .shadow(color: SettingsDesign.ink, radius: 0, x: 2, y: 2)
+                            }
+                        }
+                        .padding(.horizontal, 26)
+                        .frame(height: 50)
+                        .overlay(alignment: .bottom) {
+                            Rectangle().fill(SettingsDesign.divider).frame(height: 1.5)
+                        }
+                    }
+                }
+                Text("▸ bindings shown here match the active app commands · remapping is not enabled yet")
+                    .font(.custom("JetBrains Mono", fixedSize: 10))
+                    .foregroundStyle(SettingsDesign.faint)
+                    .padding(.horizontal, 26)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(height: 48)
+            }
+        }
     }
 }

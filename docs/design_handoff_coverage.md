@@ -44,10 +44,10 @@ the actual visual source of truth.
 | Decisions | `37a` Cost breakdown | Partial | Task estimates exist; step/model-call accordion is missing. |
 | Settings | `22a` General | Implemented | Shared 980px navigation, startup, appearance, notification, sound, and update rows exist; rendered comparison remains. |
 | Settings | `3a` Model | Implemented | Square provider cards, API-key handoff, effort selector, budget guardrail, and real save action exist; rendered comparison remains. |
-| Settings | `6a` GitHub | Missing | Least-scope authorization and repository toggles are missing. |
+| Settings | `6a` GitHub | Partial | Exact three-scope and repository-access layout uses real local git state; OAuth/device-flow connection remains. |
 | Settings | `30a` API key | Implemented | Dedicated provider/key/status layout uses real Keychain storage and removal; exact provider test semantics and rendered comparison remain. |
-| Settings | `5b` Shortcuts | Missing | Remappable shortcut table is missing. |
-| Settings | `16a` Account/usage | Missing | Budget and repository/model allocation view is missing. |
+| Settings | `5b` Shortcuts | Partial | Handoff shortcut groups now reflect active commands; runtime remapping remains. |
+| Settings | `16a` Account/usage | Implemented | Usage summary, activity chart, budget, and repository breakdown use persisted task estimates; rendered comparison remains. |
 | Quick entry | `5a` Command palette | Missing | Command palette is missing. |
 | Quick entry | `12a` Quick capture | Missing | Global floating capture window is missing. |
 | Quick entry | `7a` Menu bar mini window | Missing | Menu bar item and mini window are missing. |
@@ -77,9 +77,9 @@ the actual visual source of truth.
 - Functional Coding-Agent Demo V0: 100% of its documented behavior criteria.
 - Primary V0 screen implementation: 5 of 5 substantially implemented, none
   yet marked `Verified` under the strict rule above.
-- Full handoff: 11 `Implemented`, 8 `Partial`, 24 `Missing`, 0 `Verified` out
+- Full handoff: 12 `Implemented`, 10 `Partial`, 21 `Missing`, 0 `Verified` out
   of 43 named screens/states.
-- Weighted full-handoff UI readiness: approximately 30-35%.
+- Weighted full-handoff UI readiness: approximately 38-42%.
 
 These metrics must remain separate. Functional completion never implies design
 completion.
