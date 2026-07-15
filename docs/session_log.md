@@ -4058,3 +4058,45 @@ Next:
 
 - Run full build/package verification, push to `main`, then continue the same
   design-first sequence with the next state backed by real runtime evidence.
+
+## 2026-07-15 08:33:18 CEST
+
+Conversation summary:
+
+- Continued the design-first handoff pass with a real end-to-end `18a` Merge
+  Conflict implementation instead of a static mock.
+
+Done:
+
+- Added runtime conflict inspection for real unmerged Git index entries,
+  including bounded Base/Ours/Theirs/working text, binary/size/regular-file
+  states, operation-aware labels, and working/index fingerprints.
+- Added explicit conflict resolution with exact confirmation, expected-HEAD
+  and stale-fingerprint gates, Ours/Theirs/deletion/manual strategies, atomic
+  mode-preserving manual writes, single-file staging, task/SSE audit evidence,
+  and a strict no-auto-continue boundary.
+- Added the 1240px handoff-aligned macOS conflict workspace with 250px file
+  list, paired versions, working resolution draft, manual editor, confirmation
+  dialog, live remaining-conflict refresh, errors/results, and safety footer.
+- Added `npm run smoke:git-conflicts` using a temporary real two-file merge;
+  confirmation, stale review, stage content, Ours/manual resolution, staging,
+  and preserved `MERGE_HEAD` all pass.
+- Passed SwiftPM build, TypeScript check/build, core runtime smoke, Git conflict
+  fixture, Git remote fixtures, and diff-format checks.
+- Updated full-handoff readiness to approximately 56-59%: 23 Implemented, 3
+  Partial, 17 Missing, and 0 strictly Verified.
+
+Not done:
+
+- Strict rendered comparison is still unavailable, so `18a` remains
+  Implemented rather than Verified.
+- Forge intentionally does not continue/abort the surrounding Git operation;
+  the user retains that separate decision after all conflicts are staged.
+- First Success, queue scheduling, full native menu/system integrations,
+  onboarding/auth, updates, sharing, templates, detailed cost, Mission Control,
+  and remaining handoff verification are unfinished.
+
+Next:
+
+- Package and launch the rebuilt app, commit and push this batch to `main`,
+  then continue with the next handoff-backed state.

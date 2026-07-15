@@ -68,11 +68,41 @@ Current implementation:
 
 Current limitations:
 
-- no staging, unstaging, discard, checkout/reset, or binary diff actions
+- no general staging, unstaging, discard, checkout/reset, or binary diff actions
 - no binary visual preview beyond clear metadata/message handling
 - no full-file diff navigation or advanced filtering beyond the first review
   list
 - large diffs are truncated by the runtime
+
+## Conflict Workflow
+
+Forge treats an unmerged index as a dedicated human-review state instead of
+allowing normal commit, branch, publish, push, or PR actions to proceed.
+
+Current implementation:
+
+- `GET /git/conflicts` reads actual unmerged files and exposes Base (stage 1),
+  Ours (stage 2), Theirs (stage 3), and the working file with explicit missing,
+  binary, oversized, irregular-file, and command-failure states.
+- Operation-aware labels explain merge, rebase, and cherry-pick semantics;
+  Forge does not pretend stage 2/3 always means the same branches.
+- Every reviewed file carries a SHA-256 conflict fingerprint derived from its
+  unmerged index entries and working content. Resolution requires that
+  fingerprint plus the reviewed HEAD and exact `RESOLVE_GIT_CONFLICT`
+  confirmation.
+- `POST /git/conflicts/resolve` can select Ours, select Theirs, preserve a
+  selected deletion, or atomically write reviewed manual UTF-8 text. Manual
+  writes preserve the regular file mode and reject residual conflict markers,
+  binary content, oversized content, symlinks, and paths outside the git root.
+- A successful action stages only the selected file and refreshes remaining
+  conflicts. If a task is linked, Forge records a task event; all resolutions
+  emit runtime audit evidence.
+- Forge never runs merge/rebase/cherry-pick continue or abort, never commits,
+  and never pushes from conflict resolution. Those remain separate human
+  decisions after all files are reviewed.
+- `npm run smoke:git-conflicts` creates a temporary two-file real merge
+  conflict and verifies stage reading, confirmation and stale-review gates,
+  Ours/manual resolution, staging, and preservation of `MERGE_HEAD`.
 
 ## Commit Workflow
 

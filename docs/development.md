@@ -61,6 +61,13 @@ now renders pending proposal diffs before Apply, parses standard unified hunks
 into real aligned split rows with old/new line numbers, and supports keyboard
 file/hunk navigation plus per-file approval.
 
+Actual Git unmerged state now replaces the normal task workspace with the
+handoff `18a` conflict review. The runtime serves Base/Ours/Theirs/working
+versions and a stale-review fingerprint; the app provides paired source panes,
+an editable resolution draft, explicit confirmation, and live remaining-file
+refresh. Resolution stages only one reviewed file and never continues the Git
+operation automatically.
+
 ## Run Runtime
 
 ```bash
@@ -555,6 +562,18 @@ pointing at each fixture repo, and verifies:
 It does not require GitHub credentials or network access. Hosted-provider auth,
 fork, and branch-protection fixtures are still future work.
 
+## Git Conflict Fixtures
+
+```bash
+cd runtime
+npm run smoke:git-conflicts
+```
+
+This command creates a temporary repository with a real two-file merge
+conflict, starts the runtime against it, and verifies conflict stage reading,
+confirmation and stale-review gates, side/manual resolution, staging, and the
+no-auto-continue boundary. It does not touch the Forge worktree.
+
 ## Build Checks
 
 ```bash
@@ -562,6 +581,7 @@ swift build
 cd runtime && npm run check
 cd runtime && npm run build
 cd runtime && npm run smoke:core
+cd runtime && npm run smoke:git-conflicts
 cd runtime && npm run smoke:git-remote
 ```
 
@@ -600,9 +620,12 @@ cd runtime && npm run smoke:git-remote
   not apply fixes or rerun validation/commands automatically.
 - Follow-up repair proposals are review artifacts. They can be generated from a
   repair brief, but they still require validation and explicit human apply.
-- Git status and diff inspection are read-only review surfaces. The runtime
+- General Git status and diff inspection are read-only review surfaces. The runtime
   blocks absolute paths, parent-directory traversal, and `.git`/`.forge`
-  internals; diffs are bounded and large previews are truncated.
+  internals; diffs are bounded and large previews are truncated. The dedicated
+  conflict action is the narrow exception: after exact confirmation and stale
+  review checks it resolves and stages only one current unmerged file, without
+  continuing the surrounding Git operation.
 - App-managed runtime start/stop is a lifecycle convenience. During
   development it can build `runtime`; in an app bundle it can launch a
   prebuilt bundled runtime resource and pass the resolved repository root via

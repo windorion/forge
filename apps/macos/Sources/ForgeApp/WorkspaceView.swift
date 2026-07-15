@@ -111,6 +111,8 @@ struct WorkspaceView: View {
                 NoRepositoryState()
             } else if shouldShowOffline {
                 OfflineWorkspaceState(tasks: workspace.tasks, retry: workspace.refreshRuntimeHealth)
+            } else if let conflicts = workspace.gitConflictSnapshot, !conflicts.files.isEmpty {
+                MergeConflictState(snapshot: conflicts)
             } else if let task = workspace.selectedTask {
                 if task.status == "Completed" {
                     RunCompleteState(task: task)
@@ -173,6 +175,8 @@ struct WorkspaceView: View {
                         ? .compact
                     : shouldShowOffline
                         ? .review
+                        : workspace.gitConflictSnapshot?.files.isEmpty == false
+                            ? .review
                         : windowMode(for: workspace.selectedTask)
             )
         )
@@ -2535,6 +2539,338 @@ private struct CrashRecoveryState: View {
         }
         .padding(.horizontal, 24)
         .background(ForgeDesign.paper)
+    }
+}
+
+private struct MergeConflictState: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
+    let snapshot: GitConflictSnapshot
+
+    @State private var selectedPath: String?
+    @State private var draft = ""
+    @State private var editingDraft = false
+    @State private var pendingStrategy: String?
+
+    private var selectedFile: GitConflictFile? {
+        let path = selectedPath ?? snapshot.files.first?.path
+        return snapshot.files.first { $0.path == path }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            conflictHeader
+
+            HStack(spacing: 0) {
+                conflictSidebar
+                    .frame(width: 250)
+
+                Rectangle().fill(ForgeDesign.ink).frame(width: 1.5)
+
+                if let selectedFile {
+                    conflictDetail(selectedFile)
+                } else {
+                    ContentUnavailableView("No unresolved conflicts", systemImage: "checkmark.circle")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+
+            conflictFooter
+        }
+        .background(ForgeDesign.paper)
+        .onAppear(perform: synchronizeSelection)
+        .onChange(of: selectedPath) { _, _ in loadWorkingDraft() }
+        .onChange(of: snapshot.files.map(\.path)) { _, _ in synchronizeSelection() }
+        .confirmationDialog(
+            resolutionConfirmationTitle,
+            isPresented: Binding(
+                get: { pendingStrategy != nil },
+                set: { if !$0 { pendingStrategy = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let pendingStrategy, let selectedFile {
+                Button("Resolve and Stage \(selectedFile.path)") {
+                    let content = pendingStrategy == "Manual" ? draft : nil
+                    workspace.resolveGitConflict(file: selectedFile, strategy: pendingStrategy, content: content)
+                    self.pendingStrategy = nil
+                }
+                Button("Cancel", role: .cancel) { self.pendingStrategy = nil }
+            }
+        } message: {
+            Text("This writes the selected resolution and stages only this file. Forge will not continue or abort the \(snapshot.operation.lowercased()).")
+        }
+    }
+
+    private var conflictHeader: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(ForgeDesign.warning)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(snapshot.files.count) CONFLICT\(snapshot.files.count == 1 ? "" : "S")")
+                    .font(ForgeDesign.mono(17, weight: .black))
+                Text("\(snapshot.operation.uppercased()) IN PROGRESS · \(snapshot.branch?.uppercased() ?? "DETACHED HEAD")")
+                    .font(ForgeDesign.mono(10, weight: .bold))
+                    .foregroundStyle(ForgeDesign.muted)
+            }
+
+            Spacer()
+
+            Button {
+                workspace.refreshGitConflicts()
+            } label: {
+                Label("REFRESH", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(ForgeSecondaryButtonStyle())
+        }
+        .padding(.horizontal, 22)
+        .frame(height: 74)
+        .background(Color.white)
+        .overlay(alignment: .bottom) { Rectangle().fill(ForgeDesign.ink).frame(height: 1.5) }
+    }
+
+    private var conflictSidebar: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("CONFLICTED FILES")
+                .font(ForgeDesign.mono(10, weight: .black))
+                .tracking(0.8)
+                .padding(.horizontal, 16)
+                .frame(height: 42)
+
+            Rectangle().fill(ForgeDesign.divider).frame(height: 1)
+
+            List(selection: $selectedPath) {
+                ForEach(snapshot.files) { file in
+                    HStack(spacing: 9) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(ForgeDesign.warning)
+                            .frame(width: 15)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(URL(fileURLWithPath: file.path).lastPathComponent)
+                                .font(ForgeDesign.mono(11, weight: .bold))
+                                .lineLimit(1)
+                            Text(file.path)
+                                .font(ForgeDesign.mono(9))
+                                .foregroundStyle(ForgeDesign.muted)
+                                .lineLimit(1)
+                        }
+                    }
+                    .padding(.vertical, 5)
+                    .tag(file.path)
+                }
+            }
+            .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+        }
+        .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    private func conflictDetail(_ file: GitConflictFile) -> some View {
+        VStack(spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(file.path)
+                        .font(ForgeDesign.mono(13, weight: .black))
+                    Text("INDEX \(file.indexStatus)\(file.worktreeStatus) · REVIEW ALL VERSIONS BEFORE RESOLVING")
+                        .font(ForgeDesign.mono(9, weight: .bold))
+                        .foregroundStyle(ForgeDesign.muted)
+                }
+                Spacer()
+                if workspace.isResolvingGitConflict(path: file.path) {
+                    ProgressView().controlSize(.small)
+                    Text("RESOLVING…").font(ForgeDesign.mono(9, weight: .bold))
+                }
+            }
+            .padding(.horizontal, 18)
+            .frame(height: 58)
+            .background(Color.white)
+            .overlay(alignment: .bottom) { Rectangle().fill(ForgeDesign.divider).frame(height: 1) }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(alignment: .top, spacing: 12) {
+                        ConflictSourcePane(title: snapshot.oursLabel, stage: file.ours, tint: ForgeDesign.accent)
+                        ConflictSourcePane(title: snapshot.theirsLabel, stage: file.theirs, tint: ForgeDesign.warning)
+                    }
+
+                    resolutionDraft(file)
+
+                    if let error = workspace.gitConflictLastError {
+                        Label(error, systemImage: "xmark.octagon.fill")
+                            .font(ForgeDesign.mono(10, weight: .bold))
+                            .foregroundStyle(ForgeDesign.danger)
+                            .textSelection(.enabled)
+                    } else if let result = workspace.gitConflictLastResult {
+                        Label(result.summary, systemImage: "checkmark.circle.fill")
+                            .font(ForgeDesign.mono(10, weight: .bold))
+                            .foregroundStyle(ForgeDesign.success)
+                    }
+                }
+                .padding(18)
+            }
+
+            actionBar(file)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func resolutionDraft(_ file: GitConflictFile) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("RESOLUTION DRAFT", systemImage: "wand.and.stars")
+                    .font(ForgeDesign.mono(10, weight: .black))
+                Spacer()
+                Text(editingDraft ? "EDITING" : "WORKING FILE")
+                    .font(ForgeDesign.mono(9, weight: .bold))
+                    .foregroundStyle(ForgeDesign.muted)
+            }
+
+            Text("Forge starts from the current working conflict file. Remove every conflict marker and review the complete result before accepting it.")
+                .font(ForgeDesign.mono(10))
+                .foregroundStyle(ForgeDesign.muted)
+
+            if editingDraft {
+                TextEditor(text: $draft)
+                    .font(ForgeDesign.mono(10))
+                    .scrollContentBackground(.hidden)
+                    .padding(8)
+                    .frame(minHeight: 150)
+                    .background(Color.white)
+                    .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+            } else {
+                ScrollView([.horizontal, .vertical]) {
+                    Text(file.working.content ?? file.working.summary)
+                        .font(ForgeDesign.mono(10))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(minHeight: 100, maxHeight: 170)
+                .padding(10)
+                .background(Color.white)
+                .overlay(Rectangle().stroke(ForgeDesign.divider, lineWidth: 1))
+            }
+        }
+        .padding(14)
+        .background(ForgeDesign.accent.opacity(0.10))
+        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+    }
+
+    private func actionBar(_ file: GitConflictFile) -> some View {
+        HStack(spacing: 10) {
+            Button("✓ ACCEPT DRAFT") { pendingStrategy = "Manual" }
+                .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.success, foreground: ForgeDesign.ink))
+                .disabled(!draftIsResolvable || workspace.isResolvingGitConflict(path: file.path))
+
+            Button("TAKE \(snapshot.oursLabel)") { pendingStrategy = "Ours" }
+                .buttonStyle(ForgeSecondaryButtonStyle())
+                .disabled(!stageCanBeSelected(file.ours) || workspace.isResolvingGitConflict(path: file.path))
+
+            Button("TAKE \(snapshot.theirsLabel)") { pendingStrategy = "Theirs" }
+                .buttonStyle(ForgeSecondaryButtonStyle())
+                .disabled(!stageCanBeSelected(file.theirs) || workspace.isResolvingGitConflict(path: file.path))
+
+            Spacer()
+
+            Button(editingDraft ? "CANCEL EDIT" : "EDIT MANUALLY") {
+                editingDraft.toggle()
+                if !editingDraft { loadWorkingDraft() }
+            }
+            .buttonStyle(ForgeSecondaryButtonStyle())
+        }
+        .padding(.horizontal, 18)
+        .frame(height: 62)
+        .background(Color.white)
+        .overlay(alignment: .top) { Rectangle().fill(ForgeDesign.ink).frame(height: 1.5) }
+    }
+
+    private var conflictFooter: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "lock.shield.fill")
+                .foregroundStyle(ForgeDesign.accent)
+            Text(snapshot.operationBoundary)
+                .font(ForgeDesign.mono(9, weight: .bold))
+                .foregroundStyle(ForgeDesign.muted)
+                .lineLimit(2)
+            Spacer()
+            Text("NEXT: REVIEW · CONTINUE IN GIT · TEST · PR")
+                .font(ForgeDesign.mono(9, weight: .black))
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 46)
+        .background(ForgeDesign.paper)
+        .overlay(alignment: .top) { Rectangle().fill(ForgeDesign.ink).frame(height: 1.5) }
+    }
+
+    private var resolutionConfirmationTitle: String {
+        guard let pendingStrategy else { return "Resolve conflict?" }
+        return pendingStrategy == "Manual" ? "Accept the edited resolution?" : "Take the \(pendingStrategy.lowercased()) version?"
+    }
+
+    private var draftIsResolvable: Bool {
+        !draft.contains("<<<<<<<") && !draft.contains("=======") && !draft.contains(">>>>>>>")
+    }
+
+    private func stageCanBeSelected(_ stage: GitConflictStage) -> Bool {
+        stage.available || stage.unavailableReason == "Missing"
+    }
+
+    private func synchronizeSelection() {
+        if let selectedPath, snapshot.files.contains(where: { $0.path == selectedPath }) {
+            loadWorkingDraft()
+            return
+        }
+        selectedPath = snapshot.files.first?.path
+        loadWorkingDraft()
+    }
+
+    private func loadWorkingDraft() {
+        guard let selectedFile else {
+            draft = ""
+            editingDraft = false
+            return
+        }
+        draft = selectedFile.working.content ?? selectedFile.ours.content ?? selectedFile.theirs.content ?? ""
+        editingDraft = false
+    }
+}
+
+private struct ConflictSourcePane: View {
+    let title: String
+    let stage: GitConflictStage
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Circle().fill(tint).frame(width: 8, height: 8)
+                Text(title)
+                    .font(ForgeDesign.mono(10, weight: .black))
+                    .lineLimit(1)
+                Spacer()
+                Text(stage.available ? "\(stage.lineCount) LINES" : (stage.unavailableReason ?? "UNAVAILABLE").uppercased())
+                    .font(ForgeDesign.mono(8, weight: .bold))
+                    .foregroundStyle(ForgeDesign.muted)
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 36)
+            .background(tint.opacity(0.14))
+
+            Rectangle().fill(ForgeDesign.divider).frame(height: 1)
+
+            ScrollView([.horizontal, .vertical]) {
+                Text(stage.content ?? stage.summary)
+                    .font(ForgeDesign.mono(9))
+                    .foregroundStyle(stage.available ? ForgeDesign.ink : ForgeDesign.muted)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+            }
+            .frame(minHeight: 170, maxHeight: 220)
+        }
+        .frame(maxWidth: .infinity)
+        .background(Color.white)
+        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
     }
 }
 

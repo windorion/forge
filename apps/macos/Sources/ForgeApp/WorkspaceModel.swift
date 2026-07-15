@@ -20,6 +20,9 @@ final class WorkspaceModel: ObservableObject {
     @Published var workspaceValidationPresetConfig: WorkspaceValidationPresetConfig?
     @Published var gitStatus: GitStatusSnapshot?
     @Published var gitStatusLastError: String?
+    @Published var gitConflictSnapshot: GitConflictSnapshot?
+    @Published var gitConflictLastError: String?
+    @Published var gitConflictLastResult: GitConflictResolutionResult?
     @Published var statusMessage = "Runtime not checked"
     @Published var eventStreamStatus = "Event stream disconnected"
     @Published var eventStreamState: RuntimeEventStreamState = .disconnected
@@ -56,6 +59,7 @@ final class WorkspaceModel: ObservableObject {
     @Published private var approvingValidationPresetTaskIDs = Set<String>()
     @Published private var refreshingGitStatus = false
     @Published private var loadingGitDiffPaths = Set<String>()
+    @Published private var resolvingGitConflictPaths = Set<String>()
     @Published private var loadingGitBranchPreviewTaskIDs = Set<ForgeTask.ID>()
     @Published private var changingGitBranchTaskIDs = Set<ForgeTask.ID>()
     @Published private var loadingGitBranchPublishPreviewTaskIDs = Set<ForgeTask.ID>()
@@ -952,6 +956,44 @@ final class WorkspaceModel: ObservableObject {
 
     func isLoadingGitDiff(path: String) -> Bool {
         loadingGitDiffPaths.contains(path)
+    }
+
+    func refreshGitConflicts() {
+        Task {
+            await refreshGitConflictSnapshot()
+        }
+    }
+
+    func resolveGitConflict(file: GitConflictFile, strategy: String, content: String?) {
+        resolvingGitConflictPaths.insert(file.path)
+        gitConflictLastError = nil
+
+        Task {
+            do {
+                let taskID = selectedTaskID == ForgeTask.sample.id ? nil : selectedTaskID
+                gitConflictLastResult = try await runtime.resolveGitConflict(
+                    GitConflictResolutionRequest(
+                        path: file.path,
+                        strategy: strategy,
+                        content: content,
+                        expectedHead: gitConflictSnapshot?.head,
+                        expectedConflictHash: file.conflictHash,
+                        confirmation: "RESOLVE_GIT_CONFLICT",
+                        taskID: taskID
+                    )
+                )
+                await refreshGitStatusSnapshot()
+                statusMessage = gitConflictLastResult?.summary ?? "Git conflict resolved and staged."
+            } catch {
+                gitConflictLastError = "Resolve git conflict failed: \(error.localizedDescription)"
+            }
+
+            resolvingGitConflictPaths.remove(file.path)
+        }
+    }
+
+    func isResolvingGitConflict(path: String) -> Bool {
+        resolvingGitConflictPaths.contains(path)
     }
 
     func prepareGitBranchReview(for task: ForgeTask, targetBranch: String? = nil) {
@@ -1898,6 +1940,12 @@ final class WorkspaceModel: ObservableObject {
         do {
             gitStatus = try await runtime.gitStatus()
             gitStatusLastError = gitStatus?.error
+            if gitStatus?.changedFiles.contains(where: { $0.status == "Unmerged" }) == true {
+                await refreshGitConflictSnapshot()
+            } else {
+                gitConflictSnapshot = nil
+                gitConflictLastError = nil
+            }
             gitBranchPreviews.removeAll()
             gitBranchPublishPreviews.removeAll()
             gitCommitPreviews.removeAll()
@@ -1905,7 +1953,18 @@ final class WorkspaceModel: ObservableObject {
             gitPullRequestPreviews.removeAll()
         } catch {
             gitStatus = nil
+            gitConflictSnapshot = nil
             gitStatusLastError = error.localizedDescription
+        }
+    }
+
+    private func refreshGitConflictSnapshot() async {
+        do {
+            gitConflictSnapshot = try await runtime.gitConflicts()
+            gitConflictLastError = nil
+        } catch {
+            gitConflictSnapshot = nil
+            gitConflictLastError = "Load git conflicts failed: \(error.localizedDescription)"
         }
     }
 

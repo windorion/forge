@@ -52,6 +52,30 @@ struct RuntimeClient {
         return try JSONDecoder().decode(GitFileDiff.self, from: data)
     }
 
+    func gitConflicts() async throws -> GitConflictSnapshot {
+        let url = baseURL
+            .appending(path: "git")
+            .appending(path: "conflicts")
+        let (data, response) = try await URLSession.shared.data(from: url)
+        try validate(response, data: data)
+        return try JSONDecoder().decode(GitConflictSnapshot.self, from: data)
+    }
+
+    func resolveGitConflict(_ requestBody: GitConflictResolutionRequest) async throws -> GitConflictResolutionResult {
+        let url = baseURL
+            .appending(path: "git")
+            .appending(path: "conflicts")
+            .appending(path: "resolve")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(requestBody)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response, data: data)
+        return try JSONDecoder().decode(GitConflictResolutionResult.self, from: data)
+    }
+
     func gitCommitPreview(taskID: ForgeTask.ID?) async throws -> GitCommitPreview {
         let url = baseURL
             .appending(path: "git")

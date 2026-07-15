@@ -404,6 +404,62 @@ struct GitFileDiff: Codable, Hashable {
     var summary: String
 }
 
+struct GitConflictStage: Codable, Hashable {
+    var stage: String
+    var available: Bool
+    var content: String?
+    var byteCount: Int
+    var lineCount: Int
+    var unavailableReason: String?
+    var summary: String
+}
+
+struct GitConflictFile: Identifiable, Codable, Hashable {
+    var id: String { path }
+    var path: String
+    var indexStatus: String
+    var worktreeStatus: String
+    var conflictHash: String
+    var base: GitConflictStage
+    var ours: GitConflictStage
+    var theirs: GitConflictStage
+    var working: GitConflictStage
+}
+
+struct GitConflictSnapshot: Codable, Hashable {
+    var generatedAt: String
+    var gitRoot: String
+    var branch: String?
+    var head: String?
+    var operation: String
+    var oursLabel: String
+    var theirsLabel: String
+    var files: [GitConflictFile]
+    var summary: String
+    var operationBoundary: String
+}
+
+struct GitConflictResolutionRequest: Encodable {
+    var path: String
+    var strategy: String
+    var content: String?
+    var expectedHead: String?
+    var expectedConflictHash: String
+    var confirmation: String
+    var taskID: ForgeTask.ID?
+}
+
+struct GitConflictResolutionResult: Codable, Hashable {
+    var generatedAt: String
+    var path: String
+    var strategy: String
+    var status: String
+    var staged: Bool
+    var remainingConflicts: Int
+    var summary: String
+    var operationBoundary: String
+}
+
 struct GitCommitRelatedTask: Codable, Hashable {
     var id: String
     var title: String

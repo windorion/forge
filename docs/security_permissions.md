@@ -31,6 +31,7 @@ Examples:
 - search repository
 - inspect git status
 - inspect bounded git diffs for repo-relative changed files
+- inspect bounded Base/Ours/Theirs/working text for current unmerged files
 - prepare a read-only commit review artifact from git status, optional task
   context, and latest task validation state
 - prepare a read-only branch review artifact from current branch status,
@@ -67,6 +68,11 @@ branch/upstream/remote/commit/worktree preflight readiness, blockers, and risk
 notes. These endpoints must not stage, unstage, commit, checkout, reset,
 clean, push, create pull requests, call external hosting APIs, or otherwise
 mutate the repository.
+
+Conflict inspection is also low risk and read-only. It accepts only current
+safe repo-relative unmerged paths, reads Git index stages without a shell, and
+bounds or rejects oversized, binary, irregular, internal, or unavailable
+content.
 
 The execution-context pass after plan approval uses the same low-risk
 `list_repo_files`, `search_repo_context`, and `read_context_file` tools. It
@@ -195,6 +201,15 @@ anything externally.
 If git author identity is missing, the preview is blocked before the user can
 start the commit. Local git commit hooks may still reject the final commit;
 Forge surfaces the command output and still does not push or publish.
+
+Current conflict resolution is high risk and requires an exact explicit
+confirmation from the macOS conflict workspace. The runtime rechecks the
+reviewed short HEAD and SHA-256 conflict fingerprint, confirms the path is
+still unmerged, and either selects one Git index side/deletion or atomically
+writes bounded manual UTF-8 text before staging only that file. Manual writes
+reject symlinks, escaping parents, binary/oversized content, and remaining
+conflict markers while preserving the existing regular-file mode. Forge does
+not continue or abort the merge/rebase/cherry-pick, commit, reset, or push.
 
 Current branch create/switch implementation is high risk and requires explicit
 user confirmation from the macOS Review panel. The runtime rechecks expected

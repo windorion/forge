@@ -38,7 +38,7 @@ the actual visual source of truth.
 | Core | `4a` Mission control | Missing | Multi-repository three-column view is missing. |
 | Decisions | `33a` Agent question | Implemented | Context-backed `WaitForHumanReview` steps open the 1240px choice/consequence/frozen-context layout; answer-and-resume and confirmed abort are real, while rendered comparison remains. |
 | Decisions | `34a` Batch questions | Implemented | The sidebar and detailed question state open a 1240px answer queue backed by all waiting tasks; partial submit leaves unanswered tasks paused and resumes answered loops independently. |
-| Decisions | `18a` Merge conflict | Missing | Three-way conflict resolver is missing. |
+| Decisions | `18a` Merge conflict | Implemented | Actual unmerged index entries open the 1240px conflicted-file/three-way/draft/action layout; Base/Ours/Theirs/working contents, explicit confirmation, stale-review protection, manual/side selection, single-file staging, and no-auto-continue boundary are real. Rendered comparison remains. |
 | Decisions | `19a` Failed/rollback | Implemented | Failed tasks open a dedicated evidence/diagnosis/repo-state/reviewed-repair surface with guarded rollback/reject actions. |
 | Decisions | `24a` First success | Missing | Celebration and next-step state are missing. |
 | Decisions | `37a` Cost breakdown | Partial | Task estimates exist; step/model-call accordion is missing. |
@@ -77,9 +77,9 @@ the actual visual source of truth.
 - Functional Coding-Agent Demo V0: 100% of its documented behavior criteria.
 - Primary V0 screen implementation: 5 of 5 substantially implemented, none
   yet marked `Verified` under the strict rule above.
-- Full handoff: 22 `Implemented`, 3 `Partial`, 18 `Missing`, 0 `Verified` out
+- Full handoff: 23 `Implemented`, 3 `Partial`, 17 `Missing`, 0 `Verified` out
   of 43 named screens/states.
-- Weighted full-handoff UI readiness: approximately 54-57%.
+- Weighted full-handoff UI readiness: approximately 56-59%.
 
 These metrics must remain separate. Functional completion never implies design
 completion.

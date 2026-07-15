@@ -29,8 +29,8 @@ of truth and the delivered HTML/CSS as the exact visual/content specification.
 - Render-verify the implemented full Plan Approval expansion, including its
   real six-step and one-step runtime modes and selected-step revision request.
 - Render-verify the implemented History, Audit, Failure/Rollback, and Crash
-  Recovery surfaces. Offline and No Repository are implemented; finish the
-  remaining decision and recovery screens, starting with merge conflict.
+  Recovery surfaces. Offline, No Repository, and Merge Conflict are
+  implemented; continue with First Success and the remaining recovery states.
 - Render-verify the full Agent Question state; the context-backed answer flow
   now records a decision and resumes the paused loop instead of stopping at a
   static choice card. The multi-task Answer Queue now uses the same boundary;
@@ -107,6 +107,17 @@ the core runtime smoke. Preserve these completed boundaries:
 - Add error reporting and support diagnostics.
 
 ## Done Recently
+
+- Implemented the real `18a` Merge Conflict flow. Actual Git unmerged entries
+  now open the 1240px conflict workspace with a 250px file list,
+  operation-aware Ours/Theirs labels, Base/Ours/Theirs/working text, editable
+  resolution draft, and explicit take/draft actions. The runtime bounds text,
+  rejects binary/unsafe paths and residual conflict markers, protects against
+  stale HEAD/conflict fingerprints, writes manual results atomically while
+  preserving mode, stages only the selected file, records task/SSE evidence,
+  and never auto-continues merge/rebase. A temporary-repository smoke fixture
+  covers confirmation, stale review, ours/manual resolution, staging, and the
+  preserved MERGE_HEAD boundary.
 
 - Reconciled the macOS main workspace with the latest `design_handoff_forge`
   `14a`/`32a` surfaces. Removed the old Planner, Review, decision rail,

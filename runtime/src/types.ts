@@ -608,6 +608,61 @@ export interface GitFileDiff {
   summary: string;
 }
 
+export interface GitConflictStage {
+  stage: "Base" | "Ours" | "Theirs" | "Working";
+  available: boolean;
+  content?: string;
+  byteCount: number;
+  lineCount: number;
+  unavailableReason?: "Missing" | "Binary" | "TooLarge" | "NotRegularFile" | "CommandFailed";
+  summary: string;
+}
+
+export interface GitConflictFile {
+  path: string;
+  indexStatus: string;
+  worktreeStatus: string;
+  conflictHash: string;
+  base: GitConflictStage;
+  ours: GitConflictStage;
+  theirs: GitConflictStage;
+  working: GitConflictStage;
+}
+
+export interface GitConflictSnapshot {
+  generatedAt: string;
+  gitRoot: string;
+  branch?: string;
+  head?: string;
+  operation: "Merge" | "Rebase" | "CherryPick" | "Unknown";
+  oursLabel: string;
+  theirsLabel: string;
+  files: GitConflictFile[];
+  summary: string;
+  operationBoundary: string;
+}
+
+export interface GitConflictResolutionRequest {
+  path: string;
+  strategy: "Ours" | "Theirs" | "Manual";
+  content?: string;
+  expectedHead?: string;
+  expectedConflictHash: string;
+  confirmation: string;
+  taskID?: string;
+}
+
+export interface GitConflictResolutionResult {
+  generatedAt: string;
+  path: string;
+  strategy: GitConflictResolutionRequest["strategy"];
+  status: "ResolvedAndStaged";
+  staged: boolean;
+  remainingConflicts: number;
+  summary: string;
+  operationBoundary: string;
+}
+
 export interface GitCommitRelatedTask {
   id: string;
   title: string;
