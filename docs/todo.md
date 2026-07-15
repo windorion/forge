@@ -24,6 +24,8 @@ of truth and the delivered HTML/CSS as the exact visual/content specification.
 - Continue through decisions/recovery, queue/history, quick entry, native
   integrations, onboarding, updates, sharing, cost, and templates until all 43
   named HTML screens/states are verified.
+- Render-verify the implemented History, Audit, Failure/Rollback, and Crash
+  Recovery surfaces; finish the remaining decision and recovery screens.
 - Bundle JetBrains Mono under the SIL OFL license and use the exact handoff
   typography in packaged builds.
 - Keep screenshots or equivalent visual comparison evidence for each screen;

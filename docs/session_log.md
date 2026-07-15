@@ -3825,3 +3825,41 @@ Next:
 
 - Commit and push this settings batch to `main`, then move to dedicated
   history/audit and failure/recovery states.
+
+## 2026-07-15 07:52:29 CEST
+
+Conversation summary:
+
+- Continued into persisted history, auditability, guarded failure, and restart
+  recovery surfaces after pushing the completed shared settings batch.
+
+Done:
+
+- Implemented `2a` Task History as a dedicated searchable/filterable task table
+  backed by persisted task state, phases, changed files, and timestamps.
+- Implemented `2b` Audit Log as a terminal-style view of real runtime events,
+  event categories, human touchpoints, direct-push count, and local clipboard
+  export.
+- Added History access to the handoff sidebar and Audit access to running task
+  headers without restoring any legacy dashboard.
+- Implemented `19a` Failure/Rollback with real failed validation/task-command
+  evidence, repair diagnosis, last output, current git cleanliness, reviewed
+  self-fix generation, and confirmed proposal rollback/reject actions.
+- Implemented `31a` Crash Recovery so it appears only for persisted
+  recovered/recovery-required evidence and can review the first affected task
+  or resume resumable agent loops.
+- Updated measured full-handoff readiness to approximately 43-46%: 16
+  Implemented, 6 Partial, 21 Missing, 0 strictly Verified.
+- Passed direct Swift type-check, diff-format validation, full SwiftPM build,
+  and packaged local app rebuild/start verification.
+
+Not done:
+
+- Other decision/recovery states, quick-entry surfaces, native integrations,
+  onboarding, updates, templates, cost, sharing, and multi-task designs remain.
+- Strict rendered comparison remains unavailable.
+
+Next:
+
+- Commit and push this batch to `main`, then continue with offline/no-repo,
+  first-success, and cost/template surfaces.

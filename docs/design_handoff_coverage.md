@@ -39,7 +39,7 @@ the actual visual source of truth.
 | Decisions | `33a` Agent question | Partial | Clarification messages exist; dedicated choice/consequence layout is missing. |
 | Decisions | `34a` Batch questions | Missing | Decision inbox and submit-all flow are missing. |
 | Decisions | `18a` Merge conflict | Missing | Three-way conflict resolver is missing. |
-| Decisions | `19a` Failed/rollback | Partial | Failure and rollback behavior exists; handoff screen is missing. |
+| Decisions | `19a` Failed/rollback | Implemented | Failed tasks open a dedicated evidence/diagnosis/repo-state/reviewed-repair surface with guarded rollback/reject actions. |
 | Decisions | `24a` First success | Missing | Celebration and next-step state are missing. |
 | Decisions | `37a` Cost breakdown | Partial | Task estimates exist; step/model-call accordion is missing. |
 | Settings | `22a` General | Implemented | Shared 980px navigation, startup, appearance, notification, sound, and update rows exist; rendered comparison remains. |
@@ -62,12 +62,12 @@ the actual visual source of truth.
 | Recovery | `25a` Onboarding | Missing | Four-step first-run flow is missing. |
 | Recovery | `17a` No repository | Missing | Dedicated no-workspace state is missing. |
 | Recovery | `29a` Offline | Partial | Local runtime status exists; offline queue/checkpoint screen is missing. |
-| Recovery | `31a` Crash recovery | Partial | Persistence/recovery exists; checkpoint recovery screen is missing. |
+| Recovery | `31a` Crash recovery | Implemented | Persisted recovered/recovery-required evidence opens a checkpoint summary with review/resume actions. |
 | Recovery | `13a` Update dialog | Missing | Sparkle update dialog is missing. |
 | Recovery | `28a` Update ready | Missing | Deferred restart banner and mini-window status are missing. |
 | Recovery | `23a` Share/collaboration | Missing | Read-only web review link flow is missing. |
-| Recovery | `2a` Task history | Partial | Task persistence/list exists; history filters and dedicated screen are missing. |
-| Recovery | `2b` Audit log | Partial | Auditable events exist; dedicated audit log screen is missing. |
+| Recovery | `2a` Task history | Implemented | Dedicated filter/search table uses persisted task status, phases, changed files, and timestamps. |
+| Recovery | `2b` Audit log | Implemented | Dedicated terminal-style event log uses real task events and exports a local clipboard record. |
 | Compact states | `1c` Needs decision | Implemented | Runtime `WaitForHumanReview` decisions now open the compact two-route/freeform state; rendered comparison remains. |
 | Compact states | `1d` PR ready | Implemented | Completed tasks now open a compact metrics/files/diff/PR-handoff state backed by real task/git data; hosted PR publication remains. |
 | Compact states | `1e` Guardrails | Implemented | Shared settings navigation now exposes the exact always-on/toggle guardrail pattern; rendered comparison remains. |
@@ -77,9 +77,9 @@ the actual visual source of truth.
 - Functional Coding-Agent Demo V0: 100% of its documented behavior criteria.
 - Primary V0 screen implementation: 5 of 5 substantially implemented, none
   yet marked `Verified` under the strict rule above.
-- Full handoff: 12 `Implemented`, 10 `Partial`, 21 `Missing`, 0 `Verified` out
+- Full handoff: 16 `Implemented`, 6 `Partial`, 21 `Missing`, 0 `Verified` out
   of 43 named screens/states.
-- Weighted full-handoff UI readiness: approximately 38-42%.
+- Weighted full-handoff UI readiness: approximately 43-46%.
 
 These metrics must remain separate. Functional completion never implies design
 completion.
