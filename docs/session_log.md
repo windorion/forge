@@ -4226,3 +4226,47 @@ Next:
 - Add a supervised per-repository runtime registry and aggregate its health,
   queue, events, and task snapshots into Mission Control, then continue to the
   next missing quick-entry/native handoff surface.
+
+## 2026-07-15 21:47:47 +0200 (CEST)
+
+Conversation summary:
+
+- Continued the `4a` Mission Control implementation from cached repository
+  summaries to supervised, live, read-only multi-repository observation.
+
+Done:
+
+- Added observer runtime mode with read-only SQLite access, no startup recovery
+  or queue dispatch, GET-only HTTP access, explicit health evidence, and live
+  task reloads without modifying repository persistence.
+- Added an app-owned Mission Control runtime supervisor. It starts up to two
+  observers on deterministic unique loopback ports, validates mode and exact
+  repository identity, polls health/tasks/queue/Git every two seconds, exposes
+  honest live/connecting/offline state, and terminates only its owned children.
+- Updated Mission Control aggregation and cards to distinguish the mutable
+  primary repository from live read-only observers. Cross-repository actions
+  still require focusing the repository and its primary runtime first.
+- Added `npm run smoke:observer`, proving GET visibility, write rejection, and
+  byte-identical SQLite contents after an observer session. Re-ran TypeScript
+  checking, SwiftPM compilation, queue smoke, and full V0 core smoke.
+- Updated README, project status, backlog, handoff coverage, development,
+  runtime architecture, permissions, database, native macOS, and workspace
+  design docs. Full handoff readiness is now approximately 62-65%; polished
+  cumulative v1 readiness is approximately 18-23%.
+- Rebuilt and verified `dist/Forge.app`, launched it locally, replaced the stale
+  runtime with the new primary build, and verified health reports
+  `runtimeMode: primary` and `readOnly: false`.
+
+Not done:
+
+- Mission Control observers provide live visibility only. Explicitly
+  authorized concurrent active Agent Loops across repositories are not yet
+  implemented, so `4a` remains Partial.
+- Strict rendered screenshot comparison is still required before any handoff
+  screen can be marked Verified.
+
+Next:
+
+- Add an explicit promotion/authorization flow that safely transfers a
+  repository from observer status to an active mutation runtime, then continue
+  with the remaining quick-entry and native handoff surfaces.

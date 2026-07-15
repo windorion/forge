@@ -10,7 +10,7 @@ Last updated: 2026-07-15
 Forge is a strong trust/runtime foundation with a handoff-driven coding-agent
 session shell and a usable full-screen diff review surface in the macOS app.
 The documented Coding-Agent Demo V0 functional criteria are complete, but the
-full delivered design handoff is approximately 61-64% implemented.
+full delivered design handoff is approximately 62-65% implemented.
 It can create tasks, inspect bounded repo context, hold review gates, generate
 safe edit proposals, apply restricted Markdown edits, exact source/text
 replacements, multi-hunk patches, and context-anchored unified diffs across
@@ -65,12 +65,14 @@ Implemented:
   fixture verifies ordering, removal, settings persistence, restart recovery,
   and complete queue drain.
 - Partial but functional `4a` Mission Control. The handoff-aligned 1240px
-  surface presents three repository slots, real current-repository task/queue
-  state, and durable snapshots for recently connected local repositories.
-  Repository focus, `⌘1–3`, `⌘⇧M`, New Task, and cooperative Pause All are
-  wired. The app labels non-current data `CACHED` and keeps it read-only rather
-  than implying agents are still live. True simultaneous per-repository
-  runtimes and live cross-repository aggregation remain a v1 gap.
+  surface supervises the primary repository plus up to two read-only observer
+  runtimes on unique ports. Each observer continuously reloads committed task
+  snapshots and polls health, queue, and Git state without startup recovery,
+  queue dispatch, provider work, or POST access. The app verifies each process
+  reports observer/read-only mode and the expected repository before showing
+  it live. Repository focus, `⌘1–3`, `⌘⇧M`, New Task, and primary cooperative
+  Pause All are wired. Explicitly authorized active agents across several
+  repositories remain a v1 gap.
 - Local TypeScript runtime.
 - Task creation and task conversation.
 - Server-Sent Events from runtime to app.
@@ -307,10 +309,10 @@ use different denominators and must not be added together.
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
 | Coding-agent demo V0 behavior | 100% | All documented functional acceptance criteria are implemented and smoke-covered. |
 | Primary V0 handoff UI | 95-98% | Five primary screens are substantially implemented; exact typography and rendered comparison remain. |
-| Full 43-screen handoff UI | 61-64% | Twenty-five screens are implemented, three partial, and fifteen missing; none has passed strict rendered verification yet. |
+| Full 43-screen handoff UI | 62-65% | Twenty-five screens are implemented, three partial, and fifteen missing; none has passed strict rendered verification yet. |
 | Useful developer alpha | 50-60% | Forge can recover interrupted loops/transactions and apply guarded source create/modify/delete changes, but still needs broader autonomous tool use and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
-| Polished v1 product | 17-22% | The real queue and single-runtime Mission Control foundation exist; concurrent repository runtimes, indexing, packaging, updates, onboarding, billing, and integrations remain. |
+| Polished v1 product | 18-23% | The real queue and live read-only multi-repository supervision exist; authorized active agents across repositories, indexing, packaging, updates, onboarding, billing, and integrations remain. |
 
 ## Distance To "Finished"
 

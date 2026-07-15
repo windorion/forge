@@ -113,11 +113,11 @@ Implemented today:
   same-repository serialization boundary. Queue order and settings survive a
   runtime restart and resume automatically.
 - Handoff `4a` Mission Control foundation: a 1240px three-repository surface
-  shows the live repository's real task/queue state alongside up to two
-  persisted recent-repository snapshots. It supports repository focus,
-  `⌘1–3`, `⌘⇧M`, new-task entry, and cooperative Pause All. Cached repositories
-  are explicitly read-only until focused; true simultaneous multi-runtime
-  orchestration is not claimed yet.
+  shows the primary repository alongside up to two independently supervised
+  read-only observer runtimes on unique loopback ports. Observers poll real
+  health/task/queue/git state, reload committed SQLite snapshots, reject all
+  POST requests, and never recover or dispatch queues. Repository focus,
+  `⌘1–3`, `⌘⇧M`, new-task entry, and primary-runtime Pause All are wired.
 - Explicit human review gates for plans and edits.
 - Safe edit proposals with multi-file OpenAI proposal artifacts, including
   blocked preview-only operations. Apply supports Markdown `AppendText`,
@@ -218,10 +218,10 @@ Product-readiness estimate:
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
 | Coding-agent demo V0 behavior | 100% | The documented functional acceptance path is implemented and smoke-covered. |
 | Primary V0 handoff UI | 95-98% | The five primary screens are implemented; exact font and screenshot-based pixel/interaction verification remain. |
-| Full handoff UI | 61-64% | The handoff HTML contains 43 named screens/states. Twenty-five are implemented and three have functional foundations; none is marked strictly verified until rendered comparison passes. |
+| Full handoff UI | 62-65% | The handoff HTML contains 43 named screens/states. Twenty-five are implemented and three have functional foundations; none is marked strictly verified until rendered comparison passes. |
 | Useful developer alpha | 50-60% | Forge can recover interrupted loops/transactions and apply guarded source create/modify/delete changes, but still needs broader autonomous tool use and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
-| Polished v1 | 17-22% | Queueing and the honest single-runtime Mission Control foundation are real; concurrent multi-repo runtimes, native distribution, indexing, memory, MCP/GitHub, and product polish remain. |
+| Polished v1 | 18-23% | Queueing and live read-only multi-repo supervision are real; explicitly authorized active agents across repositories, native distribution, indexing, memory, MCP/GitHub, and product polish remain. |
 
 Short version: V0 behavior is complete, but the entire 43-screen product design
 is not. Alpha is the next cumulative horizon, followed by beta and then v1;

@@ -175,6 +175,9 @@ struct WorkspaceView: View {
             showMissionControl = true
             workspace.refreshMissionControl()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .forgeApplicationWillTerminate)) { _ in
+            workspace.stopMissionControlObservers()
+        }
         .sheet(isPresented: $showMissionControl) {
             MissionControlView {
                 workspace.selectedTaskID = nil

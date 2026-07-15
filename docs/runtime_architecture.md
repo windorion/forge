@@ -91,6 +91,25 @@ an interrupted active loop is recovered separately under the existing
 another task's loop owns the repository slot. Queueing changes scheduling only:
 it does not approve commands, apply edits, or grant provider permissions.
 
+### Observer Runtime Mode
+
+Mission Control may launch up to two additional runtimes with
+`FORGE_RUNTIME_MODE=observer` and unique loopback ports. Observer mode is a
+separate read-only capability boundary:
+
+- existing SQLite task stores open with the SQLite read-only flag; a repository
+  without a task store receives an in-memory empty schema
+- startup Agent Loop and edit-transaction recovery do not run
+- persisted queue requests do not dispatch
+- every non-GET HTTP request is rejected with `403 observer_read_only`
+- `GET /tasks` and `GET /queue` reload committed task payloads before returning
+- health reports `runtimeMode: observer` and `readOnly: true`
+
+The macOS supervisor validates mode, read-only status, and exact repository
+root before accepting an observer. It polls health, tasks, queue, and Git every
+two seconds and owns only the child processes it launched. Observers cannot be
+promoted implicitly into mutation runtimes.
+
 ### Agent Orchestrator
 
 Coordinates planning, execution, testing, review, and user approval states.

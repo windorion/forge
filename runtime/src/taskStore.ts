@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import type { ForgeTask } from "./types.js";
@@ -10,36 +10,49 @@ export class SqliteTaskStore {
 
   private readonly db: DatabaseSync;
   private readonly selectTasks: StatementSync;
-  private readonly upsertTask: StatementSync;
+  private readonly upsertTask?: StatementSync;
+  private readonly readOnly: boolean;
 
-  constructor(dbPath: string) {
+  constructor(dbPath: string, options: { readOnly?: boolean } = {}) {
     this.dbPath = dbPath;
-    mkdirSync(path.dirname(dbPath), { recursive: true });
+    this.readOnly = options.readOnly === true;
+    const existingReadOnlyDatabase = this.readOnly && existsSync(dbPath);
+    if (!this.readOnly) {
+      mkdirSync(path.dirname(dbPath), { recursive: true });
+    }
 
-    this.db = new DatabaseSync(dbPath);
-    this.applySchema();
+    this.db = existingReadOnlyDatabase
+      ? new DatabaseSync(dbPath, { readOnly: true })
+      : this.readOnly
+        ? new DatabaseSync(":memory:")
+        : new DatabaseSync(dbPath);
+    if (!existingReadOnlyDatabase) {
+      this.applySchema();
+    }
     this.selectTasks = this.db.prepare("SELECT payload_json FROM tasks ORDER BY updated_at DESC");
-    this.upsertTask = this.db.prepare(`
-      INSERT INTO tasks (
-        id,
-        title,
-        objective,
-        status,
-        current_phase,
-        created_at,
-        updated_at,
-        payload_json
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        title = excluded.title,
-        objective = excluded.objective,
-        status = excluded.status,
-        current_phase = excluded.current_phase,
-        created_at = excluded.created_at,
-        updated_at = excluded.updated_at,
-        payload_json = excluded.payload_json
-    `);
+    if (!this.readOnly) {
+      this.upsertTask = this.db.prepare(`
+        INSERT INTO tasks (
+          id,
+          title,
+          objective,
+          status,
+          current_phase,
+          created_at,
+          updated_at,
+          payload_json
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          title = excluded.title,
+          objective = excluded.objective,
+          status = excluded.status,
+          current_phase = excluded.current_phase,
+          created_at = excluded.created_at,
+          updated_at = excluded.updated_at,
+          payload_json = excluded.payload_json
+      `);
+    }
   }
 
   loadTasks(): ForgeTask[] {
@@ -47,6 +60,9 @@ export class SqliteTaskStore {
   }
 
   saveTask(task: ForgeTask): void {
+    if (!this.upsertTask) {
+      throw new Error("Task store is read-only in observer runtime mode.");
+    }
     this.upsertTask.run(
       task.id,
       task.title,

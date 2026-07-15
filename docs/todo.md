@@ -21,7 +21,7 @@ of truth and the delivered HTML/CSS as the exact visual/content specification.
 - Render-verify the implemented compact task states `1c`, `1d`, and `1e`.
 - Finish GitHub OAuth/device flow and runtime shortcut remapping; Account/Usage,
   General, Guardrails, Model, and API Key settings structures are implemented.
-- Finish true concurrent-runtime Mission Control, then continue through quick entry and native
+- Finish explicitly authorized active-agent Mission Control, then continue through quick entry and native
   integrations, onboarding, updates, sharing, cost, and templates until all 43
   named HTML screens/states are verified.
 - Render-verify the implemented `⌘K` Command Palette and extend the new native
@@ -109,15 +109,27 @@ the core runtime smoke. Preserve these completed boundaries:
 
 ## Done Recently
 
+- Added supervised multi-repository observer runtimes to `4a` Mission Control.
+  Up to two non-primary repositories now receive app-owned Node processes on
+  deterministic unique loopback ports. `FORGE_RUNTIME_MODE=observer` opens an
+  existing task database read-only (or an in-memory empty store), skips Agent
+  Loop/edit-transaction startup recovery, skips queue dispatch, rejects every
+  non-GET request with 403, and reloads committed tasks for live polling. The
+  macOS supervisor verifies mode, read-only status, and repository identity,
+  polls health/tasks/queue/git every two seconds, exposes PID/port/live/offline
+  evidence, and terminates only its own processes. `npm run smoke:observer`
+  proves GET access, POST rejection, and byte-identical SQLite before/after.
+
 - Added the honest `4a` Mission Control foundation. A new 1240px three-column
   surface uses live task/queue/git evidence for the active repository and
   persists compact snapshots for up to two recently connected repositories.
   The app exposes `⌘⇧M`, `⌘1–3` focus, `⌘⇧N` New Task, cooperative Pause All,
   repository-slot selection, real status/progress cards, and cached timestamps.
   Non-current repositories are labeled `CACHED` and remain read-only because
-  the current architecture owns one active runtime. Next work for `4a` is a
-  supervised per-repository runtime registry with unique endpoints and live
-  cross-repository event aggregation; strict rendered comparison also remains.
+  the current architecture owns one active mutation runtime. Observer
+  supervision and live aggregation are now implemented; the remaining `4a`
+  step is explicit promotion/authorization of independent active runtimes.
+  Strict rendered comparison also remains.
 
 - Implemented `26a` Task Queue as real runtime scheduling rather than a static
   task list. Approved Agent Loops now persist ordered queue requests whenever

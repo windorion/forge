@@ -89,12 +89,13 @@ import type {
 
 const startedAt = Date.now();
 const port = Number(process.env.FORGE_RUNTIME_PORT ?? 17373);
+const observerMode = process.env.FORGE_RUNTIME_MODE === "observer";
 const eventClients = new Set<ServerResponse>();
 const runtimeDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolveRepoRoot(runtimeDir);
 const repoRootSource = process.env.FORGE_REPO_ROOT?.trim() ? "FORGE_REPO_ROOT" : "runtime parent";
 const rollbackSnapshotRoot = path.join(repoRoot, ".forge", "rollback-snapshots");
-const taskStore = new SqliteTaskStore(resolveDatabasePath());
+const taskStore = new SqliteTaskStore(resolveDatabasePath(), { readOnly: observerMode });
 const tasks = new Map<string, ForgeTask>(taskStore.loadTasks().map((task) => [task.id, task]));
 const activeTaskCommands = new Map<string, ActiveTaskCommand>();
 const activeAgentRunLoops = new Map<string, ActiveAgentRunLoopControl>();
@@ -208,8 +209,10 @@ const repositoryImportantFiles = [
   "Package.swift"
 ];
 
-recoverInterruptedAgentRunLoopsOnStartup();
-recoverInterruptedEditProposalTransactionsOnStartup();
+if (!observerMode) {
+  recoverInterruptedAgentRunLoopsOnStartup();
+  recoverInterruptedEditProposalTransactionsOnStartup();
+}
 const repositorySearchStopWords = new Set([
   "about",
   "after",
@@ -503,6 +506,14 @@ const server = createServer(async (request, response) => {
   const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
 
   try {
+    if (observerMode && request.method !== "GET") {
+      writeJson(response, 403, {
+        error: "observer_read_only",
+        message: "Observer runtime accepts read-only GET requests only. Focus the repository before taking an action."
+      });
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === "/") {
       writeHtml(response, 200, renderRuntimeHome());
       return;
@@ -513,6 +524,8 @@ const server = createServer(async (request, response) => {
         ok: true,
         service: "forge-runtime",
         version: "0.1.0",
+        runtimeMode: observerMode ? "observer" : "primary",
+        readOnly: observerMode,
         uptimeSeconds: (Date.now() - startedAt) / 1000,
         modelProvider: modelProvider.info,
         modelProviderConfiguration: getModelProviderConfiguration(modelProviderSettings),
@@ -530,11 +543,13 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && url.pathname === "/tasks") {
+      reloadObserverTasks();
       writeJson(response, 200, { tasks: listTasks() });
       return;
     }
 
     if (request.method === "GET" && url.pathname === "/queue") {
+      reloadObserverTasks();
       writeJson(response, 200, getTaskQueueSnapshot());
       return;
     }
@@ -873,11 +888,21 @@ server.listen(port, "127.0.0.1", () => {
   console.log(`Forge runtime listening on http://127.0.0.1:${port}`);
   console.log(`Forge task store: ${taskStore.dbPath}`);
   console.log(`Forge model provider: ${modelProvider.info.name} (${modelProvider.info.model})`);
-  void dispatchQueuedAgentRuns();
+  console.log(`Forge runtime mode: ${observerMode ? "observer (read-only)" : "primary"}`);
+  if (!observerMode) {
+    void dispatchQueuedAgentRuns();
+  }
 });
 
 process.once("SIGINT", () => shutdown(130));
 process.once("SIGTERM", () => shutdown(143));
+
+function reloadObserverTasks(): void {
+  if (!observerMode) return;
+  const reloaded = taskStore.loadTasks();
+  tasks.clear();
+  for (const task of reloaded) tasks.set(task.id, task);
+}
 
 function resolveRepoRoot(runtimeDirectory: string): string {
   const configured = process.env.FORGE_REPO_ROOT?.trim();

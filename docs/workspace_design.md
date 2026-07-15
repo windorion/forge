@@ -65,11 +65,12 @@ task queue, not a settings dashboard.
 
 Mission Control is an auxiliary overview, not a replacement dashboard for the
 task-first workspace. Its three columns represent explicit local repository
-slots. The active repository may show live task, queue, progress, review, and
-git-derived evidence. Non-current repositories must be labeled as cached until
-they have an independently supervised runtime and event stream. Repository
-focus and new-task actions may switch the primary workspace; cached cards may
-not pretend to support live pause, mutation, or review actions.
+slots. The active repository shows live task, queue, progress, review, and
+git-derived evidence. Non-current repositories may show live data only through
+an independently supervised read-only observer runtime whose repository
+identity is verified. Repository focus and new-task actions may switch the
+primary workspace; observer cards may not pretend to support pause, mutation,
+or review actions until separately authorized as active runtimes.
 
 ### Center: Live Agent Session
 

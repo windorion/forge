@@ -976,6 +976,8 @@ struct RuntimeHealth: Codable, Hashable {
     var service: String
     var version: String
     var uptimeSeconds: Double
+    var runtimeMode: String?
+    var readOnly: Bool?
     var modelProvider: ModelProviderInfo?
     var modelProviderConfiguration: ModelProviderConfiguration?
     var workspace: RuntimeWorkspaceInfo?

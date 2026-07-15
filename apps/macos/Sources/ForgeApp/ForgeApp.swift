@@ -5,6 +5,7 @@ extension Notification.Name {
     static let forgeNewTask = Notification.Name("forge.newTask")
     static let forgeSwitchRepository = Notification.Name("forge.switchRepository")
     static let forgeToggleMissionControl = Notification.Name("forge.toggleMissionControl")
+    static let forgeApplicationWillTerminate = Notification.Name("forge.applicationWillTerminate")
 }
 
 @main

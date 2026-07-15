@@ -87,6 +87,7 @@ final class WorkspaceModel: ObservableObject {
     @Published private var updatingModelProviderSettings = false
 
     private let runtime = RuntimeClient()
+    private let missionControlSupervisor = MissionControlRuntimeSupervisor()
     private var eventStreamTask: Task<Void, Never>?
     private var runtimeProcess: Process?
     private var preferredRepositoryRoot: URL?
@@ -100,6 +101,9 @@ final class WorkspaceModel: ObservableObject {
         if let path = UserDefaults.standard.string(forKey: Self.repositoryPreferenceKey), !path.isEmpty {
             preferredRepositoryRoot = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
             registerMissionControlRepository(path: preferredRepositoryRoot!.path(percentEncoded: false))
+        }
+        missionControlSupervisor.onUpdate = { [weak self] observations in
+            self?.applyMissionControlObservations(observations)
         }
     }
 
@@ -179,6 +183,10 @@ final class WorkspaceModel: ObservableObject {
         if runtimeProcess?.isRunning == true {
             runtimeProcess?.terminate()
         }
+    }
+
+    func stopMissionControlObservers() {
+        missionControlSupervisor.stopAll()
     }
 
     func startRuntimeProcess() {
@@ -830,6 +838,7 @@ final class WorkspaceModel: ObservableObject {
                 statusMessage = "Refresh Mission Control failed: \(error.localizedDescription)"
                 captureMissionControlSnapshot()
             }
+            synchronizeMissionControlObservers()
         }
     }
 
@@ -1656,6 +1665,7 @@ final class WorkspaceModel: ObservableObject {
         preferredRepositoryRoot = standardized
         let path = standardized.path(percentEncoded: false)
         registerMissionControlRepository(path: path)
+        synchronizeMissionControlObservers()
         UserDefaults.standard.set(path, forKey: Self.repositoryPreferenceKey)
         runtimeRepositoryRoot = path
         repositorySelectionMessage = "Connected \(standardized.lastPathComponent). Starting the local runtime…"
@@ -2162,6 +2172,55 @@ final class WorkspaceModel: ObservableObject {
         persistMissionControlRepositories()
     }
 
+    private func applyMissionControlObservations(_ observations: [String: MissionControlObservedRepository]) {
+        for observation in observations.values {
+            guard observation.path != missionControlCurrentRepositoryPath else { continue }
+            guard let index = missionControlRepositories.firstIndex(where: { $0.path == observation.path }) else { continue }
+            let previous = missionControlRepositories[index]
+            let runningIDs = Set(observation.queue?.running.map(\.taskID) ?? [])
+            let queuedIDs = Set(observation.queue?.queued.map(\.taskID) ?? [])
+            var cards: [MissionControlTaskSnapshot] = []
+            for task in observation.tasks {
+                cards.append(missionControlTaskSnapshot(task, runningIDs: runningIDs, queuedIDs: queuedIDs))
+            }
+            cards.sort { lhs, rhs in
+                lhs.rank == rhs.rank ? lhs.taskID < rhs.taskID : lhs.rank < rhs.rank
+            }
+            let hasLiveSnapshot = observation.refreshedAt != nil
+            if !hasLiveSnapshot {
+                cards = previous.tasks
+            }
+            let state = hasLiveSnapshot ? missionControlState(cards: cards) : previous.state
+            let branch = observation.gitStatus?.branch ?? "no branch"
+            let changed = observation.gitStatus?.changedFiles.count ?? 0
+            let processLabel = observation.processID.map { "pid \($0)" } ?? observation.status.lowercased()
+            let snapshot = MissionControlRepositorySnapshot(
+                path: observation.path,
+                name: missionControlRepositoryName(path: observation.path),
+                state: state,
+                footer: hasLiveSnapshot
+                    ? "\(branch) · \(changed) changed · :\(observation.port) · \(processLabel)"
+                    : previous.footer,
+                capturedAt: observation.refreshedAt ?? previous.capturedAt,
+                tasks: cards,
+                runtimeState: observation.status,
+                runtimePort: observation.port,
+                runtimeProcessID: observation.processID,
+                observerReadOnly: observation.health?.readOnly
+            )
+            missionControlRepositories[index] = snapshot
+        }
+        persistMissionControlRepositories()
+    }
+
+    private func missionControlState(cards: [MissionControlTaskSnapshot]) -> String {
+        if cards.contains(where: { $0.tag.contains("WAIT") }) { return "NEEDS YOU" }
+        if cards.contains(where: { $0.tag == "RUNNING" }) { return "RUNNING" }
+        if cards.contains(where: { $0.tag == "COMPLETE" }) { return "READY" }
+        if cards.contains(where: { $0.tag == "QUEUED" }) { return "QUEUED" }
+        return "IDLE"
+    }
+
     private func missionControlTaskSnapshot(
         _ task: ForgeTask,
         runningIDs: Set<String>,
@@ -2205,6 +2264,14 @@ final class WorkspaceModel: ObservableObject {
     private func persistMissionControlRepositories() {
         guard let data = try? JSONEncoder().encode(Array(missionControlRepositories.prefix(3))) else { return }
         UserDefaults.standard.set(data, forKey: Self.missionControlRepositoriesKey)
+    }
+
+    private func synchronizeMissionControlObservers() {
+        missionControlSupervisor.synchronize(
+            repositoryPaths: missionControlRepositories.map(\.path),
+            currentPath: missionControlCurrentRepositoryPath,
+            runtimeDirectory: resolveRuntimeLaunch()?.runtimeDirectory
+        )
     }
 
     private func missionControlRepositoryName(path: String) -> String {

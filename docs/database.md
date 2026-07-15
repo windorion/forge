@@ -33,6 +33,12 @@ This is intentionally smaller than the full conceptual schema below. Future
 migrations should split runs, messages, tool calls, commands, file changes,
 and approvals into dedicated auditable tables.
 
+Mission Control observer runtimes open an existing task database with SQLite's
+read-only option. If a registered repository has no Forge database, the
+observer uses a temporary in-memory empty schema and does not create `.forge`.
+Observer GET requests reload committed task payloads so another authorized
+runtime's changes become visible, while all save operations fail closed.
+
 ## Core Entities
 
 ### Workspaces

@@ -20,6 +20,10 @@ struct MissionControlRepositorySnapshot: Identifiable, Codable, Hashable {
     var footer: String
     var capturedAt: Date
     var tasks: [MissionControlTaskSnapshot]
+    var runtimeState: String? = nil
+    var runtimePort: Int? = nil
+    var runtimeProcessID: Int32? = nil
+    var observerReadOnly: Bool? = nil
 }
 
 struct MissionControlView: View {
@@ -32,8 +36,11 @@ struct MissionControlView: View {
     }
 
     private var currentPath: String? { workspace.missionControlCurrentRepositoryPath }
-    private var currentTasks: [MissionControlTaskSnapshot] {
-        repositories.first(where: { $0.path == currentPath })?.tasks ?? []
+    private var liveRepositories: [MissionControlRepositorySnapshot] {
+        repositories.filter { $0.path == currentPath || isLiveObserver($0) }
+    }
+    private var liveTasks: [MissionControlTaskSnapshot] {
+        liveRepositories.flatMap(\.tasks)
     }
 
     var body: some View {
@@ -81,7 +88,7 @@ struct MissionControlView: View {
             Spacer()
             Button("⏸ PAUSE ALL") { workspace.pauseAllMissionControlLoops() }
                 .buttonStyle(MissionSecondaryButtonStyle())
-                .disabled(currentRunningCount == 0)
+                .disabled(primaryRunningCount == 0)
             Button("+ NEW TASK", action: newTask)
                 .buttonStyle(MissionPrimaryButtonStyle())
                 .keyboardShortcut("n", modifiers: [.command, .shift])
@@ -108,17 +115,18 @@ struct MissionControlView: View {
 
     private func repositoryColumn(_ repository: MissionControlRepositorySnapshot, index: Int) -> some View {
         let isCurrent = repository.path == currentPath
+        let hasLiveData = isCurrent || isLiveObserver(repository)
         return VStack(spacing: 0) {
             Button { workspace.activateMissionControlRepository(repository.path) } label: {
                 HStack(spacing: 10) {
                     Text("⌥").font(ForgeDesign.mono(12, weight: .black))
                     Text(repository.name).font(ForgeDesign.mono(12, weight: .bold)).lineLimit(1)
                     Spacer()
-                    Text(isCurrent ? repository.state : "CACHED")
+                    Text(hasLiveData ? repository.state : observerLabel(repository))
                         .font(ForgeDesign.mono(8.5, weight: .bold)).tracking(0.5)
                         .padding(.horizontal, 7).padding(.vertical, 3)
-                        .foregroundStyle(stateForeground(repository.state, isCurrent: isCurrent))
-                        .background(stateBackground(repository.state, isCurrent: isCurrent))
+                        .foregroundStyle(stateForeground(repository.state, hasLiveData: hasLiveData))
+                        .background(stateBackground(repository.state, hasLiveData: hasLiveData))
                         .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
                 }
                 .padding(.horizontal, 18).frame(height: 48).background(Color(red: 247 / 255, green: 247 / 255, blue: 244 / 255))
@@ -130,19 +138,19 @@ struct MissionControlView: View {
             ScrollView {
                 LazyVStack(spacing: 10) {
                     if repository.tasks.isEmpty {
-                        Text(isCurrent ? "NO TASKS IN THIS REPOSITORY" : "NO CACHED TASKS")
+                        Text(hasLiveData ? "NO TASKS IN THIS REPOSITORY" : "NO CACHED TASKS")
                             .font(ForgeDesign.mono(9, weight: .bold)).foregroundStyle(ForgeDesign.muted)
                             .frame(maxWidth: .infinity, alignment: .leading).padding(14)
                     } else {
                         ForEach(repository.tasks.prefix(4)) { task in
-                            taskCard(task, repositoryPath: repository.path, isCurrent: isCurrent)
+                            taskCard(task, repositoryPath: repository.path, isCurrent: isCurrent, hasLiveData: hasLiveData)
                         }
                     }
                 }.padding(14)
             }
             .background(Color.white)
 
-            Text(isCurrent ? repository.footer : "cached \(relativeDate(repository.capturedAt)) · focus to refresh")
+            Text(repositoryFooter(repository, isCurrent: isCurrent))
                 .font(ForgeDesign.mono(9.5)).foregroundStyle(ForgeDesign.muted)
                 .lineLimit(1).padding(.horizontal, 18).frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
                 .background(Color.white)
@@ -151,19 +159,19 @@ struct MissionControlView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func taskCard(_ task: MissionControlTaskSnapshot, repositoryPath: String, isCurrent: Bool) -> some View {
+    private func taskCard(_ task: MissionControlTaskSnapshot, repositoryPath: String, isCurrent: Bool, hasLiveData: Bool) -> some View {
         Button {
             if isCurrent { openTask(task.taskID) }
             else { workspace.activateMissionControlRepositoryForTask(path: repositoryPath, taskID: task.taskID) }
         } label: {
             VStack(alignment: .leading, spacing: 7) {
                 HStack {
-                    Text(isCurrent ? task.tag : "CACHED \(task.tag)")
+                    Text(hasLiveData ? task.tag : "CACHED \(task.tag)")
                         .font(ForgeDesign.mono(8.5, weight: .bold)).tracking(0.5)
-                        .foregroundStyle(taskTagForeground(task.tag, isCurrent: isCurrent))
+                        .foregroundStyle(taskTagForeground(task.tag, hasLiveData: hasLiveData))
                         .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(taskTagBackground(task.tag, isCurrent: isCurrent))
-                        .overlay(Rectangle().stroke(isCurrent ? ForgeDesign.ink : ForgeDesign.divider, lineWidth: 1.5))
+                        .background(taskTagBackground(task.tag, hasLiveData: hasLiveData))
+                        .overlay(Rectangle().stroke(hasLiveData ? ForgeDesign.ink : ForgeDesign.divider, lineWidth: 1.5))
                     Spacer()
                     Text("#\(task.taskID.prefix(6))").font(ForgeDesign.mono(9)).foregroundStyle(ForgeDesign.muted)
                 }
@@ -172,14 +180,14 @@ struct MissionControlView: View {
                     GeometryReader { geometry in
                         ZStack(alignment: .leading) {
                             Rectangle().fill(ForgeDesign.paper)
-                            Rectangle().fill(isCurrent ? ForgeDesign.accent : ForgeDesign.divider).frame(width: geometry.size.width * progress)
+                            Rectangle().fill(hasLiveData ? ForgeDesign.accent : ForgeDesign.divider).frame(width: geometry.size.width * progress)
                         }.overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
                     }.frame(height: 9)
                 }
                 Text(task.meta).font(ForgeDesign.mono(9.5)).foregroundStyle(ForgeDesign.muted).lineLimit(1)
             }
             .padding(12).background(task.tag.contains("WAIT") ? Color(red: 1, green: 253 / 255, blue: 244 / 255) : Color.white)
-            .overlay(Rectangle().stroke(isCurrent ? ForgeDesign.ink : ForgeDesign.divider, lineWidth: 1.5))
+            .overlay(Rectangle().stroke(hasLiveData ? ForgeDesign.ink : ForgeDesign.divider, lineWidth: 1.5))
         }
         .buttonStyle(.plain)
     }
@@ -196,7 +204,7 @@ struct MissionControlView: View {
 
     private var bottomBar: some View {
         HStack {
-            Text("one active repository runtime · cached repos are read-only · budget shared from task estimates")
+            Text("one primary runtime · background observers are live + read-only · Pause All affects primary repo")
             Spacer()
             Text("⌘1–3 focus repo · ⌘⇧N new task")
         }
@@ -206,30 +214,49 @@ struct MissionControlView: View {
         .overlay(alignment: .top) { Rectangle().fill(ForgeDesign.ink).frame(height: 1.5) }
     }
 
-    private var currentRunningCount: Int { workspace.taskQueueSnapshot?.running.count ?? currentTasks.filter { $0.tag == "RUNNING" }.count }
-    private var currentNeedsYouCount: Int { workspace.taskQueueSnapshot?.needsAttention.count ?? currentTasks.filter { $0.tag.contains("WAIT") }.count }
-    private var currentQueuedCount: Int { workspace.taskQueueSnapshot?.queued.count ?? currentTasks.filter { $0.tag == "QUEUED" }.count }
-    private var readyCount: Int { currentTasks.filter { $0.tag == "COMPLETE" || $0.tag == "REVIEW" }.count }
+    private var currentRunningCount: Int { liveTasks.filter { $0.tag == "RUNNING" }.count }
+    private var primaryRunningCount: Int { workspace.taskQueueSnapshot?.running.count ?? 0 }
+    private var currentNeedsYouCount: Int { liveTasks.filter { $0.tag.contains("WAIT") }.count }
+    private var currentQueuedCount: Int { liveTasks.filter { $0.tag == "QUEUED" }.count }
+    private var readyCount: Int { liveTasks.filter { $0.tag == "COMPLETE" || $0.tag == "REVIEW" }.count }
 
-    private func stateBackground(_ state: String, isCurrent: Bool) -> Color {
-        guard isCurrent else { return ForgeDesign.paper }
+    private func stateBackground(_ state: String, hasLiveData: Bool) -> Color {
+        guard hasLiveData else { return ForgeDesign.paper }
         if state == "NEEDS YOU" { return ForgeDesign.warning }
         if state == "RUNNING" { return ForgeDesign.accent }
         if state == "READY" { return ForgeDesign.ink }
         return Color.white
     }
-    private func stateForeground(_ state: String, isCurrent: Bool) -> Color {
-        isCurrent && state == "READY" ? ForgeDesign.paper : ForgeDesign.ink
+    private func stateForeground(_ state: String, hasLiveData: Bool) -> Color {
+        hasLiveData && state == "READY" ? ForgeDesign.paper : ForgeDesign.ink
     }
-    private func taskTagBackground(_ tag: String, isCurrent: Bool) -> Color {
-        guard isCurrent else { return ForgeDesign.paper }
+    private func taskTagBackground(_ tag: String, hasLiveData: Bool) -> Color {
+        guard hasLiveData else { return ForgeDesign.paper }
         if tag.contains("WAIT") { return ForgeDesign.warning }
         if tag == "RUNNING" { return ForgeDesign.accent }
         if tag == "COMPLETE" { return ForgeDesign.ink }
         return Color.white
     }
-    private func taskTagForeground(_ tag: String, isCurrent: Bool) -> Color {
-        isCurrent && tag == "COMPLETE" ? ForgeDesign.paper : ForgeDesign.ink
+    private func taskTagForeground(_ tag: String, hasLiveData: Bool) -> Color {
+        hasLiveData && tag == "COMPLETE" ? ForgeDesign.paper : ForgeDesign.ink
+    }
+    private func isLiveObserver(_ repository: MissionControlRepositorySnapshot) -> Bool {
+        repository.runtimeState == "LIVE OBSERVER" && repository.observerReadOnly == true
+    }
+    private func observerLabel(_ repository: MissionControlRepositorySnapshot) -> String {
+        switch repository.runtimeState {
+        case "STARTING", "CONNECTING": return "CONNECTING"
+        case "FAILED", "UNAVAILABLE", "STOPPED": return "OFFLINE"
+        default: return "CACHED"
+        }
+    }
+    private func repositoryFooter(_ repository: MissionControlRepositorySnapshot, isCurrent: Bool) -> String {
+        if isCurrent { return repository.footer }
+        if isLiveObserver(repository) { return "live read-only · \(repository.footer)" }
+        if let error = repository.runtimeState, ["FAILED", "UNAVAILABLE", "STOPPED"].contains(error) {
+            return "observer \(error.lowercased()) · showing last snapshot"
+        }
+        return "cached \(relativeDate(repository.capturedAt)) · observer connecting"
     }
     private func relativeDate(_ date: Date) -> String {
         RelativeDateTimeFormatter().localizedString(for: date, relativeTo: Date())

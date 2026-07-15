@@ -19,6 +19,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        NotificationCenter.default.post(name: .forgeApplicationWillTerminate, object: nil)
+    }
+
     private func registerBundledFonts() {
         let fontURLs = Bundle.main.urls(forResourcesWithExtension: "ttf", subdirectory: "Fonts") ?? []
         for url in fontURLs {

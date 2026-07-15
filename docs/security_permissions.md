@@ -185,6 +185,15 @@ Reordering or removing a queue entry cannot run a command, apply a proposal,
 commit, push, or publish. Dispatch re-enters the same Agent Loop gates and
 audit trail used by an immediate run.
 
+Mission Control observer runtimes add visibility, not authority. They use
+unique loopback ports, remove remote-provider secrets from their child
+environment, open existing task SQLite files read-only, skip all startup
+recovery and queue dispatch, and reject every non-GET request. The app accepts
+observer data only after health proves `observer` mode, `readOnly: true`, and
+the exact expected repository root. Focusing an observer repository is a
+separate primary-runtime transition; viewing it cannot run a tool, command,
+edit, validation, git action, or queued Agent Loop.
+
 ### High Risk
 
 Examples:
