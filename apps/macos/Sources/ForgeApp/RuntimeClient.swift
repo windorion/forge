@@ -18,6 +18,46 @@ struct RuntimeClient {
         return envelope.tasks
     }
 
+    func taskQueue() async throws -> TaskQueueSnapshot {
+        let url = baseURL.appending(path: "queue")
+        let (data, response) = try await URLSession.shared.data(from: url)
+        try validate(response, data: data)
+        return try JSONDecoder().decode(TaskQueueSnapshot.self, from: data)
+    }
+
+    func updateTaskQueueConcurrency(_ limit: Int) async throws -> TaskQueueSnapshot {
+        let url = baseURL.appending(path: "queue").appending(path: "settings")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(TaskQueueSettingsRequest(concurrencyLimit: limit))
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response, data: data)
+        return try JSONDecoder().decode(TaskQueueSnapshot.self, from: data)
+    }
+
+    func reorderTaskQueue(_ taskIDs: [ForgeTask.ID]) async throws -> TaskQueueSnapshot {
+        let url = baseURL.appending(path: "queue").appending(path: "reorder")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(TaskQueueReorderRequest(orderedTaskIDs: taskIDs))
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response, data: data)
+        return try JSONDecoder().decode(TaskQueueSnapshot.self, from: data)
+    }
+
+    func removeTaskFromQueue(taskID: ForgeTask.ID) async throws -> TaskQueueSnapshot {
+        let url = baseURL.appending(path: "tasks").appending(path: taskID).appending(path: "remove-from-queue")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data("{}".utf8)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response, data: data)
+        return try JSONDecoder().decode(TaskQueueSnapshot.self, from: data)
+    }
+
     func listValidationPresets() async throws -> ValidationPresetListEnvelope {
         let url = baseURL.appending(path: "validation-presets")
         let (data, response) = try await URLSession.shared.data(from: url)

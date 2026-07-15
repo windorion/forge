@@ -21,7 +21,7 @@ of truth and the delivered HTML/CSS as the exact visual/content specification.
 - Render-verify the implemented compact task states `1c`, `1d`, and `1e`.
 - Finish GitHub OAuth/device flow and runtime shortcut remapping; Account/Usage,
   General, Guardrails, Model, and API Key settings structures are implemented.
-- Continue through decisions/recovery, queue/history, quick entry, native
+- Continue through Mission Control, quick entry, native
   integrations, onboarding, updates, sharing, cost, and templates until all 43
   named HTML screens/states are verified.
 - Render-verify the implemented `⌘K` Command Palette and extend the new native
@@ -108,6 +108,18 @@ the core runtime smoke. Preserve these completed boundaries:
 - Add error reporting and support diagnostics.
 
 ## Done Recently
+
+- Implemented `26a` Task Queue as real runtime scheduling rather than a static
+  task list. Approved Agent Loops now persist ordered queue requests whenever
+  the single-repository execution slot is occupied; a stored 1-3 global
+  ceiling, same-repository serialization, automatic next-task dispatch, queue
+  reorder/removal, and restart recovery are runtime-enforced. The 1240px macOS
+  Queue sheet uses real running/queued/needs-you data and exposes priority,
+  pause, removal, estimates, and the safety boundary. `npm run smoke:queue`
+  verifies serialization, reorder, removal, setting persistence, restart
+  dispatch, and queue drain. The next multi-task handoff surface is `4a`
+  Mission Control; pointer-drag and exact screenshot comparison remain polish
+  for `26a`.
 
 - Implemented `24a` First Success as a one-time state for the first real
   persisted Completed task. The 980px celebration uses the handoff's diagonal

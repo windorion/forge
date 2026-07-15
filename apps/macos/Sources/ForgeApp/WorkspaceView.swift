@@ -634,6 +634,7 @@ private struct SidebarView: View {
     @EnvironmentObject private var workspace: WorkspaceModel
     @State private var showHistory = false
     @State private var showAnswerQueue = false
+    @State private var showTaskQueue = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -709,6 +710,28 @@ private struct SidebarView: View {
             }
 
             Button {
+                showTaskQueue = true
+                workspace.refreshTaskQueue()
+            } label: {
+                HStack {
+                    Text("QUEUE")
+                    if let queue = workspace.taskQueueSnapshot {
+                        Text("\(queue.running.count) RUN · \(queue.queued.count) WAIT")
+                            .foregroundStyle(ForgeDesign.muted)
+                    }
+                    Spacer()
+                    Text("⌘⇧Q").foregroundStyle(ForgeDesign.muted)
+                }
+                .font(ForgeDesign.mono(9, weight: .bold))
+                .padding(.horizontal, 16)
+                .frame(height: 36)
+                .background(Color.white)
+                .overlay(alignment: .top) { Rectangle().fill(ForgeDesign.ink).frame(height: 1.5) }
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut("q", modifiers: [.command, .shift])
+
+            Button {
                 showHistory = true
             } label: {
                 HStack {
@@ -746,6 +769,14 @@ private struct SidebarView: View {
             AgentAnswerQueueView(tasks: waitingQuestionTasks)
                 .environmentObject(workspace)
                 .frame(width: 1240, height: 680)
+        }
+        .sheet(isPresented: $showTaskQueue) {
+            TaskQueueView { taskID in
+                workspace.selectedTaskID = taskID
+                showTaskQueue = false
+            }
+            .environmentObject(workspace)
+            .frame(width: 1240, height: 680)
         }
     }
 
@@ -841,6 +872,166 @@ private struct HandoffSheetTitleBar: View {
         .overlay(alignment: .bottom) {
             Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
         }
+    }
+}
+
+private struct TaskQueueView: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
+    let openTask: (ForgeTask.ID) -> Void
+
+    private var snapshot: TaskQueueSnapshot? { workspace.taskQueueSnapshot }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HandoffSheetTitleBar(title: "QUEUE")
+            queueHeader
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    laneTitle("RUNNING — \(snapshot?.running.count ?? 0) OF \(snapshot?.concurrencyLimit ?? 2)")
+                    if snapshot?.running.isEmpty != false {
+                        emptyLane("No agent loop is active.")
+                    } else {
+                        ForEach(snapshot?.running ?? []) { entry in runningRow(entry) }
+                    }
+
+                    HStack {
+                        laneTitle("QUEUED — \(snapshot?.queued.count ?? 0) · STARTS WHEN A SLOT FREES")
+                        Spacer()
+                        Text("↑ ↓ reorder").font(ForgeDesign.mono(9)).foregroundStyle(ForgeDesign.muted)
+                    }
+                    if snapshot?.queued.isEmpty != false {
+                        emptyLane("Queue is clear — approved runs start immediately when the repository slot is free.")
+                    } else {
+                        ForEach(Array((snapshot?.queued ?? []).enumerated()), id: \.element.id) { index, entry in
+                            queuedRow(entry, index: index)
+                        }
+                    }
+
+                    if snapshot?.needsAttention.isEmpty == false {
+                        laneTitle("NEEDS YOU — \(snapshot?.needsAttention.count ?? 0)")
+                        ForEach((snapshot?.needsAttention ?? []).prefix(4)) { entry in
+                            Button { openTask(entry.taskID) } label: {
+                                HStack(spacing: 10) {
+                                    Text("⏸ NEEDS YOU").font(ForgeDesign.mono(8.5, weight: .bold))
+                                        .padding(.horizontal, 6).padding(.vertical, 2)
+                                        .background(ForgeDesign.warning)
+                                        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                                    Text(entry.title).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                                    Spacer()
+                                    Text(entry.currentPhase).font(ForgeDesign.mono(9)).foregroundStyle(ForgeDesign.muted)
+                                    Text("→").font(ForgeDesign.mono(11, weight: .black))
+                                }
+                                .padding(.horizontal, 16).frame(height: 44)
+                                .background(Color(red: 1, green: 0.99, blue: 0.94))
+                                .overlay(Rectangle().stroke(ForgeDesign.divider, lineWidth: 1))
+                                .padding(.horizontal, 24).padding(.bottom, 8)
+                            }.buttonStyle(.plain)
+                        }
+                    }
+
+                    if let error = workspace.taskQueueLastError {
+                        Label(error, systemImage: "exclamationmark.octagon.fill")
+                            .font(ForgeDesign.mono(10, weight: .bold)).foregroundStyle(ForgeDesign.danger)
+                            .padding(.horizontal, 24).padding(.vertical, 12)
+                    }
+                }
+                .padding(.bottom, 12)
+            }
+
+            queueFooter
+        }
+        .background(ForgeDesign.paper)
+        .onAppear { workspace.refreshTaskQueue() }
+    }
+
+    private var queueHeader: some View {
+        HStack(spacing: 16) {
+            Text("CONCURRENCY").font(ForgeDesign.mono(10, weight: .bold)).tracking(1).foregroundStyle(ForgeDesign.muted)
+            HStack(spacing: 0) {
+                ForEach(1...3, id: \.self) { limit in
+                    Button("\(limit)") { workspace.updateTaskQueueConcurrency(limit) }
+                        .font(ForgeDesign.mono(10, weight: .bold))
+                        .foregroundStyle(snapshot?.concurrencyLimit == limit ? ForgeDesign.paper : ForgeDesign.ink)
+                        .frame(width: 44, height: 32)
+                        .background(snapshot?.concurrencyLimit == limit ? ForgeDesign.ink : Color.white)
+                        .overlay(alignment: .trailing) { if limit < 3 { Rectangle().fill(ForgeDesign.ink).frame(width: 1.5) } }
+                        .buttonStyle(.plain)
+                }
+            }.overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+
+            Text("global ceiling · this repository stays serialized")
+                .font(ForgeDesign.mono(9.5)).foregroundStyle(ForgeDesign.muted)
+            Spacer()
+            Circle().fill(ForgeDesign.accent).frame(width: 7, height: 7)
+            Text(snapshot?.summary ?? "Loading real queue state…")
+                .font(ForgeDesign.mono(10, weight: .bold))
+            Button { workspace.refreshTaskQueue() } label: { Image(systemName: "arrow.clockwise") }
+                .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 24).frame(height: 58).background(Color.white)
+        .overlay(alignment: .bottom) { Rectangle().fill(ForgeDesign.ink).frame(height: 1.5) }
+    }
+
+    private func laneTitle(_ title: String) -> some View {
+        Text(title).font(ForgeDesign.mono(9, weight: .bold)).tracking(1.5).foregroundStyle(ForgeDesign.muted)
+            .padding(.horizontal, 24).padding(.top, 14).padding(.bottom, 7)
+    }
+
+    private func runningRow(_ entry: TaskQueueEntry) -> some View {
+        HStack(spacing: 14) {
+            Text("▸ RUN").font(ForgeDesign.mono(8.5, weight: .bold)).padding(.horizontal, 6).padding(.vertical, 2)
+                .background(ForgeDesign.accent).overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+            Text("#\(entry.taskID.prefix(6))").font(ForgeDesign.mono(9)).foregroundStyle(ForgeDesign.muted)
+            Button(entry.title) { openTask(entry.taskID) }.buttonStyle(.plain).font(.system(size: 13, weight: .bold)).lineLimit(1)
+            Spacer()
+            Text(workspace.gitStatus?.root.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "local repo")
+                .font(ForgeDesign.mono(9.5)).foregroundStyle(ForgeDesign.muted)
+            ProgressView(value: Double(entry.loop?.stepsRun ?? 0), total: Double(max(1, entry.loop?.maxSteps ?? 1))).frame(width: 130)
+            Text("step \(entry.loop?.stepsRun ?? 0)/\(entry.loop?.maxSteps ?? 0)").font(ForgeDesign.mono(9.5)).frame(width: 70)
+            Button("⏸") {
+                if let task = workspace.tasks.first(where: { $0.id == entry.taskID }), let loop = entry.loop {
+                    workspace.pauseAgentLoop(for: task, loop: loop)
+                }
+            }.buttonStyle(ForgeSecondaryButtonStyle()).disabled(entry.loop == nil)
+        }
+        .padding(.horizontal, 16).frame(height: 54).background(Color.white)
+        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5)).padding(.horizontal, 24).padding(.bottom, 8)
+    }
+
+    private func queuedRow(_ entry: TaskQueueEntry, index: Int) -> some View {
+        HStack(spacing: 12) {
+            Text("⠿").font(ForgeDesign.mono(12)).foregroundStyle(ForgeDesign.muted)
+            Text("\(entry.position ?? index + 1)").font(ForgeDesign.mono(9, weight: .black)).frame(width: 22, height: 22)
+                .background(index == 0 ? ForgeDesign.warning : Color.white).overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+            Text("#\(entry.taskID.prefix(6))").font(ForgeDesign.mono(9)).foregroundStyle(ForgeDesign.muted)
+            Button(entry.title) { openTask(entry.taskID) }.buttonStyle(.plain).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+            Spacer()
+            if index == 0 { Text("NEXT").font(ForgeDesign.mono(8, weight: .bold)).padding(.horizontal, 6).padding(.vertical, 2).background(ForgeDesign.warning).overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5)) }
+            Text(entry.estimatedMinutes.map { "~\($0)m" } ?? "—").font(ForgeDesign.mono(9.5)).foregroundStyle(ForgeDesign.muted).frame(width: 56)
+            Button("↑") { workspace.moveQueuedTask(taskID: entry.taskID, offset: -1) }.buttonStyle(.plain).disabled(index == 0)
+            Button("↓") { workspace.moveQueuedTask(taskID: entry.taskID, offset: 1) }.buttonStyle(.plain).disabled(index + 1 >= (snapshot?.queued.count ?? 0))
+            Button("✕") { workspace.removeQueuedTask(taskID: entry.taskID) }.buttonStyle(ForgeSecondaryButtonStyle())
+        }
+        .padding(.horizontal, 16).frame(height: 50).background(Color.white)
+        .overlay(Rectangle().stroke(index == 0 ? ForgeDesign.ink : ForgeDesign.divider, lineWidth: 1.5))
+        .padding(.horizontal, 24).padding(.bottom, 8)
+    }
+
+    private func emptyLane(_ text: String) -> some View {
+        Text(text).font(ForgeDesign.mono(10)).foregroundStyle(ForgeDesign.muted)
+            .frame(maxWidth: .infinity, alignment: .leading).padding(16).background(Color.white)
+            .overlay(Rectangle().stroke(ForgeDesign.divider, lineWidth: 1)).padding(.horizontal, 24).padding(.bottom, 8)
+    }
+
+    private var queueFooter: some View {
+        HStack {
+            Text("▸ same-repo tasks never run in parallel — queue serializes workspace mutation")
+            Spacer()
+            Text("limit \(snapshot?.concurrencyLimit ?? 2) · effective here \(snapshot?.effectiveRepositoryLimit ?? 1)")
+        }.font(ForgeDesign.mono(9.5)).foregroundStyle(ForgeDesign.muted)
+            .padding(.horizontal, 24).frame(height: 46).background(ForgeDesign.paper)
+            .overlay(alignment: .top) { Rectangle().fill(ForgeDesign.ink).frame(height: 1.5) }
     }
 }
 

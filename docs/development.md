@@ -53,6 +53,13 @@ The former Planner, Review, action-rail, duplicate-log, toolbar-demo, and
 Git-workbench view trees were removed to avoid rendering old and new product
 concepts together.
 
+The sidebar Queue button (`⌘⇧Q`) now opens the handoff `26a` 1240px queue
+surface backed by `GET /queue`. Running, queued, and needs-you lanes use real
+task/loop state. The runtime persists queue priority and its 1-3 global ceiling,
+but deliberately enforces one active Agent Loop for this single repository.
+Priority arrows call the exact-order reorder endpoint; remove returns an
+approved task to `Execution Ready`; pause reuses the cooperative loop gate.
+
 The shell also includes a first usable `10a`-style full-screen diff review
 surface. It opens from the Diff tab or review state card, shows a file tree,
 main diff pane, why-this-change reasoning, validation evidence, and
@@ -89,6 +96,17 @@ Runtime endpoint:
 ```text
 http://127.0.0.1:17373
 ```
+
+Run the dedicated queue/restart regression with:
+
+```bash
+cd runtime
+npm run smoke:queue
+```
+
+It uses an isolated SQLite database and settings files, occupies one repository
+slot, queues and reorders three tasks, removes one, restarts the runtime, and
+verifies automatic ordered drain.
 
 Opening that URL in a browser shows a small runtime status page. The full app
 UI still runs through the SwiftUI app.

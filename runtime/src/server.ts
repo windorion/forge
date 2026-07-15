@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { appendFile, lstat, mkdir, readdir, readFile, realpath, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { URL } from "node:url";
@@ -70,6 +70,9 @@ import type {
   TaskCommandOutputChunk,
   TaskCommandPermission,
   TaskCommandRun,
+  TaskQueueReorderRequest,
+  TaskQueueSettingsRequest,
+  TaskQueueSnapshot,
   CommandRerunEvidence,
   TaskFileReference,
   TaskMessage,
@@ -95,6 +98,8 @@ const taskStore = new SqliteTaskStore(resolveDatabasePath());
 const tasks = new Map<string, ForgeTask>(taskStore.loadTasks().map((task) => [task.id, task]));
 const activeTaskCommands = new Map<string, ActiveTaskCommand>();
 const activeAgentRunLoops = new Map<string, ActiveAgentRunLoopControl>();
+let taskQueueConcurrencyLimit = loadTaskQueueConcurrencyLimit();
+let dispatchingTaskQueue = false;
 let modelProviderSettings = loadModelProviderRuntimeSettings();
 let modelProvider = createModelProvider(modelProviderSettings);
 const validationCommandTimeoutMs = 60_000;
@@ -120,6 +125,9 @@ const gitDiffMaxBytes = 48_000;
 const gitDiffAppPreviewLineLimit = 260;
 const gitConflictTextMaxBytes = 220_000;
 const enableSmokeCommands = process.env.FORGE_ENABLE_SMOKE_COMMANDS === "1";
+const taskQueueSmokeDelayMs = enableSmokeCommands
+  ? Math.min(Math.max(Number.parseInt(process.env.FORGE_QUEUE_SMOKE_DELAY_MS ?? "0", 10) || 0, 0), 5_000)
+  : 0;
 const repositoryIgnoredDirectories = new Set([
   ".build",
   ".forge",
@@ -526,6 +534,30 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/queue") {
+      writeJson(response, 200, getTaskQueueSnapshot());
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/queue/settings") {
+      const input = await readJson<TaskQueueSettingsRequest>(request);
+      writeJson(response, 200, updateTaskQueueSettings(input));
+      void dispatchQueuedAgentRuns();
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/queue/reorder") {
+      const input = await readJson<TaskQueueReorderRequest>(request);
+      writeJson(response, 200, reorderTaskQueue(input));
+      return;
+    }
+
+    const removeQueuedTaskID = taskIDFromActionPath(url.pathname, "remove-from-queue");
+    if (request.method === "POST" && removeQueuedTaskID) {
+      writeJson(response, 200, removeTaskFromQueue(removeQueuedTaskID));
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === "/git/status") {
       writeJson(response, 200, await getGitStatusSnapshot());
       return;
@@ -674,7 +706,7 @@ const server = createServer(async (request, response) => {
     if (request.method === "POST" && approvePlanAndRunTaskID) {
       const input = await readJson<ApprovePlanAndRunRequest>(request);
       await approvePlan(approvePlanAndRunTaskID, input);
-      const task = await runAgentLoop(approvePlanAndRunTaskID, {
+      const task = await scheduleAgentRunLoop(approvePlanAndRunTaskID, {
         preferredCommandID: input.preferredCommandID,
         maxSteps: input.maxSteps ?? 6
       });
@@ -693,7 +725,7 @@ const server = createServer(async (request, response) => {
     const runAgentLoopTaskID = taskIDFromActionPath(url.pathname, "run-agent-loop");
     if (request.method === "POST" && runAgentLoopTaskID) {
       const input = await readJson<RunAgentLoopRequest>(request);
-      const task = await runAgentLoop(runAgentLoopTaskID, input);
+      const task = await scheduleAgentRunLoop(runAgentLoopTaskID, input);
       writeJson(response, 200, task);
       return;
     }
@@ -841,6 +873,7 @@ server.listen(port, "127.0.0.1", () => {
   console.log(`Forge runtime listening on http://127.0.0.1:${port}`);
   console.log(`Forge task store: ${taskStore.dbPath}`);
   console.log(`Forge model provider: ${modelProvider.info.name} (${modelProvider.info.model})`);
+  void dispatchQueuedAgentRuns();
 });
 
 process.once("SIGINT", () => shutdown(130));
@@ -6028,6 +6061,145 @@ interface ActiveAgentRunLoopControl {
   note?: string;
 }
 
+function taskQueueSettingsPath(): string {
+  const configured = process.env.FORGE_TASK_QUEUE_SETTINGS_PATH?.trim();
+  if (configured) {
+    return path.resolve(repoRoot, configured);
+  }
+  return path.join(repoRoot, ".forge", "task-queue.json");
+}
+
+function loadTaskQueueConcurrencyLimit(): number {
+  try {
+    const value = JSON.parse(readFileSync(taskQueueSettingsPath(), "utf8"))?.concurrencyLimit;
+    return Number.isInteger(value) && value >= 1 && value <= 3 ? value : 2;
+  } catch {
+    return 2;
+  }
+}
+
+function persistTaskQueueSettings(): void {
+  mkdirSync(path.dirname(taskQueueSettingsPath()), { recursive: true });
+  writeFileSync(taskQueueSettingsPath(), JSON.stringify({ concurrencyLimit: taskQueueConcurrencyLimit }, null, 2));
+}
+
+function queueEntry(task: ForgeTask) {
+  const loop = task.agentRunLoops.find((candidate) => candidate.status === "Running");
+  return {
+    taskID: task.id,
+    title: task.title,
+    status: task.status,
+    currentPhase: task.currentPhase,
+    position: task.queueRequest?.position,
+    enqueuedAt: task.queueRequest?.enqueuedAt,
+    estimatedMinutes: task.planRevisions.at(-1)?.estimatedMinutes,
+    loop
+  };
+}
+
+function getTaskQueueSnapshot(): TaskQueueSnapshot {
+  const all = [...tasks.values()];
+  const running = all.filter((task) => activeAgentRunLoops.has(task.id)).map(queueEntry);
+  const queued = all.filter((task) => task.queueRequest).sort((a, b) => a.queueRequest!.position - b.queueRequest!.position).map(queueEntry);
+  const needsAttention = all.filter((task) => task.status === "Human Review" && !task.queueRequest).map(queueEntry);
+  const completed = all.filter((task) => task.status === "Completed").map(queueEntry);
+  return {
+    generatedAt: new Date().toISOString(),
+    concurrencyLimit: taskQueueConcurrencyLimit,
+    effectiveRepositoryLimit: 1,
+    running,
+    queued,
+    needsAttention,
+    completed,
+    summary: `${running.length} running · ${queued.length} queued · ${needsAttention.length} need attention.`,
+    operationBoundary: "Concurrency is capped at 1-3 globally; this single-repository runtime serializes agent loops to one active task to prevent overlapping workspace mutations."
+  };
+}
+
+function updateTaskQueueSettings(input: TaskQueueSettingsRequest): TaskQueueSnapshot {
+  if (!Number.isInteger(input.concurrencyLimit) || input.concurrencyLimit < 1 || input.concurrencyLimit > 3) {
+    throw new HttpError(400, "Queue concurrencyLimit must be 1, 2, or 3.");
+  }
+  taskQueueConcurrencyLimit = input.concurrencyLimit;
+  persistTaskQueueSettings();
+  emit("queue.settings.updated", { concurrencyLimit: taskQueueConcurrencyLimit });
+  return getTaskQueueSnapshot();
+}
+
+function reorderTaskQueue(input: TaskQueueReorderRequest): TaskQueueSnapshot {
+  const queued = [...tasks.values()].filter((task) => task.queueRequest);
+  const expected = new Set(queued.map((task) => task.id));
+  if (input.orderedTaskIDs.length !== expected.size || new Set(input.orderedTaskIDs).size !== expected.size || input.orderedTaskIDs.some((id) => !expected.has(id))) {
+    throw new HttpError(409, "Queue reorder must include every currently queued task exactly once.");
+  }
+  input.orderedTaskIDs.forEach((id, index) => {
+    const task = requireTask(id);
+    task.queueRequest!.position = index + 1;
+    task.updatedAt = new Date().toISOString();
+    saveTask(task);
+  });
+  emit("queue.reordered", { orderedTaskIDs: input.orderedTaskIDs });
+  return getTaskQueueSnapshot();
+}
+
+function removeTaskFromQueue(taskID: string): TaskQueueSnapshot {
+  const task = requireTask(taskID);
+  const request = task.queueRequest;
+  if (!request) throw new HttpError(409, "Task is not queued.");
+  delete task.queueRequest;
+  task.status = request.previousStatus === "Running" ? "Human Review" : request.previousStatus;
+  task.currentPhase = request.previousStatus === "Running" ? "Execution Ready" : request.previousPhase;
+  task.reviewSummary = "Removed from the queue. The approved plan remains ready for a future agent run.";
+  saveAndBroadcast(task, event("agent.run_loop.dequeued", "Agent loop removed from the task queue before execution."));
+  normalizeQueuePositions();
+  return getTaskQueueSnapshot();
+}
+
+function normalizeQueuePositions(): void {
+  [...tasks.values()].filter((task) => task.queueRequest).sort((a, b) => a.queueRequest!.position - b.queueRequest!.position).forEach((task, index) => {
+    task.queueRequest!.position = index + 1;
+    saveTask(task);
+  });
+}
+
+async function scheduleAgentRunLoop(taskID: string, input: RunAgentLoopRequest = {}): Promise<ForgeTask> {
+  const task = requireTask(taskID);
+  if (task.queueRequest) return task;
+  if (activeAgentRunLoops.size < Math.min(taskQueueConcurrencyLimit, 1)) return runAgentLoop(taskID, input);
+  const position = [...tasks.values()].filter((candidate) => candidate.queueRequest).length + 1;
+  const now = new Date().toISOString();
+  task.queueRequest = {
+    id: randomUUID(), enqueuedAt: now, position,
+    maxSteps: normalizeAgentRunLoopMaxSteps(input.maxSteps),
+    preferredCommandID: input.preferredCommandID,
+    resumeLoopID: input.resumeLoopID,
+    previousStatus: task.status,
+    previousPhase: task.currentPhase
+  };
+  task.status = "Human Review";
+  task.currentPhase = "Agent Loop Queued";
+  saveAndBroadcast(task, withCreatedAt(event("agent.run_loop.queued", `Agent loop queued at position ${position}; same-repository execution is serialized.`), now));
+  emit("queue.updated", { snapshot: getTaskQueueSnapshot() });
+  return task;
+}
+
+async function dispatchQueuedAgentRuns(): Promise<void> {
+  if (dispatchingTaskQueue || activeAgentRunLoops.size >= Math.min(taskQueueConcurrencyLimit, 1)) return;
+  const next = [...tasks.values()].filter((task) => task.queueRequest).sort((a, b) => a.queueRequest!.position - b.queueRequest!.position)[0];
+  if (!next?.queueRequest) return;
+  dispatchingTaskQueue = true;
+  const request = next.queueRequest;
+  delete next.queueRequest;
+  normalizeQueuePositions();
+  saveAndBroadcast(next, event("agent.run_loop.dequeued", "Queue slot opened; starting the next serialized agent loop."));
+  try {
+    await runAgentLoop(next.id, { preferredCommandID: request.preferredCommandID, maxSteps: request.maxSteps, resumeLoopID: request.resumeLoopID });
+  } finally {
+    dispatchingTaskQueue = false;
+    void dispatchQueuedAgentRuns();
+  }
+}
+
 async function runAgentLoop(taskID: string, input: RunAgentLoopRequest = {}): Promise<ForgeTask> {
   const task = tasks.get(taskID);
   if (!task) {
@@ -6063,6 +6235,10 @@ async function runAgentLoop(taskID: string, input: RunAgentLoopRequest = {}): Pr
         loop.startedAt
       )
     );
+
+    if (taskQueueSmokeDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, taskQueueSmokeDelayMs));
+    }
 
     let current = task;
     for (let index = 0; index < loop.maxSteps; index += 1) {
@@ -6130,6 +6306,7 @@ async function runAgentLoop(taskID: string, input: RunAgentLoopRequest = {}): Pr
     if (activeAgentRunLoops.get(taskID)?.loopID === loop.id) {
       activeAgentRunLoops.delete(taskID);
     }
+    void dispatchQueuedAgentRuns();
   }
 }
 
@@ -6238,7 +6415,7 @@ async function resumeAgentRunLoop(taskID: string, input: RunAgentLoopRequest): P
     throw new HttpError(409, "No paused, aborted, or failed agent loop is available to resume.");
   }
 
-  return runAgentLoop(taskID, {
+  return scheduleAgentRunLoop(taskID, {
     preferredCommandID: input.preferredCommandID ?? source.preferredCommandID,
     maxSteps: input.maxSteps ?? source.maxSteps,
     resumeLoopID: source.id
@@ -6879,6 +7056,10 @@ async function runAgentStep(
   const task = tasks.get(taskID);
   if (!task) {
     throw new HttpError(404, `Task not found: ${taskID}`);
+  }
+
+  if (!options.loopID && activeAgentRunLoops.size > 0) {
+    throw new HttpError(409, "Another agent loop is active in this repository. Queue this task instead of starting an overlapping step.");
   }
 
   if (hasRunningValidationRun(task)) {

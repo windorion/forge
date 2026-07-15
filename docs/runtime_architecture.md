@@ -73,7 +73,23 @@ directory's parent as the repository root.
 
 ### Task Queue
 
-Stores pending, running, completed, and failed tasks.
+Stores pending, running, completed, and failed tasks. The current scheduler
+also stores an optional ordered `queueRequest` inside each durable task
+snapshot. `GET /queue` derives running, queued, needs-attention, and completed
+lanes from real task/loop state. `POST /queue/settings` persists a global
+ceiling from 1-3, `POST /queue/reorder` requires every queued task exactly
+once, and `POST /tasks/:taskID/remove-from-queue` returns an approved task to
+an execution-ready human-review state.
+
+This runtime instance owns one repository, so its effective repository limit
+is always one even when the future global ceiling is two or three. Approved
+Agent Loops are serialized rather than allowed to overlap workspace mutation.
+When an active loop reaches a terminal checkpoint, the next ordered request is
+removed from the queue and started. Persisted requests dispatch on startup;
+an interrupted active loop is recovered separately under the existing
+`RuntimeRestarted` checkpoint rule. Direct one-step execution is rejected while
+another task's loop owns the repository slot. Queueing changes scheduling only:
+it does not approve commands, apply edits, or grant provider permissions.
 
 ### Agent Orchestrator
 

@@ -34,7 +34,7 @@ the actual visual source of truth.
 | Core | `20a` Full plan approval | Implemented | Compact plan cards expand into the 1240px steps/context/risk/validation/revision layout; Run All uses the bounded six-step loop and Step by Step uses the runtime's real one-step limit. |
 | Core | `32a` New session | Implemented | Exact rendered comparison and responsive verification remain. |
 | Core | `10a` Fullscreen diff review | Implemented | Exact rendered comparison and larger diff edge states remain. |
-| Core | `26a` Task queue | Partial | Basic task list exists; concurrency lanes, limits, drag order, and repo serialization are missing. |
+| Core | `26a` Task queue | Implemented | The 1240px real-data surface has running/queued/needs-you lanes, 1-3 persisted concurrency settings, ordered priority controls, removal, pause, estimates, automatic restart dispatch, and enforced same-repository serialization. Pointer drag polish and exact rendered comparison remain. |
 | Core | `4a` Mission control | Missing | Multi-repository three-column view is missing. |
 | Decisions | `33a` Agent question | Implemented | Context-backed `WaitForHumanReview` steps open the 1240px choice/consequence/frozen-context layout; answer-and-resume and confirmed abort are real, while rendered comparison remains. |
 | Decisions | `34a` Batch questions | Implemented | The sidebar and detailed question state open a 1240px answer queue backed by all waiting tasks; partial submit leaves unanswered tasks paused and resumes answered loops independently. |
@@ -77,9 +77,9 @@ the actual visual source of truth.
 - Functional Coding-Agent Demo V0: 100% of its documented behavior criteria.
 - Primary V0 screen implementation: 5 of 5 substantially implemented, none
   yet marked `Verified` under the strict rule above.
-- Full handoff: 24 `Implemented`, 3 `Partial`, 16 `Missing`, 0 `Verified` out
+- Full handoff: 25 `Implemented`, 2 `Partial`, 16 `Missing`, 0 `Verified` out
   of 43 named screens/states.
-- Weighted full-handoff UI readiness: approximately 58-61%.
+- Weighted full-handoff UI readiness: approximately 60-63%.
 
 These metrics must remain separate. Functional completion never implies design
 completion.

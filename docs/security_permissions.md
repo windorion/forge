@@ -176,6 +176,15 @@ or failed loop and creates a linked new bounded loop under the same permissions.
 None of these endpoints cancels a child process, applies edits, or expands the
 provider action enum.
 
+The task queue adds no permission tier. It stores only a bounded Agent Loop
+request (step limit, optional already-known command preference, resume lineage,
+position, and timestamps). This single-repository runtime permits one active
+Agent Loop at a time regardless of the stored future global 1-3 ceiling, and
+rejects an unqueued direct step while another loop owns the repository slot.
+Reordering or removing a queue entry cannot run a command, apply a proposal,
+commit, push, or publish. Dispatch re-enters the same Agent Loop gates and
+audit trail used by an immediate run.
+
 ### High Risk
 
 Examples:

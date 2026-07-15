@@ -23,6 +23,8 @@ final class WorkspaceModel: ObservableObject {
     @Published var gitConflictSnapshot: GitConflictSnapshot?
     @Published var gitConflictLastError: String?
     @Published var gitConflictLastResult: GitConflictResolutionResult?
+    @Published var taskQueueSnapshot: TaskQueueSnapshot?
+    @Published var taskQueueLastError: String?
     @Published var statusMessage = "Runtime not checked"
     @Published var eventStreamStatus = "Event stream disconnected"
     @Published var eventStreamState: RuntimeEventStreamState = .disconnected
@@ -48,6 +50,7 @@ final class WorkspaceModel: ObservableObject {
     @Published private var rejectingEditProposalTaskIDs = Set<ForgeTask.ID>()
     @Published private var reviewingEditProposalFileKeys = Set<String>()
     @Published private var runningAgentLoopTaskIDs = Set<ForgeTask.ID>()
+    @Published private var updatingTaskQueue = false
     @Published private var pausingAgentLoopIDs = Set<AgentRunLoop.ID>()
     @Published private var abortingAgentLoopIDs = Set<AgentRunLoop.ID>()
     @Published private var resumingAgentLoopIDs = Set<AgentRunLoop.ID>()
@@ -253,6 +256,7 @@ final class WorkspaceModel: ObservableObject {
                 try await refreshModelProviderSettingsSnapshot()
                 statusMessage = statusMessage(for: runtimeState)
                 try await refreshTasks()
+                await refreshTaskQueueSnapshot()
                 try await refreshValidationPresets()
                 await refreshGitStatusSnapshot()
                 await refreshValidationPermissionSnapshotIfPossible(for: selectedTaskID)
@@ -369,8 +373,9 @@ final class WorkspaceModel: ObservableObject {
                 upsert(runningTask)
                 selectedTaskID = runningTask.id
                 statusMessage = maxSteps == 1
-                    ? "Approved plan entered a single-step reviewed agent run."
-                    : "Approved plan entered the bounded agent run."
+                    ? (runningTask.queueRequest == nil ? "Approved plan entered a single-step reviewed agent run." : "Approved plan queued for a single-step reviewed run.")
+                    : (runningTask.queueRequest == nil ? "Approved plan entered the bounded agent run." : "Approved plan queued behind the active repository task.")
+                await refreshTaskQueueSnapshot()
                 await refreshGitStatusSnapshot()
                 await refreshValidationPermissionSnapshotIfPossible(for: runningTask.id)
                 startEventStream()
@@ -779,6 +784,10 @@ final class WorkspaceModel: ObservableObject {
                 upsert(updatedTask)
                 selectedTaskID = updatedTask.id
                 statusMessage = "Agent loop completed."
+                if updatedTask.queueRequest != nil {
+                    statusMessage = "Agent loop queued behind the active repository task."
+                }
+                await refreshTaskQueueSnapshot()
                 await refreshGitStatusSnapshot()
                 await refreshValidationPermissionSnapshotIfPossible(for: updatedTask.id)
                 startEventStream()
@@ -793,6 +802,58 @@ final class WorkspaceModel: ObservableObject {
     func isRunningAgentLoop(taskID: ForgeTask.ID) -> Bool {
         runningAgentLoopTaskIDs.contains(taskID)
     }
+
+    func refreshTaskQueue() {
+        Task { await refreshTaskQueueSnapshot() }
+    }
+
+    func updateTaskQueueConcurrency(_ limit: Int) {
+        updatingTaskQueue = true
+        Task {
+            do {
+                taskQueueSnapshot = try await runtime.updateTaskQueueConcurrency(limit)
+                taskQueueLastError = nil
+            } catch {
+                taskQueueLastError = "Update queue concurrency failed: \(error.localizedDescription)"
+            }
+            updatingTaskQueue = false
+        }
+    }
+
+    func moveQueuedTask(taskID: ForgeTask.ID, offset: Int) {
+        guard let snapshot = taskQueueSnapshot,
+              let index = snapshot.queued.firstIndex(where: { $0.taskID == taskID }) else { return }
+        let target = index + offset
+        guard snapshot.queued.indices.contains(target) else { return }
+        var ids = snapshot.queued.map(\.taskID)
+        ids.swapAt(index, target)
+        updatingTaskQueue = true
+        Task {
+            do {
+                taskQueueSnapshot = try await runtime.reorderTaskQueue(ids)
+                taskQueueLastError = nil
+            } catch {
+                taskQueueLastError = "Reorder queue failed: \(error.localizedDescription)"
+            }
+            updatingTaskQueue = false
+        }
+    }
+
+    func removeQueuedTask(taskID: ForgeTask.ID) {
+        updatingTaskQueue = true
+        Task {
+            do {
+                taskQueueSnapshot = try await runtime.removeTaskFromQueue(taskID: taskID)
+                try await refreshTasks()
+                taskQueueLastError = nil
+            } catch {
+                taskQueueLastError = "Remove queued task failed: \(error.localizedDescription)"
+            }
+            updatingTaskQueue = false
+        }
+    }
+
+    func isUpdatingTaskQueue() -> Bool { updatingTaskQueue }
 
     func pauseAgentLoop(for task: ForgeTask, loop: AgentRunLoop) {
         pausingAgentLoopIDs.insert(loop.id)
@@ -1922,6 +1983,7 @@ final class WorkspaceModel: ObservableObject {
 
         do {
             try await refreshTasks()
+            await refreshTaskQueueSnapshot()
             await refreshGitStatusSnapshot()
             await refreshValidationPermissionSnapshotIfPossible(for: selectedTaskID)
         } catch {
@@ -1935,6 +1997,15 @@ final class WorkspaceModel: ObservableObject {
         if let selectedTaskID,
            !remoteTasks.contains(where: { $0.id == selectedTaskID }) {
             self.selectedTaskID = nil
+        }
+    }
+
+    private func refreshTaskQueueSnapshot() async {
+        do {
+            taskQueueSnapshot = try await runtime.taskQueue()
+            taskQueueLastError = nil
+        } catch {
+            taskQueueLastError = "Load task queue failed: \(error.localizedDescription)"
         }
     }
 

@@ -247,6 +247,43 @@ export interface AgentRunLoop {
   completedAt?: string;
 }
 
+export interface AgentRunQueueRequest {
+  id: string;
+  enqueuedAt: string;
+  position: number;
+  maxSteps: number;
+  preferredCommandID?: string;
+  resumeLoopID?: string;
+  previousStatus: TaskStatus;
+  previousPhase: string;
+}
+
+export interface TaskQueueEntry {
+  taskID: string;
+  title: string;
+  status: string;
+  currentPhase: string;
+  position?: number;
+  enqueuedAt?: string;
+  estimatedMinutes?: number;
+  loop?: AgentRunLoop;
+}
+
+export interface TaskQueueSnapshot {
+  generatedAt: string;
+  concurrencyLimit: number;
+  effectiveRepositoryLimit: number;
+  running: TaskQueueEntry[];
+  queued: TaskQueueEntry[];
+  needsAttention: TaskQueueEntry[];
+  completed: TaskQueueEntry[];
+  summary: string;
+  operationBoundary: string;
+}
+
+export interface TaskQueueSettingsRequest { concurrencyLimit: number; }
+export interface TaskQueueReorderRequest { orderedTaskIDs: string[]; }
+
 export interface ProposedFileChange {
   id: string;
   path: string;
@@ -975,6 +1012,7 @@ export interface ForgeTask {
   editProposal?: EditProposal;
   changedFiles: string[];
   reviewSummary?: string;
+  queueRequest?: AgentRunQueueRequest;
 }
 
 export interface CreateTaskRequest {

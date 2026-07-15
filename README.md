@@ -39,7 +39,7 @@ should no longer feel like a generic workflow dashboard.
 
 ## Current Status
 
-Last updated: 2026-07-14
+Last updated: 2026-07-15
 
 The trust/runtime foundation is strong and the Coding-Agent Demo V0 functional
 acceptance path is complete. Strict visual closeout is still in progress: the
@@ -106,6 +106,12 @@ Implemented today:
   while active and stop after the current safe step; resume starts a new
   bounded loop linked to the prior paused/aborted/failed checkpoint. The
   macOS action rail and Log tab expose control state and resume lineage.
+- Persisted multi-task scheduling: approved Agent Loops enter a real ordered
+  queue when the repository slot is occupied. The handoff `26a` Queue surface
+  shows running/queued/needs-you lanes, a persisted 1-3 global ceiling,
+  up/down priority changes, removal, pause, estimates, and the enforced
+  same-repository serialization boundary. Queue order and settings survive a
+  runtime restart and resume automatically.
 - Explicit human review gates for plans and edits.
 - Safe edit proposals with multi-file OpenAI proposal artifacts, including
   blocked preview-only operations. Apply supports Markdown `AppendText`,
@@ -206,10 +212,10 @@ Product-readiness estimate:
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
 | Coding-agent demo V0 behavior | 100% | The documented functional acceptance path is implemented and smoke-covered. |
 | Primary V0 handoff UI | 95-98% | The five primary screens are implemented; exact font and screenshot-based pixel/interaction verification remain. |
-| Full handoff UI | 58-61% | The handoff HTML contains 43 named screens/states. Twenty-four are implemented and three have functional foundations; none is marked strictly verified until rendered comparison passes. |
+| Full handoff UI | 60-63% | The handoff HTML contains 43 named screens/states. Twenty-five are implemented and two have functional foundations; none is marked strictly verified until rendered comparison passes. |
 | Useful developer alpha | 50-60% | Forge can recover interrupted loops/transactions and apply guarded source create/modify/delete changes, but still needs broader autonomous tool use and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
-| Polished v1 | 15-20% | Needs native distribution, indexing, memory, MCP/GitHub, and product polish. |
+| Polished v1 | 16-21% | Multi-task queueing is real; native distribution, indexing, memory, Mission Control, MCP/GitHub, and product polish remain. |
 
 Short version: V0 behavior is complete, but the entire 43-screen product design
 is not. Alpha is the next cumulative horizon, followed by beta and then v1;

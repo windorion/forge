@@ -19,7 +19,13 @@ proposals, edit proposal revisions, edit proposal validations, edit proposal
 decisions, Agent Run Steps/Loops, repository-inspection budgets/outcomes, and
 review state after a runtime restart. Agent Run Loop snapshots retain linked
 step IDs, preferred command intent, cooperative control state/timestamps/note,
-resume lineage, and stop reason. Edit proposal snapshots retain changeset
+resume lineage, and stop reason. A queued task snapshot additionally retains
+its request ID, enqueue timestamp, normalized position, bounded step count,
+optional known command preference, optional resume-loop lineage, and the prior
+task status/phase needed for safe removal. Queue concurrency settings are
+small repository-local configuration in `.forge/task-queue.json`, not a new
+database authority; `FORGE_TASK_QUEUE_SETTINGS_PATH` can isolate that file in
+tests. Edit proposal snapshots retain changeset
 transaction phase, per-file hashes/snapshots, verification timestamps,
 recovery phase, summary, and errors.
 

@@ -4138,3 +4138,45 @@ Next:
 - Run final runtime/Swift/package checks, restart the local latest runtime/app,
   commit and push this continuation to `main`, then proceed through the next
   handoff surface.
+
+## 2026-07-15 21:18:03 +0200 (CEST)
+
+Conversation summary:
+
+- Continued the V0/v1 gap pass with the next long handoff-backed task: replace
+  the partial `26a` task list with real persisted multi-task scheduling and a
+  handoff-aligned Queue surface.
+
+Done:
+
+- Added durable ordered Agent Loop queue requests, persisted 1-3 global
+  concurrency settings, same-repository serialization, exact-order reorder,
+  safe removal, automatic next-task dispatch, startup dispatch, SSE evidence,
+  and a direct-step overlap guard to the runtime.
+- Added real queue API models/client/workspace state and a 1240px macOS Queue
+  sheet with Running, Queued, and Needs You lanes, priority controls, pause,
+  removal, estimates, summary counts, keyboard access, and the explicit
+  operation boundary.
+- Added `npm run smoke:queue` with an isolated database/settings fixture. It
+  verifies a single active repository task, three queued tasks, reorder,
+  removal, concurrency-setting persistence, runtime restart recovery, ordered
+  redispatch, and complete drain.
+- Re-ran TypeScript checking, SwiftPM build, the queue fixture, and the full
+  V0 core smoke successfully.
+- Updated README, project status, backlog, handoff coverage, development,
+  runtime architecture, security, and database docs. Full handoff status is
+  now 25 Implemented, 2 Partial, 16 Missing, 0 Verified, approximately 60-63%;
+  polished cumulative v1 is estimated at 16-21%.
+
+Not done:
+
+- `26a` still needs exact rendered screenshot comparison and pointer-drag
+  polish before it can be marked Verified; ordered arrow controls are real.
+- `4a` multi-repository Mission Control, remaining alpha/beta requirements,
+  and the other missing handoff/system surfaces remain unfinished.
+
+Next:
+
+- Commit and push the queue batch directly to `main`, rebuild and relaunch the
+  current local runtime/app, then implement the `4a` Mission Control surface
+  without weakening the single-repository mutation boundary.

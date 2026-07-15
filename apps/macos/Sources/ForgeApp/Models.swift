@@ -27,6 +27,7 @@ struct ForgeTask: Identifiable, Codable, Hashable {
     var editProposal: EditProposal?
     var changedFiles: [String]
     var reviewSummary: String?
+    var queueRequest: AgentRunQueueRequest?
 
     static let sample = ForgeTask(
         id: "local-demo",
@@ -78,7 +79,8 @@ struct ForgeTask: Identifiable, Codable, Hashable {
         executionProposal: nil,
         editProposal: nil,
         changedFiles: [],
-        reviewSummary: "No runtime review yet."
+        reviewSummary: "No runtime review yet.",
+        queueRequest: nil
     )
 }
 
@@ -192,6 +194,44 @@ struct AgentRunLoop: Identifiable, Codable, Hashable {
     var startedAt: String
     var completedAt: String?
 }
+
+struct AgentRunQueueRequest: Identifiable, Codable, Hashable {
+    var id: String
+    var enqueuedAt: String
+    var position: Int
+    var maxSteps: Int
+    var preferredCommandID: String?
+    var resumeLoopID: String?
+    var previousStatus: String
+    var previousPhase: String
+}
+
+struct TaskQueueEntry: Identifiable, Codable, Hashable {
+    var id: String { taskID }
+    var taskID: String
+    var title: String
+    var status: String
+    var currentPhase: String
+    var position: Int?
+    var enqueuedAt: String?
+    var estimatedMinutes: Int?
+    var loop: AgentRunLoop?
+}
+
+struct TaskQueueSnapshot: Codable, Hashable {
+    var generatedAt: String
+    var concurrencyLimit: Int
+    var effectiveRepositoryLimit: Int
+    var running: [TaskQueueEntry]
+    var queued: [TaskQueueEntry]
+    var needsAttention: [TaskQueueEntry]
+    var completed: [TaskQueueEntry]
+    var summary: String
+    var operationBoundary: String
+}
+
+struct TaskQueueSettingsRequest: Encodable { var concurrencyLimit: Int }
+struct TaskQueueReorderRequest: Encodable { var orderedTaskIDs: [String] }
 
 struct ValidationCommandResult: Identifiable, Codable, Hashable {
     var id: String
