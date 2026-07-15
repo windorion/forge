@@ -3929,3 +3929,35 @@ Next:
 
 - Run full SwiftPM/package verification, commit and push to `main`, then use
   the same answer boundary for the batch question inbox or continue No Repo.
+
+## 2026-07-15 08:04:25 CEST
+
+Conversation summary:
+
+- Continued without pausing from the individual Agent Question flow into the
+  multi-task `34a` Answer Queue handoff state.
+
+Done:
+
+- Added Answer Queue access in the normal task sidebar and in a detailed
+  question banner whenever more than one task is waiting.
+- Implemented the 1240px waiting-summary, question rows, task/step metadata,
+  recommendation/revision choices, own-words fields, and submit bar using real
+  waiting tasks and persisted agent rationale.
+- Partial submission is explicit: answered tasks record their human messages
+  and resume independently, while unanswered tasks stay paused.
+- Updated measured full-handoff readiness to approximately 48-51%: 19
+  Implemented, 4 Partial, 20 Missing, 0 strictly Verified.
+- Passed direct full-app Swift type-check and diff-format validation.
+
+Not done:
+
+- Rendered comparison remains unavailable, so Answer Queue is Implemented but
+  not strictly Verified.
+- No Repository, merge conflict, task scheduler, and remaining quick-entry,
+  native, onboarding, update, sharing, template, and cost surfaces remain.
+
+Next:
+
+- Run full build/package verification, push to `main`, and continue with the
+  next recovery or queue surface.

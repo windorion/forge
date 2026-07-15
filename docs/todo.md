@@ -29,7 +29,8 @@ of truth and the delivered HTML/CSS as the exact visual/content specification.
   remaining decision and recovery screens, starting with No Repository.
 - Render-verify the full Agent Question state; the context-backed answer flow
   now records a decision and resumes the paused loop instead of stopping at a
-  static choice card. Build the multi-task Answer Queue on the same boundary.
+  static choice card. The multi-task Answer Queue now uses the same boundary;
+  render-verify it and continue with conflict/no-repository recovery states.
 - Bundle JetBrains Mono under the SIL OFL license and use the exact handoff
   typography in packaged builds.
 - Keep screenshots or equivalent visual comparison evidence for each screen;

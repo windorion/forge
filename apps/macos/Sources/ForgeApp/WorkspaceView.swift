@@ -340,6 +340,7 @@ private struct WindowSizingView: NSViewRepresentable {
 private struct SidebarView: View {
     @EnvironmentObject private var workspace: WorkspaceModel
     @State private var showHistory = false
+    @State private var showAnswerQueue = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -383,6 +384,33 @@ private struct SidebarView: View {
                 }
             }
 
+            if !waitingQuestionTasks.isEmpty {
+                Button {
+                    showAnswerQueue = true
+                } label: {
+                    HStack {
+                        Text("NEEDS YOU")
+                        Text("\(waitingQuestionTasks.count)")
+                            .foregroundStyle(ForgeDesign.ink)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1)
+                            .background(ForgeDesign.warning)
+                            .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1))
+                        Spacer()
+                        Text("ANSWER QUEUE")
+                            .foregroundStyle(ForgeDesign.muted)
+                    }
+                    .font(ForgeDesign.mono(9, weight: .bold))
+                    .padding(.horizontal, 16)
+                    .frame(height: 36)
+                    .background(Color.white)
+                    .overlay(alignment: .top) {
+                        Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+
             Button {
                 showHistory = true
             } label: {
@@ -416,6 +444,19 @@ private struct SidebarView: View {
                 showHistory = false
             }
             .frame(width: 980, height: 600)
+        }
+        .sheet(isPresented: $showAnswerQueue) {
+            AgentAnswerQueueView(tasks: waitingQuestionTasks)
+                .environmentObject(workspace)
+                .frame(width: 1240, height: 680)
+        }
+    }
+
+    private var waitingQuestionTasks: [ForgeTask] {
+        workspace.tasks.filter {
+            $0.status == "Human Review" &&
+                $0.currentPhase != "Plan Review" &&
+                $0.agentRunSteps.last?.action == "WaitForHumanReview"
         }
     }
 
@@ -1158,6 +1199,7 @@ private struct AgentQuestionState: View {
     @State private var selectedAnswer: String?
     @State private var ownAnswer = ""
     @State private var confirmAbort = false
+    @State private var showAnswerQueue = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1169,6 +1211,17 @@ private struct AgentQuestionState: View {
                     .font(ForgeDesign.mono(10))
                     .foregroundStyle(ForgeDesign.ink.opacity(0.65))
                 Spacer()
+                if waitingQuestionTasks.count > 1 {
+                    Button("ANSWER QUEUE · \(waitingQuestionTasks.count)") {
+                        showAnswerQueue = true
+                    }
+                    .font(ForgeDesign.mono(9, weight: .bold))
+                    .padding(.horizontal, 10)
+                    .frame(height: 28)
+                    .background(Color.white.opacity(0.65))
+                    .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                    .buttonStyle(.plain)
+                }
                 Text(otherTaskNote)
                     .font(ForgeDesign.mono(9.5))
                     .foregroundStyle(ForgeDesign.ink.opacity(0.65))
@@ -1196,6 +1249,11 @@ private struct AgentQuestionState: View {
             Button("Abort Task", role: .destructive, action: abort)
         } message: {
             Text("The paused loop will stop. Existing reviewed changes and audit evidence remain local.")
+        }
+        .sheet(isPresented: $showAnswerQueue) {
+            AgentAnswerQueueView(tasks: waitingQuestionTasks)
+                .environmentObject(workspace)
+                .frame(width: 1240, height: 680)
         }
     }
 
@@ -1402,6 +1460,13 @@ private struct AgentQuestionState: View {
         let active = workspace.tasks.filter { $0.id != task.id && ["Running", "Testing"].contains($0.status) }.count
         return active == 0 ? "other tasks unaffected" : "other tasks unaffected: \(active) still running"
     }
+    private var waitingQuestionTasks: [ForgeTask] {
+        workspace.tasks.filter {
+            $0.status == "Human Review" &&
+                $0.currentPhase != "Plan Review" &&
+                $0.agentRunSteps.last?.action == "WaitForHumanReview"
+        }
+    }
     private var recentContextEvents: [RuntimeEvent] {
         Array(task.events.suffix(3))
     }
@@ -1446,6 +1511,211 @@ private struct AgentQuestionState: View {
     private func abort() {
         guard let loop = task.agentRunLoops.last else { return }
         workspace.abortAgentLoop(for: task, loop: loop)
+    }
+}
+
+private struct AgentAnswerQueueView: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
+
+    var tasks: [ForgeTask]
+    @State private var answers: [ForgeTask.ID: String] = [:]
+    @State private var ownWordsTaskIDs = Set<ForgeTask.ID>()
+    @State private var submittedTaskIDs = Set<ForgeTask.ID>()
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 14) {
+                Text("⏸ \(tasks.count) TASK\(tasks.count == 1 ? "" : "S") WAITING ON \(remainingCount) ANSWER\(remainingCount == 1 ? "" : "S")")
+                    .font(ForgeDesign.mono(11, weight: .heavy))
+                    .tracking(0.5)
+                Text("answer each decision without reopening every task")
+                    .font(ForgeDesign.mono(10))
+                    .foregroundStyle(ForgeDesign.ink.opacity(0.65))
+                Spacer()
+                Text("↹ tab between questions · each resumes on its own")
+                    .font(ForgeDesign.mono(9.5))
+                    .foregroundStyle(ForgeDesign.ink.opacity(0.65))
+            }
+            .padding(.horizontal, 24)
+            .frame(height: 44)
+            .background(ForgeDesign.warning)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+            }
+
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    ForEach(tasks) { task in
+                        answerRow(task)
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 16)
+            }
+
+            HStack(spacing: 14) {
+                Button(submitLabel, action: submitAnswers)
+                    .buttonStyle(ForgePrimaryButtonStyle(foreground: ForgeDesign.accent))
+                    .disabled(answeredCount == 0)
+                Text(submitStatus)
+                    .font(ForgeDesign.mono(10))
+                    .foregroundStyle(ForgeDesign.muted)
+                Spacer()
+                Text("unanswered tasks stay paused — nothing is guessed")
+                    .font(ForgeDesign.mono(9.5))
+                    .foregroundStyle(Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255))
+            }
+            .padding(.horizontal, 24)
+            .frame(height: 66)
+            .background(Color.white)
+            .overlay(alignment: .top) {
+                Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+            }
+        }
+        .background(ForgeDesign.paper)
+    }
+
+    private func answerRow(_ task: ForgeTask) -> some View {
+        let step = task.agentRunSteps.last
+        let answer = answers[task.id]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let isSubmitted = submittedTaskIDs.contains(task.id)
+
+        return VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                StatusPill(
+                    label: isSubmitted ? "✓ RESUMING" : "⏸ NEEDS YOU",
+                    color: isSubmitted ? ForgeDesign.accent : ForgeDesign.warning
+                )
+                Text("#\(task.id.prefix(6))")
+                    .font(ForgeDesign.mono(9))
+                    .foregroundStyle(Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255))
+                Text(task.title)
+                    .font(ForgeDesign.mono(11, weight: .bold))
+                    .lineLimit(1)
+                Text("· \(task.currentPhase.lowercased())")
+                    .font(ForgeDesign.mono(9))
+                    .foregroundStyle(Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255))
+                Spacer()
+                Text(stepProgress(task))
+                    .font(ForgeDesign.mono(9))
+                    .foregroundStyle(ForgeDesign.muted)
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 40)
+            .background(isSubmitted ? Color(red: 247 / 255, green: 242 / 255, blue: 255 / 255) : Color.white)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+            }
+
+            HStack(alignment: .top, spacing: 18) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(step?.summary ?? task.reviewSummary ?? "Forge needs an explicit decision before continuing.")
+                        .font(.system(size: 14, weight: .bold))
+                        .lineSpacing(3)
+                    Text(step?.rationale ?? "The next action changes the reviewed approach, so the agent paused.")
+                        .font(ForgeDesign.mono(10))
+                        .foregroundStyle(ForgeDesign.muted)
+                        .lineSpacing(3)
+                        .lineLimit(2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if ownWordsTaskIDs.contains(task.id) {
+                    TextField("answer in your own words…", text: answerBinding(for: task.id))
+                        .textFieldStyle(.plain)
+                        .font(ForgeDesign.mono(10.5))
+                        .padding(.horizontal, 12)
+                        .frame(width: 330, height: 38)
+                        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                } else {
+                    HStack(spacing: 8) {
+                        queueChoiceButton(
+                            "FOLLOW AGENT",
+                            selected: answer.hasPrefix("Follow the inspected"),
+                            disabled: isSubmitted
+                        ) {
+                            answers[task.id] = "Follow the inspected repository evidence: \(step?.rationale ?? "continue with the narrow reviewed approach")"
+                        }
+                        queueChoiceButton(
+                            "REVISE",
+                            selected: answer.hasPrefix("Keep this task paused"),
+                            disabled: isSubmitted
+                        ) {
+                            answers[task.id] = "Keep this task paused and produce a revised approach with narrower risk before continuing."
+                        }
+                        Button("✎ OWN WORDS") {
+                            answers[task.id] = ""
+                            ownWordsTaskIDs.insert(task.id)
+                        }
+                        .font(ForgeDesign.mono(9.5, weight: .semibold))
+                        .padding(.horizontal, 11)
+                        .frame(height: 36)
+                        .background(Color.clear)
+                        .overlay(Rectangle().stroke(ForgeDesign.divider, style: StrokeStyle(lineWidth: 1.5, dash: [4, 3])))
+                        .buttonStyle(.plain)
+                        .disabled(isSubmitted)
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+        }
+        .background(Color.white)
+        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+    }
+
+    private func queueChoiceButton(_ title: String, selected: Bool, disabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(ForgeDesign.mono(10, weight: .bold))
+                .padding(.horizontal, 13)
+                .frame(height: 36)
+                .foregroundStyle(selected ? ForgeDesign.accent : ForgeDesign.ink)
+                .background(selected ? ForgeDesign.ink : Color.white)
+                .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                .shadow(color: selected ? ForgeDesign.ink : .clear, radius: 0, x: 3, y: 3)
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+    }
+
+    private func answerBinding(for taskID: ForgeTask.ID) -> Binding<String> {
+        Binding(
+            get: { answers[taskID] ?? "" },
+            set: { answers[taskID] = $0 }
+        )
+    }
+
+    private var answeredTasks: [ForgeTask] {
+        tasks.filter {
+            !(answers[$0.id]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) &&
+                !submittedTaskIDs.contains($0.id)
+        }
+    }
+    private var answeredCount: Int { answeredTasks.count }
+    private var remainingCount: Int { max(tasks.count - submittedTaskIDs.count, 0) }
+    private var submitLabel: String {
+        submittedTaskIDs.isEmpty ? "▸ SUBMIT \(answeredCount) ANSWER\(answeredCount == 1 ? "" : "S")" : "✓ SUBMITTED"
+    }
+    private var submitStatus: String {
+        if !submittedTaskIDs.isEmpty { return "\(submittedTaskIDs.count) task\(submittedTaskIDs.count == 1 ? "" : "s") resuming independently" }
+        if answeredCount == tasks.count { return "all answered · ready to resume" }
+        return "\(answeredCount) of \(tasks.count) answered"
+    }
+
+    private func stepProgress(_ task: ForgeTask) -> String {
+        guard let loop = task.agentRunLoops.last else { return task.currentPhase.lowercased() }
+        return "step \(max(loop.stepsRun, 1))/\(loop.maxSteps)"
+    }
+
+    private func submitAnswers() {
+        let ready = answeredTasks
+        guard !ready.isEmpty else { return }
+        for task in ready {
+            guard let answer = answers[task.id]?.trimmingCharacters(in: .whitespacesAndNewlines), !answer.isEmpty else { continue }
+            submittedTaskIDs.insert(task.id)
+            workspace.answerAgentQuestion(for: task, content: answer)
+        }
     }
 }
 
