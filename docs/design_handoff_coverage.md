@@ -40,7 +40,7 @@ the actual visual source of truth.
 | Decisions | `34a` Batch questions | Implemented | The sidebar and detailed question state open a 1240px answer queue backed by all waiting tasks; partial submit leaves unanswered tasks paused and resumes answered loops independently. |
 | Decisions | `18a` Merge conflict | Implemented | Actual unmerged index entries open the 1240px conflicted-file/three-way/draft/action layout; Base/Ours/Theirs/working contents, explicit confirmation, stale-review protection, manual/side selection, single-file staging, and no-auto-continue boundary are real. Rendered comparison remains. |
 | Decisions | `19a` Failed/rollback | Implemented | Failed tasks open a dedicated evidence/diagnosis/repo-state/reviewed-repair surface with guarded rollback/reject actions. |
-| Decisions | `24a` First success | Missing | Celebration and next-step state are missing. |
+| Decisions | `24a` First success | Implemented | The first persisted Completed task opens the one-time 980px celebration/receipt/next-step layout with real elapsed/agent/diff/check/review/cost evidence; Queue Next is real and GitHub opens only a safely derived GitHub remote. True merged-PR wording/URL and rendered comparison remain. |
 | Decisions | `37a` Cost breakdown | Partial | Task estimates exist; step/model-call accordion is missing. |
 | Settings | `22a` General | Implemented | Shared 980px navigation, startup, appearance, notification, sound, and update rows exist; rendered comparison remains. |
 | Settings | `3a` Model | Implemented | Square provider cards, API-key handoff, effort selector, budget guardrail, and real save action exist; rendered comparison remains. |
@@ -77,9 +77,9 @@ the actual visual source of truth.
 - Functional Coding-Agent Demo V0: 100% of its documented behavior criteria.
 - Primary V0 screen implementation: 5 of 5 substantially implemented, none
   yet marked `Verified` under the strict rule above.
-- Full handoff: 23 `Implemented`, 3 `Partial`, 17 `Missing`, 0 `Verified` out
+- Full handoff: 24 `Implemented`, 3 `Partial`, 16 `Missing`, 0 `Verified` out
   of 43 named screens/states.
-- Weighted full-handoff UI readiness: approximately 56-59%.
+- Weighted full-handoff UI readiness: approximately 58-61%.
 
 These metrics must remain separate. Functional completion never implies design
 completion.

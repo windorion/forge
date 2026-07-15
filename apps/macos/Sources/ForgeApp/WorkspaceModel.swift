@@ -105,6 +105,18 @@ final class WorkspaceModel: ObservableObject {
             preferredRepositoryRoot.map(repositoryRootIsUsable) == true
     }
 
+    func openRepositoryOnGitHub() {
+        guard let value = gitStatus?.repositoryWebURL,
+              let url = URL(string: value),
+              url.scheme == "https",
+              url.host == "github.com"
+        else {
+            statusMessage = "No GitHub repository URL is available for this workspace."
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
+
     func connectRepository() {
         let panel = NSOpenPanel()
         panel.title = "Connect a Repository"

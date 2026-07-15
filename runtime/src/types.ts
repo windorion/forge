@@ -583,6 +583,7 @@ export interface GitStatusSnapshot {
   root?: string;
   branch?: string;
   upstream?: string;
+  repositoryWebURL?: string;
   head?: string;
   ahead?: number;
   behind?: number;

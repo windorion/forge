@@ -379,6 +379,7 @@ struct GitStatusSnapshot: Codable, Hashable {
     var root: String?
     var branch: String?
     var upstream: String?
+    var repositoryWebURL: String?
     var head: String?
     var ahead: Int?
     var behind: Int?

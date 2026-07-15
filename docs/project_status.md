@@ -10,7 +10,7 @@ Last updated: 2026-07-15
 Forge is a strong trust/runtime foundation with a handoff-driven coding-agent
 session shell and a usable full-screen diff review surface in the macOS app.
 The documented Coding-Agent Demo V0 functional criteria are complete, but the
-full delivered design handoff is approximately 56-59% implemented.
+full delivered design handoff is approximately 58-61% implemented.
 It can create tasks, inspect bounded repo context, hold review gates, generate
 safe edit proposals, apply restricted Markdown edits, exact source/text
 replacements, multi-hunk patches, and context-anchored unified diffs across
@@ -50,6 +50,12 @@ Implemented:
   deliberately leaves merge/rebase continuation to the user. The macOS app
   shows the handoff-aligned conflict sidebar, paired sources, editable draft,
   explicit actions, failure/result evidence, and operation boundary.
+- One-time `24a` First Success state for the first persisted Completed task.
+  The handoff celebration, hard-edge confetti, receipt, and next-step actions
+  use real elapsed/agent time, proposal diff lines, passed checks, requested
+  review changes, plan cost, current branch, and a safely normalized GitHub
+  remote. Forge says Shipped/Completed rather than falsely claiming a merged
+  PR until hosted PR publication provides that fact.
 - Local TypeScript runtime.
 - Task creation and task conversation.
 - Server-Sent Events from runtime to app.
@@ -286,7 +292,7 @@ use different denominators and must not be added together.
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
 | Coding-agent demo V0 behavior | 100% | All documented functional acceptance criteria are implemented and smoke-covered. |
 | Primary V0 handoff UI | 95-98% | Five primary screens are substantially implemented; exact typography and rendered comparison remain. |
-| Full 43-screen handoff UI | 56-59% | Twenty-three screens are implemented, three partial, and seventeen missing; none has passed strict rendered verification yet. |
+| Full 43-screen handoff UI | 58-61% | Twenty-four screens are implemented, three partial, and sixteen missing; none has passed strict rendered verification yet. |
 | Useful developer alpha | 50-60% | Forge can recover interrupted loops/transactions and apply guarded source create/modify/delete changes, but still needs broader autonomous tool use and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |

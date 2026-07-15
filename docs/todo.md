@@ -30,7 +30,8 @@ of truth and the delivered HTML/CSS as the exact visual/content specification.
   real six-step and one-step runtime modes and selected-step revision request.
 - Render-verify the implemented History, Audit, Failure/Rollback, and Crash
   Recovery surfaces. Offline, No Repository, and Merge Conflict are
-  implemented; continue with First Success and the remaining recovery states.
+  implemented. First Success now has its real one-time Completed-task receipt;
+  connect its final merged-PR wording/link after hosted PR publication exists.
 - Render-verify the full Agent Question state; the context-backed answer flow
   now records a decision and resumes the paused loop instead of stopping at a
   static choice card. The multi-task Answer Queue now uses the same boundary;
@@ -107,6 +108,15 @@ the core runtime smoke. Preserve these completed boundaries:
 - Add error reporting and support diagnostics.
 
 ## Done Recently
+
+- Implemented `24a` First Success as a one-time state for the first real
+  persisted Completed task. The 980px celebration uses the handoff's diagonal
+  field, hard-edged confetti, square check, receipt, and next actions; receipt
+  values come from real task/run/proposal/validation/review/plan evidence.
+  Queue Next returns to the composer. View on GitHub is enabled only when the
+  runtime can safely normalize a configured `github.com` remote to HTTPS.
+  Copy says Shipped/Completed rather than inventing a merged PR; hosted PR
+  publication remains the boundary for exact merged wording and PR URL.
 
 - Implemented the real `18a` Merge Conflict flow. Actual Git unmerged entries
   now open the 1240px conflict workspace with a 250px file list,

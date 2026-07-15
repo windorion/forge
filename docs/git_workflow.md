@@ -25,7 +25,9 @@ Current implementation:
 
 - the runtime exposes `GET /git/status`
 - the response includes git root, branch, upstream, head, dirty state,
-  staged/unstaged/untracked files, and line stats when available
+  staged/unstaged/untracked files, line stats when available, and an optional
+  normalized HTTPS repository URL only when a configured remote is safely
+  recognized as `github.com/<owner>/<repo>`
 - the macOS Review panel shows the working tree and highlights files related
   to the selected task
 - `.git` and `.forge` internals are not exposed through the review endpoints

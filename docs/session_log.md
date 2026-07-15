@@ -4100,3 +4100,41 @@ Next:
 
 - Package and launch the rebuilt app, commit and push this batch to `main`,
   then continue with the next handoff-backed state.
+
+## 2026-07-15 08:42:40 CEST
+
+Conversation summary:
+
+- After pushing the real Merge Conflict batch, continued immediately into the
+  next missing handoff state, `24a` First Success.
+
+Done:
+
+- Added a one-time 980px First Success celebration for the first persisted
+  Completed task with the handoff's diagonal field, hard-edged confetti,
+  square check, receipt, and next-step controls.
+- Bound elapsed time, Agent Loop time, diff additions/deletions, passed checks,
+  review change requests, plan cost, completion time, branch, and task ID to
+  real persisted/runtime evidence.
+- Made Queue Next return to the real new-task composer and persisted the
+  shown-once boundary through app preferences.
+- Extended Git status with an optional repository web URL that is emitted only
+  when a configured remote safely matches `github.com/<owner>/<repo>`; the
+  GitHub action stays disabled otherwise.
+- Kept product truth explicit: the screen says Shipped/Completed rather than
+  claiming a merged PR that the current runtime cannot prove.
+- Updated full-handoff readiness to approximately 58-61%: 24 Implemented, 3
+  Partial, 16 Missing, and 0 strictly Verified.
+
+Not done:
+
+- Exact merged-PR wording and a PR-specific GitHub link depend on hosted PR
+  publication/merge evidence and remain intentionally absent.
+- Strict rendered comparison is still unavailable, so the screen is not
+  marked Verified.
+
+Next:
+
+- Run final runtime/Swift/package checks, restart the local latest runtime/app,
+  commit and push this continuation to `main`, then proceed through the next
+  handoff surface.

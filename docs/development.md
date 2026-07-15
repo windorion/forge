@@ -68,6 +68,14 @@ an editable resolution draft, explicit confirmation, and live remaining-file
 refresh. Resolution stages only one reviewed file and never continues the Git
 operation automatically.
 
+The first persisted Completed task now opens the handoff `24a` celebration
+once. Its receipt derives elapsed and Agent Loop durations, proposal diff line
+counts, passed validation/task commands, requested review changes, and the last
+plan cost estimate from task state. Queue Next returns to the task composer;
+View on GitHub is enabled only for a runtime-normalized `github.com` remote.
+The UI intentionally says Shipped/Completed until a hosted PR integration can
+prove a merge and supply the actual PR URL.
+
 ## Run Runtime
 
 ```bash

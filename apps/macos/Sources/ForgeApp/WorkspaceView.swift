@@ -96,6 +96,7 @@ struct WorkspaceView: View {
     @EnvironmentObject private var workspace: WorkspaceModel
     @State private var recoveryDismissed = false
     @State private var showCommandPalette = false
+    @AppStorage("forge.didShowFirstTaskSuccess") private var didShowFirstTaskSuccess = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -114,7 +115,15 @@ struct WorkspaceView: View {
             } else if let conflicts = workspace.gitConflictSnapshot, !conflicts.files.isEmpty {
                 MergeConflictState(snapshot: conflicts)
             } else if let task = workspace.selectedTask {
-                if task.status == "Completed" {
+                if shouldShowFirstTaskSuccess(task) {
+                    FirstTaskSuccessState(task: task) {
+                        didShowFirstTaskSuccess = true
+                        workspace.selectedTaskID = nil
+                    } viewOnGitHub: {
+                        didShowFirstTaskSuccess = true
+                        workspace.openRepositoryOnGitHub()
+                    }
+                } else if task.status == "Completed" {
                     RunCompleteState(task: task)
                 } else if task.status == "Failed" {
                     TaskFailureState(task: task)
@@ -177,6 +186,8 @@ struct WorkspaceView: View {
                         ? .review
                         : workspace.gitConflictSnapshot?.files.isEmpty == false
                             ? .review
+                        : workspace.selectedTask.map(shouldShowFirstTaskSuccess) == true
+                            ? .recovery
                         : windowMode(for: workspace.selectedTask)
             )
         )
@@ -230,6 +241,15 @@ struct WorkspaceView: View {
             workspace.tasks.isEmpty &&
             !workspace.hasSelectedRepository &&
             [.unchecked, .checking, .disconnected].contains(workspace.runtimeState)
+    }
+
+    private func shouldShowFirstTaskSuccess(_ task: ForgeTask) -> Bool {
+        guard !didShowFirstTaskSuccess, task.status == "Completed" else { return false }
+        let firstCompleted = workspace.tasks
+            .filter { $0.status == "Completed" }
+            .sorted { $0.updatedAt < $1.updatedAt }
+            .first
+        return firstCompleted?.id == task.id
     }
 
     private func reviewFirstRecoveredTask() {
@@ -1293,6 +1313,221 @@ private struct RunningTaskWorkspaceView: View {
             FullscreenDiffReview(task: task)
                 .frame(minWidth: 1180, minHeight: 760)
         }
+    }
+}
+
+private struct FirstTaskSuccessState: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
+    let task: ForgeTask
+    let queueNext: () -> Void
+    let viewOnGitHub: () -> Void
+
+    var body: some View {
+        ZStack {
+            FirstSuccessPattern()
+            FirstSuccessConfetti()
+
+            VStack(spacing: 0) {
+                Text("✓")
+                    .font(ForgeDesign.mono(42, weight: .black))
+                    .frame(width: 88, height: 88)
+                    .background(ForgeDesign.accent)
+                    .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                    .shadow(color: ForgeDesign.ink, radius: 0, x: 6, y: 6)
+                    .padding(.bottom, 24)
+
+                Text("FIRST TASK SHIPPED")
+                    .font(ForgeDesign.mono(11, weight: .bold))
+                    .tracking(2)
+                    .foregroundStyle(ForgeDesign.muted)
+                    .padding(.bottom, 10)
+
+                Text("You just shipped without typing code.")
+                    .font(.system(size: 28, weight: .heavy))
+                    .tracking(-0.6)
+                    .padding(.bottom, 12)
+
+                Text("\"\(task.title)\" is complete on \(branchName). Reviewed by you, written by the agent — that's the whole idea.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(ForgeDesign.muted)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(5)
+                    .frame(maxWidth: 440)
+                    .padding(.bottom, 26)
+
+                receipt
+                    .frame(width: 600)
+                    .padding(.bottom, 26)
+
+                HStack(spacing: 12) {
+                    Button("＋ QUEUE THE NEXT ONE", action: queueNext)
+                        .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.ink, foreground: ForgeDesign.accent))
+
+                    Button("VIEW ON GITHUB ↗", action: viewOnGitHub)
+                        .buttonStyle(ForgeSecondaryButtonStyle())
+                        .disabled(workspace.gitStatus?.repositoryWebURL == nil)
+                        .help(workspace.gitStatus?.repositoryWebURL == nil
+                              ? "No GitHub remote is configured for this workspace."
+                              : "Open the configured GitHub repository.")
+                }
+
+                Text("shown once — after this, completions are just a notification")
+                    .font(ForgeDesign.mono(9.5))
+                    .foregroundStyle(Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255))
+                    .padding(.top, 18)
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 40)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(ForgeDesign.paper)
+    }
+
+    private var receipt: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 9) {
+                Text("RECEIPT — TASK #\(task.id.prefix(6).uppercased())")
+                    .font(ForgeDesign.mono(9, weight: .bold))
+                    .tracking(1)
+                    .foregroundStyle(ForgeDesign.muted)
+                Spacer()
+                Text("completed \(completionTime)")
+                    .font(ForgeDesign.mono(9))
+                    .foregroundStyle(Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255))
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 38)
+            .background(Color(red: 247 / 255, green: 247 / 255, blue: 244 / 255))
+
+            Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+
+            HStack(spacing: 0) {
+                receiptMetric(label: "ELAPSED", value: "\(elapsedMinutes) min")
+                receiptMetric(label: "AGENT TIME", value: "\(agentMinutes) min")
+                receiptMetric(label: "DIFF", value: "+\(diffStats.additions) −\(diffStats.deletions)")
+                receiptMetric(label: "COST", value: costLabel, drawsDivider: false)
+            }
+            .frame(height: 66)
+
+            Rectangle().fill(ForgeDesign.divider).frame(height: 1)
+
+            Text("\(passedTestCount) checks ✓ · \(reviewChangeCount) review change request\(reviewChangeCount == 1 ? "" : "s") · completed by you")
+                .font(ForgeDesign.mono(10))
+                .foregroundStyle(ForgeDesign.muted)
+                .padding(.horizontal, 16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(height: 36)
+        }
+        .background(Color.white)
+        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+    }
+
+    private func receiptMetric(label: String, value: String, drawsDivider: Bool = true) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(ForgeDesign.mono(8.5, weight: .bold))
+                .tracking(1)
+                .foregroundStyle(ForgeDesign.muted)
+            Text(value)
+                .font(ForgeDesign.mono(17, weight: .black))
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+        .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .overlay(alignment: .trailing) {
+            if drawsDivider { Rectangle().fill(ForgeDesign.divider).frame(width: 1) }
+        }
+    }
+
+    private var branchName: String { workspace.gitStatus?.branch ?? "the local workspace" }
+
+    private var completionTime: String {
+        guard let date = ISO8601DateFormatter().date(from: task.updatedAt) else { return "locally" }
+        return date.formatted(date: .omitted, time: .shortened)
+    }
+
+    private var elapsedMinutes: Int {
+        guard let start = ISO8601DateFormatter().date(from: task.createdAt),
+              let end = ISO8601DateFormatter().date(from: task.updatedAt)
+        else { return 1 }
+        return max(1, Int(ceil(end.timeIntervalSince(start) / 60)))
+    }
+
+    private var agentMinutes: Int {
+        let seconds = task.agentRunLoops.reduce(0.0) { partial, loop in
+            guard let start = ISO8601DateFormatter().date(from: loop.startedAt),
+                  let completedAt = loop.completedAt,
+                  let end = ISO8601DateFormatter().date(from: completedAt)
+            else { return partial }
+            return partial + max(0, end.timeIntervalSince(start))
+        }
+        return max(1, Int(ceil(seconds / 60)))
+    }
+
+    private var diffStats: (additions: Int, deletions: Int) {
+        let proposal = task.editProposalRevisions.last(where: { $0.status == "Applied" }) ?? task.editProposal
+        return proposal?.fileChanges.reduce(into: (additions: 0, deletions: 0)) { result, change in
+            for line in change.diffPreview.split(separator: "\n", omittingEmptySubsequences: false) {
+                if line.hasPrefix("+") && !line.hasPrefix("+++") { result.additions += 1 }
+                if line.hasPrefix("-") && !line.hasPrefix("---") { result.deletions += 1 }
+            }
+        } ?? (0, 0)
+    }
+
+    private var costLabel: String {
+        guard let cost = task.planRevisions.last?.estimatedCostUSD else { return "LOCAL" }
+        return String(format: "$%.2f", cost)
+    }
+
+    private var passedTestCount: Int {
+        let validationCommands = task.validationRuns.flatMap(\.commands).filter { $0.status == "Passed" }.count
+        let taskCommands = task.taskCommandRuns.filter { $0.status == "Passed" }.count
+        return validationCommands + taskCommands
+    }
+
+    private var reviewChangeCount: Int {
+        task.editProposalRevisions
+            .flatMap { $0.fileDecisions ?? [] }
+            .filter { $0.decision == "ChangesRequested" }
+            .count
+    }
+}
+
+private struct FirstSuccessPattern: View {
+    var body: some View {
+        Canvas { context, size in
+            var path = Path()
+            for offset in stride(from: -size.height, through: size.width, by: 12) {
+                path.move(to: CGPoint(x: offset, y: size.height))
+                path.addLine(to: CGPoint(x: offset + size.height, y: 0))
+            }
+            context.stroke(path, with: .color(ForgeDesign.accent.opacity(0.05)), lineWidth: 1)
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+private struct FirstSuccessConfetti: View {
+    private let pieces: [(CGFloat, CGFloat, CGFloat, Double, Bool)] = [
+        (-360, -220, 12, 18, true), (-245, -150, 8, -12, false),
+        (330, -200, 12, 30, false), (390, -100, 9, -25, true),
+        (-320, 190, 10, 45, true), (260, 220, 8, 10, false),
+        (-410, 20, 7, -40, false), (415, 70, 11, 60, true)
+    ]
+
+    var body: some View {
+        ZStack {
+            ForEach(Array(pieces.enumerated()), id: \.offset) { _, piece in
+                Rectangle()
+                    .fill(piece.4 ? ForgeDesign.accent : ForgeDesign.ink)
+                    .frame(width: piece.2, height: piece.2)
+                    .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: piece.4 ? 1.5 : 0))
+                    .rotationEffect(.degrees(piece.3))
+                    .offset(x: piece.0, y: piece.1)
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
 

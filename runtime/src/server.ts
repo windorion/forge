@@ -903,7 +903,10 @@ async function getGitStatusSnapshot(): Promise<GitStatusSnapshot> {
       ...change,
       ...stats.get(change.path)
     }));
-    const headResult = await runGitCommand(["rev-parse", "--short", "HEAD"], gitRoot);
+    const [headResult, repositoryWebURL] = await Promise.all([
+      runGitCommand(["rev-parse", "--short", "HEAD"], gitRoot),
+      getGitHubRepositoryWebURL(gitRoot)
+    ]);
     const head = headResult.exitCode === 0 ? headResult.output.trim() : undefined;
     const isDirty = changedFiles.length > 0;
 
@@ -912,6 +915,7 @@ async function getGitStatusSnapshot(): Promise<GitStatusSnapshot> {
       root: gitRoot,
       branch: branch.branch,
       upstream: branch.upstream,
+      repositoryWebURL,
       head,
       ahead: branch.ahead,
       behind: branch.behind,
@@ -932,6 +936,22 @@ async function getGitStatusSnapshot(): Promise<GitStatusSnapshot> {
       error: error instanceof Error ? error.message : String(error)
     };
   }
+}
+
+async function getGitHubRepositoryWebURL(gitRoot: string): Promise<string | undefined> {
+  const origin = await runGitCommand(["remote", "get-url", "origin"], gitRoot, 8_000);
+  let remoteURL = origin.exitCode === 0 ? origin.output.trim() : "";
+  if (!remoteURL) {
+    const remotes = await runGitCommand(["remote"], gitRoot, 8_000);
+    const firstRemote = remotes.output.split(/\r?\n/).map((value) => value.trim()).find(Boolean);
+    if (!firstRemote) return undefined;
+    const fallback = await runGitCommand(["remote", "get-url", firstRemote], gitRoot, 8_000);
+    remoteURL = fallback.exitCode === 0 ? fallback.output.trim() : "";
+  }
+
+  const match = remoteURL.match(/^(?:https?:\/\/github\.com\/|ssh:\/\/git@github\.com\/|git@github\.com:)([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?$/i);
+  if (!match) return undefined;
+  return `https://github.com/${match[1]}/${match[2]}`;
 }
 
 async function getGitFileDiff(rawPath: string | null): Promise<GitFileDiff> {
