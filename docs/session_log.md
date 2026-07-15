@@ -4025,3 +4025,36 @@ Next:
 
 - Run full build/package verification, push to `main`, then continue with the
   next handoff surface that can be backed by existing state.
+
+## 2026-07-15 08:16:25 CEST
+
+Conversation summary:
+
+- Continued from the pushed Command Palette into the full Plan Approval design
+  after confirming the runtime already supports bounded one-step execution.
+
+Done:
+
+- Added an EXPAND path from the compact embedded plan card to the dedicated
+  1240px `20a` Full Plan Approval surface.
+- Bound steps, intent, rationale, risks, validation plan, status, timestamp,
+  time estimate, and cost estimate to the current persisted PlanRevision.
+- Added selected-step revision instructions through the real task-message
+  boundary and preserved plan regeneration/approval gates.
+- Made RUN ALL use the existing six-step bounded loop and STEP BY STEP use the
+  existing runtime `maxSteps: 1` path; no approval mode is simulated.
+- Updated measured full-handoff readiness to approximately 54-57%: 22
+  Implemented, 3 Partial, 18 Missing, 0 strictly Verified.
+- Passed direct full-app Swift type-check and diff-format validation.
+
+Not done:
+
+- Strict rendered comparison remains unavailable.
+- Merge conflicts, queue scheduling, full native menus, notifications, Dock,
+  menu bar, onboarding/auth, updates, sharing, templates, cost details, first
+  success, widgets, Spotlight, CLI, and Mission Control remain.
+
+Next:
+
+- Run full build/package verification, push to `main`, then continue the same
+  design-first sequence with the next state backed by real runtime evidence.

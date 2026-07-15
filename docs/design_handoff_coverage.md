@@ -31,7 +31,7 @@ the actual visual source of truth.
 | Core | `14a` Main window | Implemented | Exact rendered comparison and typography remain. |
 | Core | `1a` New task empty state | Implemented | Exact rendered comparison and typography remain. |
 | Core | `1b` Plan approval | Implemented | Standalone state and exact rendered comparison remain. |
-| Core | `20a` Full plan approval | Partial | Detailed plan data exists; dedicated full-screen layout is missing. |
+| Core | `20a` Full plan approval | Implemented | Compact plan cards expand into the 1240px steps/context/risk/validation/revision layout; Run All uses the bounded six-step loop and Step by Step uses the runtime's real one-step limit. |
 | Core | `32a` New session | Implemented | Exact rendered comparison and responsive verification remain. |
 | Core | `10a` Fullscreen diff review | Implemented | Exact rendered comparison and larger diff edge states remain. |
 | Core | `26a` Task queue | Partial | Basic task list exists; concurrency lanes, limits, drag order, and repo serialization are missing. |
@@ -77,9 +77,9 @@ the actual visual source of truth.
 - Functional Coding-Agent Demo V0: 100% of its documented behavior criteria.
 - Primary V0 screen implementation: 5 of 5 substantially implemented, none
   yet marked `Verified` under the strict rule above.
-- Full handoff: 21 `Implemented`, 4 `Partial`, 18 `Missing`, 0 `Verified` out
+- Full handoff: 22 `Implemented`, 3 `Partial`, 18 `Missing`, 0 `Verified` out
   of 43 named screens/states.
-- Weighted full-handoff UI readiness: approximately 53-56%.
+- Weighted full-handoff UI readiness: approximately 54-57%.
 
 These metrics must remain separate. Functional completion never implies design
 completion.

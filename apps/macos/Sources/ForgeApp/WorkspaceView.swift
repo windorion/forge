@@ -4776,12 +4776,278 @@ private struct TaskConversationPanel: View {
     }
 }
 
+private struct FullPlanApprovalView: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
+
+    var task: ForgeTask
+    var revision: PlanRevision
+    @State private var selectedStepID: PlanStep.ID?
+    @State private var revisionInstruction = ""
+    @State private var approvalMode = 0
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                ForgeLogo(size: 18)
+                Text("FORGE — PLAN REVIEW · #\(task.id.prefix(6))")
+                    .font(ForgeDesign.mono(12, weight: .bold))
+                    .tracking(0.5)
+                Spacer()
+                Text(ForgeDesign.appVersion)
+                    .font(ForgeDesign.mono(10))
+                    .foregroundStyle(ForgeDesign.muted)
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 44)
+            .background(Color(red: 236 / 255, green: 236 / 255, blue: 234 / 255))
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+            }
+
+            HStack(spacing: 14) {
+                StatusPill(label: "PLAN READY", color: ForgeDesign.accent)
+                Text(task.title)
+                    .font(.system(size: 15, weight: .heavy))
+                    .lineLimit(1)
+                Spacer()
+                Text("planned \(shortTime(revision.generatedAt)) · nothing executed yet")
+                    .font(ForgeDesign.mono(10))
+                    .foregroundStyle(ForgeDesign.muted)
+            }
+            .padding(.horizontal, 24)
+            .frame(height: 54)
+            .background(Color.white)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+            }
+
+            HStack(spacing: 0) {
+                VStack(spacing: 0) {
+                    HStack {
+                        Text("PROPOSED STEPS — \(revision.steps.count)")
+                        Spacer()
+                        Text("✎ select a step to revise")
+                            .fontWeight(.regular)
+                            .foregroundStyle(Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255))
+                    }
+                    .font(ForgeDesign.mono(9, weight: .bold))
+                    .tracking(1)
+                    .foregroundStyle(ForgeDesign.muted)
+                    .padding(.horizontal, 18)
+                    .frame(height: 36)
+                    .background(Color(red: 247 / 255, green: 247 / 255, blue: 244 / 255))
+                    .overlay(alignment: .bottom) {
+                        Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+                    }
+
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(Array(revision.steps.enumerated()), id: \.element.id) { index, step in
+                                Button {
+                                    selectedStepID = step.id
+                                    revisionInstruction = "Change step \(index + 1) — \(step.title): "
+                                } label: {
+                                    HStack(alignment: .top, spacing: 14) {
+                                        Text(String(format: "%02d", index + 1))
+                                            .font(ForgeDesign.mono(10, weight: .heavy))
+                                            .frame(width: 24, height: 24)
+                                            .background(selectedStepID == step.id ? ForgeDesign.accent : Color.white)
+                                            .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(step.title)
+                                                .font(.system(size: 13.5, weight: .bold))
+                                            Text(step.summary)
+                                                .font(ForgeDesign.mono(10))
+                                                .foregroundStyle(ForgeDesign.muted)
+                                                .lineLimit(2)
+                                        }
+                                        Spacer()
+                                        Text(step.status.uppercased())
+                                            .font(ForgeDesign.mono(9))
+                                            .foregroundStyle(Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255))
+                                    }
+                                    .padding(.horizontal, 18)
+                                    .padding(.vertical, 13)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(selectedStepID == step.id ? Color(red: 247 / 255, green: 242 / 255, blue: 255 / 255) : Color.white)
+                                    .overlay(alignment: .bottom) {
+                                        Rectangle().fill(ForgeDesign.divider).frame(height: 1.5)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+
+                    HStack(spacing: 10) {
+                        Text("est. total:")
+                        Text(estimateSummary).fontWeight(.bold).foregroundStyle(ForgeDesign.ink)
+                        Spacer()
+                        Text("risk \(revision.riskLevel.lowercased())")
+                    }
+                    .font(ForgeDesign.mono(10))
+                    .foregroundStyle(ForgeDesign.muted)
+                    .padding(.horizontal, 18)
+                    .frame(height: 42)
+                    .background(ForgeDesign.paper)
+                    .overlay(alignment: .top) {
+                        Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+
+                Rectangle().fill(ForgeDesign.ink).frame(width: 1.5)
+
+                VStack(spacing: 0) {
+                    planContextSection("AI · HOW I READ YOUR TASK", value: revision.intentSummary)
+                    planListSection("DELIBERATELY OUT OF SCOPE", values: revision.riskNotes ?? ["No work outside the reviewed plan and repository boundary."])
+                    planListSection("VALIDATION AFTER THE RUN", values: revision.validationPlan ?? ["Use only approved validation commands."])
+
+                    VStack(alignment: .leading, spacing: 9) {
+                        Text("REVISE SELECTED STEP")
+                            .font(ForgeDesign.mono(9, weight: .bold))
+                            .tracking(1)
+                            .foregroundStyle(ForgeDesign.muted)
+                        HStack(spacing: 0) {
+                            TextField("select a step, then describe the change…", text: $revisionInstruction)
+                                .textFieldStyle(.plain)
+                                .font(ForgeDesign.mono(10.5))
+                                .padding(.horizontal, 11)
+                                .frame(height: 38)
+                            Button("REQUEST") { requestRevision() }
+                                .font(ForgeDesign.mono(9.5, weight: .bold))
+                                .foregroundStyle(ForgeDesign.accent)
+                                .padding(.horizontal, 12)
+                                .frame(height: 38)
+                                .background(ForgeDesign.ink)
+                                .buttonStyle(.plain)
+                                .disabled(trimmedInstruction.isEmpty)
+                        }
+                        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 13)
+                    .overlay(alignment: .bottom) {
+                        Rectangle().fill(ForgeDesign.divider).frame(height: 1.5)
+                    }
+
+                    VStack(alignment: .leading, spacing: 9) {
+                        Text("APPROVAL MODE")
+                            .font(ForgeDesign.mono(9, weight: .bold))
+                            .tracking(1)
+                            .foregroundStyle(ForgeDesign.muted)
+                        HStack(spacing: 0) {
+                            approvalModeButton("RUN ALL \(revision.steps.count)", mode: 0)
+                            approvalModeButton("STEP BY STEP", mode: 1)
+                        }
+                        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                        Text(approvalMode == 0 ? "runs within the bounded loop and stops at every trust gate" : "runs one agent step, then returns control to you")
+                            .font(ForgeDesign.mono(9.5))
+                            .foregroundStyle(Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255))
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 13)
+
+                    Spacer(minLength: 6)
+
+                    HStack(spacing: 10) {
+                        Button("↻ REGENERATE") { workspace.generatePlanRevision(for: task) }
+                            .buttonStyle(ForgeSecondaryButtonStyle())
+                            .disabled(workspace.isGeneratingPlanRevision(taskID: task.id))
+                        Button(approvalMode == 0 ? "✓ APPROVE & RUN" : "✓ APPROVE NEXT STEP") {
+                            workspace.approvePlan(for: task, maxSteps: approvalMode == 0 ? 6 : 1)
+                        }
+                        .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.accent, foreground: ForgeDesign.ink))
+                        .disabled(!canApprove)
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 16)
+                }
+                .frame(width: 470)
+                .background(Color.white)
+            }
+        }
+        .background(ForgeDesign.paper)
+    }
+
+    private func planContextSection(_ title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(ForgeDesign.mono(9, weight: .bold))
+                .tracking(1)
+                .foregroundStyle(ForgeDesign.muted)
+            Text(value)
+                .font(.system(size: 12.5))
+                .foregroundStyle(Color(red: 42 / 255, green: 42 / 255, blue: 38 / 255))
+                .lineSpacing(4)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(alignment: .bottom) { Rectangle().fill(ForgeDesign.divider).frame(height: 1.5) }
+    }
+
+    private func planListSection(_ title: String, values: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title)
+                .font(ForgeDesign.mono(9, weight: .bold))
+                .tracking(1)
+                .foregroundStyle(ForgeDesign.muted)
+            ForEach(values.prefix(3), id: \.self) { value in
+                Text("− \(value)")
+                    .font(ForgeDesign.mono(10))
+                    .foregroundStyle(ForgeDesign.muted)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(alignment: .bottom) { Rectangle().fill(ForgeDesign.divider).frame(height: 1.5) }
+    }
+
+    private func approvalModeButton(_ title: String, mode: Int) -> some View {
+        Button(title) { approvalMode = mode }
+            .font(ForgeDesign.mono(10, weight: .bold))
+            .foregroundStyle(approvalMode == mode ? ForgeDesign.accent : ForgeDesign.ink)
+            .frame(maxWidth: .infinity)
+            .frame(height: 36)
+            .background(approvalMode == mode ? ForgeDesign.ink : Color.white)
+            .buttonStyle(.plain)
+            .overlay(alignment: .leading) {
+                if mode == 1 { Rectangle().fill(ForgeDesign.ink).frame(width: 1.5) }
+            }
+    }
+
+    private var canApprove: Bool {
+        task.status == "Human Review" &&
+            task.currentPhase == "Plan Review" &&
+            !workspace.isApprovingPlan(taskID: task.id)
+    }
+    private var trimmedInstruction: String { revisionInstruction.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var estimateSummary: String {
+        let minutes = revision.estimatedMinutes.map { "~\($0) min" } ?? "time pending"
+        let cost = revision.estimatedCostUSD.map { String(format: "~$%.2f", $0) } ?? "cost pending"
+        return "\(minutes) · \(cost)"
+    }
+
+    private func shortTime(_ value: String) -> String {
+        value.count > 8 ? String(value.suffix(8)) : value
+    }
+    private func requestRevision() {
+        guard !trimmedInstruction.isEmpty else { return }
+        workspace.sendTaskMessage(for: task, content: trimmedInstruction)
+        revisionInstruction = ""
+    }
+}
+
 private struct EmbeddedConversationPlanCard: View {
     @EnvironmentObject private var workspace: WorkspaceModel
 
     var task: ForgeTask
     var revision: PlanRevision
     @Binding var draft: String
+    @State private var showFullPlan = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -4796,6 +5062,9 @@ private struct EmbeddedConversationPlanCard: View {
                     .font(.callout.weight(.bold))
                     .lineLimit(2)
                 Spacer()
+                Button("EXPAND") { showFullPlan = true }
+                    .font(ForgeDesign.mono(9, weight: .bold))
+                    .buttonStyle(.plain)
             }
 
             ForEach(Array(revision.steps.prefix(6).enumerated()), id: \.element.id) { index, step in
@@ -4857,6 +5126,11 @@ private struct EmbeddedConversationPlanCard: View {
         .background(Color.white)
         .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
         .shadow(color: ForgeDesign.ink, radius: 0, x: 4, y: 4)
+        .sheet(isPresented: $showFullPlan) {
+            FullPlanApprovalView(task: task, revision: revision)
+                .environmentObject(workspace)
+                .frame(width: 1240, height: 680)
+        }
     }
 
     private var approved: Bool {

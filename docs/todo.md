@@ -26,6 +26,8 @@ of truth and the delivered HTML/CSS as the exact visual/content specification.
   named HTML screens/states are verified.
 - Render-verify the implemented `⌘K` Command Palette and extend the new native
   Forge menu from its core commands to the complete `21a` handoff command set.
+- Render-verify the implemented full Plan Approval expansion, including its
+  real six-step and one-step runtime modes and selected-step revision request.
 - Render-verify the implemented History, Audit, Failure/Rollback, and Crash
   Recovery surfaces. Offline and No Repository are implemented; finish the
   remaining decision and recovery screens, starting with merge conflict.

@@ -341,7 +341,7 @@ final class WorkspaceModel: ObservableObject {
         }
     }
 
-    func approvePlan(for task: ForgeTask) {
+    func approvePlan(for task: ForgeTask, maxSteps: Int = 6) {
         approvingTaskIDs.insert(task.id)
         runningAgentLoopTaskIDs.insert(task.id)
         statusMessage = "Approving plan and starting the bounded agent run."
@@ -349,10 +349,12 @@ final class WorkspaceModel: ObservableObject {
 
         Task {
             do {
-                let runningTask = try await runtime.approvePlanAndRun(taskID: task.id)
+                let runningTask = try await runtime.approvePlanAndRun(taskID: task.id, maxSteps: maxSteps)
                 upsert(runningTask)
                 selectedTaskID = runningTask.id
-                statusMessage = "Approved plan entered the bounded agent run."
+                statusMessage = maxSteps == 1
+                    ? "Approved plan entered a single-step reviewed agent run."
+                    : "Approved plan entered the bounded agent run."
                 await refreshGitStatusSnapshot()
                 await refreshValidationPermissionSnapshotIfPossible(for: runningTask.id)
                 startEventStream()
