@@ -42,10 +42,10 @@ the actual visual source of truth.
 | Decisions | `19a` Failed/rollback | Partial | Failure and rollback behavior exists; handoff screen is missing. |
 | Decisions | `24a` First success | Missing | Celebration and next-step state are missing. |
 | Decisions | `37a` Cost breakdown | Partial | Task estimates exist; step/model-call accordion is missing. |
-| Settings | `22a` General | Partial | Runtime settings exist; handoff navigation and content are not aligned. |
-| Settings | `3a` Model | Partial | Provider/model controls exist; handoff layout and effort selector are not aligned. |
+| Settings | `22a` General | Implemented | Shared 980px navigation, startup, appearance, notification, sound, and update rows exist; rendered comparison remains. |
+| Settings | `3a` Model | Implemented | Square provider cards, API-key handoff, effort selector, budget guardrail, and real save action exist; rendered comparison remains. |
 | Settings | `6a` GitHub | Missing | Least-scope authorization and repository toggles are missing. |
-| Settings | `30a` API key | Partial | Keychain storage exists; dedicated TEST KEY handoff screen is missing. |
+| Settings | `30a` API key | Implemented | Dedicated provider/key/status layout uses real Keychain storage and removal; exact provider test semantics and rendered comparison remain. |
 | Settings | `5b` Shortcuts | Missing | Remappable shortcut table is missing. |
 | Settings | `16a` Account/usage | Missing | Budget and repository/model allocation view is missing. |
 | Quick entry | `5a` Command palette | Missing | Command palette is missing. |
@@ -68,18 +68,18 @@ the actual visual source of truth.
 | Recovery | `23a` Share/collaboration | Missing | Read-only web review link flow is missing. |
 | Recovery | `2a` Task history | Partial | Task persistence/list exists; history filters and dedicated screen are missing. |
 | Recovery | `2b` Audit log | Partial | Auditable events exist; dedicated audit log screen is missing. |
-| Compact states | `1c` Needs decision | Partial | Questions exist; compact exact decision state is missing. |
-| Compact states | `1d` PR ready | Partial | Completion/diff/git data exists; compact PR-ready state is missing. |
-| Compact states | `1e` Guardrails | Partial | Approval rules exist; exact settings screen is missing. |
+| Compact states | `1c` Needs decision | Implemented | Runtime `WaitForHumanReview` decisions now open the compact two-route/freeform state; rendered comparison remains. |
+| Compact states | `1d` PR ready | Implemented | Completed tasks now open a compact metrics/files/diff/PR-handoff state backed by real task/git data; hosted PR publication remains. |
+| Compact states | `1e` Guardrails | Implemented | Shared settings navigation now exposes the exact always-on/toggle guardrail pattern; rendered comparison remains. |
 
 ## Measured Status
 
 - Functional Coding-Agent Demo V0: 100% of its documented behavior criteria.
 - Primary V0 screen implementation: 5 of 5 substantially implemented, none
   yet marked `Verified` under the strict rule above.
-- Full handoff: 5 `Implemented`, 14 `Partial`, 24 `Missing`, 0 `Verified` out
+- Full handoff: 11 `Implemented`, 8 `Partial`, 24 `Missing`, 0 `Verified` out
   of 43 named screens/states.
-- Weighted full-handoff UI readiness: approximately 20-25%.
+- Weighted full-handoff UI readiness: approximately 30-35%.
 
 These metrics must remain separate. Functional completion never implies design
 completion.

@@ -3752,3 +3752,42 @@ Next:
 
 - Verify, commit, and push this design-baseline batch directly to `main`, then
   immediately implement the compact task states and shared settings shell.
+
+## 2026-07-15 07:40:47 CEST
+
+Conversation summary:
+
+- After pushing the strict design baseline, continued without pausing into the
+  compact task-state and shared-settings handoff batch.
+
+Done:
+
+- Added a dedicated `1c` Needs Decision surface for runtime
+  `WaitForHumanReview` stops, with two explicit routes, a freeform instruction,
+  and budget-safe pause messaging.
+- Added a dedicated `1d` Run Complete surface backed by real task, validation,
+  diff, file, branch, and PR-handoff data.
+- Replaced the old Settings TabView with the 980px handoff shell and shared
+  square-edged sidebar navigation.
+- Implemented `22a` General, `1e` Guardrails, `3a` Model, and `30a` API Key
+  settings structures, preserving real runtime settings and macOS Keychain
+  storage/removal actions.
+- Deleted the entire unused legacy Runtime/Model/Validation Form hierarchy so
+  it cannot reappear or overlap the new design.
+- Raised measured full-handoff implementation readiness from approximately
+  20-25% to 30-35%: 11 Implemented, 8 Partial, 24 Missing, 0 strictly Verified.
+- Passed full Swift type-check, SwiftPM build, diff-format validation, and
+  packaged `Forge.app` rebuild/start verification.
+
+Not done:
+
+- GitHub, Account/Usage, and Shortcuts settings remain missing or partial.
+- Hosted PR publication is not implemented; the `1d` primary action currently
+  prepares the guarded PR review/handoff rather than publishing remotely.
+- Strict rendered comparison remains blocked by unavailable screen-capture
+  access, so implemented screens are not yet marked Verified.
+
+Next:
+
+- Commit and push this batch to `main`, then implement Shortcuts, GitHub,
+  Account/Usage, and the remaining decision/recovery handoff states.

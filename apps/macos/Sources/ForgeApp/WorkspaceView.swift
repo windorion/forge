@@ -100,7 +100,11 @@ struct WorkspaceView: View {
             ForgeTitleBar()
 
             if let task = workspace.selectedTask {
-                if usesNewSessionLayout(task) {
+                if task.status == "Completed" {
+                    RunCompleteState(task: task)
+                } else if needsDecisionLayout(task) {
+                    NeedsDecisionState(task: task)
+                } else if usesNewSessionLayout(task) {
                     TaskWorkspaceView(task: task)
                 } else {
                     HStack(spacing: 0) {
@@ -129,7 +133,11 @@ struct WorkspaceView: View {
         }
         .background(
             WindowSizingView(
-                mode: workspace.selectedTask == nil ? .compact : .session
+                mode: workspace.selectedTask == nil ||
+                    workspace.selectedTask?.status == "Completed" ||
+                    workspace.selectedTask.map(needsDecisionLayout) == true
+                    ? .compact
+                    : .session
             )
         )
     }
@@ -138,6 +146,12 @@ struct WorkspaceView: View {
         task.agentRunLoops.isEmpty &&
             task.editProposal == nil &&
             !["Running", "Testing", "Completed", "Failed"].contains(task.status)
+    }
+
+    private func needsDecisionLayout(_ task: ForgeTask) -> Bool {
+        task.status == "Human Review" &&
+            task.currentPhase != "Plan Review" &&
+            task.agentRunSteps.last?.action == "WaitForHumanReview"
     }
 }
 
@@ -558,6 +572,331 @@ private struct RunningTaskWorkspaceView: View {
             FullscreenDiffReview(task: task)
                 .frame(minWidth: 1180, minHeight: 760)
         }
+    }
+}
+
+private struct RunCompleteState: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
+
+    var task: ForgeTask
+    @State private var showDiffReview = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                StatusPill(label: "✓ ALL STEPS PASSED", color: ForgeDesign.accent)
+                Text(task.title)
+                    .font(.system(size: 16, weight: .heavy))
+                    .tracking(-0.3)
+                    .lineLimit(1)
+                Spacer()
+                Text("#\(task.id.prefix(6)) · finished · \(task.currentPhase.lowercased())")
+                    .font(.custom("JetBrains Mono", fixedSize: 10))
+                    .foregroundStyle(ForgeDesign.muted)
+            }
+            .padding(.horizontal, 28)
+            .frame(height: 62)
+            .background(Color.white)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+            }
+
+            HStack(spacing: 0) {
+                completionMetric(
+                    label: "DIFF",
+                    value: "+\(additionCount) −\(deletionCount)",
+                    detail: "\(filePaths.count) files · \(newFileCount) new"
+                )
+                completionMetric(
+                    label: "TESTS",
+                    value: "\(passedCommandCount) passed",
+                    detail: "\(newTestCount) run(s) · \(task.commandRerunEvidence.count) self-fix"
+                )
+                completionMetric(
+                    label: "REVIEW LOAD",
+                    value: "~\(reviewMinutes) min",
+                    detail: "reasoning attached per diff",
+                    drawsDivider: false
+                )
+            }
+            .frame(height: 88)
+            .background(Color.white)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+            }
+
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(filePaths.prefix(4).enumerated()), id: \.element) { index, path in
+                    HStack(spacing: 8) {
+                        Text("✓")
+                            .foregroundStyle(ForgeDesign.accent)
+                            .fontWeight(.bold)
+                        Text(path)
+                            .foregroundStyle(ForgeDesign.ink)
+                        Spacer()
+                        Text(fileDetail(path))
+                            .foregroundStyle(Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255))
+                    }
+                    .font(.custom("JetBrains Mono", fixedSize: 11.5))
+                    .frame(height: 30)
+
+                    if index < min(filePaths.count, 4) - 1 {
+                        Rectangle().fill(ForgeDesign.divider).frame(height: 1)
+                    }
+                }
+
+                if filePaths.isEmpty {
+                    Text("✓ reviewed workspace diff · validation evidence attached")
+                        .font(.custom("JetBrains Mono", fixedSize: 11.5))
+                        .foregroundStyle(ForgeDesign.muted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(height: 60)
+                }
+            }
+            .padding(.horizontal, 28)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, minHeight: 126, alignment: .topLeading)
+            .background(Color.white)
+
+            Spacer(minLength: 0)
+
+            HStack(spacing: 10) {
+                Text("branch \(branchName) · PR body ready for reviewed handoff")
+                    .font(.custom("JetBrains Mono", fixedSize: 10.5))
+                    .foregroundStyle(ForgeDesign.muted)
+                    .lineLimit(1)
+                Spacer()
+                Button("VIEW FULL DIFF") {
+                    showDiffReview = true
+                }
+                .buttonStyle(ForgeSecondaryButtonStyle())
+                Button("⇡ OPEN PR ON GITHUB →") {
+                    workspace.prepareGitPullRequestReview(for: task)
+                }
+                .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.accent, foreground: ForgeDesign.ink))
+                .disabled(workspace.isPreparingGitPullRequestReview(taskID: task.id))
+            }
+            .padding(.horizontal, 28)
+            .frame(height: 62)
+            .background(Color(red: 247 / 255, green: 247 / 255, blue: 244 / 255))
+            .overlay(alignment: .top) {
+                Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+            }
+        }
+        .background(ForgeDesign.paper)
+        .sheet(isPresented: $showDiffReview) {
+            FullscreenDiffReview(task: task)
+                .frame(minWidth: 1240, minHeight: 700)
+        }
+    }
+
+    private func completionMetric(
+        label: String,
+        value: String,
+        detail: String,
+        drawsDivider: Bool = true
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(label)
+                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
+                .tracking(1)
+                .foregroundStyle(ForgeDesign.muted)
+            Text(value)
+                .font(.custom("JetBrains Mono", fixedSize: 18).weight(.bold))
+            Text(detail)
+                .font(.custom("JetBrains Mono", fixedSize: 9.5))
+                .foregroundStyle(Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255))
+        }
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .overlay(alignment: .trailing) {
+            if drawsDivider {
+                Rectangle().fill(ForgeDesign.ink).frame(width: 1.5)
+            }
+        }
+    }
+
+    private var changedFiles: [GitFileChange] {
+        workspace.gitStatus?.changedFiles ?? []
+    }
+
+    private var filePaths: [String] {
+        let proposalPaths = task.editProposal?.fileChanges.map(\.path) ?? []
+        let paths = changedFiles.map(\.path) + proposalPaths + task.changedFiles
+        return paths.reduce(into: [String]()) { result, path in
+            if !result.contains(path) { result.append(path) }
+        }
+    }
+
+    private var additionCount: Int { changedFiles.compactMap(\.additions).reduce(0, +) }
+    private var deletionCount: Int { changedFiles.compactMap(\.deletions).reduce(0, +) }
+    private var newFileCount: Int { changedFiles.filter { $0.status == "Added" || $0.untracked }.count }
+    private var passedCommandCount: Int {
+        task.validationRuns.flatMap(\.commands).filter { $0.status == "Passed" }.count +
+            task.taskCommandRuns.filter { $0.status == "Passed" }.count
+    }
+    private var newTestCount: Int { task.validationRuns.last?.commands.count ?? task.taskCommandRuns.count }
+    private var reviewMinutes: Int { max(3, filePaths.count * 2) }
+    private var branchName: String { workspace.gitStatus?.branch ?? "local worktree" }
+
+    private func fileDetail(_ path: String) -> String {
+        guard let file = changedFiles.first(where: { $0.path == path }) else {
+            return "reviewed"
+        }
+        let prefix = file.status == "Added" || file.untracked ? "new · " : ""
+        return "\(prefix)+\(file.additions ?? 0) −\(file.deletions ?? 0)"
+    }
+}
+
+private struct NeedsDecisionState: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
+
+    var task: ForgeTask
+    @State private var draft = ""
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                StatusPill(label: "⏸ WAITING FOR YOU", color: ForgeDesign.warning)
+                Text(task.title)
+                    .font(.system(size: 16, weight: .heavy))
+                    .tracking(-0.3)
+                    .lineLimit(1)
+                Spacer()
+                Text("paused · \(stepProgress)")
+                    .font(.custom("JetBrains Mono", fixedSize: 10))
+                    .foregroundStyle(ForgeDesign.muted)
+            }
+            .padding(.horizontal, 28)
+            .frame(height: 62)
+            .background(Color.white)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+            }
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text("? FORGE NEEDS A DECISION")
+                    .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
+                    .tracking(1)
+                    .foregroundStyle(ForgeDesign.muted)
+                    .padding(.horizontal, 20)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(height: 42)
+                    .background(Color(red: 247 / 255, green: 247 / 255, blue: 244 / 255))
+                    .overlay(alignment: .bottom) {
+                        Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+                    }
+
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(question)
+                        .font(.system(size: 14.5))
+                        .foregroundStyle(Color(red: 42 / 255, green: 42 / 255, blue: 38 / 255))
+                        .lineSpacing(5)
+
+                    HStack(alignment: .top, spacing: 14) {
+                        DecisionOption(
+                            title: "A · FOLLOW RECOMMENDATION",
+                            detail: recommendation,
+                            note: "recommended · based on inspected context"
+                        ) {
+                            draft = "Follow Forge's recommendation: \(recommendation)"
+                        }
+                        DecisionOption(
+                            title: "B · KEEP CURRENT APPROACH",
+                            detail: alternative,
+                            note: "safer · request another reviewed step"
+                        ) {
+                            draft = "Keep the current approach and propose a safer reviewed alternative."
+                        }
+                    }
+
+                    HStack(spacing: 0) {
+                        TextField("or type your own instruction…", text: $draft)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 12))
+                            .padding(.horizontal, 14)
+                            .frame(height: 44)
+                            .background(Color.white)
+                        Button("SEND", action: send)
+                            .font(.custom("JetBrains Mono", fixedSize: 11).weight(.bold))
+                            .foregroundStyle(ForgeDesign.accent)
+                            .frame(width: 76, height: 44)
+                            .background(ForgeDesign.ink)
+                            .buttonStyle(.plain)
+                            .disabled(trimmedDraft.isEmpty || workspace.isSendingTaskMessage(taskID: task.id))
+                    }
+                    .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                }
+                .padding(.horizontal, 22)
+                .padding(.vertical, 18)
+            }
+            .background(Color.white)
+            .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+            .shadow(color: ForgeDesign.ink, radius: 0, x: 5, y: 5)
+            .padding(.horizontal, 28)
+            .padding(.top, 26)
+
+            Text("▸ the agent never guesses on architecture — it asks · paused work does not spend budget")
+                .font(.custom("JetBrains Mono", fixedSize: 10))
+                .foregroundStyle(Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 28)
+                .padding(.top, 16)
+            Spacer()
+        }
+        .background(ForgeDesign.paper)
+    }
+
+    private var latestStep: AgentRunStep? { task.agentRunSteps.last }
+    private var question: String {
+        latestStep?.summary ?? task.reviewSummary ?? "Forge reached a decision point and needs your instruction before continuing."
+    }
+    private var recommendation: String {
+        latestStep?.rationale ?? "Continue only with the reviewed, repository-aligned approach."
+    }
+    private var alternative: String {
+        task.reviewSummary ?? "Pause here and request a revised approach before any more work runs."
+    }
+    private var stepProgress: String {
+        task.agentRunLoops.last.map { "step \($0.stepsRun) of \($0.maxSteps)" } ?? task.currentPhase.lowercased()
+    }
+    private var trimmedDraft: String { draft.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private func send() {
+        guard !trimmedDraft.isEmpty else { return }
+        let content = trimmedDraft
+        draft = ""
+        workspace.sendTaskMessage(for: task, content: content)
+    }
+}
+
+private struct DecisionOption: View {
+    var title: String
+    var detail: String
+    var note: String
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 7) {
+                Text(title)
+                    .font(.custom("JetBrains Mono", fixedSize: 11).weight(.bold))
+                Text(detail)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(ForgeDesign.muted)
+                    .lineSpacing(3)
+                    .lineLimit(3)
+                Text(note)
+                    .font(.custom("JetBrains Mono", fixedSize: 9.5))
+                    .foregroundStyle(Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255))
+            }
+            .frame(maxWidth: .infinity, minHeight: 104, alignment: .topLeading)
+            .padding(.horizontal, 17)
+            .padding(.vertical, 15)
+            .background(Color.white)
+            .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+        }
+        .buttonStyle(.plain)
     }
 }
 

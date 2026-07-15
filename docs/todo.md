@@ -18,8 +18,9 @@ of truth and the delivered HTML/CSS as the exact visual/content specification.
 
 - Finish exact line-by-line verification of `1a`, `1b`, `10a`, `14a`, and
   `32a`.
-- Complete compact task states `1c`, `1d`, and `1e`.
-- Rebuild all six shared settings screens against their handoff layouts.
+- Render-verify the implemented compact task states `1c`, `1d`, and `1e`.
+- Finish GitHub, Account, and Shortcuts after the implemented General,
+  Guardrails, Model, and API Key settings pages.
 - Continue through decisions/recovery, queue/history, quick entry, native
   integrations, onboarding, updates, sharing, cost, and templates until all 43
   named HTML screens/states are verified.

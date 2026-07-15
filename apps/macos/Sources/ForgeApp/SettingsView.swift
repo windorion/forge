@@ -1,43 +1,45 @@
+import AppKit
 import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var workspace: WorkspaceModel
+    @State private var selection = ForgeSettingsSection.general
 
     var body: some View {
-        TabView {
-            RuntimeSettingsTab(
-                endpoint: workspace.runtimeEndpoint,
-                runtimeState: workspace.runtimeState,
-                eventStreamState: workspace.eventStreamState,
-                statusMessage: workspace.statusMessage,
-                eventStreamStatus: workspace.eventStreamStatus,
-                runtimeHealth: workspace.runtimeHealth,
-                runtimeLastCheckedAt: workspace.runtimeLastCheckedAt,
-                runtimeLastError: workspace.runtimeLastError,
-                runtimeProcessState: workspace.runtimeProcessState,
-                runtimeProcessMessage: workspace.runtimeProcessMessage,
-                runtimeProcessID: workspace.runtimeProcessID,
-                runtimeProcessDirectory: workspace.runtimeProcessDirectory,
-                runtimeRepositoryRoot: workspace.runtimeRepositoryRoot,
-                runtimeProcessCandidateDirectories: workspace.runtimeProcessCandidateDirectories,
-                runtimeProcessLastOutput: workspace.runtimeProcessLastOutput,
-                runtimeProcessLaunchCommand: workspace.runtimeProcessLaunchCommand,
-                canStartRuntimeProcess: workspace.canStartRuntimeProcess,
-                canStopRuntimeProcess: workspace.canStopRuntimeProcess,
-                startRuntimeProcess: workspace.startRuntimeProcess,
-                stopRuntimeProcess: workspace.stopRuntimeProcess,
-                refresh: workspace.refreshRuntimeHealth,
-                copyDiagnostics: workspace.copyRuntimeDiagnostics,
-                openRuntimeStatusPage: workspace.openRuntimeStatusPage
-            )
-            .tabItem {
-                Label("Runtime", systemImage: "server.rack")
-            }
+        VStack(spacing: 0) {
+            SettingsTitleBar()
 
-            ModelProviderSettingsTab(
+            HStack(spacing: 0) {
+                SettingsSidebar(selection: $selection)
+                    .frame(width: 200)
+
+                Rectangle()
+                    .fill(SettingsDesign.ink)
+                    .frame(width: 1.5)
+
+                settingsContent
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.white)
+            }
+        }
+        .frame(width: 980, height: 602)
+        .background(SettingsDesign.paper)
+    }
+
+    @ViewBuilder
+    private var settingsContent: some View {
+        switch selection {
+        case .general:
+            GeneralSettingsPage(refresh: workspace.refreshRuntimeHealth)
+        case .guardrails:
+            GuardrailsSettingsPage(
+                validationPresetCount: workspace.validationPresets.count,
+                workspaceConfig: workspace.workspaceValidationPresetConfig
+            )
+        case .model:
+            ModelSettingsPage(
                 envelope: workspace.modelProviderSettingsEnvelope,
                 fallbackConfiguration: workspace.runtimeHealth?.modelProviderConfiguration,
-                refresh: workspace.refreshModelProviderSettings,
                 save: { providerID, modelName, openAIBaseURL, timeout, maxOutputTokens, apiKey, clearKey in
                     workspace.updateModelProviderSettings(
                         providerID: providerID,
@@ -49,558 +51,732 @@ struct SettingsView: View {
                         clearOpenAIAPIKey: clearKey
                     )
                 },
-                isSaving: workspace.isUpdatingModelProviderSettings()
+                isSaving: workspace.isUpdatingModelProviderSettings(),
+                openAPIKey: { selection = .apiKey }
             )
-                .tabItem {
-                    Label("Model", systemImage: "cpu")
+        case .apiKey:
+            APIKeySettingsPage(
+                envelope: workspace.modelProviderSettingsEnvelope,
+                isSaving: workspace.isUpdatingModelProviderSettings(),
+                save: { key, clear in
+                    let editable = workspace.modelProviderSettingsEnvelope?.editableSettings
+                    workspace.updateModelProviderSettings(
+                        providerID: "openai",
+                        modelName: editable?.modelName,
+                        openAIBaseURL: editable?.openAIBaseURL,
+                        openAITimeoutMs: editable?.openAITimeoutMs,
+                        openAIMaxOutputTokens: editable?.openAIMaxOutputTokens,
+                        openAIAPIKey: key,
+                        clearOpenAIAPIKey: clear ? true : nil
+                    )
                 }
-
-            ValidationSettingsTab(
-                validationPresetCount: workspace.validationPresets.count,
-                workspaceConfig: workspace.workspaceValidationPresetConfig
             )
-            .tabItem {
-                Label("Validation", systemImage: "checklist")
-            }
-        }
-        .padding()
-        .frame(width: 640, height: 500)
-    }
-}
-
-private struct RuntimeSettingsTab: View {
-    var endpoint: String
-    var runtimeState: RuntimeConnectionState
-    var eventStreamState: RuntimeEventStreamState
-    var statusMessage: String
-    var eventStreamStatus: String
-    var runtimeHealth: RuntimeHealth?
-    var runtimeLastCheckedAt: Date?
-    var runtimeLastError: String?
-    var runtimeProcessState: RuntimeProcessState
-    var runtimeProcessMessage: String
-    var runtimeProcessID: Int32?
-    var runtimeProcessDirectory: String?
-    var runtimeRepositoryRoot: String?
-    var runtimeProcessCandidateDirectories: [String]
-    var runtimeProcessLastOutput: String?
-    var runtimeProcessLaunchCommand: String?
-    var canStartRuntimeProcess: Bool
-    var canStopRuntimeProcess: Bool
-    var startRuntimeProcess: () -> Void
-    var stopRuntimeProcess: () -> Void
-    var refresh: () -> Void
-    var copyDiagnostics: () -> Void
-    var openRuntimeStatusPage: () -> Void
-
-    var body: some View {
-        Form {
-            Section("Runtime") {
-                LabeledContent("Endpoint", value: endpoint)
-                LabeledContent("Runtime State") {
-                    RuntimeStateText(state: runtimeState)
-                }
-                LabeledContent("Event Stream") {
-                    EventStreamStateText(state: eventStreamState)
-                }
-                LabeledContent("Status", value: statusMessage)
-                LabeledContent("Stream Detail", value: eventStreamStatus)
-                LabeledContent("Managed Process") {
-                    Text(runtimeProcessState.rawValue)
-                }
-                LabeledContent("Process Detail", value: runtimeProcessMessage)
-                if let runtimeProcessID {
-                    LabeledContent("Process ID", value: "\(runtimeProcessID)")
-                }
-                if let runtimeProcessDirectory {
-                    LabeledContent("Process Directory", value: runtimeProcessDirectory)
-                }
-                if let runtimeRepositoryRoot {
-                    LabeledContent("Repository Root", value: runtimeRepositoryRoot)
-                } else if let workspace = runtimeHealth?.workspace {
-                    LabeledContent("Repository Root", value: workspace.repoRoot)
-                    LabeledContent("Repository Source", value: workspace.repoRootSource)
-                }
-                if let runtimeProcessLaunchCommand {
-                    LabeledContent("Launch Command", value: runtimeProcessLaunchCommand)
-                }
-
-                if !runtimeProcessCandidateDirectories.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Runtime Launch Candidates")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                        ForEach(runtimeProcessCandidateDirectories, id: \.self) { candidate in
-                            Text(candidate)
-                                .font(.custom("JetBrains Mono", fixedSize: 9))
-                                .foregroundStyle(.secondary)
-                                .textSelection(.enabled)
-                        }
-                    }
-                }
-
-                if let runtimeProcessLastOutput,
-                   !runtimeProcessLastOutput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Latest Launch Output")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                        ScrollView {
-                            Text(runtimeProcessLastOutput)
-                                .font(.custom("JetBrains Mono", fixedSize: 9))
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .textSelection(.enabled)
-                        }
-                        .frame(minHeight: 72, maxHeight: 120)
-                    }
-                }
-
-                if let runtimeLastCheckedAt {
-                    LabeledContent("Last Checked", value: runtimeLastCheckedAt.formatted(date: .abbreviated, time: .standard))
-                }
-
-                if let runtimeLastError {
-                    LabeledContent("Last Error", value: runtimeLastError)
-                }
-
-                if let runtimeHealth {
-                    LabeledContent("Service", value: runtimeHealth.service)
-                    LabeledContent("Version", value: runtimeHealth.version)
-                    LabeledContent("Expected Version", value: WorkspaceModel.expectedRuntimeVersion)
-                    LabeledContent("Uptime", value: formattedUptime(runtimeHealth.uptimeSeconds))
-                    if let persistence = runtimeHealth.persistence {
-                        LabeledContent("Task Count", value: "\(persistence.taskCount)")
-                        LabeledContent("Database", value: persistence.databasePath)
-                    }
-                }
-
-                HStack {
-                    Button(action: startRuntimeProcess) {
-                        Label("Start Runtime", systemImage: "play.circle")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!canStartRuntimeProcess)
-
-                    Button(action: stopRuntimeProcess) {
-                        Label("Stop Runtime", systemImage: "stop.circle")
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(!canStopRuntimeProcess)
-
-                    Button(action: refresh) {
-                        Label("Refresh Runtime", systemImage: "arrow.clockwise")
-                    }
-                    .buttonStyle(.bordered)
-
-                    Button(action: openRuntimeStatusPage) {
-                        Label("Open Status Page", systemImage: "safari")
-                    }
-                    .buttonStyle(.bordered)
-
-                    Button(action: copyDiagnostics) {
-                        Label("Copy Diagnostics", systemImage: "doc.on.doc")
-                    }
-                    .buttonStyle(.bordered)
-                }
-            }
-
-            Section("Product Rules") {
-                Text("Forge is task-first, agent-first, local-first, and review-centered.")
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .formStyle(.grouped)
-    }
-
-    private func formattedUptime(_ seconds: Double) -> String {
-        let value = Int(seconds.rounded())
-        if value < 60 {
-            return "\(value)s"
-        }
-
-        let minutes = value / 60
-        let remainingSeconds = value % 60
-        return "\(minutes)m \(remainingSeconds)s"
-    }
-}
-
-private struct RuntimeStateText: View {
-    var state: RuntimeConnectionState
-
-    var body: some View {
-        Label(state.rawValue, systemImage: systemImage)
-            .foregroundStyle(color)
-    }
-
-    private var systemImage: String {
-        switch state {
-        case .unchecked:
-            return "questionmark.circle"
-        case .checking:
-            return "arrow.triangle.2.circlepath.circle"
-        case .running:
-            return "checkmark.circle.fill"
-        case .needsProviderConfiguration:
-            return "exclamationmark.triangle.fill"
-        case .wrongVersion:
-            return "xmark.octagon.fill"
-        case .disconnected:
-            return "bolt.horizontal.circle"
-        }
-    }
-
-    private var color: Color {
-        switch state {
-        case .running:
-            return .green
-        case .needsProviderConfiguration, .checking:
-            return .orange
-        case .wrongVersion, .disconnected:
-            return .red
-        case .unchecked:
-            return .secondary
+        case .account, .github, .shortcuts:
+            SettingsPendingPage(section: selection)
         }
     }
 }
 
-private struct EventStreamStateText: View {
-    var state: RuntimeEventStreamState
+private enum SettingsDesign {
+    static let paper = Color(red: 244 / 255, green: 244 / 255, blue: 241 / 255)
+    static let ink = Color(red: 10 / 255, green: 10 / 255, blue: 10 / 255)
+    static let muted = Color(red: 106 / 255, green: 106 / 255, blue: 100 / 255)
+    static let faint = Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255)
+    static let divider = Color(red: 226 / 255, green: 225 / 255, blue: 220 / 255)
+    static let accent = Color(red: 166 / 255, green: 116 / 255, blue: 255 / 255)
+}
 
+private enum ForgeSettingsSection: String, CaseIterable, Identifiable {
+    case general = "GENERAL"
+    case account = "ACCOUNT"
+    case guardrails = "GUARDRAILS"
+    case github = "GITHUB"
+    case apiKey = "API KEY"
+    case model = "MODEL"
+    case shortcuts = "SHORTCUTS"
+
+    var id: String { rawValue }
+}
+
+private struct SettingsTitleBar: View {
     var body: some View {
-        Label(state.rawValue, systemImage: systemImage)
-            .foregroundStyle(color)
-    }
-
-    private var systemImage: String {
-        switch state {
-        case .connected:
-            return "dot.radiowaves.left.and.right"
-        case .connecting:
-            return "antenna.radiowaves.left.and.right"
-        case .disconnected:
-            return "wifi.slash"
+        ZStack {
+            HStack(spacing: 10) {
+                SettingsLogo(size: 18)
+                Text("FORGE — SETTINGS")
+                    .font(.custom("JetBrains Mono", fixedSize: 12).weight(.bold))
+                    .tracking(0.5)
+            }
+            HStack {
+                Spacer()
+                Text("v0.4.2")
+                    .font(.custom("JetBrains Mono", fixedSize: 10))
+                    .foregroundStyle(SettingsDesign.muted)
+                    .padding(.trailing, 16)
+            }
         }
-    }
-
-    private var color: Color {
-        switch state {
-        case .connected:
-            return .green
-        case .connecting:
-            return .orange
-        case .disconnected:
-            return .secondary
+        .frame(height: 42)
+        .background(Color(red: 236 / 255, green: 236 / 255, blue: 234 / 255))
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(SettingsDesign.ink).frame(height: 1.5)
         }
     }
 }
 
-private struct ModelProviderSettingsTab: View {
-    var envelope: ModelProviderSettingsEnvelope?
-    var fallbackConfiguration: ModelProviderConfiguration?
-    var refresh: () -> Void
-    var save: (String, String?, String?, Int?, Int?, String?, Bool?) -> Void
-    var isSaving: Bool
-
-    @State private var providerID = "local"
-    @State private var modelName = ""
-    @State private var openAIBaseURL = ""
-    @State private var timeoutText = ""
-    @State private var maxOutputText = ""
-    @State private var apiKeyInput = ""
-    @State private var localMessage = ""
-
-    private var configuration: ModelProviderConfiguration? {
-        envelope?.configuration ?? fallbackConfiguration
-    }
+private struct SettingsLogo: View {
+    var size: CGFloat
 
     var body: some View {
-        Form {
-            Section("Edit Provider") {
-                Picker("Provider", selection: $providerID) {
-                    Text("Local").tag("local")
-                    Text("OpenAI").tag("openai")
-                }
-                .pickerStyle(.segmented)
-
-                TextField("Model", text: $modelName)
-
-                HStack {
-                    Button(action: refresh) {
-                        Label("Refresh", systemImage: "arrow.clockwise")
-                    }
-
-                    Button(action: { saveCurrentSettings() }) {
-                        Label("Save", systemImage: "square.and.arrow.down")
-                    }
-                    .keyboardShortcut("s", modifiers: [.command])
-                    .disabled(isSaving)
-
-                    if isSaving {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-                }
-
-                if let settingsPath = envelope?.editableSettings.settingsPath {
-                    LabeledContent("Settings File", value: settingsPath)
-                }
-            }
-
-            Section("OpenAI") {
-                TextField("Base URL", text: $openAIBaseURL)
-                TextField("Timeout ms", text: $timeoutText)
-                    .monospacedDigit()
-                TextField("Max Output Tokens", text: $maxOutputText)
-                    .monospacedDigit()
-                SecureField("API Key", text: $apiKeyInput)
-
-                if let editableSettings = envelope?.editableSettings {
-                    LabeledContent("Runtime Key", value: editableSettings.hasOpenAIAPIKey ? "Configured" : "Missing")
-                }
-
-                HStack {
-                    Button(action: syncStoredKey) {
-                        Label("Use Stored Key", systemImage: "key")
-                    }
-                    .disabled(isSaving)
-
-                    Button(role: .destructive, action: clearStoredKey) {
-                        Label("Clear Key", systemImage: "trash")
-                    }
-                    .disabled(isSaving)
-                }
-            }
-
-            Section("Provider") {
-                if let configuration {
-                    LabeledContent("Status") {
-                        StatusText(status: configuration.status)
-                    }
-                    LabeledContent("Provider", value: configuration.provider.name)
-                    LabeledContent("Provider ID", value: configuration.provider.id)
-                    LabeledContent("Configured ID", value: configuration.configuredProviderID)
-                    LabeledContent("Model", value: configuration.provider.model)
-                    LabeledContent("Mode", value: configuration.provider.mode)
-                    Text(configuration.summary)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("Check Runtime to load model provider settings.")
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            if let configuration {
-                Section("Configuration") {
-                    ForEach(configuration.settings) { item in
-                        LabeledContent(item.label, value: displayValue(for: item))
-                    }
-                }
-
-                Section("Context Boundary") {
-                    LabeledContent("Remote Context", value: configuration.sendsRemoteContext ? "Enabled" : "Disabled")
-                    if let summary = configuration.remoteContextSummary {
-                        Text(summary)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Section("Issues") {
-                    if configuration.issues.isEmpty {
-                        Label("No provider issues reported.", systemImage: "checkmark.circle")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(configuration.issues, id: \.self) { issue in
-                            Label(issue, systemImage: "exclamationmark.triangle")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
-
-            if !localMessage.isEmpty {
-                Section("Last Action") {
-                    Text(localMessage)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .formStyle(.grouped)
-        .onAppear(perform: loadCurrentSettings)
-        .onChange(of: envelope) { _, _ in
-            loadCurrentSettings()
-        }
-    }
-
-    private func displayValue(for item: ModelProviderConfigItem) -> String {
-        item.isSecret && item.value == "Configured" ? "Configured" : item.value
-    }
-
-    private func loadCurrentSettings() {
-        let editableSettings = envelope?.editableSettings
-        let configuration = configuration
-        providerID = editableSettings?.providerID ?? configuration?.provider.id ?? "local"
-        modelName = editableSettings?.modelName ?? configuration?.provider.model ?? ""
-        openAIBaseURL = editableSettings?.openAIBaseURL ?? ""
-        timeoutText = editableSettings?.openAITimeoutMs.map(String.init) ?? ""
-        maxOutputText = editableSettings?.openAIMaxOutputTokens.map(String.init) ?? ""
-        apiKeyInput = ""
-    }
-
-    private func saveCurrentSettings() {
-        saveCurrentSettings(apiKeyOverride: nil, clearKey: false, storeEnteredAPIKey: true)
-    }
-
-    private func syncStoredKey() {
-        do {
-            guard let storedKey = try KeychainStore.readOpenAIAPIKey(), !storedKey.isEmpty else {
-                localMessage = "No OpenAI API key found in Keychain."
-                return
-            }
-
-            saveCurrentSettings(apiKeyOverride: storedKey, clearKey: false, storeEnteredAPIKey: false)
-            localMessage = "Stored OpenAI API key synced to runtime memory."
-        } catch {
-            localMessage = "Read Keychain failed: \(error.localizedDescription)"
-        }
-    }
-
-    private func clearStoredKey() {
-        do {
-            try KeychainStore.deleteOpenAIAPIKey()
-            apiKeyInput = ""
-            saveCurrentSettings(apiKeyOverride: nil, clearKey: true, storeEnteredAPIKey: false)
-            localMessage = "OpenAI API key cleared from Keychain and runtime memory."
-        } catch {
-            localMessage = "Clear Keychain failed: \(error.localizedDescription)"
-        }
-    }
-
-    private func saveCurrentSettings(
-        apiKeyOverride: String?,
-        clearKey: Bool,
-        storeEnteredAPIKey: Bool
-    ) {
-        do {
-            localMessage = ""
-            let timeout = try optionalPositiveInteger(timeoutText, fieldName: "Timeout")
-            let maxOutputTokens = try optionalPositiveInteger(maxOutputText, fieldName: "Max Output Tokens")
-            let trimmedAPIKey = apiKeyOverride ?? optionalTrimmed(apiKeyInput)
-
-            if storeEnteredAPIKey, let trimmedAPIKey {
-                try KeychainStore.saveOpenAIAPIKey(trimmedAPIKey)
-            }
-
-            save(
-                providerID,
-                optionalTrimmed(modelName),
-                optionalTrimmed(openAIBaseURL),
-                timeout,
-                maxOutputTokens,
-                trimmedAPIKey,
-                clearKey ? true : nil
-            )
-
-            if trimmedAPIKey != nil && storeEnteredAPIKey {
-                apiKeyInput = ""
-                localMessage = "Settings saved. API key stored in Keychain and synced to runtime memory."
+        Group {
+            if let image {
+                Image(nsImage: image).resizable().interpolation(.high)
             } else {
-                localMessage = "Settings saved."
+                Text("F")
+                    .font(.custom("JetBrains Mono", fixedSize: 11).weight(.bold))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(SettingsDesign.accent)
             }
-        } catch {
-            localMessage = error.localizedDescription
         }
+        .frame(width: size, height: size)
+        .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1))
     }
 
-    private func optionalTrimmed(_ value: String) -> String? {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-
-    private func optionalPositiveInteger(_ value: String, fieldName: String) throws -> Int? {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            return nil
-        }
-
-        guard let integer = Int(trimmed), integer > 0 else {
-            throw SettingsInputError.invalidPositiveInteger(fieldName)
-        }
-
-        return integer
+    private var image: NSImage? {
+        Bundle.main.url(forResource: "forge-logo", withExtension: "png")
+            .flatMap(NSImage.init(contentsOf:))
     }
 }
 
-private enum SettingsInputError: LocalizedError {
-    case invalidPositiveInteger(String)
+private struct SettingsSidebar: View {
+    @Binding var selection: ForgeSettingsSection
 
-    var errorDescription: String? {
-        switch self {
-        case .invalidPositiveInteger(let fieldName):
-            return "\(fieldName) must be a positive whole number."
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer().frame(height: 18)
+            ForEach(ForgeSettingsSection.allCases) { section in
+                Button {
+                    selection = section
+                } label: {
+                    Text(section.rawValue)
+                        .font(.custom("JetBrains Mono", fixedSize: 12).weight(selection == section ? .bold : .regular))
+                        .foregroundStyle(selection == section ? SettingsDesign.ink : SettingsDesign.muted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 20)
+                        .frame(height: 41)
+                        .background(selection == section ? SettingsDesign.accent : Color.clear)
+                        .overlay(alignment: .top) {
+                            if selection == section { Rectangle().fill(SettingsDesign.ink).frame(height: 1.5) }
+                        }
+                        .overlay(alignment: .bottom) {
+                            if selection == section { Rectangle().fill(SettingsDesign.ink).frame(height: 1.5) }
+                        }
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer()
+        }
+        .background(SettingsDesign.paper)
+    }
+}
+
+private struct SettingsToggle: View {
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Button { isOn.toggle() } label: {
+            ZStack(alignment: isOn ? .trailing : .leading) {
+                Rectangle()
+                    .fill(isOn ? SettingsDesign.accent : SettingsDesign.paper)
+                Rectangle()
+                    .fill(SettingsDesign.ink)
+                    .frame(width: 16, height: 16)
+                    .padding(2)
+            }
+            .frame(width: 38, height: 22)
+            .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct SettingsRow<Trailing: View>: View {
+    var title: String
+    var subtitle: String
+    @ViewBuilder var trailing: () -> Trailing
+
+    var body: some View {
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 13.5, weight: .bold))
+                Text(subtitle)
+                    .font(.custom("JetBrains Mono", fixedSize: 10))
+                    .foregroundStyle(SettingsDesign.faint)
+            }
+            Spacer()
+            trailing()
+        }
+        .padding(.horizontal, 26)
+        .frame(height: 66)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(SettingsDesign.divider).frame(height: 1.5)
         }
     }
 }
 
-private struct ValidationSettingsTab: View {
+private struct SettingsSectionHeader: View {
+    var title: String
+
+    var body: some View {
+        Text(title)
+            .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
+            .tracking(1.5)
+            .foregroundStyle(SettingsDesign.muted)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 26)
+            .frame(height: 38, alignment: .bottom)
+            .padding(.bottom, 8)
+            .background(Color(red: 247 / 255, green: 247 / 255, blue: 244 / 255))
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(SettingsDesign.ink).frame(height: 1.5)
+            }
+    }
+}
+
+private struct GeneralSettingsPage: View {
+    var refresh: () -> Void
+
+    @AppStorage("forge.launchAtLogin") private var launchAtLogin = false
+    @AppStorage("forge.reopenLastWorkspace") private var reopenLastWorkspace = true
+    @AppStorage("forge.keepRuntimeRunning") private var keepRuntimeRunning = true
+    @AppStorage("forge.completionSound") private var completionSound = true
+    @State private var theme = "AUTO"
+    @State private var notify = "ALL"
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                SettingsSectionHeader(title: "STARTUP")
+                SettingsRow(title: "Launch Forge at login", subtitle: "start quietly in the menu bar") {
+                    SettingsToggle(isOn: $launchAtLogin)
+                }
+                SettingsRow(title: "Reopen last workspace", subtitle: "restore task queue and selected repository") {
+                    SettingsToggle(isOn: $reopenLastWorkspace)
+                }
+                SettingsRow(title: "Keep local runtime running", subtitle: "continue queued local work after closing the window") {
+                    SettingsToggle(isOn: $keepRuntimeRunning)
+                }
+
+                SettingsSectionHeader(title: "APPEARANCE")
+                SettingsRow(title: "Theme", subtitle: "auto follows macOS appearance") {
+                    SettingsSegmented(options: ["AUTO", "LIGHT", "DARK"], selection: $theme)
+                }
+                SettingsRow(title: "Accent color", subtitle: "used for running states and primary actions") {
+                    HStack(spacing: 8) {
+                        ForEach([SettingsDesign.accent, Color(red: 22 / 255, green: 224 / 255, blue: 106 / 255), Color(red: 47 / 255, green: 107 / 255, blue: 1), Color(red: 1, green: 92 / 255, blue: 43 / 255)], id: \.self) { color in
+                            Rectangle().fill(color).frame(width: 26, height: 26)
+                                .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: color == SettingsDesign.accent ? 1.5 : 1))
+                        }
+                    }
+                }
+
+                SettingsSectionHeader(title: "NOTIFICATIONS")
+                SettingsRow(title: "Notify me about", subtitle: "delivered as macOS notifications") {
+                    SettingsSegmented(options: ["ALL", "NEEDS ME", "NONE"], selection: $notify)
+                }
+                SettingsRow(title: "Completion sound", subtitle: "a short anvil \"ting\" when a PR is ready") {
+                    SettingsToggle(isOn: $completionSound)
+                }
+                SettingsRow(title: "Updates", subtitle: "v0.4.2 · release notes in changelog") {
+                    Button("CHECK NOW", action: refresh).buttonStyle(SettingsOutlineButtonStyle())
+                }
+            }
+        }
+    }
+}
+
+private struct GuardrailsSettingsPage: View {
     var validationPresetCount: Int
     var workspaceConfig: WorkspaceValidationPresetConfig?
 
+    @AppStorage("forge.askBeforeDependencies") private var askBeforeDependencies = true
+    @AppStorage("forge.runTestsAfterStep") private var runTestsAfterStep = true
+    @AppStorage("forge.allowTaskNetwork") private var allowTaskNetwork = false
+
     var body: some View {
-        Form {
-            Section("Validation Presets") {
-                LabeledContent("Loaded", value: "\(validationPresetCount)")
-
-                if let workspaceConfig {
-                    LabeledContent("Workspace Config", value: workspaceConfig.path)
-                    LabeledContent("Config Exists", value: workspaceConfig.exists ? "Yes" : "No")
-
-                    if !workspaceConfig.issues.isEmpty {
-                        ForEach(workspaceConfig.issues, id: \.self) { issue in
-                            Label(issue, systemImage: "exclamationmark.triangle")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                } else {
-                    Text("Check Runtime to load validation preset settings.")
-                        .foregroundStyle(.secondary)
-                }
-            }
+        VStack(spacing: 0) {
+            GuardrailRow(title: "Plan approval before changes", subtitle: "every task waits for explicit approval before mutation", locked: true, toggle: nil)
+            GuardrailRow(title: "Review diff before apply", subtitle: "proposed file changes stay review-only until accepted", locked: true, toggle: nil)
+            GuardrailRow(title: "Ask before new dependencies", subtitle: "the agent pauses instead of changing the dependency graph", locked: false, toggle: $askBeforeDependencies)
+            GuardrailRow(title: "Run tests after each step", subtitle: "\(validationPresetCount) validation preset(s) currently loaded", locked: false, toggle: $runTestsAfterStep)
+            GuardrailRow(title: "Allow network during tasks", subtitle: workspaceConfig?.exists == true ? "workspace policy loaded from local config" : "off by default · local-first boundary", locked: false, toggle: $allowTaskNetwork)
+            Text("▸ guardrails marked ALWAYS ON cannot be disabled — that's the point")
+                .font(.custom("JetBrains Mono", fixedSize: 10.5))
+                .foregroundStyle(SettingsDesign.faint)
+                .padding(.horizontal, 26)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(height: 56)
+            Spacer()
         }
-        .formStyle(.grouped)
     }
 }
 
-private struct StatusText: View {
-    var status: String
+private struct APIKeySettingsPage: View {
+    var envelope: ModelProviderSettingsEnvelope?
+    var isSaving: Bool
+    var save: (String?, Bool) -> Void
+
+    @State private var provider = "OPENAI"
+    @State private var keyInput = ""
+    @State private var statusMessage = ""
 
     var body: some View {
-        Label(status, systemImage: systemImage)
-            .foregroundStyle(color)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 10) {
+                    settingsLabel("PROVIDER")
+                    SettingsSegmented(options: ["OPENAI", "ANTHROPIC", "GEMINI"], selection: $provider)
+                }
+                .padding(.horizontal, 26)
+                .padding(.top, 18)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    settingsLabel("\(provider) API KEY")
+                    HStack(spacing: 0) {
+                        Text("🔒")
+                            .font(.custom("JetBrains Mono", fixedSize: 11))
+                            .frame(width: 42, height: 44)
+                            .background(Color(red: 247 / 255, green: 247 / 255, blue: 244 / 255))
+                            .overlay(alignment: .trailing) {
+                                Rectangle().fill(SettingsDesign.divider).frame(width: 1.5)
+                            }
+                        SecureField(provider == "OPENAI" ? "sk-…" : "paste provider key", text: $keyInput)
+                            .textFieldStyle(.plain)
+                            .font(.custom("JetBrains Mono", fixedSize: 12))
+                            .padding(.horizontal, 14)
+                            .frame(height: 44)
+                            .disabled(provider != "OPENAI")
+                    }
+                    .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
+
+                    HStack(spacing: 12) {
+                        Button(isSaving ? "TESTING…" : "TEST KEY") {
+                            testAndStoreKey()
+                        }
+                        .buttonStyle(SettingsOutlineButtonStyle())
+                        .disabled(provider != "OPENAI" || trimmedKey.isEmpty || isSaving)
+                        Text(statusMessage.isEmpty ? keyStatusNote : statusMessage)
+                            .font(.custom("JetBrains Mono", fixedSize: 10))
+                            .foregroundStyle(statusColor)
+                    }
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("▸ stored in macOS Keychain — never synced, never sent to Windorion servers")
+                        Text("▸ calls go directly from your Mac to the provider — we are not a proxy")
+                    }
+                    .font(.custom("JetBrains Mono", fixedSize: 10))
+                    .foregroundStyle(SettingsDesign.faint)
+                    .lineSpacing(3)
+                }
+                .padding(.horizontal, 26)
+                .padding(.vertical, 18)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(SettingsDesign.ink).frame(height: 1.5)
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    settingsLabel("KEY STATUS")
+                    HStack(spacing: 10) {
+                        keyMetric(label: "STATE", value: hasStoredKey ? "● ACTIVE" : "○ MISSING")
+                        keyMetric(label: "MODELS VISIBLE", value: hasStoredKey ? "1+" : "0")
+                        keyMetric(label: "STORAGE", value: "KEYCHAIN")
+                    }
+                }
+                .padding(.horizontal, 26)
+                .padding(.vertical, 16)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(SettingsDesign.ink).frame(height: 1.5)
+                }
+
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(spacing: 14) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("No key? Use the local provider")
+                                .font(.system(size: 13, weight: .bold))
+                            Text("no remote context · no provider cost · works offline")
+                                .font(.custom("JetBrains Mono", fixedSize: 9.5))
+                                .foregroundStyle(SettingsDesign.muted)
+                        }
+                        Spacer()
+                        Text("AVAILABLE")
+                            .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
+                    }
+                    .padding(.horizontal, 16)
+                    .frame(height: 68)
+                    .background(Color(red: 247 / 255, green: 247 / 255, blue: 244 / 255))
+                    .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
+
+                    Button("REMOVE KEY FROM KEYCHAIN") {
+                        removeKey()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
+                    .foregroundStyle(Color(red: 192 / 255, green: 57 / 255, blue: 43 / 255))
+                    .disabled(!hasStoredKey || isSaving)
+                }
+                .padding(.horizontal, 26)
+                .padding(.vertical, 16)
+            }
+        }
+        .onAppear(perform: refreshStoredKeyStatus)
+        .onChange(of: envelope) { _, _ in refreshStoredKeyStatus() }
     }
 
-    private var systemImage: String {
-        switch status {
-        case "Ready":
-            return "checkmark.circle.fill"
-        case "NeedsConfiguration":
-            return "exclamationmark.triangle.fill"
-        case "Unsupported":
-            return "xmark.octagon.fill"
-        default:
-            return "questionmark.circle.fill"
+    private var hasStoredKey: Bool { envelope?.editableSettings.hasOpenAIAPIKey == true }
+    private var trimmedKey: String { keyInput.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var keyStatusNote: String { hasStoredKey ? "key configured · enter a replacement to test" : "no provider key configured" }
+    private var statusColor: Color { statusMessage.contains("failed") ? .red : SettingsDesign.muted }
+
+    private func settingsLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
+            .tracking(1)
+            .foregroundStyle(SettingsDesign.muted)
+    }
+
+    private func keyMetric(label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.custom("JetBrains Mono", fixedSize: 8.5).weight(.bold))
+                .tracking(1)
+                .foregroundStyle(SettingsDesign.muted)
+            Text(value)
+                .font(.custom("JetBrains Mono", fixedSize: 13).weight(.bold))
+        }
+        .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
+        .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
+    }
+
+    private func testAndStoreKey() {
+        guard provider == "OPENAI", !trimmedKey.isEmpty else { return }
+        do {
+            try KeychainStore.saveOpenAIAPIKey(trimmedKey)
+            save(trimmedKey, false)
+            keyInput = ""
+            statusMessage = "key stored in Keychain · provider check requested"
+        } catch {
+            statusMessage = "key test failed: \(error.localizedDescription)"
         }
     }
 
-    private var color: Color {
-        switch status {
-        case "Ready":
-            return .green
-        case "NeedsConfiguration":
-            return .orange
-        case "Unsupported":
-            return .red
-        default:
-            return .secondary
+    private func removeKey() {
+        do {
+            try KeychainStore.deleteOpenAIAPIKey()
+            save(nil, true)
+            keyInput = ""
+            statusMessage = "key removed from Keychain and runtime memory"
+        } catch {
+            statusMessage = "remove failed: \(error.localizedDescription)"
         }
+    }
+
+    private func refreshStoredKeyStatus() {
+        guard statusMessage.isEmpty else { return }
+        do {
+            statusMessage = try KeychainStore.readOpenAIAPIKey() == nil ? "" : "key present in macOS Keychain"
+        } catch {
+            statusMessage = "key status failed: \(error.localizedDescription)"
+        }
+    }
+}
+
+private struct ModelSettingsPage: View {
+    var envelope: ModelProviderSettingsEnvelope?
+    var fallbackConfiguration: ModelProviderConfiguration?
+    var save: (String, String?, String?, Int?, Int?, String?, Bool?) -> Void
+    var isSaving: Bool
+    var openAPIKey: () -> Void
+
+    @State private var providerID = "local"
+    @State private var modelName = ""
+    @AppStorage("forge.reasoningEffort") private var effort = "MEDIUM"
+    @AppStorage("forge.monthlyBudgetCap") private var monthlyBudgetCap = 40
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 8) {
+                    modelLabel("AGENT MODEL")
+                    modelCard(
+                        id: "local",
+                        name: "LOCAL PROVIDER",
+                        tag: "PRIVATE",
+                        detail: "deterministic local planning · no remote context",
+                        speed: "FAST",
+                        cost: "$0"
+                    )
+                    modelCard(
+                        id: "openai",
+                        name: modelName.isEmpty ? "OPENAI" : modelName.uppercased(),
+                        tag: hasOpenAIKey ? "READY" : "KEY NEEDED",
+                        detail: "provider-backed planning and reviewed execution proposals",
+                        speed: "REMOTE",
+                        cost: "provider billing"
+                    )
+                }
+                .padding(.horizontal, 26)
+                .padding(.top, 20)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    modelLabel("MODEL NAME")
+                    HStack(spacing: 0) {
+                        TextField("e.g. gpt-5", text: $modelName)
+                            .textFieldStyle(.plain)
+                            .font(.custom("JetBrains Mono", fixedSize: 12))
+                            .padding(.horizontal, 14)
+                            .frame(height: 42)
+                            .disabled(providerID == "local")
+                        Button(hasOpenAIKey ? "KEY CONFIGURED" : "ADD API KEY", action: openAPIKey)
+                            .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
+                            .padding(.horizontal, 14)
+                            .frame(height: 42)
+                            .background(Color.white)
+                            .buttonStyle(.plain)
+                            .overlay(alignment: .leading) {
+                                Rectangle().fill(SettingsDesign.ink).frame(width: 1.5)
+                            }
+                    }
+                    .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
+                    Text("stored in local Forge settings · provider keys stay in macOS Keychain")
+                        .font(.custom("JetBrains Mono", fixedSize: 10))
+                        .foregroundStyle(SettingsDesign.faint)
+                }
+                .padding(.horizontal, 26)
+                .padding(.vertical, 14)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(SettingsDesign.divider).frame(height: 1.5)
+                }
+
+                HStack(alignment: .top, spacing: 22) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        modelLabel("REASONING EFFORT")
+                        SettingsSegmented(options: ["LOW", "MEDIUM", "HIGH"], selection: $effort)
+                        Text(effortNote)
+                            .font(.custom("JetBrains Mono", fixedSize: 9.5))
+                            .foregroundStyle(SettingsDesign.faint)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        modelLabel("MONTHLY BUDGET CAP")
+                        HStack(spacing: 12) {
+                            Text("$\(monthlyBudgetCap)")
+                                .font(.custom("JetBrains Mono", fixedSize: 20).weight(.bold))
+                            GeometryReader { proxy in
+                                ZStack(alignment: .leading) {
+                                    Rectangle().fill(SettingsDesign.paper)
+                                    Rectangle().fill(SettingsDesign.accent)
+                                        .frame(width: proxy.size.width * 0.31)
+                                    Rectangle().fill(SettingsDesign.ink)
+                                        .frame(width: 1.5)
+                                        .offset(x: proxy.size.width * 0.31)
+                                }
+                                .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
+                            }
+                            .frame(height: 12)
+                        }
+                        Stepper("Budget", value: $monthlyBudgetCap, in: 5...500, step: 5)
+                            .labelsHidden()
+                        Text("pauses — never aborts — when the configured cap is reached")
+                            .font(.custom("JetBrains Mono", fixedSize: 9.5))
+                            .foregroundStyle(SettingsDesign.faint)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.horizontal, 26)
+                .padding(.vertical, 16)
+
+                HStack {
+                    Text(configuration?.summary ?? "Choose a provider and save it to the local runtime.")
+                        .font(.custom("JetBrains Mono", fixedSize: 10))
+                        .foregroundStyle(SettingsDesign.muted)
+                        .lineLimit(2)
+                    Spacer()
+                    Button(isSaving ? "SAVING…" : "SAVE MODEL") {
+                        saveModel()
+                    }
+                    .buttonStyle(SettingsOutlineButtonStyle())
+                    .disabled(isSaving || (providerID == "openai" && modelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
+                }
+                .padding(.horizontal, 26)
+                .frame(minHeight: 54)
+                .background(Color(red: 247 / 255, green: 247 / 255, blue: 244 / 255))
+                .overlay(alignment: .top) {
+                    Rectangle().fill(SettingsDesign.ink).frame(height: 1.5)
+                }
+            }
+        }
+        .onAppear(perform: load)
+        .onChange(of: envelope) { _, _ in load() }
+    }
+
+    private var configuration: ModelProviderConfiguration? { envelope?.configuration ?? fallbackConfiguration }
+    private var hasOpenAIKey: Bool { envelope?.editableSettings.hasOpenAIAPIKey == true }
+    private var effortNote: String {
+        switch effort {
+        case "LOW": return "faster and cheaper for straightforward tasks"
+        case "HIGH": return "more reasoning budget for ambiguous or risky work"
+        default: return "balanced default for normal repository tasks"
+        }
+    }
+
+    private func modelLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
+            .tracking(1)
+            .foregroundStyle(SettingsDesign.muted)
+    }
+
+    private func modelCard(id: String, name: String, tag: String, detail: String, speed: String, cost: String) -> some View {
+        Button { providerID = id } label: {
+            HStack(spacing: 14) {
+                Text(providerID == id ? "✓" : "")
+                    .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
+                    .frame(width: 18, height: 18)
+                    .background(providerID == id ? SettingsDesign.accent : Color.white)
+                    .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 9) {
+                        Text(name)
+                            .font(.custom("JetBrains Mono", fixedSize: 13).weight(.bold))
+                        Text(tag)
+                            .font(.custom("JetBrains Mono", fixedSize: 8.5).weight(.bold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(providerID == id ? SettingsDesign.accent : SettingsDesign.paper)
+                            .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1))
+                    }
+                    Text(detail)
+                        .font(.custom("JetBrains Mono", fixedSize: 10.5))
+                        .foregroundStyle(SettingsDesign.muted)
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(speed).font(.custom("JetBrains Mono", fixedSize: 11).weight(.bold))
+                    Text(cost).font(.custom("JetBrains Mono", fixedSize: 9)).foregroundStyle(SettingsDesign.faint)
+                }
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 68)
+            .background(providerID == id ? Color(red: 250 / 255, green: 248 / 255, blue: 1) : Color.white)
+            .overlay(Rectangle().stroke(providerID == id ? SettingsDesign.ink : SettingsDesign.divider, lineWidth: 1.5))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func load() {
+        providerID = envelope?.editableSettings.providerID ?? configuration?.provider.id ?? "local"
+        modelName = envelope?.editableSettings.modelName ?? configuration?.provider.model ?? ""
+    }
+
+    private func saveModel() {
+        let editable = envelope?.editableSettings
+        let name = modelName.trimmingCharacters(in: .whitespacesAndNewlines)
+        save(
+            providerID,
+            name.isEmpty ? nil : name,
+            editable?.openAIBaseURL,
+            editable?.openAITimeoutMs,
+            editable?.openAIMaxOutputTokens,
+            nil,
+            nil
+        )
+    }
+}
+
+private struct GuardrailRow: View {
+    var title: String
+    var subtitle: String
+    var locked: Bool
+    var toggle: Binding<Bool>?
+
+    var body: some View {
+        HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.system(size: 14, weight: .bold))
+                Text(subtitle)
+                    .font(.custom("JetBrains Mono", fixedSize: 10.5))
+                    .foregroundStyle(SettingsDesign.muted)
+            }
+            Spacer()
+            if locked {
+                Text("ALWAYS ON")
+                    .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
+                    .tracking(0.5)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
+            } else if let toggle {
+                SettingsToggle(isOn: toggle)
+            }
+        }
+        .padding(.horizontal, 26)
+        .frame(height: 82)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(SettingsDesign.divider).frame(height: 1.5)
+        }
+    }
+}
+
+private struct SettingsSegmented: View {
+    var options: [String]
+    @Binding var selection: String
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(options, id: \.self) { option in
+                Button(option) { selection = option }
+                    .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
+                    .foregroundStyle(selection == option ? Color.white : SettingsDesign.ink)
+                    .padding(.horizontal, 14)
+                    .frame(height: 34)
+                    .background(selection == option ? SettingsDesign.ink : Color.white)
+                    .buttonStyle(.plain)
+                    .overlay(alignment: .trailing) {
+                        if option != options.last { Rectangle().fill(SettingsDesign.ink).frame(width: 1.5) }
+                    }
+            }
+        }
+        .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
+    }
+}
+
+private struct SettingsOutlineButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
+            .padding(.horizontal, 13)
+            .frame(height: 34)
+            .background(Color.white)
+            .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
+            .offset(x: configuration.isPressed ? 1 : 0, y: configuration.isPressed ? 1 : 0)
+    }
+}
+
+private struct SettingsPendingPage: View {
+    var section: ForgeSettingsSection
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text(section.rawValue)
+                .font(.custom("JetBrains Mono", fixedSize: 12).weight(.bold))
+            Text("This handoff screen is next in the design-first queue.")
+                .font(.custom("JetBrains Mono", fixedSize: 10))
+                .foregroundStyle(SettingsDesign.muted)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

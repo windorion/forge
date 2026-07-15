@@ -206,7 +206,7 @@ Product-readiness estimate:
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
 | Coding-agent demo V0 behavior | 100% | The documented functional acceptance path is implemented and smoke-covered. |
 | Primary V0 handoff UI | 95-98% | The five primary screens are implemented; exact font and screenshot-based pixel/interaction verification remain. |
-| Full handoff UI | 20-25% | The handoff HTML contains 43 named screens/states. Five primary screens are substantially implemented, several have only functional foundations, and most alpha/beta/v1 surfaces remain. |
+| Full handoff UI | 30-35% | The handoff HTML contains 43 named screens/states. Eleven are implemented and eight have functional foundations; none is marked strictly verified until rendered comparison passes. |
 | Useful developer alpha | 50-60% | Forge can recover interrupted loops/transactions and apply guarded source create/modify/delete changes, but still needs broader autonomous tool use and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, memory, MCP/GitHub, and product polish. |

@@ -19,5 +19,8 @@ struct ForgeApp: App {
             SettingsView()
                 .environmentObject(workspace)
         }
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 980, height: 602)
+        .windowResizability(.contentSize)
     }
 }
