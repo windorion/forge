@@ -4163,6 +4163,11 @@ Done:
   redispatch, and complete drain.
 - Re-ran TypeScript checking, SwiftPM build, the queue fixture, and the full
   V0 core smoke successfully.
+- Committed the complete batch as `bfdcb12`, pushed it directly to
+  `origin/main`, rebuilt and verified `dist/Forge.app`, and relaunched both the
+  app and the matching runtime. Live `/health` and `/queue` responses confirm
+  the app process, SQLite task store, persisted concurrency setting, and real
+  needs-attention lane are available locally.
 - Updated README, project status, backlog, handoff coverage, development,
   runtime architecture, security, and database docs. Full handoff status is
   now 25 Implemented, 2 Partial, 16 Missing, 0 Verified, approximately 60-63%;
@@ -4177,6 +4182,6 @@ Not done:
 
 Next:
 
-- Commit and push the queue batch directly to `main`, rebuild and relaunch the
-  current local runtime/app, then implement the `4a` Mission Control surface
-  without weakening the single-repository mutation boundary.
+- Implement the `4a` Mission Control surface without weakening the
+  single-repository mutation boundary, then continue through the remaining
+  missing cumulative alpha/beta/v1 handoff surfaces.
