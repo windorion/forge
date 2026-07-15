@@ -6,6 +6,7 @@ final class WorkspaceModel: ObservableObject {
     static let expectedRuntimeService = "forge-runtime"
     static let expectedRuntimeVersion = "0.1.0"
     nonisolated private static let runtimeProcessOutputLimit = 12_000
+    nonisolated private static let repositoryPreferenceKey = "forge.selectedRepositoryRoot"
 
     @Published var tasks: [ForgeTask] = []
     @Published var selectedTaskID: ForgeTask.ID?
@@ -30,6 +31,7 @@ final class WorkspaceModel: ObservableObject {
     @Published var runtimeProcessCandidateDirectories: [String] = []
     @Published var runtimeProcessLastOutput: String?
     @Published var runtimeProcessLaunchCommand: String?
+    @Published var repositorySelectionMessage: String?
     @Published private var validationPermissionSnapshots: [ForgeTask.ID: [ValidationPresetPermission]] = [:]
     @Published private var taskCommandPermissionSnapshots: [ForgeTask.ID: [TaskCommandPermission]] = [:]
     @Published private var sendingMessageTaskIDs = Set<ForgeTask.ID>()
@@ -78,6 +80,13 @@ final class WorkspaceModel: ObservableObject {
     private let runtime = RuntimeClient()
     private var eventStreamTask: Task<Void, Never>?
     private var runtimeProcess: Process?
+    private var preferredRepositoryRoot: URL?
+
+    init() {
+        if let path = UserDefaults.standard.string(forKey: Self.repositoryPreferenceKey), !path.isEmpty {
+            preferredRepositoryRoot = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
+        }
+    }
 
     var selectedTask: ForgeTask? {
         tasks.first { $0.id == selectedTaskID }
@@ -85,6 +94,39 @@ final class WorkspaceModel: ObservableObject {
 
     var runtimeEndpoint: String {
         runtime.baseURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
+
+    var hasSelectedRepository: Bool {
+        runtimeHealth?.workspace != nil ||
+            preferredRepositoryRoot.map(repositoryRootIsUsable) == true
+    }
+
+    func connectRepository() {
+        let panel = NSOpenPanel()
+        panel.title = "Connect a Repository"
+        panel.message = "Choose a local Git repository. Forge keeps repository access on this Mac."
+        panel.prompt = "Connect Repository"
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = false
+        panel.treatsFilePackagesAsDirectories = false
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        selectRepository(url)
+    }
+
+    func useDemoRepository() {
+        repositorySelectionMessage = "Preparing the local demo repository…"
+        Task {
+            do {
+                let url = try await Self.createDemoRepository()
+                selectRepository(url)
+            } catch {
+                repositorySelectionMessage = "Demo repository failed: \(error.localizedDescription)"
+                statusMessage = repositorySelectionMessage ?? "Demo repository failed."
+            }
+        }
     }
 
     var canStartRuntimeProcess: Bool {
@@ -1431,6 +1473,91 @@ final class WorkspaceModel: ObservableObject {
         }
     }
 
+    private func selectRepository(_ url: URL) {
+        let standardized = url.standardizedFileURL
+        guard repositoryRootIsUsable(standardized) else {
+            repositorySelectionMessage = "Choose a folder containing .git or README.md."
+            statusMessage = repositorySelectionMessage ?? "Repository selection failed."
+            return
+        }
+
+        preferredRepositoryRoot = standardized
+        let path = standardized.path(percentEncoded: false)
+        UserDefaults.standard.set(path, forKey: Self.repositoryPreferenceKey)
+        runtimeRepositoryRoot = path
+        repositorySelectionMessage = "Connected \(standardized.lastPathComponent). Starting the local runtime…"
+        statusMessage = repositorySelectionMessage ?? "Repository connected."
+
+        if canStartRuntimeProcess {
+            startRuntimeProcess()
+        } else if runtimeProcess?.isRunning == true {
+            repositorySelectionMessage = "\(standardized.lastPathComponent) is saved. Restart the managed runtime to switch workspaces."
+            statusMessage = repositorySelectionMessage ?? "Repository saved."
+        } else {
+            refreshRuntimeHealth()
+        }
+    }
+
+    private nonisolated static func createDemoRepository() async throws -> URL {
+        try await Task.detached(priority: .userInitiated) {
+            let fileManager = FileManager.default
+            let applicationSupport = try fileManager.url(
+                for: .applicationSupportDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            )
+            let root = applicationSupport
+                .appendingPathComponent("Forge", isDirectory: true)
+                .appendingPathComponent("DemoTodo", isDirectory: true)
+            let source = root.appendingPathComponent("src", isDirectory: true)
+            try fileManager.createDirectory(at: source, withIntermediateDirectories: true)
+
+            let files: [(String, String)] = [
+                (
+                    "README.md",
+                    "# Forge Demo Todo\n\nA local sandbox repository for trying Forge. Nothing leaves this Mac.\n"
+                ),
+                (
+                    "package.json",
+                    "{\n  \"name\": \"forge-demo-todo\",\n  \"private\": true,\n  \"scripts\": { \"test\": \"node --test\" }\n}\n"
+                ),
+                (
+                    "src/todos.js",
+                    "export function addTodo(items, title) {\n  return [...items, { id: items.length + 1, title, done: false }];\n}\n"
+                )
+            ]
+            for (relativePath, content) in files {
+                let target = root.appendingPathComponent(relativePath)
+                if !fileManager.fileExists(atPath: target.path) {
+                    try Data(content.utf8).write(to: target, options: .atomic)
+                }
+            }
+
+            let gitDirectory = root.appendingPathComponent(".git", isDirectory: true)
+            if !fileManager.fileExists(atPath: gitDirectory.path) {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+                process.arguments = ["git", "init", "--quiet", root.path(percentEncoded: false)]
+                let errorPipe = Pipe()
+                process.standardError = errorPipe
+                try process.run()
+                process.waitUntilExit()
+                guard process.terminationStatus == 0 else {
+                    let data = errorPipe.fileHandleForReading.readDataToEndOfFile()
+                    let output = String(decoding: data, as: UTF8.self)
+                    throw NSError(
+                        domain: "ForgeDemoRepository",
+                        code: Int(process.terminationStatus),
+                        userInfo: [NSLocalizedDescriptionKey: output.isEmpty ? "git init failed" : output]
+                    )
+                }
+            }
+
+            return root
+        }.value
+    }
+
     private func resolveRuntimeLaunch() -> RuntimeLaunchResolution? {
         for runtimeDirectory in runtimeDirectoryCandidateURLs() {
             guard runtimeDirectoryIsUsable(runtimeDirectory),
@@ -1483,6 +1610,7 @@ final class WorkspaceModel: ObservableObject {
             }
 
         return uniqueStandardizedURLs([
+            preferredRepositoryRoot,
             explicitRepository,
             currentDirectory,
             currentDirectory.deletingLastPathComponent(),

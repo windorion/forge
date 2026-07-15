@@ -60,7 +60,7 @@ the actual visual source of truth.
 | System | `35a` Widget | Missing | WidgetKit S/M/L widgets are missing. |
 | Recovery | `15a` Sign in | Missing | GitHub device-flow screen is missing. |
 | Recovery | `25a` Onboarding | Missing | Four-step first-run flow is missing. |
-| Recovery | `17a` No repository | Missing | Dedicated no-workspace state is missing. |
+| Recovery | `17a` No repository | Implemented | First launch without a selected workspace opens the 980px no-repo state; native folder selection persists a usable repository and starts the runtime, while Demo creates a local git sandbox. |
 | Recovery | `29a` Offline | Implemented | Disconnected/wrong-version runtime states open the 1240px offline queue/checkpoint screen with real tasks, cached state, runtime events, and retry; rendered comparison remains. |
 | Recovery | `31a` Crash recovery | Implemented | Persisted recovered/recovery-required evidence opens a checkpoint summary with review/resume actions. |
 | Recovery | `13a` Update dialog | Missing | Sparkle update dialog is missing. |
@@ -77,9 +77,9 @@ the actual visual source of truth.
 - Functional Coding-Agent Demo V0: 100% of its documented behavior criteria.
 - Primary V0 screen implementation: 5 of 5 substantially implemented, none
   yet marked `Verified` under the strict rule above.
-- Full handoff: 19 `Implemented`, 4 `Partial`, 20 `Missing`, 0 `Verified` out
+- Full handoff: 20 `Implemented`, 4 `Partial`, 19 `Missing`, 0 `Verified` out
   of 43 named screens/states.
-- Weighted full-handoff UI readiness: approximately 48-51%.
+- Weighted full-handoff UI readiness: approximately 50-53%.
 
 These metrics must remain separate. Functional completion never implies design
 completion.

@@ -3961,3 +3961,35 @@ Next:
 
 - Run full build/package verification, push to `main`, and continue with the
   next recovery or queue surface.
+
+## 2026-07-15 08:07:55 CEST
+
+Conversation summary:
+
+- Continued from the pushed Answer Queue into the first-launch/no-workspace
+  handoff state and connected it to real local repository setup.
+
+Done:
+
+- Implemented `17a` No Repository with the 980px empty glyph, exact headline,
+  dual actions, three-step explanation, and restrained diagonal background.
+- Added native macOS directory selection, repository validation, persisted
+  preferred-root selection, and automatic app-managed runtime startup.
+- Added a fully local DemoTodo sandbox under Application Support with minimal
+  source/package files and a real `git init`; nothing is uploaded.
+- Made the no-repository state reachable only when no runtime workspace, tasks,
+  or valid persisted repository exists, preserving the separate Offline state.
+- Updated measured full-handoff readiness to approximately 50-53%: 20
+  Implemented, 4 Partial, 19 Missing, 0 strictly Verified.
+- Passed direct full-app Swift type-check and diff-format validation.
+
+Not done:
+
+- Strict rendered comparison remains unavailable.
+- Merge conflict, scheduler semantics, and the remaining quick-entry, native,
+  onboarding, update, sharing, template, cost, and success surfaces remain.
+
+Next:
+
+- Run full SwiftPM/package verification, push to `main`, then continue with the
+  next highest-confidence handoff surface.

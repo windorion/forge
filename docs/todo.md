@@ -25,8 +25,8 @@ of truth and the delivered HTML/CSS as the exact visual/content specification.
   integrations, onboarding, updates, sharing, cost, and templates until all 43
   named HTML screens/states are verified.
 - Render-verify the implemented History, Audit, Failure/Rollback, and Crash
-  Recovery surfaces. The dedicated Offline state is implemented; finish the
-  remaining decision and recovery screens, starting with No Repository.
+  Recovery surfaces. Offline and No Repository are implemented; finish the
+  remaining decision and recovery screens, starting with merge conflict.
 - Render-verify the full Agent Question state; the context-backed answer flow
   now records a decision and resumes the paused loop instead of stopping at a
   static choice card. The multi-task Answer Queue now uses the same boundary;

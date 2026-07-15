@@ -106,6 +106,8 @@ struct WorkspaceView: View {
                     resumeAll: resumeRecoveredTasks,
                     reviewFirst: reviewFirstRecoveredTask
                 )
+            } else if shouldShowNoRepository {
+                NoRepositoryState()
             } else if shouldShowOffline {
                 OfflineWorkspaceState(tasks: workspace.tasks, retry: workspace.refreshRuntimeHealth)
             } else if let task = workspace.selectedTask {
@@ -148,6 +150,8 @@ struct WorkspaceView: View {
             WindowSizingView(
                 mode: !recoveryDismissed && !recoveryTasks.isEmpty
                     ? .recovery
+                    : shouldShowNoRepository
+                        ? .compact
                     : shouldShowOffline
                         ? .review
                         : windowMode(for: workspace.selectedTask)
@@ -196,6 +200,13 @@ struct WorkspaceView: View {
         case .unchecked, .checking, .running, .needsProviderConfiguration:
             return false
         }
+    }
+
+    private var shouldShowNoRepository: Bool {
+        workspace.runtimeHealth?.workspace == nil &&
+            workspace.tasks.isEmpty &&
+            !workspace.hasSelectedRepository &&
+            [.unchecked, .checking, .disconnected].contains(workspace.runtimeState)
     }
 
     private func reviewFirstRecoveredTask() {
@@ -2262,6 +2273,107 @@ private struct CrashRecoveryState: View {
         }
         .padding(.horizontal, 24)
         .background(ForgeDesign.paper)
+    }
+}
+
+private struct NoRepositoryState: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
+
+    var body: some View {
+        ZStack {
+            NoRepositoryPattern()
+                .opacity(0.55)
+
+            VStack(spacing: 0) {
+                Text("⌥")
+                    .font(ForgeDesign.mono(34))
+                    .foregroundStyle(Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255))
+                    .frame(width: 88, height: 88)
+                    .background(Color.white)
+                    .overlay(
+                        Rectangle().stroke(
+                            Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255),
+                            style: StrokeStyle(lineWidth: 1.5, dash: [6, 5])
+                        )
+                    )
+                    .padding(.bottom, 22)
+
+                Text("No repos yet. The agent is bored.")
+                    .font(.system(size: 24, weight: .heavy))
+                    .tracking(-0.5)
+                    .padding(.bottom, 10)
+
+                Text("Connect a repository and drop your first task — Forge plans before it touches anything, so nothing happens without your OK.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(ForgeDesign.muted)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(5)
+                    .frame(maxWidth: 430)
+                    .padding(.bottom, 28)
+
+                HStack(spacing: 12) {
+                    Button("⌥ CONNECT A REPO", action: workspace.connectRepository)
+                        .buttonStyle(ForgePrimaryButtonStyle(foreground: ForgeDesign.accent))
+                    Button("TRY THE DEMO REPO", action: workspace.useDemoRepository)
+                        .buttonStyle(ForgeSecondaryButtonStyle())
+                }
+                .padding(.bottom, 32)
+
+                HStack(spacing: 10) {
+                    noRepoStep("01", "CONNECT\nLOCAL REPO")
+                    Text("→").foregroundStyle(Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255))
+                    noRepoStep("02", "DESCRIBE\nA TASK")
+                    Text("→").foregroundStyle(Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255))
+                    noRepoStep("03", "REVIEW\nTHE PR", accent: true)
+                }
+                .padding(.horizontal, 18)
+                .frame(width: 560, height: 82)
+                .background(Color.white)
+                .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+
+                Text(workspace.repositorySelectionMessage ?? "demo repo = a sandboxed todo app · nothing leaves your machine")
+                    .font(ForgeDesign.mono(10))
+                    .foregroundStyle(Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255))
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 16)
+                    .lineLimit(2)
+            }
+            .frame(maxWidth: 620)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 30)
+        }
+        .background(ForgeDesign.paper)
+    }
+
+    private func noRepoStep(_ number: String, _ label: String, accent: Bool = false) -> some View {
+        VStack(spacing: 4) {
+            Text(number)
+                .font(ForgeDesign.mono(16, weight: .heavy))
+                .foregroundStyle(accent ? ForgeDesign.accent : ForgeDesign.ink)
+            Text(label)
+                .font(ForgeDesign.mono(9.5, weight: .semibold))
+                .tracking(0.5)
+                .foregroundStyle(ForgeDesign.muted)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+private struct NoRepositoryPattern: View {
+    var body: some View {
+        GeometryReader { proxy in
+            Path { path in
+                let span = proxy.size.width + proxy.size.height
+                var offset: CGFloat = -proxy.size.height
+                while offset < span {
+                    path.move(to: CGPoint(x: offset, y: 0))
+                    path.addLine(to: CGPoint(x: offset - proxy.size.height, y: proxy.size.height))
+                    offset += 24
+                }
+            }
+            .stroke(ForgeDesign.ink.opacity(0.035), lineWidth: 1)
+        }
     }
 }
 
