@@ -3,7 +3,7 @@
 Document role: track implementation and exact visual/interaction verification
 for every named screen in `design_handoff_forge/Forge App States.dc.html`.
 
-Last updated: 2026-07-14
+Last updated: 2026-07-15
 
 ## Completion Rule
 
@@ -61,7 +61,7 @@ the actual visual source of truth.
 | Recovery | `15a` Sign in | Missing | GitHub device-flow screen is missing. |
 | Recovery | `25a` Onboarding | Missing | Four-step first-run flow is missing. |
 | Recovery | `17a` No repository | Missing | Dedicated no-workspace state is missing. |
-| Recovery | `29a` Offline | Partial | Local runtime status exists; offline queue/checkpoint screen is missing. |
+| Recovery | `29a` Offline | Implemented | Disconnected/wrong-version runtime states open the 1240px offline queue/checkpoint screen with real tasks, cached state, runtime events, and retry; rendered comparison remains. |
 | Recovery | `31a` Crash recovery | Implemented | Persisted recovered/recovery-required evidence opens a checkpoint summary with review/resume actions. |
 | Recovery | `13a` Update dialog | Missing | Sparkle update dialog is missing. |
 | Recovery | `28a` Update ready | Missing | Deferred restart banner and mini-window status are missing. |
@@ -77,9 +77,9 @@ the actual visual source of truth.
 - Functional Coding-Agent Demo V0: 100% of its documented behavior criteria.
 - Primary V0 screen implementation: 5 of 5 substantially implemented, none
   yet marked `Verified` under the strict rule above.
-- Full handoff: 16 `Implemented`, 6 `Partial`, 21 `Missing`, 0 `Verified` out
+- Full handoff: 17 `Implemented`, 5 `Partial`, 21 `Missing`, 0 `Verified` out
   of 43 named screens/states.
-- Weighted full-handoff UI readiness: approximately 43-46%.
+- Weighted full-handoff UI readiness: approximately 44-47%.
 
 These metrics must remain separate. Functional completion never implies design
 completion.

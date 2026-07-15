@@ -106,6 +106,8 @@ struct WorkspaceView: View {
                     resumeAll: resumeRecoveredTasks,
                     reviewFirst: reviewFirstRecoveredTask
                 )
+            } else if shouldShowOffline {
+                OfflineWorkspaceState(tasks: workspace.tasks, retry: workspace.refreshRuntimeHealth)
             } else if let task = workspace.selectedTask {
                 if task.status == "Completed" {
                     RunCompleteState(task: task)
@@ -144,7 +146,9 @@ struct WorkspaceView: View {
             WindowSizingView(
                 mode: !recoveryDismissed && !recoveryTasks.isEmpty
                     ? .recovery
-                    : windowMode(for: workspace.selectedTask)
+                    : shouldShowOffline
+                        ? .review
+                        : windowMode(for: workspace.selectedTask)
             )
         )
     }
@@ -172,6 +176,15 @@ struct WorkspaceView: View {
         workspace.tasks.filter { task in
             task.currentPhase.localizedCaseInsensitiveContains("recover") ||
                 task.events.contains { $0.type.localizedCaseInsensitiveContains("startup_recover") }
+        }
+    }
+
+    private var shouldShowOffline: Bool {
+        switch workspace.runtimeState {
+        case .disconnected, .wrongVersion:
+            return true
+        case .unchecked, .checking, .running, .needsProviderConfiguration:
+            return false
         }
     }
 
@@ -1627,6 +1640,182 @@ private struct CrashRecoveryState: View {
         }
         .padding(.horizontal, 24)
         .background(ForgeDesign.paper)
+    }
+}
+
+private struct OfflineWorkspaceState: View {
+    var tasks: [ForgeTask]
+    var retry: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                HStack(spacing: 8) {
+                    Circle().fill(ForgeDesign.warning).frame(width: 7, height: 7)
+                    Text("OFFLINE")
+                        .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
+                        .tracking(0.5)
+                        .foregroundStyle(ForgeDesign.warning)
+                }
+                Text("no runtime connection — local state is preserved · nothing was lost")
+                    .font(.custom("JetBrains Mono", fixedSize: 11))
+                    .foregroundStyle(Color(red: 201 / 255, green: 201 / 255, blue: 196 / 255))
+                Spacer()
+                Button("RETRY NOW", action: retry)
+                    .font(.custom("JetBrains Mono", fixedSize: 9.5).weight(.bold))
+                    .foregroundStyle(ForgeDesign.paper)
+                    .padding(.horizontal, 12)
+                    .frame(height: 30)
+                    .overlay(Rectangle().stroke(ForgeDesign.paper, lineWidth: 1.5))
+                    .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 24)
+            .frame(height: 46)
+            .background(ForgeDesign.ink)
+
+            HStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("TASKS — \(tasks.count)")
+                        .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
+                        .tracking(1.5)
+                        .foregroundStyle(ForgeDesign.muted)
+                        .padding(.horizontal, 16)
+                        .frame(height: 38)
+                    ForEach(tasks.prefix(5)) { task in
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack {
+                                StatusPill(label: offlineStatus(task), color: offlineColor(task))
+                                Spacer()
+                                Text("#\(task.id.prefix(6))")
+                                    .font(.custom("JetBrains Mono", fixedSize: 9))
+                                    .foregroundStyle(Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255))
+                            }
+                            Text(task.title)
+                                .font(.system(size: 12.5, weight: .bold))
+                                .lineLimit(2)
+                            Text(task.status == "Completed" ? "diff cached — readable offline" : "checkpoint persisted · resumes after reconnect")
+                                .font(.custom("JetBrains Mono", fixedSize: 9.5))
+                                .foregroundStyle(ForgeDesign.muted)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 11)
+                        .background(task.id == activeTask?.id ? Color.white : Color.clear)
+                        .overlay(alignment: .leading) {
+                            if task.id == activeTask?.id { Rectangle().fill(ForgeDesign.warning).frame(width: 3) }
+                        }
+                        .overlay(alignment: .bottom) {
+                            Rectangle().fill(ForgeDesign.divider).frame(height: 1.5)
+                        }
+                    }
+                    Spacer()
+                    Text("agent state checkpointed\nevery step — safe to lose power too")
+                        .font(.custom("JetBrains Mono", fixedSize: 9.5))
+                        .foregroundStyle(ForgeDesign.muted)
+                        .lineSpacing(3)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .overlay(alignment: .top) {
+                            Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+                        }
+                }
+                .frame(width: 300)
+                .background(ForgeDesign.paper)
+                .overlay(alignment: .trailing) {
+                    Rectangle().fill(ForgeDesign.ink).frame(width: 1.5)
+                }
+
+                VStack(spacing: 0) {
+                    HStack(spacing: 12) {
+                        StatusPill(label: "⏸ WAITING FOR NETWORK", color: ForgeDesign.warning)
+                        Text(activeTask?.title ?? "Local workspace")
+                            .font(.system(size: 15, weight: .heavy))
+                            .lineLimit(1)
+                        Spacer()
+                        Text("checkpoint saved locally")
+                            .font(.custom("JetBrains Mono", fixedSize: 10))
+                            .foregroundStyle(ForgeDesign.muted)
+                    }
+                    .padding(.horizontal, 22)
+                    .frame(height: 54)
+                    .overlay(alignment: .bottom) {
+                        Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+                    }
+
+                    HStack(spacing: 0) {
+                        offlineCapability(
+                            title: "STILL WORKS OFFLINE",
+                            marker: "✓",
+                            color: ForgeDesign.success,
+                            values: ["read cached diffs & task history", "draft new tasks locally", "browse audit logs"]
+                        )
+                        offlineCapability(
+                            title: "WAITING ON RECONNECT",
+                            marker: "⏸",
+                            color: ForgeDesign.warning,
+                            values: ["remote model calls", "GitHub push / PR sync", "hosted notifications"]
+                        )
+                    }
+                    .frame(height: 146)
+                    .overlay(alignment: .bottom) {
+                        Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+                    }
+
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("— thinking stream · frozen at checkpoint —")
+                                .foregroundStyle(Color(red: 85 / 255, green: 85 / 255, blue: 79 / 255))
+                            ForEach(activeTask?.events.suffix(8) ?? []) { event in
+                                Text("\(event.createdAt.prefix(19))  \(event.message)")
+                            }
+                            Text("⏸ runtime unavailable — retry only on explicit refresh")
+                                .foregroundStyle(ForgeDesign.warning)
+                        }
+                        .font(.custom("JetBrains Mono", fixedSize: 11.5))
+                        .foregroundStyle(Color(red: 232 / 255, green: 232 / 255, blue: 228 / 255))
+                        .padding(.horizontal, 22)
+                        .padding(.vertical, 16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .background(ForgeDesign.ink)
+                }
+                .background(Color.white)
+            }
+        }
+    }
+
+    private var activeTask: ForgeTask? {
+        tasks.first(where: { ["Running", "Testing", "Human Review"].contains($0.status) }) ?? tasks.first
+    }
+
+    private func offlineStatus(_ task: ForgeTask) -> String {
+        if task.status == "Completed" { return "✓ CACHED" }
+        if task.status == "Running" || task.status == "Testing" { return "⏸ WAITING NET" }
+        return "◌ LOCAL"
+    }
+    private func offlineColor(_ task: ForgeTask) -> Color {
+        task.status == "Completed" ? ForgeDesign.success : task.status == "Running" || task.status == "Testing" ? ForgeDesign.warning : Color.white
+    }
+    private func offlineCapability(title: String, marker: String, color: Color, values: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
+                .tracking(1)
+                .foregroundStyle(ForgeDesign.muted)
+            ForEach(values, id: \.self) { value in
+                HStack(spacing: 8) {
+                    Text(marker).foregroundStyle(color).fontWeight(.bold)
+                    Text(value)
+                }
+                .font(.custom("JetBrains Mono", fixedSize: 11))
+            }
+        }
+        .padding(.horizontal, 22)
+        .padding(.vertical, 16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .overlay(alignment: .trailing) {
+            Rectangle().fill(ForgeDesign.ink).frame(width: 1.5)
+        }
     }
 }
 

@@ -3863,3 +3863,35 @@ Next:
 
 - Commit and push this batch to `main`, then continue with offline/no-repo,
   first-success, and cost/template surfaces.
+
+## 2026-07-15 07:56:08 CEST
+
+Conversation summary:
+
+- Continued the strict handoff pass with the disconnected-runtime experience
+  before moving to the next recovery and multi-task surfaces.
+
+Done:
+
+- Implemented `29a` Offline as a state-driven 1240px workspace that appears
+  for disconnected or incompatible runtimes.
+- Bound the 300px affected-task rail, cached/checkpoint labels, frozen thinking
+  stream, and retry action to real task, event, and runtime-health data.
+- Preserved local-first semantics by distinguishing offline-readable history,
+  diffs, drafts, and audit logs from model, GitHub, and notification work that
+  must wait for reconnection.
+- Updated measured full-handoff readiness to approximately 44-47%: 17
+  Implemented, 5 Partial, 21 Missing, 0 strictly Verified.
+- Passed direct full-app Swift type-check and diff-format validation.
+
+Not done:
+
+- Strict rendered comparison is still unavailable, so Offline remains
+  Implemented rather than Verified.
+- No Repository and the remaining decision, quick-entry, system-integration,
+  onboarding, update, sharing, template, and cost surfaces remain.
+
+Next:
+
+- Run the full package build and local app restart, commit and push this batch
+  to `main`, then continue immediately with No Repository and task queue work.
