@@ -4185,3 +4185,44 @@ Next:
 - Implement the `4a` Mission Control surface without weakening the
   single-repository mutation boundary, then continue through the remaining
   missing cumulative alpha/beta/v1 handoff surfaces.
+
+## 2026-07-15 21:32:31 +0200 (CEST)
+
+Conversation summary:
+
+- Continued directly into the next long handoff task, `4a` Mission Control,
+  while preserving the real one-runtime/one-active-repository architecture.
+
+Done:
+
+- Added a handoff-aligned 1240px Mission Control surface with three repository
+  columns, summary strip, repo state badges, task cards, progress bars, repo
+  footers, operation boundary, and empty repository slots.
+- Bound the current repository column to real task, queue, loop, phase, and git
+  evidence. Persisted compact snapshots for up to two recently connected local
+  repositories in app preferences and labeled all non-current data `CACHED`.
+- Added `⌘⇧M` through the native Forge menu and sidebar, `⌘1–3` repository
+  focus, `⌘⇧N` New Task, task opening, repository selection, and cooperative
+  Pause All for live loops in the current runtime.
+- Kept cached repository cards read-only until focus and did not claim
+  simultaneous cross-repository agents. Updated the README, status, backlog,
+  design coverage, development, workspace-design, and macOS-native documents.
+- Raised full-handoff readiness to approximately 61-64%: 25 Implemented, 3
+  Partial, 15 Missing, 0 Verified. Raised cumulative polished-v1 readiness to
+  17-22% while recording the remaining multi-runtime gap.
+- Passed SwiftPM compilation, TypeScript checking/build, the standard packaged
+  app verification script, live app-process verification, and runtime health.
+
+Not done:
+
+- `4a` remains Partial because independent supervised runtimes, unique
+  endpoints, and live event aggregation for multiple simultaneous repositories
+  do not exist yet.
+- Exact rendered screenshot comparison remains unavailable, so Mission Control
+  is not marked Verified.
+
+Next:
+
+- Add a supervised per-repository runtime registry and aggregate its health,
+  queue, events, and task snapshots into Mission Control, then continue to the
+  next missing quick-entry/native handoff surface.

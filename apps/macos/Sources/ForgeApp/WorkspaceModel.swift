@@ -7,6 +7,7 @@ final class WorkspaceModel: ObservableObject {
     static let expectedRuntimeVersion = "0.1.0"
     nonisolated private static let runtimeProcessOutputLimit = 12_000
     nonisolated private static let repositoryPreferenceKey = "forge.selectedRepositoryRoot"
+    nonisolated private static let missionControlRepositoriesKey = "forge.missionControlRepositories"
 
     @Published var tasks: [ForgeTask] = []
     @Published var selectedTaskID: ForgeTask.ID?
@@ -37,6 +38,7 @@ final class WorkspaceModel: ObservableObject {
     @Published var runtimeProcessLastOutput: String?
     @Published var runtimeProcessLaunchCommand: String?
     @Published var repositorySelectionMessage: String?
+    @Published var missionControlRepositories: [MissionControlRepositorySnapshot] = []
     @Published private var validationPermissionSnapshots: [ForgeTask.ID: [ValidationPresetPermission]] = [:]
     @Published private var taskCommandPermissionSnapshots: [ForgeTask.ID: [TaskCommandPermission]] = [:]
     @Published private var sendingMessageTaskIDs = Set<ForgeTask.ID>()
@@ -88,10 +90,16 @@ final class WorkspaceModel: ObservableObject {
     private var eventStreamTask: Task<Void, Never>?
     private var runtimeProcess: Process?
     private var preferredRepositoryRoot: URL?
+    private var pendingMissionControlTaskID: ForgeTask.ID?
 
     init() {
+        if let data = UserDefaults.standard.data(forKey: Self.missionControlRepositoriesKey),
+           let decoded = try? JSONDecoder().decode([MissionControlRepositorySnapshot].self, from: data) {
+            missionControlRepositories = Array(decoded.prefix(3))
+        }
         if let path = UserDefaults.standard.string(forKey: Self.repositoryPreferenceKey), !path.isEmpty {
             preferredRepositoryRoot = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
+            registerMissionControlRepository(path: preferredRepositoryRoot!.path(percentEncoded: false))
         }
     }
 
@@ -106,6 +114,10 @@ final class WorkspaceModel: ObservableObject {
     var hasSelectedRepository: Bool {
         runtimeHealth?.workspace != nil ||
             preferredRepositoryRoot.map(repositoryRootIsUsable) == true
+    }
+
+    var missionControlCurrentRepositoryPath: String? {
+        runtimeHealth?.workspace?.repoRoot ?? runtimeRepositoryRoot ?? preferredRepositoryRoot?.path(percentEncoded: false)
     }
 
     func openRepositoryOnGitHub() {
@@ -805,6 +817,49 @@ final class WorkspaceModel: ObservableObject {
 
     func refreshTaskQueue() {
         Task { await refreshTaskQueueSnapshot() }
+    }
+
+    func refreshMissionControl() {
+        Task {
+            do {
+                try await refreshTasks()
+                await refreshTaskQueueSnapshot()
+                await refreshGitStatusSnapshot()
+                captureMissionControlSnapshot()
+            } catch {
+                statusMessage = "Refresh Mission Control failed: \(error.localizedDescription)"
+                captureMissionControlSnapshot()
+            }
+        }
+    }
+
+    func pauseAllMissionControlLoops() {
+        let running = tasks.compactMap { task -> (ForgeTask, AgentRunLoop)? in
+            guard let loop = task.agentRunLoops.last(where: { $0.status == "Running" }) else { return nil }
+            return (task, loop)
+        }
+        for (task, loop) in running {
+            pauseAgentLoop(for: task, loop: loop)
+        }
+        statusMessage = running.isEmpty ? "No active Agent Loops to pause." : "Pause requested for \(running.count) active Agent Loop(s)."
+    }
+
+    func activateMissionControlRepository(_ path: String) {
+        guard path != missionControlCurrentRepositoryPath else {
+            statusMessage = "\(missionControlRepositoryName(path: path)) is already focused."
+            return
+        }
+        pendingMissionControlTaskID = nil
+        selectRepository(URL(fileURLWithPath: path, isDirectory: true))
+    }
+
+    func activateMissionControlRepositoryForTask(path: String, taskID: ForgeTask.ID) {
+        if path == missionControlCurrentRepositoryPath {
+            selectedTaskID = taskID
+            return
+        }
+        pendingMissionControlTaskID = taskID
+        selectRepository(URL(fileURLWithPath: path, isDirectory: true))
     }
 
     func updateTaskQueueConcurrency(_ limit: Int) {
@@ -1600,6 +1655,7 @@ final class WorkspaceModel: ObservableObject {
 
         preferredRepositoryRoot = standardized
         let path = standardized.path(percentEncoded: false)
+        registerMissionControlRepository(path: path)
         UserDefaults.standard.set(path, forKey: Self.repositoryPreferenceKey)
         runtimeRepositoryRoot = path
         repositorySelectionMessage = "Connected \(standardized.lastPathComponent). Starting the local runtime…"
@@ -1994,6 +2050,11 @@ final class WorkspaceModel: ObservableObject {
     private func refreshTasks() async throws {
         let remoteTasks = try await runtime.listTasks()
         tasks = remoteTasks
+        if let pendingMissionControlTaskID,
+           remoteTasks.contains(where: { $0.id == pendingMissionControlTaskID }) {
+            selectedTaskID = pendingMissionControlTaskID
+            self.pendingMissionControlTaskID = nil
+        }
         if let selectedTaskID,
            !remoteTasks.contains(where: { $0.id == selectedTaskID }) {
             self.selectedTaskID = nil
@@ -2039,6 +2100,117 @@ final class WorkspaceModel: ObservableObject {
             gitConflictSnapshot = nil
             gitStatusLastError = error.localizedDescription
         }
+        captureMissionControlSnapshot()
+    }
+
+    private func registerMissionControlRepository(path: String) {
+        guard !path.isEmpty else { return }
+        if missionControlRepositories.contains(where: { $0.path == path }) {
+            return
+        }
+        if missionControlRepositories.count >= 3 {
+            let current = missionControlCurrentRepositoryPath
+            if let removable = missionControlRepositories.indices.reversed().first(where: { missionControlRepositories[$0].path != current }) {
+                missionControlRepositories.remove(at: removable)
+            } else {
+                missionControlRepositories.removeLast()
+            }
+        }
+        missionControlRepositories.append(MissionControlRepositorySnapshot(
+            path: path,
+            name: missionControlRepositoryName(path: path),
+            state: "IDLE",
+            footer: "not opened in this session",
+            capturedAt: Date(),
+            tasks: []
+        ))
+        persistMissionControlRepositories()
+    }
+
+    private func captureMissionControlSnapshot() {
+        guard let path = missionControlCurrentRepositoryPath else { return }
+        registerMissionControlRepository(path: path)
+        let runningIDs = Set(taskQueueSnapshot?.running.map(\.taskID) ?? [])
+        let queuedIDs = Set(taskQueueSnapshot?.queued.map(\.taskID) ?? [])
+        let unsortedCards = tasks.map {
+            missionControlTaskSnapshot($0, runningIDs: runningIDs, queuedIDs: queuedIDs)
+        }
+        let cards = unsortedCards.sorted { lhs, rhs in
+            lhs.rank == rhs.rank ? lhs.taskID < rhs.taskID : lhs.rank < rhs.rank
+        }
+        let state: String
+        if cards.contains(where: { $0.tag.contains("WAIT") }) { state = "NEEDS YOU" }
+        else if cards.contains(where: { $0.tag == "RUNNING" }) { state = "RUNNING" }
+        else if cards.contains(where: { $0.tag == "COMPLETE" }) { state = "READY" }
+        else if cards.contains(where: { $0.tag == "QUEUED" }) { state = "QUEUED" }
+        else { state = "IDLE" }
+        let branch = gitStatus?.branch ?? "no branch"
+        let changed = gitStatus?.changedFiles.count ?? 0
+        let snapshot = MissionControlRepositorySnapshot(
+            path: path,
+            name: missionControlRepositoryName(path: path),
+            state: state,
+            footer: "\(branch) · \(changed) changed · \(tasks.count) tasks",
+            capturedAt: Date(),
+            tasks: cards
+        )
+        if let index = missionControlRepositories.firstIndex(where: { $0.path == path }) {
+            missionControlRepositories[index] = snapshot
+        } else {
+            missionControlRepositories.append(snapshot)
+        }
+        persistMissionControlRepositories()
+    }
+
+    private func missionControlTaskSnapshot(
+        _ task: ForgeTask,
+        runningIDs: Set<String>,
+        queuedIDs: Set<String>
+    ) -> MissionControlTaskSnapshot {
+        let loop = task.agentRunLoops.last
+        let tag: String
+        let rank: Int
+        if runningIDs.contains(task.id) || loop?.status == "Running" {
+            tag = "RUNNING"; rank = 0
+        } else if task.status == "Human Review" {
+            tag = "⏸ WAITING"; rank = 1
+        } else if queuedIDs.contains(task.id) || task.queueRequest != nil {
+            tag = "QUEUED"; rank = 2
+        } else if task.status == "Completed" {
+            tag = "COMPLETE"; rank = 3
+        } else if task.status == "Failed" {
+            tag = "FAILED"; rank = 4
+        } else {
+            tag = task.status.uppercased(); rank = 5
+        }
+        let progress: Double?
+        if let loop, loop.maxSteps > 0, tag == "RUNNING" || tag.contains("WAIT") {
+            progress = min(max(Double(loop.stepsRun) / Double(loop.maxSteps), 0), 1)
+        } else {
+            progress = nil
+        }
+        let step = loop.map { "step \($0.stepsRun)/\($0.maxSteps)" }
+        let metaParts = [step, Optional(task.currentPhase)].compactMap { $0 }
+        return MissionControlTaskSnapshot(
+            taskID: task.id,
+            title: task.title,
+            tag: tag,
+            phase: task.currentPhase,
+            meta: metaParts.joined(separator: " · "),
+            progress: progress,
+            rank: rank
+        )
+    }
+
+    private func persistMissionControlRepositories() {
+        guard let data = try? JSONEncoder().encode(Array(missionControlRepositories.prefix(3))) else { return }
+        UserDefaults.standard.set(data, forKey: Self.missionControlRepositoriesKey)
+    }
+
+    private func missionControlRepositoryName(path: String) -> String {
+        let url = URL(fileURLWithPath: path, isDirectory: true)
+        let parts = url.pathComponents.filter { $0 != "/" }.suffix(2)
+        return parts.joined(separator: "/")
     }
 
     private func refreshGitConflictSnapshot() async {

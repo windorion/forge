@@ -3,7 +3,7 @@
 Document role: record the product surface, information architecture, screen
 responsibilities, and interaction rules for the Forge workspace.
 
-Last updated: 2026-07-11
+Last updated: 2026-07-15
 
 ## Design Direction
 
@@ -26,6 +26,7 @@ The next UI pass should follow `design_handoff_forge/`, especially:
 - `1b` and `20a` Plan approval.
 - `10a` Fullscreen diff review.
 - `33a` and `34a` decision prompts.
+- `26a` Queue and `4a` Mission Control for task/repository coordination.
 
 ## Visual System
 
@@ -59,6 +60,16 @@ Responsibilities:
 
 This should replace the current broad sidebar/status feeling. The sidebar is a
 task queue, not a settings dashboard.
+
+### Mission Control: Cross-Repository Overview
+
+Mission Control is an auxiliary overview, not a replacement dashboard for the
+task-first workspace. Its three columns represent explicit local repository
+slots. The active repository may show live task, queue, progress, review, and
+git-derived evidence. Non-current repositories must be labeled as cached until
+they have an independently supervised runtime and event stream. Repository
+focus and new-task actions may switch the primary workspace; cached cards may
+not pretend to support live pause, mutation, or review actions.
 
 ### Center: Live Agent Session
 

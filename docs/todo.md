@@ -21,7 +21,7 @@ of truth and the delivered HTML/CSS as the exact visual/content specification.
 - Render-verify the implemented compact task states `1c`, `1d`, and `1e`.
 - Finish GitHub OAuth/device flow and runtime shortcut remapping; Account/Usage,
   General, Guardrails, Model, and API Key settings structures are implemented.
-- Continue through Mission Control, quick entry, native
+- Finish true concurrent-runtime Mission Control, then continue through quick entry and native
   integrations, onboarding, updates, sharing, cost, and templates until all 43
   named HTML screens/states are verified.
 - Render-verify the implemented `⌘K` Command Palette and extend the new native
@@ -109,6 +109,16 @@ the core runtime smoke. Preserve these completed boundaries:
 
 ## Done Recently
 
+- Added the honest `4a` Mission Control foundation. A new 1240px three-column
+  surface uses live task/queue/git evidence for the active repository and
+  persists compact snapshots for up to two recently connected repositories.
+  The app exposes `⌘⇧M`, `⌘1–3` focus, `⌘⇧N` New Task, cooperative Pause All,
+  repository-slot selection, real status/progress cards, and cached timestamps.
+  Non-current repositories are labeled `CACHED` and remain read-only because
+  the current architecture owns one active runtime. Next work for `4a` is a
+  supervised per-repository runtime registry with unique endpoints and live
+  cross-repository event aggregation; strict rendered comparison also remains.
+
 - Implemented `26a` Task Queue as real runtime scheduling rather than a static
   task list. Approved Agent Loops now persist ordered queue requests whenever
   the single-repository execution slot is occupied; a stored 1-3 global
@@ -117,9 +127,8 @@ the core runtime smoke. Preserve these completed boundaries:
   Queue sheet uses real running/queued/needs-you data and exposes priority,
   pause, removal, estimates, and the safety boundary. `npm run smoke:queue`
   verifies serialization, reorder, removal, setting persistence, restart
-  dispatch, and queue drain. The next multi-task handoff surface is `4a`
-  Mission Control; pointer-drag and exact screenshot comparison remain polish
-  for `26a`.
+  dispatch, and queue drain. Pointer-drag and exact screenshot comparison
+  remain polish for `26a`.
 
 - Implemented `24a` First Success as a one-time state for the first real
   persisted Completed task. The 980px celebration uses the handoff's diagonal

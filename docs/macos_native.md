@@ -10,6 +10,16 @@ itself should become part of the agent workspace.
 
 ## Core Native Features
 
+### Mission Control Window Surface
+
+The current `4a` implementation is a 1240px auxiliary sheet opened with
+`⌘⇧M`. It retains explicit desktop selection state, offers `⌘1–3` repository
+focus and `⌘⇧N` new-task access, and preserves up to three local repository
+slots in app preferences. One repository is live through the current runtime;
+other columns are cached/read-only and visibly say so. Future multi-runtime
+work should preserve per-repository process ownership, unique endpoints, and
+separate event streams rather than sharing mutable runtime state.
+
 ### Menu Bar Agent
 
 Purpose:

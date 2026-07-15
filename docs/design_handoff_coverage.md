@@ -35,7 +35,7 @@ the actual visual source of truth.
 | Core | `32a` New session | Implemented | Exact rendered comparison and responsive verification remain. |
 | Core | `10a` Fullscreen diff review | Implemented | Exact rendered comparison and larger diff edge states remain. |
 | Core | `26a` Task queue | Implemented | The 1240px real-data surface has running/queued/needs-you lanes, 1-3 persisted concurrency settings, ordered priority controls, removal, pause, estimates, automatic restart dispatch, and enforced same-repository serialization. Pointer drag polish and exact rendered comparison remain. |
-| Core | `4a` Mission control | Missing | Multi-repository three-column view is missing. |
+| Core | `4a` Mission control | Partial | The 1240px three-column surface, live current-repo cards, persisted recent-repo snapshots, focus shortcuts, New Task, and cooperative Pause All are real. Cached repos are explicitly read-only; simultaneous per-repo runtimes, live cross-repo aggregation, and rendered comparison remain. |
 | Decisions | `33a` Agent question | Implemented | Context-backed `WaitForHumanReview` steps open the 1240px choice/consequence/frozen-context layout; answer-and-resume and confirmed abort are real, while rendered comparison remains. |
 | Decisions | `34a` Batch questions | Implemented | The sidebar and detailed question state open a 1240px answer queue backed by all waiting tasks; partial submit leaves unanswered tasks paused and resumes answered loops independently. |
 | Decisions | `18a` Merge conflict | Implemented | Actual unmerged index entries open the 1240px conflicted-file/three-way/draft/action layout; Base/Ours/Theirs/working contents, explicit confirmation, stale-review protection, manual/side selection, single-file staging, and no-auto-continue boundary are real. Rendered comparison remains. |
@@ -77,9 +77,9 @@ the actual visual source of truth.
 - Functional Coding-Agent Demo V0: 100% of its documented behavior criteria.
 - Primary V0 screen implementation: 5 of 5 substantially implemented, none
   yet marked `Verified` under the strict rule above.
-- Full handoff: 25 `Implemented`, 2 `Partial`, 16 `Missing`, 0 `Verified` out
+- Full handoff: 25 `Implemented`, 3 `Partial`, 15 `Missing`, 0 `Verified` out
   of 43 named screens/states.
-- Weighted full-handoff UI readiness: approximately 60-63%.
+- Weighted full-handoff UI readiness: approximately 61-64%.
 
 These metrics must remain separate. Functional completion never implies design
 completion.

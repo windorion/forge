@@ -60,6 +60,16 @@ but deliberately enforces one active Agent Loop for this single repository.
 Priority arrows call the exact-order reorder endpoint; remove returns an
 approved task to `Execution Ready`; pause reuses the cooperative loop gate.
 
+Mission Control (`⌘⇧M`) opens a separate handoff `4a` 1240px three-column
+surface instead of replacing the main task workspace. The active repository
+column is derived from live tasks, `GET /queue`, and git state. Up to two other
+repository columns come from compact snapshots persisted in app preferences
+when those repositories were last active. `⌘1–3` focuses a repository,
+`⌘⇧N` opens a new task, and Pause All requests cooperative pause for every live
+loop in the current runtime. Cached columns are visibly labeled and read-only;
+the app does not claim cross-repository execution until supervised independent
+runtimes exist.
+
 The shell also includes a first usable `10a`-style full-screen diff review
 surface. It opens from the Diff tab or review state card, shows a file tree,
 main diff pane, why-this-change reasoning, validation evidence, and

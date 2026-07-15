@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import SwiftUI
 
-private enum ForgeDesign {
+enum ForgeDesign {
     static let appVersion = "v0.4.2"
     static let paper = Color(red: 244 / 255, green: 244 / 255, blue: 241 / 255)
     static let ink = Color(red: 10 / 255, green: 10 / 255, blue: 10 / 255)
@@ -96,6 +96,7 @@ struct WorkspaceView: View {
     @EnvironmentObject private var workspace: WorkspaceModel
     @State private var recoveryDismissed = false
     @State private var showCommandPalette = false
+    @State private var showMissionControl = false
     @AppStorage("forge.didShowFirstTaskSuccess") private var didShowFirstTaskSuccess = false
 
     var body: some View {
@@ -135,7 +136,7 @@ struct WorkspaceView: View {
                     TaskWorkspaceView(task: task)
                 } else {
                     HStack(spacing: 0) {
-                        SidebarView()
+                        SidebarView(showMissionControl: $showMissionControl)
                             .frame(width: 300)
 
                         Rectangle()
@@ -168,6 +169,22 @@ struct WorkspaceView: View {
         .onReceive(NotificationCenter.default.publisher(for: .forgeSwitchRepository)) { _ in
             showCommandPalette = false
             workspace.connectRepository()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .forgeToggleMissionControl)) { _ in
+            showCommandPalette = false
+            showMissionControl = true
+            workspace.refreshMissionControl()
+        }
+        .sheet(isPresented: $showMissionControl) {
+            MissionControlView {
+                workspace.selectedTaskID = nil
+                showMissionControl = false
+            } openTask: { taskID in
+                workspace.selectedTaskID = taskID
+                showMissionControl = false
+            }
+            .environmentObject(workspace)
+            .frame(width: 1240, height: 650)
         }
         .overlay {
             if showCommandPalette {
@@ -306,7 +323,7 @@ private struct ForgeTitleBar: View {
     }
 }
 
-private struct ForgeLogo: View {
+struct ForgeLogo: View {
     var size: CGFloat
 
     var body: some View {
@@ -632,6 +649,7 @@ private struct CommandPaletteView: View {
 
 private struct SidebarView: View {
     @EnvironmentObject private var workspace: WorkspaceModel
+    @Binding var showMissionControl: Bool
     @State private var showHistory = false
     @State private var showAnswerQueue = false
     @State private var showTaskQueue = false
@@ -708,6 +726,24 @@ private struct SidebarView: View {
                 }
                 .buttonStyle(.plain)
             }
+
+            Button {
+                showMissionControl = true
+                workspace.refreshMissionControl()
+            } label: {
+                HStack {
+                    Text("MISSION CONTROL")
+                    Spacer()
+                    Text("⌘⇧M").foregroundStyle(ForgeDesign.muted)
+                }
+                .font(ForgeDesign.mono(9, weight: .bold))
+                .padding(.horizontal, 16)
+                .frame(height: 36)
+                .background(Color.white)
+                .overlay(alignment: .top) { Rectangle().fill(ForgeDesign.ink).frame(height: 1.5) }
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut("m", modifiers: [.command, .shift])
 
             Button {
                 showTaskQueue = true

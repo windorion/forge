@@ -4,6 +4,7 @@ extension Notification.Name {
     static let forgeToggleCommandPalette = Notification.Name("forge.toggleCommandPalette")
     static let forgeNewTask = Notification.Name("forge.newTask")
     static let forgeSwitchRepository = Notification.Name("forge.switchRepository")
+    static let forgeToggleMissionControl = Notification.Name("forge.toggleMissionControl")
 }
 
 @main
@@ -33,6 +34,11 @@ struct ForgeApp: App {
                     NotificationCenter.default.post(name: .forgeNewTask, object: nil)
                 }
                 .keyboardShortcut("n", modifiers: [.command])
+
+                Button("Mission Control") {
+                    NotificationCenter.default.post(name: .forgeToggleMissionControl, object: nil)
+                }
+                .keyboardShortcut("m", modifiers: [.command, .shift])
 
                 Button("Switch Repository…") {
                     NotificationCenter.default.post(name: .forgeSwitchRepository, object: nil)
