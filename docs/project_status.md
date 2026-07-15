@@ -7,9 +7,10 @@ Last updated: 2026-07-14
 
 ## One-Line Status
 
-Forge is a strong trust/runtime foundation with a first-pass coding-agent
+Forge is a strong trust/runtime foundation with a handoff-driven coding-agent
 session shell and a usable full-screen diff review surface in the macOS app.
-The documented Coding-Agent Demo V0 acceptance criteria are complete.
+The documented Coding-Agent Demo V0 functional criteria are complete, but the
+full delivered design handoff is only approximately 20-25% implemented.
 It can create tasks, inspect bounded repo context, hold review gates, generate
 safe edit proposals, apply restricted Markdown edits, exact source/text
 replacements, multi-hunk patches, and context-anchored unified diffs across
@@ -27,10 +28,10 @@ the next milestone is broader search/symbol choices and patch breadth.
 Implemented:
 
 - Native SwiftUI macOS app shell.
-- Handoff-aligned macOS coding-agent session UI based on
-  `design_handoff_forge` `14a`/`32a`: a square-edged task queue, compact
-  new-task input, one chat/plan column, and one live-work column that switches
-  between Log/Diff/Tests. Pause/abort/resume share the tab footer. Legacy
+- State-driven macOS coding-agent session UI based on
+  `design_handoff_forge` `1a`/`1b`/`14a`/`32a`: a dedicated new-task screen,
+  sidebar-free clarification/plan state, square-edged running-task queue, and
+  one live-work column that switches between Log/Diff/Tests. Legacy
   Planner, Review, decision-rail, duplicate-log, toolbar-demo, and Git
   workbench view hierarchies have been removed rather than hidden.
 - First usable `10a`-style full-screen diff review surface with a changed-file
@@ -269,11 +270,16 @@ Implemented:
 ## Completion Estimate
 
 These percentages are product-readiness estimates, not calendar estimates.
+Milestones are cumulative: alpha includes V0, beta includes V0 and alpha, and
+v1 includes all earlier milestones plus v1-only requirements. The estimates
+use different denominators and must not be added together.
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 100% | All documented V0 acceptance criteria are implemented and smoke-covered: clarification, evidence-rich plan, Approve & Run, bounded live loop, reviewed source lifecycle, commands/self-fix, aligned diff, recovery, and local commit preparation/creation. |
+| Coding-agent demo V0 behavior | 100% | All documented functional acceptance criteria are implemented and smoke-covered. |
+| Primary V0 handoff UI | 95-98% | Five primary screens are substantially implemented; exact typography and rendered comparison remain. |
+| Full 43-screen handoff UI | 20-25% | Five screens are implemented, fourteen partial, and twenty-four missing; none has passed strict visual verification yet. |
 | Useful developer alpha | 50-60% | Forge can recover interrupted loops/transactions and apply guarded source create/modify/delete changes, but still needs broader autonomous tool use and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 product | 15-20% | Forge feels like a complete native Mac product with runtime management, indexing, packaging, updates, onboarding, billing, and integrations. |
@@ -288,8 +294,8 @@ The hardest remaining work is not the app shell. The hardest remaining work is:
 
 - a richer model-backed coding loop with read/search tool choices and broader
   patch/recovery behavior
-- a polished UI that fully matches the handoff, especially live-run polish and
-  decision prompts
+- strict implementation and verification of all 43 named handoff screens and
+  states; see `docs/design_handoff_coverage.md`
 - a useful source-code patch engine beyond exact text-based hunks
 - reliable repository understanding beyond bounded file scans
 - git workflow from dirty tree to approved published PR
@@ -300,14 +306,15 @@ The hardest remaining work is not the app shell. The hardest remaining work is:
 
 ## V0 Finish Line
 
-The old V0 foundation and the new V0 finish line are complete. The
-Coding-Agent Demo defined in `docs/v0_scope.md` proves that a user can type a coding
-task, approve a plan, watch a live agent run, see code/test activity, review a
-real source diff, and approve the final patch.
+The V0 functional finish line is complete. The Coding-Agent Demo defined in
+`docs/v0_scope.md` proves that a user can type a coding task, approve a plan,
+watch a live agent run, see code/test activity, review a real source diff, and
+approve the final patch.
 
-There are no remaining documented V0 acceptance gaps. Git/preflight remains
-supporting infrastructure rather than the main demo; broader autonomy,
-repository understanding, publication, and distribution belong to alpha/beta.
+Design completion is tracked separately and is not complete. The primary V0
+screens must pass strict line-by-line visual and interaction verification, and
+the remaining handoff screens continue cumulatively through alpha, beta, and
+v1. Broader autonomous runtime work is paused behind this design-first pass.
 
 ## Alpha Finish Line
 

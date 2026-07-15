@@ -3,7 +3,7 @@
 Document role: record sequencing, milestones, proof points, and what should
 not be built too early.
 
-Last updated: 2026-07-11
+Last updated: 2026-07-14
 
 ## Direction Reset
 
@@ -55,7 +55,7 @@ main demo story.
 
 ### Coding-Agent Demo V0
 
-Status: next milestone.
+Status: functional criteria complete; full handoff design completion remains.
 
 Goal: make Forge feel like an agent coding app.
 
@@ -141,15 +141,21 @@ Proof point:
 - Forge becomes the place a developer starts, supervises, resumes, and reviews
   agent engineering work across repositories.
 
+Milestones are cumulative. Alpha includes V0, beta includes V0 and alpha, and
+v1 includes V0, alpha, and beta plus the v1-only workspace requirements.
+Readiness percentages therefore use different denominators and are not
+additive.
+
 ## Immediate Build Order
 
-1. Reshape the macOS UI around `32a`, `14a`, `1a`, `1b`, and `10a`.
-2. Add a real patch proposal/apply engine for source files.
-3. Add task-scoped command execution with streaming logs.
-4. Wire provider-driven read/search/patch/run/repair into the normal flow.
-5. Build full-screen diff review with per-file reasoning.
-6. Add pause/abort/request-change loops around the live run.
-7. Only then continue GitHub PR publication and broader integrations.
+1. Complete and strictly verify all 43 named screens/states in the delivered
+   design handoff, following `docs/design_handoff_coverage.md`.
+2. Harden the completed V0 behavior across varied real repositories.
+3. Extend the provider-owned tool loop, query variation, and malformed-output
+   recovery without weakening approval boundaries.
+4. Add durable text and lightweight symbol indexing.
+5. Connect the guarded git flow to approved publication and draft PR creation.
+6. Complete beta packaging, signing, onboarding, and update paths.
 
 ## What Not To Optimize Next
 

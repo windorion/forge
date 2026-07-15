@@ -9,8 +9,11 @@ struct ForgeApp: App {
         WindowGroup("Forge") {
             WorkspaceView()
                 .environmentObject(workspace)
-                .frame(minWidth: 1180, minHeight: 760)
+                .frame(minWidth: 900, minHeight: 480)
         }
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 980, height: 520)
+        .windowResizability(.contentMinSize)
 
         Settings {
             SettingsView()

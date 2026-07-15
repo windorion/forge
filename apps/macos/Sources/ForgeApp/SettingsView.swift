@@ -132,7 +132,7 @@ private struct RuntimeSettingsTab: View {
                             .foregroundStyle(.secondary)
                         ForEach(runtimeProcessCandidateDirectories, id: \.self) { candidate in
                             Text(candidate)
-                                .font(.caption2.monospaced())
+                                .font(.custom("JetBrains Mono", fixedSize: 9))
                                 .foregroundStyle(.secondary)
                                 .textSelection(.enabled)
                         }
@@ -147,7 +147,7 @@ private struct RuntimeSettingsTab: View {
                             .foregroundStyle(.secondary)
                         ScrollView {
                             Text(runtimeProcessLastOutput)
-                                .font(.caption2.monospaced())
+                                .font(.custom("JetBrains Mono", fixedSize: 9))
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .textSelection(.enabled)
                         }

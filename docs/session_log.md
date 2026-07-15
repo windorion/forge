@@ -3710,3 +3710,45 @@ Next:
 
 - Build and relaunch `dist/Forge.app`, inspect the live handoff-aligned shell,
   then commit and push this UI reconciliation directly to `main`.
+
+## 2026-07-15 07:28:21 CEST
+
+Conversation summary:
+
+- Re-audited Forge after the user correctly identified that functional V0
+  completion had been conflated with completion of the entire design handoff,
+  then made design completion the blocking priority before new feature work.
+
+Done:
+
+- Counted the actual delivered HTML source of truth: 43 named screens/states,
+  despite the handoff README describing 37.
+- Added a strict per-screen coverage tracker with separate Implemented,
+  Partial, Missing, and Verified definitions; full-handoff UI readiness is now
+  honestly reported at approximately 20-25%.
+- Rebuilt the primary workspace into state-driven `1a`, `32a`, and `14a`
+  layouts, removed remaining duplicate hierarchy, and kept `10a` as the
+  dedicated full diff surface.
+- Matched the compact/new-session window widths to the handoff state model,
+  aligned exact `1a` copy, reused the supplied Forge logo, and added the
+  handoff's `v0.4.2` display version to the packaged app.
+- Downloaded official JetBrains Mono Regular/Bold files plus the SIL OFL from
+  JetBrains, registered them at launch, converted all self-drawn monospace UI
+  to the bundled face, and packaged the fonts and license in `Forge.app`.
+- Reordered TODO and roadmap work so complete handoff implementation and
+  verification blocks further feature expansion; documented that V0, alpha,
+  beta, and v1 are cumulative milestones.
+
+Not done:
+
+- No screen is marked strictly Verified yet because rendered handoff access was
+  blocked for the local `file://` design canvas and macOS app screen capture is
+  not available in the current automation permission state.
+- Compact states `1c`, `1d`, and `1e`, shared settings, decision/recovery,
+  queue/history, quick-entry, and native integration screens remain partial or
+  missing as recorded in `docs/design_handoff_coverage.md`.
+
+Next:
+
+- Verify, commit, and push this design-baseline batch directly to `main`, then
+  immediately implement the compact task states and shared settings shell.

@@ -10,7 +10,25 @@ Last updated: 2026-07-14
 Keep this file practical. A future agent should be able to open it and know
 what to do next without rereading the whole project history.
 
-## Coding-Agent Demo V0: Complete
+## P0: Complete And Verify The Design Handoff
+
+Do not start another feature track until the handoff implementation is
+complete. Use `docs/design_handoff_coverage.md` as the screen-by-screen source
+of truth and the delivered HTML/CSS as the exact visual/content specification.
+
+- Finish exact line-by-line verification of `1a`, `1b`, `10a`, `14a`, and
+  `32a`.
+- Complete compact task states `1c`, `1d`, and `1e`.
+- Rebuild all six shared settings screens against their handoff layouts.
+- Continue through decisions/recovery, queue/history, quick entry, native
+  integrations, onboarding, updates, sharing, cost, and templates until all 43
+  named HTML screens/states are verified.
+- Bundle JetBrains Mono under the SIL OFL license and use the exact handoff
+  typography in packaged builds.
+- Keep screenshots or equivalent visual comparison evidence for each screen;
+  do not mark a screen verified from code inspection alone.
+
+## Coding-Agent Demo V0: Functional Complete
 
 All acceptance criteria in `docs/v0_scope.md` are implemented and covered by
 the core runtime smoke. Preserve these completed boundaries:

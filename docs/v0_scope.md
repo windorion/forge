@@ -106,7 +106,7 @@ It should not feel like:
 - signed/notarized distribution
 - team collaboration
 
-## Completion Criteria
+## Functional Completion Criteria
 
 V0 is complete when:
 
@@ -130,6 +130,11 @@ V0 is complete when:
 - Local commit can be prepared and created after explicit approval.
 - No file change, command, commit, push, or PR happens without an explicit
   policy path and audit record.
+
+All functional criteria above are implemented. Design completion is tracked
+separately in `docs/design_handoff_coverage.md`; the full product UI is not
+complete until every delivered handoff screen/state passes strict visual and
+interaction verification.
 
 ## Completed State Against V0
 

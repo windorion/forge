@@ -26,6 +26,7 @@ Timestamped working history lives in `session_log.md`, not in the root README.
 | `user_personas.md` | Target users, pains, motivations, objections, and success criteria. |
 | `user_flows.md` | End-to-end workflows from onboarding to review and shipping. |
 | `workspace_design.md` | Product surface model, screen structure, panels, states, and interaction rules. |
+| `design_handoff_coverage.md` | Per-screen implementation and strict visual verification status for the delivered handoff. |
 | `macos_native.md` | macOS-specific features, permissions, distribution, and native integrations. |
 | `multi_agent.md` | Agent roles, responsibilities, handoffs, orchestration, and state transitions. |
 | `runtime_architecture.md` | Local runtime modules, app-runtime boundaries, tool execution, and event streams. |

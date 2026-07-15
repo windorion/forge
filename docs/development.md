@@ -43,12 +43,15 @@ but it still is not a full Codex/Claude Code style autonomous agent. The next
 app/runtime work should add result-quality evidence, broader patch operations,
 deeper self-fix, and final review polish.
 
-The macOS app now follows the handoff's `14a`/`32a` structure: a square-edged
-task queue, compact composer, one conversation/plan column, and one live-work
-column that switches between Log/Diff/Tests. The live footer owns loop
-run/pause/abort/resume controls. The former Planner, Review, action-rail,
-duplicate-log, toolbar-demo, and Git-workbench view trees were removed to avoid
-rendering old and new product concepts together.
+The macOS app now switches between the handoff's primary states instead of
+stacking them: `1a` is a full-window new-task composer, `32a` is a sidebar-free
+clarification/plan workspace, and `14a` adds the square-edged task queue for a
+running/review task. One live-work column switches between Log/Diff/Tests, and
+the task header owns run/pause/abort/resume controls. The packaged build copies
+the handoff Forge logo into app resources and uses a hidden native title bar.
+The former Planner, Review, action-rail, duplicate-log, toolbar-demo, and
+Git-workbench view trees were removed to avoid rendering old and new product
+concepts together.
 
 The shell also includes a first usable `10a`-style full-screen diff review
 surface. It opens from the Diff tab or review state card, shows a file tree,
@@ -351,7 +354,7 @@ preset, and bounded output chunks. The runtime also emits
 `task.command.started`, `task.command.output`, and `task.command.completed`
 events over `GET /events`.
 
-In the macOS session shell, the action rail exposes a command chooser populated
+In the macOS session shell, the Tests control strip exposes a command chooser populated
 from runtime-derived task-command permissions. After approval, the same
 `runtime-typescript` preset can expose both `runtime-npm-check` and
 `runtime-npm-build`; other project presets such as `macos-swiftpm` appear with
@@ -370,12 +373,12 @@ run `Cancelled` without generating a repair brief.
 When a command-sourced self-fix proposal is applied, the runtime records
 `commandRerunEvidence` linking the failed source command, repair brief, and
 applied repair proposal. The macOS Tests tab shows that evidence chain and the
-action rail exposes `Rerun Self-Fix`. That action calls
+Tests control strip exposes `Rerun Self-Fix`. That action calls
 `POST /tasks/:taskID/rerun-repair-command`, which reruns the original command
 ID through the same approval/cwd/no-shell path, attaches the new command run to
 the evidence, and moves the task to `Repair Verified` when it passes.
 
-The action rail exposes Agent Run Step v0 and Agent Run Loop v0:
+The running-task header exposes Agent Run Step v0 and Agent Run Loop v0:
 
 ```text
 POST /tasks/:taskID/run-agent-step

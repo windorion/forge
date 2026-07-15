@@ -1,7 +1,9 @@
+import AppKit
 import Foundation
 import SwiftUI
 
 private enum ForgeDesign {
+    static let appVersion = "v0.4.2"
     static let paper = Color(red: 244 / 255, green: 244 / 255, blue: 241 / 255)
     static let ink = Color(red: 10 / 255, green: 10 / 255, blue: 10 / 255)
     static let muted = Color(red: 106 / 255, green: 106 / 255, blue: 100 / 255)
@@ -12,8 +14,8 @@ private enum ForgeDesign {
     static let success = Color(red: 40 / 255, green: 200 / 255, blue: 64 / 255)
     static let danger = Color(red: 192 / 255, green: 57 / 255, blue: 43 / 255)
 
-    static var mono: Font {
-        .system(.caption, design: .monospaced)
+    static func mono(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        .custom("JetBrains Mono", fixedSize: size).weight(weight)
     }
 }
 
@@ -38,7 +40,7 @@ private struct ForgePrimaryButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(.caption, design: .monospaced).weight(.bold))
+            .font(ForgeDesign.mono(11, weight: .bold))
             .textCase(.uppercase)
             .foregroundStyle(foreground)
             .padding(.horizontal, 12)
@@ -53,7 +55,7 @@ private struct ForgePrimaryButtonStyle: ButtonStyle {
 private struct ForgeSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(.caption, design: .monospaced).weight(.bold))
+            .font(ForgeDesign.mono(11, weight: .bold))
             .textCase(.uppercase)
             .foregroundStyle(ForgeDesign.ink)
             .padding(.horizontal, 10)
@@ -94,22 +96,156 @@ struct WorkspaceView: View {
     @EnvironmentObject private var workspace: WorkspaceModel
 
     var body: some View {
-        NavigationSplitView {
-            SidebarView()
-                .navigationSplitViewColumnWidth(min: 250, ideal: 300)
-        } detail: {
-            ZStack {
-                ForgeDesign.paper.ignoresSafeArea()
-                if let task = workspace.selectedTask {
+        VStack(spacing: 0) {
+            ForgeTitleBar()
+
+            if let task = workspace.selectedTask {
+                if usesNewSessionLayout(task) {
                     TaskWorkspaceView(task: task)
                 } else {
-                    NewTaskEmptyState()
+                    HStack(spacing: 0) {
+                        SidebarView()
+                            .frame(width: 300)
+
+                        Rectangle()
+                            .fill(ForgeDesign.ink)
+                            .frame(width: 1.5)
+
+                        RunningTaskWorkspaceView(task: task)
+                    }
                 }
+            } else {
+                NewTaskEmptyState()
+            }
+        }
+        .background(ForgeDesign.paper)
+        .task {
+            if workspace.runtimeState == .unchecked {
+                workspace.refreshRuntimeHealth()
             }
         }
         .onChange(of: workspace.selectedTaskID) { _, taskID in
             workspace.refreshValidationPermissions(for: taskID)
         }
+        .background(
+            WindowSizingView(
+                mode: workspace.selectedTask == nil ? .compact : .session
+            )
+        )
+    }
+
+    private func usesNewSessionLayout(_ task: ForgeTask) -> Bool {
+        task.agentRunLoops.isEmpty &&
+            task.editProposal == nil &&
+            !["Running", "Testing", "Completed", "Failed"].contains(task.status)
+    }
+}
+
+private struct ForgeTitleBar: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
+
+    var body: some View {
+        ZStack {
+            HStack(spacing: 10) {
+                ForgeLogo(size: 18)
+                Text("FORGE — \(workspaceLabel)")
+                    .font(.custom("JetBrains Mono", fixedSize: 12).weight(.bold))
+                    .tracking(0.5)
+            }
+
+            HStack {
+                Spacer()
+                Text(ForgeDesign.appVersion)
+                    .font(.custom("JetBrains Mono", fixedSize: 10))
+                    .foregroundStyle(ForgeDesign.muted)
+                    .padding(.trailing, 16)
+            }
+        }
+        .frame(height: 42)
+        .background(Color(red: 236 / 255, green: 236 / 255, blue: 234 / 255))
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+        }
+    }
+
+    private var workspaceLabel: String {
+        guard let path = workspace.runtimeHealth?.workspace?.repoRoot else {
+            return "LOCAL WORKSPACE"
+        }
+        let components = URL(fileURLWithPath: path).pathComponents.suffix(2)
+        return components.joined(separator: "/")
+    }
+}
+
+private struct ForgeLogo: View {
+    var size: CGFloat
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.high)
+            } else {
+                Text("F")
+                    .font(.custom("JetBrains Mono", fixedSize: size * 0.62).weight(.black))
+                    .foregroundStyle(ForgeDesign.ink)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(ForgeDesign.accent)
+            }
+        }
+        .frame(width: size, height: size)
+        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+    }
+
+    private var image: NSImage? {
+        guard let url = Bundle.main.url(forResource: "forge-logo", withExtension: "png") else {
+            return nil
+        }
+        return NSImage(contentsOf: url)
+    }
+}
+
+private enum WorkspaceWindowMode: Equatable {
+    case compact
+    case session
+
+    var contentSize: NSSize {
+        switch self {
+        case .compact:
+            return NSSize(width: 980, height: 520)
+        case .session:
+            return NSSize(width: 1380, height: 720)
+        }
+    }
+}
+
+private struct WindowSizingView: NSViewRepresentable {
+    var mode: WorkspaceWindowMode
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> NSView {
+        NSView(frame: .zero)
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        guard context.coordinator.lastMode != mode else { return }
+        context.coordinator.lastMode = mode
+        DispatchQueue.main.async {
+            guard let window = nsView.window else { return }
+            window.contentMinSize = mode == .compact
+                ? NSSize(width: 900, height: 480)
+                : NSSize(width: 1180, height: 680)
+            window.setContentSize(mode.contentSize)
+            window.center()
+        }
+    }
+
+    final class Coordinator {
+        var lastMode: WorkspaceWindowMode?
     }
 }
 
@@ -118,19 +254,19 @@ private struct SidebarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .lastTextBaseline) {
-                Text("FORGE")
-                    .font(.system(size: 22, weight: .black, design: .monospaced))
+            HStack(spacing: 10) {
+                Text("⌥")
+                    .font(.custom("JetBrains Mono", fixedSize: 12).weight(.black))
+                Text(workspaceLabel)
+                    .font(.custom("JetBrains Mono", fixedSize: 12).weight(.bold))
+                    .lineLimit(1)
                 Spacer()
-                Text("AGENT")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(ForgeDesign.accent)
-                    .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                Text("⌘⇧K  ▾")
+                    .font(.custom("JetBrains Mono", fixedSize: 9).weight(.medium))
+                    .foregroundStyle(ForgeDesign.muted)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 14)
+            .padding(.horizontal, 16)
+            .frame(height: 42)
             .background(Color.white)
             .overlay(alignment: .bottom) {
                 Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
@@ -140,7 +276,7 @@ private struct SidebarView: View {
                 .padding(14)
 
             Text("TASKS — \(workspace.tasks.count)")
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
                 .foregroundStyle(ForgeDesign.muted)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
@@ -159,12 +295,20 @@ private struct SidebarView: View {
             }
 
             RuntimeBadge()
-                .padding(14)
+                .padding(.horizontal, 16)
+                .frame(height: 42)
                 .overlay(alignment: .top) {
                     Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
                 }
         }
         .background(ForgeDesign.paper)
+    }
+
+    private var workspaceLabel: String {
+        guard let path = workspace.runtimeHealth?.workspace?.repoRoot else {
+            return "LOCAL WORKSPACE"
+        }
+        return URL(fileURLWithPath: path).lastPathComponent
     }
 }
 
@@ -177,12 +321,12 @@ private struct RuntimeBadge: View {
                 .fill(runtimeColor)
                 .frame(width: 8, height: 8)
             Text(workspace.runtimeState.rawValue.uppercased())
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
                 .lineLimit(1)
             Spacer()
             if let version = workspace.runtimeHealth?.version {
                 Text(version)
-                    .font(.system(size: 9, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 9))
                     .foregroundStyle(ForgeDesign.muted)
             }
             Button {
@@ -193,11 +337,7 @@ private struct RuntimeBadge: View {
             .buttonStyle(.plain)
             .help("Refresh local runtime status")
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white)
-        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
     }
 
     private var runtimeColor: Color {
@@ -223,18 +363,22 @@ private struct TaskComposer: View {
         HStack(spacing: 0) {
             TextField("Describe the next task…", text: $objective)
                 .textFieldStyle(.plain)
-                .font(.system(.caption, design: .monospaced))
+                .font(.custom("JetBrains Mono", fixedSize: 11))
                 .padding(.horizontal, 9)
                 .onSubmit(createTask)
             Button {
                 createTask()
             } label: {
-                Image(systemName: "plus")
-                    .frame(width: 30, height: 30)
+                Text("⌘N")
+                    .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
+                    .foregroundStyle(ForgeDesign.muted)
+                    .frame(width: 38, height: 34)
             }
             .buttonStyle(.plain)
-            .background(ForgeDesign.ink)
-            .foregroundStyle(ForgeDesign.paper)
+            .background(Color.white)
+            .overlay(alignment: .leading) {
+                Rectangle().fill(ForgeDesign.divider).frame(width: 1.5)
+            }
             .disabled(resolvedObjective.isEmpty)
         }
         .background(Color.white)
@@ -264,7 +408,7 @@ private struct TaskRow: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(task.status.uppercased())
-                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 8).weight(.bold))
                     .foregroundStyle(statusForeground)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 2)
@@ -272,7 +416,7 @@ private struct TaskRow: View {
                     .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
                 Spacer()
                 Text("#\(task.id.prefix(4).uppercased())")
-                    .font(.system(size: 8, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 8))
                     .foregroundStyle(ForgeDesign.muted)
             }
 
@@ -281,7 +425,7 @@ private struct TaskRow: View {
                 .foregroundStyle(ForgeDesign.ink)
                 .lineLimit(2)
             Text(task.currentPhase.uppercased())
-                .font(.system(size: 9, weight: .medium, design: .monospaced))
+                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.medium))
                 .foregroundStyle(ForgeDesign.muted)
         }
         .padding(.horizontal, 16)
@@ -322,39 +466,189 @@ private struct TaskWorkspaceView: View {
     @State private var showDiffReview = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 0) {
-            TaskConversationPanel(task: task)
-                .frame(minWidth: 360, idealWidth: 430, maxWidth: 520, maxHeight: .infinity)
+        GeometryReader { proxy in
+            HStack(alignment: .top, spacing: 0) {
+                TaskConversationPanel(task: task)
+                    .frame(width: max(430, proxy.size.width / 2.1))
+                    .frame(maxHeight: .infinity)
 
-            VStack(spacing: 0) {
-                PlanProgressStrip(task: task)
-                SessionTabContent(
-                    tab: selectedTab,
-                    task: task,
-                    openDiffReview: {
-                        showDiffReview = true
-                    }
-                )
-                HStack(spacing: 0) {
-                    SessionTabs(selectedTab: $selectedTab, task: task)
-                        .frame(width: 330)
-                    LiveRunControlBar(
+                VStack(spacing: 0) {
+                    LiveWorkStatusHeader(task: task)
+                    PlanProgressStrip(task: task)
+                    SessionTabContent(
+                        tab: selectedTab,
                         task: task,
                         openDiffReview: {
                             showDiffReview = true
                         }
                     )
+                    HStack(spacing: 0) {
+                        SessionTabs(selectedTab: $selectedTab, task: task)
+                            .frame(width: 330)
+                        LiveRunControlBar(
+                            task: task,
+                            openDiffReview: {
+                                showDiffReview = true
+                            }
+                        )
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
-        .frame(maxHeight: .infinity, alignment: .top)
-        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
-        .padding(12)
         .background(ForgeDesign.paper)
         .sheet(isPresented: $showDiffReview) {
             FullscreenDiffReview(task: task)
                 .frame(minWidth: 1180, minHeight: 760)
+        }
+    }
+}
+
+private struct LiveWorkStatusHeader: View {
+    var task: ForgeTask
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(ForgeDesign.accent)
+                .frame(width: 7, height: 7)
+            Text(statusLabel)
+                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
+                .tracking(1)
+            Spacer()
+            Text(task.agentRunLoops.last.map { "\($0.stepsRun)/\($0.maxSteps) STEPS" } ?? "GUARDRAILS ON")
+                .font(.custom("JetBrains Mono", fixedSize: 9))
+                .foregroundStyle(ForgeDesign.muted)
+        }
+        .padding(.horizontal, 18)
+        .frame(height: 36)
+        .background(Color(red: 247 / 255, green: 247 / 255, blue: 244 / 255))
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+        }
+    }
+
+    private var statusLabel: String {
+        if let loop = task.agentRunLoops.last {
+            return "AGENT \(loop.status.uppercased()) — STEP \(loop.stepsRun)/\(loop.maxSteps)"
+        }
+        return "AGENT READY — \(task.currentPhase.uppercased())"
+    }
+}
+
+private struct RunningTaskWorkspaceView: View {
+    var task: ForgeTask
+    @State private var selectedTab: SessionTab = .log
+    @State private var showDiffReview = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            RunningTaskHeader(task: task, openDiffReview: { showDiffReview = true })
+            PlanProgressStrip(task: task)
+            SessionTabContent(
+                tab: selectedTab,
+                task: task,
+                openDiffReview: { showDiffReview = true }
+            )
+            RunningSessionFooter(selectedTab: $selectedTab, task: task)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Color.white)
+        .sheet(isPresented: $showDiffReview) {
+            FullscreenDiffReview(task: task)
+                .frame(minWidth: 1180, minHeight: 760)
+        }
+    }
+}
+
+private struct RunningTaskHeader: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
+
+    var task: ForgeTask
+    var openDiffReview: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            StatusPill(label: statusLabel, color: statusColor)
+            Text(task.title)
+                .font(.system(size: 15, weight: .heavy))
+                .lineLimit(1)
+            Spacer()
+
+            if diffCount > 0 {
+                Button("FULL DIFF", action: openDiffReview)
+                    .buttonStyle(ForgeSecondaryButtonStyle())
+            }
+
+            if canStartLoop {
+                Button("RUN") { workspace.runAgentLoop(for: task, maxSteps: 6) }
+                    .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.accent, foreground: ForgeDesign.ink))
+            }
+            if canResumeLoop, let loop = latestLoop {
+                Button("RESUME") { workspace.resumeAgentLoop(for: task, loop: loop) }
+                    .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.accent, foreground: ForgeDesign.ink))
+            }
+            if canPauseLoop, let loop = latestLoop {
+                Button("⏸ PAUSE") { workspace.pauseAgentLoop(for: task, loop: loop) }
+                    .buttonStyle(ForgeSecondaryButtonStyle())
+            }
+            if canAbortLoop, let loop = latestLoop {
+                Button("✕ ABORT") { workspace.abortAgentLoop(for: task, loop: loop) }
+                    .buttonStyle(ForgeSecondaryButtonStyle())
+                    .foregroundStyle(ForgeDesign.danger)
+            }
+        }
+        .padding(.horizontal, 22)
+        .frame(height: 58)
+        .background(Color.white)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+        }
+    }
+
+    private var latestLoop: AgentRunLoop? { task.agentRunLoops.last }
+    private var diffCount: Int { max(task.changedFiles.count, task.editProposal?.fileChanges.count ?? 0) }
+    private var canStartLoop: Bool {
+        task.executionProposal != nil && task.editProposal?.status != "Proposed" && latestLoop?.status != "Running" && !workspace.isRunningAgentLoop(taskID: task.id)
+    }
+    private var canPauseLoop: Bool { latestLoop?.status == "Running" && latestLoop?.controlState == nil }
+    private var canAbortLoop: Bool { latestLoop?.status == "Running" && latestLoop?.controlState != "AbortRequested" }
+    private var canResumeLoop: Bool {
+        guard let status = latestLoop?.status else { return false }
+        return ["Paused", "Aborted", "Failed"].contains(status) && !workspace.isRunningAgentLoop(taskID: task.id)
+    }
+    private var statusLabel: String { task.status == "Running" ? "▸ RUNNING" : task.status }
+    private var statusColor: Color {
+        switch task.status {
+        case "Completed": return ForgeDesign.success
+        case "Failed": return ForgeDesign.danger
+        case "Human Review": return ForgeDesign.warning
+        case "Running", "Testing": return ForgeDesign.accent
+        default: return Color.white
+        }
+    }
+}
+
+private struct RunningSessionFooter: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
+
+    @Binding var selectedTab: SessionTab
+    var task: ForgeTask
+
+    var body: some View {
+        HStack(spacing: 0) {
+            SessionTabs(selectedTab: $selectedTab, task: task)
+                .frame(width: 330)
+            Spacer()
+            Text("\(workspace.gitStatus?.branch ?? "LOCAL WORKTREE") · GUARDRAILS ON")
+                .font(.custom("JetBrains Mono", fixedSize: 9))
+                .foregroundStyle(ForgeDesign.muted)
+                .padding(.trailing, 20)
+        }
+        .frame(height: 38)
+        .background(Color.white)
+        .overlay(alignment: .top) {
+            Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
         }
     }
 }
@@ -368,7 +662,7 @@ private struct LiveRunControlBar: View {
     var body: some View {
         HStack(spacing: 8) {
             Text(runStateLabel)
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
                 .foregroundStyle(ForgeDesign.muted)
 
             Spacer()
@@ -460,59 +754,74 @@ private struct NewTaskEmptyState: View {
     @State private var prompt = ""
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Spacer(minLength: 20)
+        VStack(spacing: 0) {
+            Spacer()
 
+            ForgeLogo(size: 56)
+                .shadow(color: ForgeDesign.ink, radius: 0, x: 4, y: 4)
+                .padding(.bottom, 22)
             Text("What should Forge build?")
-                .font(.system(size: 34, weight: .black))
+                .font(.system(size: 28, weight: .heavy))
+                .tracking(-0.8)
 
-            Text("Start with a coding task. Forge will turn it into a plan, stop for approval, then make the work reviewable.")
-                .font(.title3)
+            Text("one outcome per task · something your tests can verify")
+                .font(.custom("JetBrains Mono", fixedSize: 12))
                 .foregroundStyle(ForgeDesign.muted)
-                .frame(maxWidth: 720, alignment: .leading)
+                .padding(.top, 10)
+                .padding(.bottom, 26)
 
-            VStack(alignment: .leading, spacing: 12) {
-                TextField("Example: Add a source patch engine with rollback metadata", text: $prompt, axis: .vertical)
-                    .lineLimit(5...8)
-                    .font(.system(size: 15, design: .monospaced))
+            HStack(spacing: 0) {
+                TextField("e.g. \"add rate limiting to the public API\"", text: $prompt)
+                    .font(.system(size: 13))
                     .textFieldStyle(.plain)
-                    .padding(12)
+                    .padding(.horizontal, 18)
+                    .frame(height: 50)
                     .background(Color.white)
-                    .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                    .onSubmit(createTask)
 
-                HStack {
-                    Button {
-                        workspace.createTask(title: title, objective: objective)
-                    } label: {
-                        Label("Create Task", systemImage: "arrow.right")
-                    }
-                    .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.accent, foreground: ForgeDesign.ink))
-                    .disabled(objective.isEmpty)
+                Button(action: createTask) {
+                    Text("PLAN IT →")
+                        .font(.custom("JetBrains Mono", fixedSize: 12).weight(.bold))
+                        .foregroundStyle(ForgeDesign.accent)
+                        .padding(.horizontal, 22)
+                        .frame(height: 50)
+                        .background(ForgeDesign.ink)
+                }
+                .buttonStyle(.plain)
+                .disabled(objective.isEmpty)
+            }
+            .frame(maxWidth: 640)
+            .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
 
-                    Text("Plan approval is still required before file changes.")
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundStyle(ForgeDesign.muted)
+            HStack(spacing: 8) {
+                ExampleTaskButton(title: "fix flaky test in auth.spec.ts") {
+                    prompt = "Fix the flaky test in auth.spec.ts"
+                }
+                ExampleTaskButton(title: "add input validation to signup") {
+                    prompt = "Add input validation to signup"
+                }
+                ExampleTaskButton(title: "upgrade eslint + fix warnings") {
+                    prompt = "Upgrade eslint and fix the resulting warnings"
                 }
             }
-            .frame(maxWidth: 760)
-            .forgeCard()
-
-            HStack(spacing: 10) {
-                ExampleTaskButton(title: "Refactor WorkspaceView into live session") {
-                    prompt = "Refactor the macOS WorkspaceView so the main task screen shows a live agent coding stream, Log/Diff/Tests tabs, and a compact plan approval rail."
-                }
-                ExampleTaskButton(title: "Add patch rollback metadata") {
-                    prompt = "Add rollback metadata to source-file patch proposals and show the rollback boundary in review."
-                }
-                ExampleTaskButton(title: "Stream validation output") {
-                    prompt = "Add streamed output for approved task-scoped validation commands and show it in the Tests tab."
-                }
-            }
+            .padding(.top, 18)
 
             Spacer()
+
+            HStack {
+                Text("⌘N new task · ⌘K switch repo")
+                Spacer()
+                Text("indexed 1,204 files · in sync")
+            }
+            .font(.custom("JetBrains Mono", fixedSize: 10))
+            .foregroundStyle(ForgeDesign.muted)
+            .padding(.horizontal, 20)
+            .frame(height: 40)
+            .overlay(alignment: .top) {
+                Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+            }
         }
-        .padding(36)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var objective: String {
@@ -522,6 +831,12 @@ private struct NewTaskEmptyState: View {
     private var title: String {
         String(objective.prefix(60))
     }
+
+    private func createTask() {
+        guard !objective.isEmpty else { return }
+        workspace.createTask(title: title, objective: objective)
+        prompt = ""
+    }
 }
 
 private struct ExampleTaskButton: View {
@@ -530,10 +845,18 @@ private struct ExampleTaskButton: View {
 
     var body: some View {
         Button(action: action) {
-            Text(title.uppercased())
+            Text(title)
+                .font(.custom("JetBrains Mono", fixedSize: 10.5))
+                .foregroundStyle(ForgeDesign.muted)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .overlay(
+                    Rectangle()
+                        .stroke(ForgeDesign.muted, style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+                )
                 .lineLimit(2)
         }
-        .buttonStyle(ForgeSecondaryButtonStyle())
+        .buttonStyle(.plain)
     }
 }
 
@@ -544,7 +867,7 @@ private struct StatusPill: View {
 
     var body: some View {
         Text(label.uppercased())
-            .font(.system(size: 10, weight: .bold, design: .monospaced))
+            .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
             .foregroundStyle(foreground)
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
@@ -560,11 +883,11 @@ private struct MetricRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(label.uppercased())
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
                 .foregroundStyle(ForgeDesign.muted)
             Spacer()
             Text(value)
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .font(.custom("JetBrains Mono", fixedSize: 10).weight(.semibold))
                 .foregroundStyle(ForgeDesign.ink)
                 .multilineTextAlignment(.trailing)
         }
@@ -579,11 +902,11 @@ private struct PlanProgressStrip: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("PLAN PROGRESS")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
                     .foregroundStyle(ForgeDesign.muted)
                 Spacer()
                 Text("\(doneCount)/\(max(task.planSteps.count, 1)) STEPS")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
                     .foregroundStyle(ForgeDesign.muted)
             }
 
@@ -600,7 +923,7 @@ private struct PlanProgressStrip: View {
                                 )
                             )
                         Text(step.title.uppercased())
-                            .font(.system(size: 8, weight: step.status == "Active" ? .bold : .regular, design: .monospaced))
+                            .font(.custom("JetBrains Mono", fixedSize: 8).weight(step.status == "Active" ? .bold : .regular))
                             .foregroundStyle(step.status == "Pending" ? ForgeDesign.muted : ForgeDesign.ink)
                             .lineLimit(1)
                     }
@@ -640,11 +963,11 @@ private struct LiveAgentStream: View {
         VStack(spacing: 0) {
             HStack {
                 Text("LIVE AGENT STREAM")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
                     .foregroundStyle(ForgeDesign.paper)
                 Spacer()
                 Text(task.currentPhase.uppercased())
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
                     .foregroundStyle(ForgeDesign.accent)
             }
             .padding(10)
@@ -655,15 +978,15 @@ private struct LiveAgentStream: View {
                     ForEach(streamRows) { row in
                         HStack(alignment: .top, spacing: 10) {
                             Text(row.time)
-                                .font(.system(size: 10, design: .monospaced))
+                                .font(.custom("JetBrains Mono", fixedSize: 10))
                                 .foregroundStyle(Color.gray)
                                 .frame(width: 72, alignment: .leading)
                             Text(row.kind)
-                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
                                 .foregroundStyle(row.color)
                                 .frame(width: 92, alignment: .leading)
                             Text(row.message)
-                                .font(.system(size: 12, design: .monospaced))
+                                .font(.custom("JetBrains Mono", fixedSize: 12))
                                 .foregroundStyle(ForgeDesign.paper)
                                 .textSelection(.enabled)
                             Spacer(minLength: 0)
@@ -672,11 +995,11 @@ private struct LiveAgentStream: View {
 
                     HStack(spacing: 8) {
                         Text("now")
-                            .font(.system(size: 10, design: .monospaced))
+                            .font(.custom("JetBrains Mono", fixedSize: 10))
                             .foregroundStyle(Color.gray)
                             .frame(width: 72, alignment: .leading)
                         Text("CURSOR")
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
                             .foregroundStyle(ForgeDesign.accent)
                             .frame(width: 92, alignment: .leading)
                         Rectangle()
@@ -754,7 +1077,7 @@ private struct SessionTabs: View {
                     selectedTab = tab
                 } label: {
                     Text(label(for: tab))
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .font(.custom("JetBrains Mono", fixedSize: 11).weight(.bold))
                         .foregroundStyle(selectedTab == tab ? ForgeDesign.paper : ForgeDesign.ink)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
@@ -825,7 +1148,7 @@ private struct DiffReviewSummary: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("DIFF REVIEW")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
                         .foregroundStyle(ForgeDesign.muted)
                     Spacer()
                     Button {
@@ -844,11 +1167,11 @@ private struct DiffReviewSummary: View {
                     ForEach(diffFiles, id: \.self) { file in
                         HStack {
                             Text(file)
-                                .font(.system(.caption, design: .monospaced))
+                                .font(.custom("JetBrains Mono", fixedSize: 11))
                                 .lineLimit(1)
                             Spacer()
                             Text("REVIEW")
-                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
                                 .foregroundStyle(ForgeDesign.muted)
                         }
                         .padding(8)
@@ -861,7 +1184,7 @@ private struct DiffReviewSummary: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("WHY THIS CHANGE")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
                     .foregroundStyle(ForgeDesign.muted)
                 Text(task.editProposal?.summary ?? task.reviewSummary ?? "Forge will explain the reasoning for each changed file here once a proposal exists.")
                     .font(.callout)
@@ -938,7 +1261,7 @@ private struct FullscreenDiffReview: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("FULLSCREEN DIFF REVIEW")
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 11).weight(.bold))
                     .foregroundStyle(ForgeDesign.muted)
                 Text(task.title)
                     .font(.system(size: 22, weight: .black))
@@ -952,7 +1275,7 @@ private struct FullscreenDiffReview: View {
 
             if !reviewFiles.isEmpty {
                 Text("FILE \(activeFileIndex + 1) OF \(reviewFiles.count)")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
                     .foregroundStyle(ForgeDesign.muted)
             }
 
@@ -999,11 +1322,11 @@ private struct FullscreenDiffReview: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("FILES")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
                     .foregroundStyle(ForgeDesign.muted)
                 Spacer()
                 Text("+\(totalAdditions) -\(totalDeletions)")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
                     .foregroundStyle(ForgeDesign.muted)
             }
             .padding(10)
@@ -1013,7 +1336,7 @@ private struct FullscreenDiffReview: View {
             if reviewFiles.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("NO DIFF READY")
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .font(.custom("JetBrains Mono", fixedSize: 11).weight(.bold))
                     Text("Generate or apply a proposal, then refresh git status.")
                         .font(.caption)
                         .foregroundStyle(ForgeDesign.muted)
@@ -1042,7 +1365,7 @@ private struct FullscreenDiffReview: View {
                     Spacer()
                     Text("\(max(reviewFiles.count - approvedFileCount, 0)) TO GO")
                 }
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
                 .foregroundStyle(ForgeDesign.muted)
                 .padding(10)
                 .overlay(alignment: .top) {
@@ -1061,7 +1384,7 @@ private struct FullscreenDiffReview: View {
                         mode = item
                     } label: {
                         Text(item.rawValue)
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
                             .foregroundStyle(mode == item ? ForgeDesign.paper : ForgeDesign.ink)
                             .frame(width: 92)
                             .padding(.vertical, 10)
@@ -1075,7 +1398,7 @@ private struct FullscreenDiffReview: View {
 
                 if let activePath {
                     Text(activePath)
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .font(.custom("JetBrains Mono", fixedSize: 11).weight(.bold))
                         .lineLimit(1)
                         .padding(.horizontal, 10)
                 }
@@ -1123,13 +1446,13 @@ private struct FullscreenDiffReview: View {
             .disabled(selectedHunkIndex >= selectedHunkCount - 1 || selectedHunkCount == 0)
 
             Text(selectedHunkCount == 0 ? "NO HUNKS" : "HUNK \(selectedHunkIndex + 1)/\(selectedHunkCount)")
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
                 .foregroundStyle(ForgeDesign.muted)
 
             Spacer()
 
             Text("THIS FILE:")
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
                 .foregroundStyle(ForgeDesign.muted)
 
             Button(selectedFileDecision?.decision == "Approved" ? "✓ APPROVED" : "✓ LOOKS GOOD") {
@@ -1155,7 +1478,7 @@ private struct FullscreenDiffReview: View {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("WHY THIS CHANGE")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
                         .foregroundStyle(ForgeDesign.muted)
 
                     Text(selectedRationale)
@@ -1167,7 +1490,7 @@ private struct FullscreenDiffReview: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("VALIDATION EVIDENCE")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
                         .foregroundStyle(ForgeDesign.muted)
 
                     if fileTestEvidence.isEmpty && taskWideTestEvidence.isEmpty {
@@ -1176,24 +1499,24 @@ private struct FullscreenDiffReview: View {
                             .foregroundStyle(ForgeDesign.muted)
                     } else {
                         Text(fileTestEvidence.isEmpty ? "FILE-SPECIFIC  NONE RECORDED" : "FILE-SPECIFIC")
-                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
                             .foregroundStyle(fileTestEvidence.isEmpty ? ForgeDesign.warning : ForgeDesign.success)
 
                         ForEach(Array(fileTestEvidence.prefix(4).enumerated()), id: \.offset) { _, evidence in
                             Text(evidence)
-                                .font(.caption.monospaced())
+                                .font(.custom("JetBrains Mono", fixedSize: 11))
                                 .foregroundStyle(ForgeDesign.ink)
                                 .textSelection(.enabled)
                         }
 
                         if !taskWideTestEvidence.isEmpty {
                             Text("TASK-WIDE — NOT CLAIMED AS FILE COVERAGE")
-                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
                                 .foregroundStyle(ForgeDesign.muted)
 
                             ForEach(Array(taskWideTestEvidence.prefix(3).enumerated()), id: \.offset) { _, evidence in
                                 Text(evidence)
-                                    .font(.caption2.monospaced())
+                                    .font(.custom("JetBrains Mono", fixedSize: 9))
                                     .foregroundStyle(ForgeDesign.muted)
                                     .textSelection(.enabled)
                             }
@@ -1212,7 +1535,7 @@ private struct FullscreenDiffReview: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("FILE REVIEW")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
                         .foregroundStyle(ForgeDesign.muted)
 
                     if let selectedFile {
@@ -1531,7 +1854,7 @@ private struct CompactCommitHandoffCard: View {
         VStack(alignment: .leading, spacing: 9) {
             HStack {
                 Text("LOCAL COMMIT")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
                     .foregroundStyle(ForgeDesign.muted)
                 Spacer()
                 if let preview {
@@ -1544,14 +1867,14 @@ private struct CompactCommitHandoffCard: View {
 
             if let result = workspace.gitCommitResult(for: task.id) {
                 Text("✓ \(result.shortHash) · \(result.messageTitle)")
-                    .font(.system(.caption, design: .monospaced).weight(.bold))
+                    .font(.custom("JetBrains Mono", fixedSize: 11).weight(.bold))
                     .textSelection(.enabled)
                 Text(result.summary)
                     .font(.caption)
                     .foregroundStyle(ForgeDesign.muted)
             } else if let preview {
                 Text(preview.suggestedTitle)
-                    .font(.system(.caption, design: .monospaced).weight(.bold))
+                    .font(.custom("JetBrains Mono", fixedSize: 11).weight(.bold))
                     .textSelection(.enabled)
                 Text("\(preview.includedFiles.count) files · \(preview.validationSummary)")
                     .font(.caption)
@@ -1620,7 +1943,7 @@ private struct DiffReviewFileRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             Text(statusToken)
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
                 .foregroundStyle(ForgeDesign.ink)
                 .frame(width: 24)
                 .padding(.vertical, 3)
@@ -1629,7 +1952,7 @@ private struct DiffReviewFileRow: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(file.path)
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 11).weight(.bold))
                     .foregroundStyle(ForgeDesign.ink)
                     .lineLimit(2)
 
@@ -1639,7 +1962,7 @@ private struct DiffReviewFileRow: View {
                         Text("+\(additions) -\(deletions)")
                     }
                 }
-                .font(.system(size: 9, design: .monospaced))
+                .font(.custom("JetBrains Mono", fixedSize: 9))
                 .foregroundStyle(ForgeDesign.muted)
                 .lineLimit(1)
             }
@@ -1679,46 +2002,123 @@ private struct DiffReviewFileRow: View {
 }
 
 private struct AgentTestsTab: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
+
     var task: ForgeTask
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                if task.taskCommandRuns.isEmpty && task.validationRuns.isEmpty && task.commandRerunEvidence.isEmpty {
-                    EmptyTerminalMessage(title: "NO TEST RUNS YET", message: "Approved checks and command output will appear here as the agent runs.")
-                } else {
-                    ForEach(task.commandRerunEvidence.reversed()) { evidence in
-                        CommandRerunEvidenceCard(
-                            evidence: evidence,
-                            sourceRun: taskCommandRun(for: evidence.sourceTaskCommandRunID),
-                            repairBrief: validationRepairBrief(for: evidence.validationRepairBriefID),
-                            rerunRun: taskCommandRun(for: evidence.rerunTaskCommandRunID)
-                        )
+        VStack(spacing: 0) {
+            testsControlStrip
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    if task.taskCommandRuns.isEmpty && task.validationRuns.isEmpty && task.commandRerunEvidence.isEmpty {
+                        EmptyTerminalMessage(title: "NO TEST RUNS YET", message: "Approved checks and command output will appear here as the agent runs.")
+                    } else {
+                        ForEach(task.commandRerunEvidence.reversed()) { evidence in
+                            CommandRerunEvidenceCard(
+                                evidence: evidence,
+                                sourceRun: taskCommandRun(for: evidence.sourceTaskCommandRunID),
+                                repairBrief: validationRepairBrief(for: evidence.validationRepairBriefID),
+                                rerunRun: taskCommandRun(for: evidence.rerunTaskCommandRunID)
+                            )
+                        }
+
+                        ForEach(task.taskCommandRuns.reversed()) { run in
+                            TaskCommandTerminalCard(run: run)
+                        }
+
+                        ForEach(task.validationRuns.reversed()) { run in
+                            TestRunTerminalCard(run: run)
+                        }
                     }
 
-                    ForEach(task.taskCommandRuns.reversed()) { run in
-                        TaskCommandTerminalCard(run: run)
-                    }
-
-                    ForEach(task.validationRuns.reversed()) { run in
-                        TestRunTerminalCard(run: run)
+                    if !task.validationRepairBriefs.isEmpty {
+                        ForEach(task.validationRepairBriefs.reversed()) { brief in
+                            ValidationRepairBriefCard(
+                                brief: brief,
+                                validationRun: validationRun(for: brief.validationRunID),
+                                taskCommandRun: taskCommandRun(for: brief.taskCommandRunID),
+                                isCurrentProposalSource: task.editProposal?.validationRepairBriefID == brief.id
+                            )
+                        }
                     }
                 }
-
-                if !task.validationRepairBriefs.isEmpty {
-                    ForEach(task.validationRepairBriefs.reversed()) { brief in
-                        ValidationRepairBriefCard(
-                            brief: brief,
-                            validationRun: validationRun(for: brief.validationRunID),
-                            taskCommandRun: taskCommandRun(for: brief.taskCommandRunID),
-                            isCurrentProposalSource: task.editProposal?.validationRepairBriefID == brief.id
-                        )
-                    }
-                }
+                .padding(14)
             }
-            .padding(14)
         }
-        .forgeCard(shadow: false)
+        .background(ForgeDesign.paper)
+    }
+
+    private var testsControlStrip: some View {
+        HStack(spacing: 8) {
+            Text("APPROVED COMMANDS")
+                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
+                .foregroundStyle(ForgeDesign.muted)
+            Spacer()
+
+            if let activeRun {
+                Button(workspace.isCancellingTaskCommand(runID: activeRun.id) ? "CANCELLING…" : "✕ CANCEL COMMAND") {
+                    workspace.cancelTaskCommand(for: task, run: activeRun)
+                }
+                .buttonStyle(ForgeSecondaryButtonStyle())
+                .disabled(workspace.isCancellingTaskCommand(runID: activeRun.id))
+            } else if let readyEvidence {
+                Button(workspace.isRerunningRepairCommand(evidenceID: readyEvidence.id) ? "RERUNNING…" : "↻ RERUN SELF-FIX") {
+                    workspace.rerunRepairCommand(for: task, evidence: readyEvidence)
+                }
+                .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.accent, foreground: ForgeDesign.ink))
+                .disabled(workspace.isRerunningRepairCommand(evidenceID: readyEvidence.id))
+            } else if let permissionToApprove {
+                Button(workspace.isApprovingValidationPreset(taskID: task.id, presetID: permissionToApprove.id) ? "APPROVING…" : "APPROVE \(permissionToApprove.preset.name)") {
+                    workspace.approveValidationPreset(for: task, presetID: permissionToApprove.id)
+                }
+                .buttonStyle(ForgeSecondaryButtonStyle())
+                .disabled(workspace.isApprovingValidationPreset(taskID: task.id, presetID: permissionToApprove.id))
+            } else if let runnableCommand {
+                Button(workspace.isRunningTaskCommand(taskID: task.id) ? "RUNNING…" : "RUN \(runnableCommand.command.name)") {
+                    workspace.runTaskCommand(for: task, commandID: runnableCommand.id)
+                }
+                .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.accent, foreground: ForgeDesign.ink))
+                .disabled(workspace.isRunningTaskCommand(taskID: task.id))
+            }
+
+            if canGenerateSelfFix {
+                Button(workspace.isGeneratingValidationRepairProposal(taskID: task.id) ? "GENERATING…" : "GENERATE SELF-FIX") {
+                    workspace.generateValidationRepairProposal(for: task)
+                }
+                .buttonStyle(ForgeSecondaryButtonStyle())
+                .disabled(workspace.isGeneratingValidationRepairProposal(taskID: task.id))
+            }
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 46)
+        .background(Color.white)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+        }
+    }
+
+    private var activeRun: TaskCommandRun? {
+        task.taskCommandRuns.reversed().first { $0.status == "Running" }
+    }
+
+    private var readyEvidence: CommandRerunEvidence? {
+        task.commandRerunEvidence.reversed().first { $0.status == "Ready" }
+    }
+
+    private var permissionToApprove: ValidationPresetPermission? {
+        workspace.validationPermissions(for: task.id).first { $0.canApprove }
+    }
+
+    private var runnableCommand: TaskCommandPermission? {
+        workspace.taskCommandPermissions(for: task.id).first { $0.canRun }
+    }
+
+    private var canGenerateSelfFix: Bool {
+        guard let latestBrief = task.validationRepairBriefs.last else { return false }
+        return task.editProposal?.validationRepairBriefID != latestBrief.id &&
+            task.editProposal?.status != "Proposed"
     }
 
     private func validationRun(for id: String?) -> ValidationRun? {
@@ -1753,10 +2153,10 @@ private struct EmptyTerminalMessage: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
                 .foregroundStyle(ForgeDesign.accent)
             Text(message)
-                .font(.system(.caption, design: .monospaced))
+                .font(.custom("JetBrains Mono", fixedSize: 11))
                 .foregroundStyle(ForgeDesign.paper)
         }
         .padding(14)
@@ -1772,42 +2172,42 @@ private struct TaskCommandTerminalCard: View {
         VStack(alignment: .leading, spacing: 9) {
             HStack {
                 Text("\(run.name.uppercased()) / \(run.status.uppercased())")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
                     .foregroundStyle(statusColor)
                 Spacer()
                 Text(run.endedAt ?? run.startedAt)
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 10))
                     .foregroundStyle(Color.gray)
             }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("$ \(run.command)")
-                    .font(.system(.caption, design: .monospaced).weight(.bold))
+                    .font(.custom("JetBrains Mono", fixedSize: 11).weight(.bold))
                     .foregroundStyle(ForgeDesign.accent)
                 if let cwd = run.cwd {
                     Text("cwd: \(cwd)")
-                        .font(.system(size: 10, design: .monospaced))
+                        .font(.custom("JetBrains Mono", fixedSize: 10))
                         .foregroundStyle(Color.gray)
                 }
                 Text(run.presetName ?? "Approved command")
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 10))
                     .foregroundStyle(Color.gray)
             }
 
             if run.outputChunks.isEmpty {
                 Text(run.outputSummary)
-                    .font(.system(.caption, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 11))
                     .foregroundStyle(ForgeDesign.paper)
                     .textSelection(.enabled)
             } else {
                 ForEach(run.outputChunks) { chunk in
                     HStack(alignment: .top, spacing: 8) {
                         Text(chunk.stream.uppercased())
-                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
                             .foregroundStyle(streamColor(chunk.stream))
                             .frame(width: 48, alignment: .leading)
                         Text(chunk.text.trimmingCharacters(in: .newlines))
-                            .font(.system(.caption, design: .monospaced))
+                            .font(.custom("JetBrains Mono", fixedSize: 11))
                             .foregroundStyle(ForgeDesign.paper)
                             .textSelection(.enabled)
                     }
@@ -1855,18 +2255,18 @@ private struct CommandRerunEvidenceCard: View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Label("SELF-FIX RERUN / \(evidence.status.uppercased())", systemImage: statusSystemImage)
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
                     .foregroundStyle(statusColor)
 
                 Spacer(minLength: 8)
 
                 Text(evidence.updatedAt)
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 10))
                     .foregroundStyle(Color.gray)
             }
 
             Text(evidence.summary)
-                .font(.system(.caption, design: .monospaced))
+                .font(.custom("JetBrains Mono", fixedSize: 11))
                 .foregroundStyle(ForgeDesign.paper)
                 .textSelection(.enabled)
 
@@ -1904,11 +2304,11 @@ private struct CommandRerunEvidenceCard: View {
     private func evidenceLine(title: String, value: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Text(title.uppercased())
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
                 .foregroundStyle(ForgeDesign.muted)
                 .frame(width: 54, alignment: .leading)
             Text(value)
-                .font(.system(.caption, design: .monospaced))
+                .font(.custom("JetBrains Mono", fixedSize: 11))
                 .foregroundStyle(ForgeDesign.paper)
                 .lineLimit(3)
                 .textSelection(.enabled)
@@ -1953,26 +2353,26 @@ private struct TestRunTerminalCard: View {
         VStack(alignment: .leading, spacing: 9) {
             HStack {
                 Text("\(run.presetName.uppercased()) / \(run.status.uppercased())")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
                     .foregroundStyle(statusColor)
                 Spacer()
                 Text(run.endedAt ?? run.startedAt)
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 10))
                     .foregroundStyle(Color.gray)
             }
 
             Text(run.summary)
-                .font(.system(.caption, design: .monospaced))
+                .font(.custom("JetBrains Mono", fixedSize: 11))
                 .foregroundStyle(ForgeDesign.paper)
                 .textSelection(.enabled)
 
             ForEach(run.commands) { command in
                 VStack(alignment: .leading, spacing: 4) {
                     Text("$ \(command.command)")
-                        .font(.system(.caption, design: .monospaced).weight(.bold))
+                        .font(.custom("JetBrains Mono", fixedSize: 11).weight(.bold))
                         .foregroundStyle(ForgeDesign.accent)
                     Text(command.outputSummary)
-                        .font(.system(.caption, design: .monospaced))
+                        .font(.custom("JetBrains Mono", fixedSize: 11))
                         .foregroundStyle(ForgeDesign.paper)
                         .textSelection(.enabled)
                 }
@@ -2011,13 +2411,13 @@ private struct TaskConversationPanel: View {
                     .fill(clarificationQuestions.isEmpty ? ForgeDesign.accent : ForgeDesign.warning)
                     .frame(width: 7, height: 7)
                 Text("SESSION")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
                 Text(conversationState)
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
                     .foregroundStyle(clarificationQuestions.isEmpty ? ForgeDesign.muted : ForgeDesign.danger)
                 Spacer()
                 Text(task.messages.last?.provider?.model ?? "GUARDRAILS ON")
-                    .font(.system(size: 8, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 8))
                     .foregroundStyle(ForgeDesign.muted)
                     .lineLimit(1)
             }
@@ -2041,7 +2441,7 @@ private struct TaskConversationPanel: View {
                     }
 
                     if let revision = task.planRevisions.last {
-                        EmbeddedConversationPlanCard(task: task, revision: revision)
+                        EmbeddedConversationPlanCard(task: task, revision: revision, draft: $draft)
                     }
                 }
                 .padding(14)
@@ -2049,43 +2449,25 @@ private struct TaskConversationPanel: View {
             }
             .background(Color.white)
 
-            VStack(spacing: 0) {
-                HStack(alignment: .bottom, spacing: 0) {
-                    TextField(replyPlaceholder, text: $draft, axis: .vertical)
-                        .lineLimit(2...5)
-                        .textFieldStyle(.plain)
-                        .font(.callout.monospaced())
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
-
-                    Button {
-                        send()
-                    } label: {
-                        Text(sendButtonTitle.uppercased())
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            .foregroundStyle(ForgeDesign.accent)
-                            .frame(minWidth: 76, minHeight: 46)
-                            .background(ForgeDesign.ink)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!canSend)
-                }
-
-                if task.planRevisions.last != nil {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Button {
-                            workspace.generatePlanRevision(for: task)
-                        } label: {
-                            Label(planRevisionButtonTitle, systemImage: "arrow.triangle.2.circlepath")
-                        }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
-                        .foregroundStyle(ForgeDesign.muted)
-                        .disabled(!canGeneratePlanRevision)
-                    }
+            HStack(alignment: .bottom, spacing: 0) {
+                TextField(replyPlaceholder, text: $draft, axis: .vertical)
+                    .lineLimit(2...5)
+                    .textFieldStyle(.plain)
+                    .font(.custom("JetBrains Mono", fixedSize: 13))
                     .padding(.horizontal, 14)
-                    .padding(.bottom, 9)
+                    .padding(.vertical, 12)
+
+                Button {
+                    send()
+                } label: {
+                    Text("\(sendButtonTitle.uppercased()) ↵")
+                        .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
+                        .foregroundStyle(ForgeDesign.accent)
+                        .frame(minWidth: 82, minHeight: 46)
+                        .background(ForgeDesign.ink)
                 }
+                .buttonStyle(.plain)
+                .disabled(!canSend)
             }
             .background(Color.white)
             .overlay(alignment: .top) {
@@ -2107,20 +2489,6 @@ private struct TaskConversationPanel: View {
 
     private var sendButtonTitle: String {
         workspace.isSendingTaskMessage(taskID: task.id) ? "Sending" : "Send"
-    }
-
-    private var canGeneratePlanRevision: Bool {
-        !workspace.isGeneratingPlanRevision(taskID: task.id) &&
-            clarificationQuestions.isEmpty &&
-            task.editProposal?.status != "Proposed" &&
-            task.editProposal?.status != "Applied"
-    }
-
-    private var planRevisionButtonTitle: String {
-        if !clarificationQuestions.isEmpty {
-            return "Answer Clarification First"
-        }
-        return workspace.isGeneratingPlanRevision(taskID: task.id) ? "Updating Plan" : "Update Plan From Conversation"
     }
 
     private var clarificationQuestions: [String] {
@@ -2151,12 +2519,13 @@ private struct EmbeddedConversationPlanCard: View {
 
     var task: ForgeTask
     var revision: PlanRevision
+    @Binding var draft: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack {
                 Text("PLAN")
-                    .font(.system(size: 9, weight: .black, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 9).weight(.black))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
                     .background(ForgeDesign.accent)
@@ -2167,20 +2536,27 @@ private struct EmbeddedConversationPlanCard: View {
                 Spacer()
             }
 
-            ForEach(revision.steps.prefix(6)) { step in
-                HStack(alignment: .top, spacing: 7) {
-                    Text(step.status == "Done" ? "✓" : step.status == "Active" ? "▸" : "○")
-                        .font(.caption.monospaced().weight(.bold))
-                        .foregroundStyle(step.status == "Done" ? ForgeDesign.success : ForgeDesign.accent)
+            ForEach(Array(revision.steps.prefix(6).enumerated()), id: \.element.id) { index, step in
+                HStack(alignment: .center, spacing: 10) {
+                    Text("\(index + 1)")
+                        .font(.custom("JetBrains Mono", fixedSize: 9).weight(.black))
+                        .frame(width: 20, height: 20)
+                        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
                     VStack(alignment: .leading, spacing: 1) {
                         Text(step.title)
-                            .font(.caption.weight(.semibold))
+                            .font(.custom("JetBrains Mono", fixedSize: 11).weight(.bold))
                         Text(step.summary)
-                            .font(.caption2)
+                            .font(.custom("JetBrains Mono", fixedSize: 9))
                             .foregroundStyle(ForgeDesign.muted)
                             .lineLimit(2)
                     }
+                    Spacer(minLength: 6)
+                    Button("✎ EDIT") {
+                        draft = "Change plan step \(index + 1) — \(step.title): "
+                    }
+                    .buttonStyle(ForgeSecondaryButtonStyle())
                 }
+                .padding(.vertical, 3)
             }
 
             HStack(spacing: 12) {
@@ -2191,18 +2567,29 @@ private struct EmbeddedConversationPlanCard: View {
                     Text("\(areas.count) area(s)")
                 }
             }
-            .font(.system(size: 9, weight: .bold, design: .monospaced))
+            .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
             .foregroundStyle(ForgeDesign.muted)
 
-            Button {
-                workspace.approvePlan(for: task)
-            } label: {
-                Label(approveTitle, systemImage: "play.fill")
-                    .frame(maxWidth: .infinity)
+            HStack(spacing: 10) {
+                Button {
+                    workspace.generatePlanRevision(for: task)
+                } label: {
+                    Text(workspace.isGeneratingPlanRevision(taskID: task.id) ? "REGENERATING…" : "↻ REGENERATE")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ForgeSecondaryButtonStyle())
+                .disabled(!canRegenerate)
+
+                Button {
+                    workspace.approvePlan(for: task)
+                } label: {
+                    Label(approveTitle, systemImage: "play.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.accent, foreground: ForgeDesign.ink))
+                .disabled(!canApprove)
+                .keyboardShortcut(.return, modifiers: [.command])
             }
-            .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.accent, foreground: ForgeDesign.ink))
-            .disabled(!canApprove)
-            .keyboardShortcut(.return, modifiers: [.command])
         }
         .padding(11)
         .background(Color.white)
@@ -2218,6 +2605,13 @@ private struct EmbeddedConversationPlanCard: View {
 
     private var canApprove: Bool {
         task.status == "Human Review" && task.currentPhase == "Plan Review" && !approved && !workspace.isApprovingPlan(taskID: task.id)
+    }
+
+    private var canRegenerate: Bool {
+        !workspace.isGeneratingPlanRevision(taskID: task.id) &&
+            task.messages.last(where: { $0.role == "Assistant" })?.intentBrief?.openQuestions.isEmpty != false &&
+            task.editProposal?.status != "Proposed" &&
+            task.editProposal?.status != "Applied"
     }
 
     private var approveTitle: String {
@@ -2237,15 +2631,6 @@ private struct TaskMessageRow: View {
             }
 
             VStack(alignment: .leading, spacing: 7) {
-                HStack {
-                    Text(message.role.uppercased())
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
-                    Spacer()
-                    Text(shortTime(message.createdAt))
-                        .font(.system(size: 8, design: .monospaced))
-                        .opacity(0.65)
-                }
-
                 if let intentBrief = message.intentBrief {
                     IntentBriefView(brief: intentBrief)
                 } else {
@@ -2257,7 +2642,7 @@ private struct TaskMessageRow: View {
 
                 if let provider = message.provider {
                     Text("\(provider.name) · \(provider.model)")
-                        .font(.system(size: 8, design: .monospaced))
+                        .font(.custom("JetBrains Mono", fixedSize: 8))
                         .opacity(0.65)
                 }
 
@@ -2300,12 +2685,18 @@ private struct TaskMessageRow: View {
     }
 
     private var messageAvatar: some View {
-        Text(message.role == "User" ? "YOU" : "F")
-            .font(.system(size: 8, weight: .black, design: .monospaced))
-            .foregroundStyle(ForgeDesign.ink)
-            .frame(width: 28, height: 28)
-            .background(message.role == "User" ? ForgeDesign.accent : Color.white)
-            .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+        Group {
+            if message.role == "User" {
+                Text("YOU")
+                    .font(.custom("JetBrains Mono", fixedSize: 8).weight(.black))
+                    .foregroundStyle(ForgeDesign.ink)
+                    .frame(width: 28, height: 28)
+                    .background(ForgeDesign.accent)
+                    .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+            } else {
+                ForgeLogo(size: 28)
+            }
+        }
     }
 
     private func shortTime(_ value: String) -> String {
@@ -2445,7 +2836,7 @@ private struct ReviewDiffDocumentView: View {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(parsed.metadata.prefix(12).enumerated()), id: \.offset) { _, line in
                         Text(line)
-                            .font(.system(size: 10, design: .monospaced))
+                            .font(.custom("JetBrains Mono", fixedSize: 10))
                             .foregroundStyle(Color.white.opacity(0.46))
                             .padding(.horizontal, 12)
                             .padding(.vertical, 2)
@@ -2471,7 +2862,7 @@ private struct ReviewDiffDocumentView: View {
 
                     if parsed.hunks.isEmpty {
                         Text("NO TEXT HUNKS IN THIS DIFF")
-                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .font(.custom("JetBrains Mono", fixedSize: 11).weight(.bold))
                             .foregroundStyle(Color.white.opacity(0.55))
                             .padding(18)
                     }
@@ -2502,7 +2893,7 @@ private struct ReviewDiffHunkHeader: View {
             Text(hunk.header)
                 .lineLimit(1)
         }
-        .font(.system(size: 10, design: .monospaced))
+        .font(.custom("JetBrains Mono", fixedSize: 10))
         .foregroundStyle(isSelected ? ForgeDesign.ink : Color.white.opacity(0.72))
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
@@ -2530,7 +2921,7 @@ private struct ReviewUnifiedHunkView: View {
                 Text(line.text.isEmpty ? " " : line.text)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .font(.system(size: 11, design: .monospaced))
+            .font(.custom("JetBrains Mono", fixedSize: 11))
             .foregroundStyle(line.foreground)
             .padding(.horizontal, 8)
             .padding(.vertical, 2)
@@ -2551,7 +2942,7 @@ private struct ReviewSplitHunkView: View {
                 Text("NEW")
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .font(.system(size: 9, weight: .black, design: .monospaced))
+            .font(.custom("JetBrains Mono", fixedSize: 9).weight(.black))
             .foregroundStyle(Color.white.opacity(0.5))
             .padding(.horizontal, 12)
             .padding(.vertical, 5)
@@ -2582,7 +2973,7 @@ private struct ReviewSplitCell: View {
                 .foregroundStyle(foreground)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .font(.system(size: 11, design: .monospaced))
+        .font(.custom("JetBrains Mono", fixedSize: 11))
         .padding(.horizontal, 8)
         .padding(.vertical, 2)
         .background(background)
@@ -2802,7 +3193,7 @@ private struct GitDiffCard: View {
             }
 
             Text(path)
-                .font(.caption2.monospaced())
+                .font(.custom("JetBrains Mono", fixedSize: 9))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
 
@@ -2844,15 +3235,15 @@ private struct GitDiffCard: View {
 
                         if !diff.diff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             Text(diff.diff)
-                                .font(.caption2.monospaced())
+                                .font(.custom("JetBrains Mono", fixedSize: 9))
                                 .foregroundStyle(.secondary)
                                 .textSelection(.enabled)
                         }
                     }
                     .padding(8)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.background)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .background(Color.white)
+                    .overlay(Rectangle().stroke(ForgeDesign.divider, lineWidth: 1))
                 }
             } else {
                 Label(isLoading ? "Loading diff..." : "Select Load to inspect this file.", systemImage: isLoading ? "hourglass" : "doc.text.magnifyingglass")
@@ -2861,8 +3252,8 @@ private struct GitDiffCard: View {
             }
         }
         .padding(8)
-        .background(.quaternary)
-        .clipShape(RoundedRectangle(cornerRadius: 7))
+        .background(ForgeDesign.paper)
+        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
     }
 
     private func shouldRenderSideBySide(_ diff: GitFileDiff) -> Bool {
@@ -3003,8 +3394,7 @@ private struct DiffLineRow: View {
                 .padding(.vertical, 2)
                 .background(newBackground)
         }
-        .font(.caption2.monospaced())
-        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .font(.custom("JetBrains Mono", fixedSize: 9))
     }
 
     @ViewBuilder
@@ -3075,8 +3465,8 @@ private struct ValidationRepairBriefCard: View {
                     .font(.caption2.weight(.medium))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
-                    .background(.quaternary)
-                    .clipShape(RoundedRectangle(cornerRadius: 5))
+                    .background(ForgeDesign.paper)
+                    .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1))
             }
 
             if let validationRun {
@@ -3129,13 +3519,13 @@ private struct ValidationRepairBriefCard: View {
                 Text("Follow-up Prompt")
                     .font(.caption.weight(.semibold))
                 Text(brief.followUpPrompt)
-                    .font(.caption.monospaced())
+                    .font(.custom("JetBrains Mono", fixedSize: 11))
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
                     .padding(8)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.quaternary)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .background(ForgeDesign.paper)
+                    .overlay(Rectangle().stroke(ForgeDesign.divider, lineWidth: 1))
             }
 
             Text(brief.generatedAt)
@@ -3143,8 +3533,8 @@ private struct ValidationRepairBriefCard: View {
                 .foregroundStyle(.tertiary)
         }
         .padding(10)
-        .background(.background)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(Color.white)
+        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
     }
 }
 
@@ -3166,8 +3556,8 @@ private struct EditProposalFileChangeCard: View {
                     .font(.caption2.weight(.medium))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
-                    .background(.quaternary)
-                    .clipShape(RoundedRectangle(cornerRadius: 5))
+                    .background(ForgeDesign.paper)
+                    .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1))
 
                 if let validationResult {
                     ValidationStatusBadge(result: validationResult)
@@ -3200,16 +3590,16 @@ private struct EditProposalFileChangeCard: View {
             }
 
             Text(change.diffPreview)
-                .font(.caption.monospaced())
+                .font(.custom("JetBrains Mono", fixedSize: 11))
                 .textSelection(.enabled)
                 .padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.quaternary)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .background(ForgeDesign.paper)
+                .overlay(Rectangle().stroke(ForgeDesign.divider, lineWidth: 1))
         }
         .padding(10)
-        .background(.background)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(Color.white)
+        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
     }
 
     private var changeSystemImage: String {
@@ -3333,7 +3723,7 @@ private struct ProposalTransactionEvidenceCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("CHANGESET RECOVERY")
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
                 .foregroundStyle(ForgeDesign.muted)
 
             if let transaction = proposal.applyTransaction {
@@ -3348,7 +3738,7 @@ private struct ProposalTransactionEvidenceCard: View {
             let verifiedRollbackCount = proposal.appliedFileChanges?.filter { $0.rollbackVerifiedAt != nil }.count ?? 0
             if verifiedApplyCount > 0 || verifiedRollbackCount > 0 {
                 Text("HASH VERIFIED  APPLY \(verifiedApplyCount)  /  ROLLBACK \(verifiedRollbackCount)")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
                     .foregroundStyle(ForgeDesign.muted)
             }
         }
@@ -3364,14 +3754,14 @@ private struct ProposalTransactionEvidenceCard: View {
                     .font(.caption.weight(.bold))
                 Spacer()
                 Text(transaction.status.uppercased())
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
                     .foregroundStyle(transactionColor(transaction))
             }
             Text(transaction.summary)
                 .font(.caption)
                 .foregroundStyle(ForgeDesign.ink)
             Text("\(transaction.paths.count) file(s) / \(transaction.verifiedAt == nil ? "verification pending" : "hash verified")")
-                .font(.caption2.monospaced())
+                .font(.custom("JetBrains Mono", fixedSize: 9))
                 .foregroundStyle(ForgeDesign.muted)
             if let recoverySummary = transaction.recoverySummary {
                 Text(recoverySummary)
@@ -3405,23 +3795,5 @@ private struct ProposalTransactionEvidenceCard: View {
         default:
             return ForgeDesign.accent
         }
-    }
-}
-
-private struct Panel<Content: View>: View {
-    var title: String
-    var systemImage: String
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label(title, systemImage: systemImage)
-                .font(.headline)
-            content
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.thinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }

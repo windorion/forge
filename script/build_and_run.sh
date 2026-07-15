@@ -27,10 +27,15 @@ BUILD_BINARY="$(swift build --show-bin-path)/$APP_NAME"
 rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_MACOS"
 mkdir -p "$RUNTIME_RESOURCE"
+mkdir -p "$APP_RESOURCES/Fonts"
 cp "$BUILD_BINARY" "$APP_BINARY"
 chmod +x "$APP_BINARY"
 cp "$ROOT_DIR/runtime/package.json" "$RUNTIME_RESOURCE/package.json"
 cp -R "$ROOT_DIR/runtime/dist" "$RUNTIME_RESOURCE/dist"
+cp "$ROOT_DIR/design_handoff_forge/assets/forge-logo.png" "$APP_RESOURCES/forge-logo.png"
+cp "$ROOT_DIR/apps/macos/Resources/Fonts/JetBrainsMono-Regular.ttf" "$APP_RESOURCES/Fonts/JetBrainsMono-Regular.ttf"
+cp "$ROOT_DIR/apps/macos/Resources/Fonts/JetBrainsMono-Bold.ttf" "$APP_RESOURCES/Fonts/JetBrainsMono-Bold.ttf"
+cp "$ROOT_DIR/apps/macos/Resources/Fonts/OFL.txt" "$APP_RESOURCES/Fonts/OFL.txt"
 
 cat >"$INFO_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -43,6 +48,10 @@ cat >"$INFO_PLIST" <<PLIST
   <string>$BUNDLE_ID</string>
   <key>CFBundleName</key>
   <string>$BUNDLE_NAME</string>
+  <key>CFBundleShortVersionString</key>
+  <string>0.4.2</string>
+  <key>CFBundleVersion</key>
+  <string>42</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>LSMinimumSystemVersion</key>

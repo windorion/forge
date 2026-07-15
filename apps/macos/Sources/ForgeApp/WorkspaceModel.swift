@@ -7,8 +7,8 @@ final class WorkspaceModel: ObservableObject {
     static let expectedRuntimeVersion = "0.1.0"
     nonisolated private static let runtimeProcessOutputLimit = 12_000
 
-    @Published var tasks: [ForgeTask] = [.sample]
-    @Published var selectedTaskID: ForgeTask.ID? = ForgeTask.sample.id
+    @Published var tasks: [ForgeTask] = []
+    @Published var selectedTaskID: ForgeTask.ID?
     @Published var runtimeHealth: RuntimeHealth?
     @Published var runtimeState: RuntimeConnectionState = .unchecked
     @Published var runtimeLastCheckedAt: Date?
@@ -1700,12 +1700,11 @@ final class WorkspaceModel: ObservableObject {
 
     private func refreshTasks() async throws {
         let remoteTasks = try await runtime.listTasks()
-        if remoteTasks.isEmpty {
-            return
-        }
-
         tasks = remoteTasks
-        selectedTaskID = selectedTaskID ?? remoteTasks.first?.id
+        if let selectedTaskID,
+           !remoteTasks.contains(where: { $0.id == selectedTaskID }) {
+            self.selectedTaskID = nil
+        }
     }
 
     private func refreshValidationPresets() async throws {

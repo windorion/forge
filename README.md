@@ -41,17 +41,18 @@ should no longer feel like a generic workflow dashboard.
 
 Last updated: 2026-07-14
 
-Direction reset: the trust/runtime foundation is strong, but the next milestone
-is now complete: the Coding-Agent Demo V0 implements the documented
-new-task, clarification, plan-approval, live-session, and full diff-review
-acceptance path from `design_handoff_forge/`.
+The trust/runtime foundation is strong and the Coding-Agent Demo V0 functional
+acceptance path is complete. Strict visual closeout is still in progress: the
+primary new-task, clarification/plan, live-session, and diff-review screens are
+being matched against the latest `design_handoff_forge/` references.
 
 Implemented today:
 
 - SwiftUI macOS app shell.
-- First-pass coding-agent session UI in the macOS app: neo-brutalist task
-  queue, new-task empty state, live agent stream, plan progress, Log/Diff/Tests
-  tabs, compact plan gate, and action rail based on `design_handoff_forge`.
+- State-driven coding-agent session UI in the macOS app: the `1a` new-task
+  composer, `1b` reviewable plan, `32a` clarification/plan workspace, `14a`
+  running task shell, and mutually exclusive Log/Diff/Tests surfaces based on
+  `design_handoff_forge`.
 - First usable `10a`-style full-screen diff review surface with a changed-file
   tree, main diff pane, why-this-change reasoning, test evidence, and
   apply/request-change actions backed by the existing review gates.
@@ -203,13 +204,16 @@ Product-readiness estimate:
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
 | Trust/runtime foundation | 80-85% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, diagnostics, and smoke coverage are real. |
-| Coding-agent demo V0 | 100% | All documented V0 acceptance criteria are implemented and smoke-covered: clarification, evidence-rich plan, Approve & Run, bounded live loop, reviewed source lifecycle, commands/self-fix, aligned diff, recovery, and local commit preparation/creation. |
+| Coding-agent demo V0 behavior | 100% | The documented functional acceptance path is implemented and smoke-covered. |
+| Primary V0 handoff UI | 95-98% | The five primary screens are implemented; exact font and screenshot-based pixel/interaction verification remain. |
+| Full handoff UI | 20-25% | The handoff HTML contains 43 named screens/states. Five primary screens are substantially implemented, several have only functional foundations, and most alpha/beta/v1 surfaces remain. |
 | Useful developer alpha | 50-60% | Forge can recover interrupted loops/transactions and apply guarded source create/modify/delete changes, but still needs broader autonomous tool use and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 | 15-20% | Needs native distribution, indexing, memory, MCP/GitHub, and product polish. |
 
-Short version: the Coding-Agent Demo V0 is complete; the next horizon is
-repeated real-repository success and alpha breadth.
+Short version: V0 behavior is complete, but the entire 43-screen product design
+is not. Alpha is the next cumulative horizon, followed by beta and then v1;
+v1 includes the completed requirements from every earlier milestone.
 
 ## Next TODO
 
