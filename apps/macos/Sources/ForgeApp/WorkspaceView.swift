@@ -95,6 +95,7 @@ private struct DiffReviewFile: Identifiable, Hashable {
 struct WorkspaceView: View {
     @EnvironmentObject private var workspace: WorkspaceModel
     @State private var recoveryDismissed = false
+    @State private var showCommandPalette = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -145,6 +146,24 @@ struct WorkspaceView: View {
         }
         .onChange(of: workspace.selectedTaskID) { _, taskID in
             workspace.refreshValidationPermissions(for: taskID)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .forgeToggleCommandPalette)) { _ in
+            showCommandPalette.toggle()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .forgeNewTask)) { _ in
+            workspace.selectedTaskID = nil
+            showCommandPalette = false
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .forgeSwitchRepository)) { _ in
+            showCommandPalette = false
+            workspace.connectRepository()
+        }
+        .overlay {
+            if showCommandPalette {
+                CommandPaletteView(isPresented: $showCommandPalette)
+                    .environmentObject(workspace)
+                    .transition(.opacity)
+            }
         }
         .background(
             WindowSizingView(
@@ -348,6 +367,245 @@ private struct WindowSizingView: NSViewRepresentable {
     }
 }
 
+private enum CommandPaletteAction: Hashable {
+    case task(ForgeTask.ID)
+    case newTask
+    case switchRepository
+    case refreshRuntime
+    case settings
+}
+
+private struct CommandPaletteItem: Identifiable, Hashable {
+    var id: String
+    var group: String
+    var glyph: String
+    var title: String
+    var metadata: String
+    var shortcut: String?
+    var action: CommandPaletteAction
+}
+
+private struct CommandPaletteView: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
+    @Binding var isPresented: Bool
+    @State private var query = ""
+    @State private var selectedIndex = 0
+    @FocusState private var searchFocused: Bool
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            ForgeDesign.ink.opacity(0.45)
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture { isPresented = false }
+
+            VStack(spacing: 0) {
+                HStack(spacing: 12) {
+                    Text("⌕")
+                        .font(ForgeDesign.mono(16, weight: .heavy))
+                        .foregroundStyle(ForgeDesign.muted)
+                    TextField("Search tasks and commands…", text: $query)
+                        .textFieldStyle(.plain)
+                        .font(ForgeDesign.mono(14))
+                        .focused($searchFocused)
+                    Text("ESC")
+                        .font(ForgeDesign.mono(9, weight: .bold))
+                        .foregroundStyle(ForgeDesign.muted)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .overlay(Rectangle().stroke(ForgeDesign.divider, lineWidth: 1.5))
+                }
+                .padding(.horizontal, 18)
+                .frame(height: 54)
+                .background(Color.white)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+                }
+
+                if visibleItems.isEmpty {
+                    VStack(spacing: 8) {
+                        Text("NO MATCHES")
+                            .font(ForgeDesign.mono(10, weight: .bold))
+                            .tracking(1)
+                        Text("Press ↵ to create a new task from “\(query)”")
+                            .font(ForgeDesign.mono(10))
+                            .foregroundStyle(ForgeDesign.muted)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 120)
+                    .background(ForgeDesign.paper)
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(groupNames, id: \.self) { group in
+                                Text(group)
+                                    .font(ForgeDesign.mono(9, weight: .bold))
+                                    .tracking(1)
+                                    .foregroundStyle(ForgeDesign.muted)
+                                    .padding(.horizontal, 18)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .frame(height: 32)
+                                    .background(ForgeDesign.paper)
+
+                                ForEach(Array(visibleItems.enumerated()).filter { $0.element.group == group }, id: \.element.id) { index, item in
+                                    Button {
+                                        execute(item)
+                                    } label: {
+                                        paletteRow(item, selected: index == selectedIndex)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 330)
+                    .background(ForgeDesign.paper)
+                }
+
+                HStack(spacing: 16) {
+                    Text("↑↓ navigate")
+                    Text("↵ open")
+                    Text("⌘↵ run")
+                    Spacer()
+                    Text("fuzzy across tasks and commands")
+                }
+                .font(ForgeDesign.mono(9.5))
+                .foregroundStyle(ForgeDesign.muted)
+                .padding(.horizontal, 18)
+                .frame(height: 40)
+                .background(Color(red: 247 / 255, green: 247 / 255, blue: 244 / 255))
+                .overlay(alignment: .top) {
+                    Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+                }
+            }
+            .frame(width: 620)
+            .background(ForgeDesign.paper)
+            .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+            .shadow(color: ForgeDesign.ink, radius: 0, x: 8, y: 8)
+            .padding(.top, 56)
+        }
+        .onAppear { searchFocused = true }
+        .onChange(of: query) { _, _ in selectedIndex = 0 }
+        .onKeyPress(.downArrow) {
+            moveSelection(1)
+            return .handled
+        }
+        .onKeyPress(.upArrow) {
+            moveSelection(-1)
+            return .handled
+        }
+        .onKeyPress(.return) {
+            executeSelection()
+            return .handled
+        }
+        .onExitCommand { isPresented = false }
+    }
+
+    private func paletteRow(_ item: CommandPaletteItem, selected: Bool) -> some View {
+        HStack(spacing: 12) {
+            Text(item.glyph)
+                .font(ForgeDesign.mono(11, weight: .heavy))
+                .foregroundStyle(selected ? ForgeDesign.ink : Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255))
+                .frame(width: 16)
+            Text(item.title)
+                .font(.system(size: 13, weight: selected ? .bold : .regular))
+                .lineLimit(1)
+            Spacer()
+            Text(item.metadata)
+                .font(ForgeDesign.mono(9, weight: selected ? .bold : .regular))
+                .foregroundStyle(selected ? ForgeDesign.ink : Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255))
+                .lineLimit(1)
+            if let shortcut = item.shortcut {
+                Text(shortcut)
+                    .font(ForgeDesign.mono(9, weight: .bold))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(ForgeDesign.paper)
+                    .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+            }
+        }
+        .padding(.horizontal, 18)
+        .frame(height: 42)
+        .foregroundStyle(ForgeDesign.ink)
+        .background(selected ? ForgeDesign.accent : Color.white)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(selected ? ForgeDesign.ink : ForgeDesign.divider).frame(height: 1.5)
+        }
+    }
+
+    private var allItems: [CommandPaletteItem] {
+        let taskItems = workspace.tasks.map { task in
+            CommandPaletteItem(
+                id: "task-\(task.id)",
+                group: "TASKS",
+                glyph: "▸",
+                title: task.title,
+                metadata: "#\(task.id.prefix(6)) · \(task.status.uppercased())",
+                shortcut: nil,
+                action: .task(task.id)
+            )
+        }
+        let commandItems = [
+            CommandPaletteItem(id: "new", group: "COMMANDS", glyph: "＋", title: "New task", metadata: "OPEN COMPOSER", shortcut: "⌘N", action: .newTask),
+            CommandPaletteItem(id: "repo", group: "COMMANDS", glyph: "⌥", title: "Switch repo…", metadata: "LOCAL WORKSPACE", shortcut: "⌘⇧K", action: .switchRepository),
+            CommandPaletteItem(id: "refresh", group: "COMMANDS", glyph: "↻", title: "Refresh runtime", metadata: workspace.runtimeState.rawValue.uppercased(), shortcut: nil, action: .refreshRuntime),
+            CommandPaletteItem(id: "settings", group: "COMMANDS", glyph: "⚙", title: "Open settings", metadata: "GUARDRAILS · MODEL", shortcut: "⌘,", action: .settings)
+        ]
+        return taskItems + commandItems
+    }
+
+    private var visibleItems: [CommandPaletteItem] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return Array(allItems.prefix(10)) }
+        return allItems.filter {
+            fuzzyMatch(trimmed, in: "\($0.title) \($0.metadata)")
+        }.prefix(10).map { $0 }
+    }
+
+    private var groupNames: [String] {
+        var seen = Set<String>()
+        return visibleItems.map(\.group).filter { seen.insert($0).inserted }
+    }
+
+    private func fuzzyMatch(_ needle: String, in haystack: String) -> Bool {
+        var remainder = haystack.lowercased()[...]
+        for character in needle.lowercased() {
+            guard let index = remainder.firstIndex(of: character) else { return false }
+            remainder = remainder[remainder.index(after: index)...]
+        }
+        return true
+    }
+
+    private func moveSelection(_ delta: Int) {
+        guard !visibleItems.isEmpty else { return }
+        selectedIndex = (selectedIndex + delta + visibleItems.count) % visibleItems.count
+    }
+
+    private func executeSelection() {
+        if visibleItems.isEmpty {
+            workspace.selectedTaskID = nil
+            isPresented = false
+            return
+        }
+        execute(visibleItems[min(selectedIndex, visibleItems.count - 1)])
+    }
+
+    private func execute(_ item: CommandPaletteItem) {
+        switch item.action {
+        case .task(let id):
+            workspace.selectedTaskID = id
+        case .newTask:
+            workspace.selectedTaskID = nil
+        case .switchRepository:
+            workspace.connectRepository()
+        case .refreshRuntime:
+            workspace.refreshRuntimeHealth()
+        case .settings:
+            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        }
+        isPresented = false
+    }
+}
+
 private struct SidebarView: View {
     @EnvironmentObject private var workspace: WorkspaceModel
     @State private var showHistory = false
@@ -362,9 +620,13 @@ private struct SidebarView: View {
                     .font(.custom("JetBrains Mono", fixedSize: 12).weight(.bold))
                     .lineLimit(1)
                 Spacer()
-                Text("⌘⇧K  ▾")
-                    .font(.custom("JetBrains Mono", fixedSize: 9).weight(.medium))
-                    .foregroundStyle(ForgeDesign.muted)
+                Button("⌘K") {
+                    NotificationCenter.default.post(name: .forgeToggleCommandPalette, object: nil)
+                }
+                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
+                .foregroundStyle(ForgeDesign.muted)
+                .buttonStyle(.plain)
+                .help("Open Command Palette")
             }
             .padding(.horizontal, 16)
             .frame(height: 42)

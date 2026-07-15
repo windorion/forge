@@ -3993,3 +3993,35 @@ Next:
 
 - Run full SwiftPM/package verification, push to `main`, then continue with the
   next highest-confidence handoff surface.
+
+## 2026-07-15 08:11:19 CEST
+
+Conversation summary:
+
+- Continued after the No Repository push with the handoff Command Palette and
+  its native macOS command/menu entry points.
+
+Done:
+
+- Implemented `5a` Command Palette as the 620px hard-shadow overlay over a
+  dimmed live workspace, with grouped task/command results and handoff footer.
+- Added fuzzy matching across real task titles, statuses, and commands;
+  direction-key selection, Return execution, Escape dismissal, and autofocus.
+- Connected palette actions to task selection, New Task, native repository
+  selection, runtime refresh, and Settings.
+- Added a scene-level Forge command menu with `⌘K`, `⌘N`, and `⌘⇧K`, plus a
+  visible sidebar `⌘K` affordance, following native command discoverability.
+- Updated measured full-handoff readiness to approximately 53-56%: 21
+  Implemented, 4 Partial, 18 Missing, 0 strictly Verified.
+- Passed direct full-app Swift type-check and diff-format validation.
+
+Not done:
+
+- Strict rendered comparison remains unavailable.
+- The complete `21a` app menu, global Quick Capture/Menu Bar surfaces, merge
+  conflicts, scheduler semantics, and other remaining designs are unfinished.
+
+Next:
+
+- Run full build/package verification, push to `main`, then continue with the
+  next handoff surface that can be backed by existing state.

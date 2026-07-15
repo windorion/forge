@@ -48,7 +48,7 @@ the actual visual source of truth.
 | Settings | `30a` API key | Implemented | Dedicated provider/key/status layout uses real Keychain storage and removal; exact provider test semantics and rendered comparison remain. |
 | Settings | `5b` Shortcuts | Partial | Handoff shortcut groups now reflect active commands; runtime remapping remains. |
 | Settings | `16a` Account/usage | Implemented | Usage summary, activity chart, budget, and repository breakdown use persisted task estimates; rendered comparison remains. |
-| Quick entry | `5a` Command palette | Missing | Command palette is missing. |
+| Quick entry | `5a` Command palette | Implemented | Scene-level `⌘K` and the visible sidebar entry open the dimmed 620px palette with fuzzy task/command search, keyboard navigation, and real task/runtime/repository/settings actions. |
 | Quick entry | `12a` Quick capture | Missing | Global floating capture window is missing. |
 | Quick entry | `7a` Menu bar mini window | Missing | Menu bar item and mini window are missing. |
 | Quick entry | `27a` CLI companion | Missing | Shared-background CLI is missing. |
@@ -56,7 +56,7 @@ the actual visual source of truth.
 | System | `8a` Dock menu | Missing | Native Dock menu commands are missing. |
 | System | `9a` Notifications | Missing | Four native notification states are missing. |
 | System | `11a` Spotlight | Missing | Core Spotlight task indexing is missing. |
-| System | `21a` App menu | Partial | Default menus exist; the handoff command set is missing. |
+| System | `21a` App menu | Partial | A native Forge menu now exposes Command Palette, New Task, and Switch Repository with the documented shortcuts; the full handoff command set and context validation remain. |
 | System | `35a` Widget | Missing | WidgetKit S/M/L widgets are missing. |
 | Recovery | `15a` Sign in | Missing | GitHub device-flow screen is missing. |
 | Recovery | `25a` Onboarding | Missing | Four-step first-run flow is missing. |
@@ -77,9 +77,9 @@ the actual visual source of truth.
 - Functional Coding-Agent Demo V0: 100% of its documented behavior criteria.
 - Primary V0 screen implementation: 5 of 5 substantially implemented, none
   yet marked `Verified` under the strict rule above.
-- Full handoff: 20 `Implemented`, 4 `Partial`, 19 `Missing`, 0 `Verified` out
+- Full handoff: 21 `Implemented`, 4 `Partial`, 18 `Missing`, 0 `Verified` out
   of 43 named screens/states.
-- Weighted full-handoff UI readiness: approximately 50-53%.
+- Weighted full-handoff UI readiness: approximately 53-56%.
 
 These metrics must remain separate. Functional completion never implies design
 completion.
