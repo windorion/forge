@@ -4614,26 +4614,21 @@ private struct FullscreenDiffReview: View {
     }
 
     private var header: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("FULLSCREEN DIFF REVIEW")
-                    .font(.custom("JetBrains Mono", fixedSize: 11).weight(.bold))
+        HStack(spacing: 14) {
+            StatusPill(label: validationState, color: validationColor)
+
+            Text(task.title)
+                .font(.system(size: 15, weight: .heavy))
+                .tracking(-0.3)
+                .lineLimit(1)
+
+            if !reviewFiles.isEmpty {
+                Text("file \(activeFileIndex + 1) of \(reviewFiles.count) · +\(totalAdditions) −\(totalDeletions)")
+                    .font(ForgeDesign.mono(10.5))
                     .foregroundStyle(ForgeDesign.muted)
-                Text(task.title)
-                    .font(.system(size: 22, weight: .black))
-                    .lineLimit(1)
             }
 
             Spacer()
-
-            StatusPill(label: "\(reviewFiles.count) Files", color: ForgeDesign.paper)
-            StatusPill(label: validationState, color: validationColor)
-
-            if !reviewFiles.isEmpty {
-                Text("FILE \(activeFileIndex + 1) OF \(reviewFiles.count)")
-                    .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
-                    .foregroundStyle(ForgeDesign.muted)
-            }
 
             Button {
                 selectPreviousFile()
@@ -4678,17 +4673,18 @@ private struct FullscreenDiffReview: View {
     private var fileTree: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("FILES")
-                    .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
-                    .foregroundStyle(ForgeDesign.muted)
+                Text("FILES — \(reviewFiles.count)")
                 Spacer()
-                Text("+\(totalAdditions) -\(totalDeletions)")
-                    .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
-                    .foregroundStyle(ForgeDesign.muted)
             }
-            .padding(10)
-            .background(Color.white)
-            .overlay(Rectangle().stroke(ForgeDesign.divider, lineWidth: 1))
+            .font(ForgeDesign.mono(9, weight: .bold))
+            .tracking(1)
+            .foregroundStyle(ForgeDesign.muted)
+            .padding(.horizontal, 16)
+            .frame(height: 36)
+            .background(Color(red: 247 / 255, green: 247 / 255, blue: 244 / 255))
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+            }
 
             if reviewFiles.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
@@ -4718,13 +4714,13 @@ private struct FullscreenDiffReview: View {
                 }
 
                 HStack {
-                    Text("✓ \(approvedFileCount) REVIEWED")
+                    Text("✓ \(approvedFileCount) reviewed · \(max(reviewFiles.count - approvedFileCount, 0)) to go")
                     Spacer()
-                    Text("\(max(reviewFiles.count - approvedFileCount, 0)) TO GO")
                 }
-                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
+                .font(ForgeDesign.mono(9.5))
                 .foregroundStyle(ForgeDesign.muted)
-                .padding(10)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 11)
                 .overlay(alignment: .top) {
                     Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
                 }
@@ -4735,32 +4731,44 @@ private struct FullscreenDiffReview: View {
 
     private var diffPane: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 0) {
-                ForEach(DiffReviewMode.allCases) { item in
-                    Button {
-                        mode = item
-                    } label: {
-                        Text(item.rawValue)
-                            .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
-                            .foregroundStyle(mode == item ? ForgeDesign.paper : ForgeDesign.ink)
-                            .frame(width: 92)
-                            .padding(.vertical, 10)
-                            .background(mode == item ? ForgeDesign.ink : Color.white)
-                            .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+            HStack(spacing: 10) {
+                if let activePath {
+                    Text(activePath)
+                        .font(.custom("JetBrains Mono", fixedSize: 10.5).weight(.bold))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if let file = selectedFile, let additions = file.additions, let deletions = file.deletions {
+                        Text("+\(additions) −\(deletions)")
+                            .font(ForgeDesign.mono(9.5))
+                            .foregroundStyle(ForgeDesign.muted)
                     }
-                    .buttonStyle(.plain)
                 }
 
                 Spacer()
 
-                if let activePath {
-                    Text(activePath)
-                        .font(.custom("JetBrains Mono", fixedSize: 11).weight(.bold))
-                        .lineLimit(1)
-                        .padding(.horizontal, 10)
+                HStack(spacing: 0) {
+                    ForEach(DiffReviewMode.allCases) { item in
+                        Button {
+                            mode = item
+                        } label: {
+                            Text(item.rawValue)
+                                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
+                                .foregroundStyle(mode == item ? ForgeDesign.paper : ForgeDesign.ink)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 3)
+                                .background(mode == item ? ForgeDesign.ink : Color.white)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
+                .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
             }
-            .background(Color.white)
+            .padding(.horizontal, 18)
+            .frame(height: 36)
+            .background(Color(red: 247 / 255, green: 247 / 255, blue: 244 / 255))
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+            }
 
             if let activePath {
                 FullscreenGitDiffView(
@@ -4787,29 +4795,9 @@ private struct FullscreenDiffReview: View {
     }
 
     private var fileVerdictBar: some View {
-        HStack(spacing: 8) {
-            Button("↑ PREV HUNK") {
-                selectedHunkIndex = max(selectedHunkIndex - 1, 0)
-            }
-            .buttonStyle(ForgeSecondaryButtonStyle())
-            .keyboardShortcut("k", modifiers: [])
-            .disabled(selectedHunkIndex <= 0 || selectedHunkCount == 0)
-
-            Button("↓ NEXT HUNK") {
-                selectedHunkIndex = min(selectedHunkIndex + 1, max(selectedHunkCount - 1, 0))
-            }
-            .buttonStyle(ForgeSecondaryButtonStyle())
-            .keyboardShortcut("j", modifiers: [])
-            .disabled(selectedHunkIndex >= selectedHunkCount - 1 || selectedHunkCount == 0)
-
-            Text(selectedHunkCount == 0 ? "NO HUNKS" : "HUNK \(selectedHunkIndex + 1)/\(selectedHunkCount)")
-                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
-                .foregroundStyle(ForgeDesign.muted)
-
-            Spacer()
-
-            Text("THIS FILE:")
-                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
+        HStack(spacing: 10) {
+            Text("this file:")
+                .font(ForgeDesign.mono(9.5))
                 .foregroundStyle(ForgeDesign.muted)
 
             Button(selectedFileDecision?.decision == "Approved" ? "✓ APPROVED" : "✓ LOOKS GOOD") {
@@ -4824,108 +4812,151 @@ private struct FullscreenDiffReview: View {
             }
             .buttonStyle(ForgeSecondaryButtonStyle())
             .disabled(!canRejectProposal)
+
+            Spacer()
+
+            Text(selectedHunkCount > 1 ? "J/K next hunk · ⌘↵ approve file" : "⌘↵ approve file")
+                .font(ForgeDesign.mono(9))
+                .foregroundStyle(ForgeDesign.dashedBorder)
+
+            // Hidden hunk-navigation bindings behind the J/K hint above.
+            Button("") { selectedHunkIndex = max(selectedHunkIndex - 1, 0) }
+                .keyboardShortcut("k", modifiers: [])
+                .disabled(selectedHunkIndex <= 0 || selectedHunkCount == 0)
+                .frame(width: 0, height: 0)
+                .opacity(0)
+            Button("") { selectedHunkIndex = min(selectedHunkIndex + 1, max(selectedHunkCount - 1, 0)) }
+                .keyboardShortcut("j", modifiers: [])
+                .disabled(selectedHunkIndex >= selectedHunkCount - 1 || selectedHunkCount == 0)
+                .frame(width: 0, height: 0)
+                .opacity(0)
         }
-        .padding(10)
-        .background(Color.white)
-        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+        .padding(.horizontal, 18)
+        .padding(.vertical, 10)
+        .background(Color(red: 247 / 255, green: 247 / 255, blue: 244 / 255))
+        .overlay(alignment: .top) {
+            Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+        }
     }
 
     private var reasoningPane: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("WHY THIS CHANGE")
-                        .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
-                        .foregroundStyle(ForgeDesign.muted)
+        VStack(spacing: 0) {
+            HStack {
+                Text("WHY THIS CHANGE")
+                Spacer()
+            }
+            .font(ForgeDesign.mono(9, weight: .bold))
+            .tracking(1)
+            .foregroundStyle(ForgeDesign.muted)
+            .padding(.horizontal, 16)
+            .frame(height: 36)
+            .background(Color(red: 247 / 255, green: 247 / 255, blue: 244 / 255))
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+            }
 
-                    Text(selectedRationale)
-                        .font(.callout)
-                        .textSelection(.enabled)
-                }
-                .padding(12)
-                .forgeCard(shadow: false)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(selectedRationale)
+                            .font(.system(size: 13))
+                            .foregroundStyle(Color(red: 42 / 255, green: 42 / 255, blue: 38 / 255))
+                            .lineSpacing(4)
+                            .textSelection(.enabled)
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .overlay(alignment: .bottom) { Rectangle().fill(ForgeDesign.divider).frame(height: 1.5) }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("VALIDATION EVIDENCE")
-                        .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
-                        .foregroundStyle(ForgeDesign.muted)
-
-                    if fileTestEvidence.isEmpty && taskWideTestEvidence.isEmpty {
-                        Text("No validation evidence has been recorded yet.")
-                            .font(.caption)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("TESTS COVERING THIS FILE")
+                            .font(ForgeDesign.mono(9, weight: .bold))
+                            .tracking(1)
                             .foregroundStyle(ForgeDesign.muted)
-                    } else {
-                        Text(fileTestEvidence.isEmpty ? "FILE-SPECIFIC  NONE RECORDED" : "FILE-SPECIFIC")
-                            .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
-                            .foregroundStyle(fileTestEvidence.isEmpty ? ForgeDesign.warning : ForgeDesign.success)
 
-                        ForEach(Array(fileTestEvidence.prefix(4).enumerated()), id: \.offset) { _, evidence in
-                            Text(evidence)
-                                .font(.custom("JetBrains Mono", fixedSize: 11))
-                                .foregroundStyle(ForgeDesign.ink)
-                                .textSelection(.enabled)
-                        }
-
-                        if !taskWideTestEvidence.isEmpty {
-                            Text("TASK-WIDE — NOT CLAIMED AS FILE COVERAGE")
-                                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
+                        if fileTestEvidence.isEmpty && taskWideTestEvidence.isEmpty {
+                            Text("no validation evidence recorded yet")
+                                .font(ForgeDesign.mono(11))
                                 .foregroundStyle(ForgeDesign.muted)
-
-                            ForEach(Array(taskWideTestEvidence.prefix(3).enumerated()), id: \.offset) { _, evidence in
-                                Text(evidence)
-                                    .font(.custom("JetBrains Mono", fixedSize: 9))
-                                    .foregroundStyle(ForgeDesign.muted)
+                        } else {
+                            ForEach(Array(fileTestEvidence.prefix(4).enumerated()), id: \.offset) { _, evidence in
+                                (Text("✓ ").foregroundStyle(ForgeDesign.accent).fontWeight(.bold)
+                                    + Text(evidence))
+                                    .font(ForgeDesign.mono(11))
+                                    .foregroundStyle(Color(red: 42 / 255, green: 42 / 255, blue: 38 / 255))
                                     .textSelection(.enabled)
+                            }
+
+                            if !taskWideTestEvidence.isEmpty {
+                                Text("TASK-WIDE — NOT CLAIMED AS FILE COVERAGE")
+                                    .font(ForgeDesign.mono(9, weight: .bold))
+                                    .foregroundStyle(ForgeDesign.muted)
+                                    .padding(.top, 4)
+
+                                ForEach(Array(taskWideTestEvidence.prefix(3).enumerated()), id: \.offset) { _, evidence in
+                                    Text(evidence)
+                                        .font(ForgeDesign.mono(9))
+                                        .foregroundStyle(ForgeDesign.muted)
+                                        .textSelection(.enabled)
+                                }
                             }
                         }
                     }
-                }
-                .padding(12)
-                .forgeCard(shadow: false)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .overlay(alignment: .bottom) { Rectangle().fill(ForgeDesign.divider).frame(height: 1.5) }
 
-                if let proposal = task.editProposal,
-                   proposal.applyTransaction != nil || proposal.rollbackTransaction != nil {
-                    ProposalTransactionEvidenceCard(proposal: proposal)
-                }
-
-                CompactCommitHandoffCard(task: task)
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("FILE REVIEW")
-                        .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
-                        .foregroundStyle(ForgeDesign.muted)
-
-                    if let selectedFile {
-                        MetricRow(label: "Status", value: selectedFile.status)
-                        MetricRow(label: "Validation", value: selectedFile.validationStatus ?? "Unknown")
-                        MetricRow(label: "Review", value: selectedFileDecision?.decision ?? "Pending")
-                        MetricRow(label: "Lines", value: "+\(selectedFile.additions ?? 0) -\(selectedFile.deletions ?? 0)")
+                    if let proposal = task.editProposal,
+                       proposal.applyTransaction != nil || proposal.rollbackTransaction != nil {
+                        ProposalTransactionEvidenceCard(proposal: proposal)
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 12)
                     }
 
-                    Button {
-                        workspace.applyEditProposal(for: task)
-                    } label: {
-                        Label(applyPatchTitle, systemImage: "checkmark.seal")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.accent, foreground: ForgeDesign.ink))
-                    .disabled(!canApplyProposal)
+                    CompactCommitHandoffCard(task: task)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 12)
 
-                    Button {
-                        workspace.rollbackEditProposal(for: task)
-                    } label: {
-                        Label(rollbackPatchTitle, systemImage: "arrow.uturn.backward.circle")
-                            .frame(maxWidth: .infinity)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("FILE REVIEW")
+                            .font(ForgeDesign.mono(9, weight: .bold))
+                            .tracking(1)
+                            .foregroundStyle(ForgeDesign.muted)
+
+                        if let selectedFile {
+                            MetricRow(label: "Status", value: selectedFile.status)
+                            MetricRow(label: "Validation", value: selectedFile.validationStatus ?? "Unknown")
+                            MetricRow(label: "Review", value: selectedFileDecision?.decision ?? "Pending")
+                            MetricRow(label: "Lines", value: "+\(selectedFile.additions ?? 0) −\(selectedFile.deletions ?? 0)")
+                        }
+
+                        Button {
+                            workspace.applyEditProposal(for: task)
+                        } label: {
+                            Label(applyPatchTitle, systemImage: "checkmark.seal")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.accent, foreground: ForgeDesign.ink))
+                        .disabled(!canApplyProposal)
+
+                        Button {
+                            workspace.rollbackEditProposal(for: task)
+                        } label: {
+                            Label(rollbackPatchTitle, systemImage: "arrow.uturn.backward.circle")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(ForgeSecondaryButtonStyle())
+                        .disabled(!canRollbackProposal)
                     }
-                    .buttonStyle(ForgeSecondaryButtonStyle())
-                    .disabled(!canRollbackProposal)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(12)
-                .forgeCard()
             }
-            .padding(12)
         }
-        .background(ForgeDesign.paper)
+        .background(Color.white)
     }
 
     private var activePath: String? {
@@ -5298,37 +5329,37 @@ private struct DiffReviewFileRow: View {
     var isSelected: Bool
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .center, spacing: 9) {
             Text(statusToken)
-                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
+                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.heavy))
+                .foregroundStyle(statusColor)
+                .frame(width: 12, alignment: .leading)
+
+            Text(file.path)
+                .font(.custom("JetBrains Mono", fixedSize: 10.5).weight(isSelected ? .bold : .regular))
                 .foregroundStyle(ForgeDesign.ink)
-                .frame(width: 24)
-                .padding(.vertical, 3)
-                .background(statusColor)
-                .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1))
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(file.path)
-                    .font(.custom("JetBrains Mono", fixedSize: 11).weight(.bold))
-                    .foregroundStyle(ForgeDesign.ink)
-                    .lineLimit(2)
-
-                HStack(spacing: 6) {
-                    Text(file.detail)
-                    if let additions = file.additions, let deletions = file.deletions {
-                        Text("+\(additions) -\(deletions)")
-                    }
-                }
-                .font(.custom("JetBrains Mono", fixedSize: 9))
-                .foregroundStyle(ForgeDesign.muted)
                 .lineLimit(1)
-            }
+                .truncationMode(.middle)
 
-            Spacer(minLength: 0)
+            Spacer(minLength: 6)
+
+            if let additions = file.additions, let deletions = file.deletions {
+                Text("+\(additions) −\(deletions)")
+                    .font(.custom("JetBrains Mono", fixedSize: 9))
+                    .foregroundStyle(ForgeDesign.dashedBorder)
+            }
         }
-        .padding(9)
-        .background(isSelected ? ForgeDesign.accent : Color.white)
-        .overlay(Rectangle().stroke(ForgeDesign.divider, lineWidth: 1))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(isSelected ? Color(red: 247 / 255, green: 242 / 255, blue: 255 / 255) : Color.white)
+        .overlay(alignment: .leading) {
+            if isSelected {
+                Rectangle().fill(ForgeDesign.accent).frame(width: 3)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(ForgeDesign.divider).frame(height: 1.5)
+        }
     }
 
     private var statusToken: String {
