@@ -5906,11 +5906,11 @@ private struct FullPlanApprovalView: View {
 
             HStack(spacing: 14) {
                 StatusPill(label: "PLAN READY", color: ForgeDesign.accent)
-                Text(task.title)
+                Text("\u{201C}\(task.title)\u{201D}")
                     .font(.system(size: 15, weight: .heavy))
                     .lineLimit(1)
                 Spacer()
-                Text("planned \(shortTime(revision.generatedAt)) · nothing executed yet")
+                Text("planned in \(planningDuration) · nothing executed yet")
                     .font(ForgeDesign.mono(10))
                     .foregroundStyle(ForgeDesign.muted)
             }
@@ -5926,9 +5926,9 @@ private struct FullPlanApprovalView: View {
                     HStack {
                         Text("PROPOSED STEPS — \(revision.steps.count)")
                         Spacer()
-                        Text("✎ select a step to revise")
+                        Text("✎ click a step to edit it")
                             .fontWeight(.regular)
-                            .foregroundStyle(Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255))
+                            .foregroundStyle(ForgeDesign.dashedBorder)
                     }
                     .font(ForgeDesign.mono(9, weight: .bold))
                     .tracking(1)
@@ -5980,10 +5980,10 @@ private struct FullPlanApprovalView: View {
                     }
 
                     HStack(spacing: 10) {
+                        Text("risk \(revision.riskLevel.lowercased())")
+                        Spacer()
                         Text("est. total:")
                         Text(estimateSummary).fontWeight(.bold).foregroundStyle(ForgeDesign.ink)
-                        Spacer()
-                        Text("risk \(revision.riskLevel.lowercased())")
                     }
                     .font(ForgeDesign.mono(10))
                     .foregroundStyle(ForgeDesign.muted)
@@ -5999,36 +5999,81 @@ private struct FullPlanApprovalView: View {
                 Rectangle().fill(ForgeDesign.ink).frame(width: 1.5)
 
                 VStack(spacing: 0) {
-                    planContextSection("AI · HOW I READ YOUR TASK", value: revision.intentSummary)
-                    planListSection("DELIBERATELY OUT OF SCOPE", values: revision.riskNotes ?? ["No work outside the reviewed plan and repository boundary."])
-                    planListSection("VALIDATION AFTER THE RUN", values: revision.validationPlan ?? ["Use only approved validation commands."])
-
-                    VStack(alignment: .leading, spacing: 9) {
-                        Text("REVISE SELECTED STEP")
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("AI · HOW I READ YOUR TASK")
                             .font(ForgeDesign.mono(9, weight: .bold))
                             .tracking(1)
                             .foregroundStyle(ForgeDesign.muted)
-                        HStack(spacing: 0) {
-                            TextField("select a step, then describe the change…", text: $revisionInstruction)
-                                .textFieldStyle(.plain)
-                                .font(ForgeDesign.mono(10.5))
-                                .padding(.horizontal, 11)
-                                .frame(height: 38)
-                            Button("REQUEST") { requestRevision() }
-                                .font(ForgeDesign.mono(9.5, weight: .bold))
-                                .foregroundStyle(ForgeDesign.accent)
-                                .padding(.horizontal, 12)
-                                .frame(height: 38)
-                                .background(ForgeDesign.ink)
-                                .buttonStyle(.plain)
-                                .disabled(trimmedInstruction.isEmpty)
+                        Text(revision.intentSummary)
+                            .font(.system(size: 12.5))
+                            .foregroundStyle(Color(red: 42 / 255, green: 42 / 255, blue: 38 / 255))
+                            .lineSpacing(4)
+                        HStack(spacing: 4) {
+                            Text("wrong?")
+                                .foregroundStyle(ForgeDesign.dashedBorder)
+                            Button {
+                                close()
+                            } label: {
+                                Text("rephrase the task")
+                                    .underline()
+                                    .foregroundStyle(ForgeDesign.muted)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                        .font(ForgeDesign.mono(9.5))
                     }
                     .padding(.horizontal, 18)
-                    .padding(.vertical, 13)
-                    .overlay(alignment: .bottom) {
-                        Rectangle().fill(ForgeDesign.divider).frame(height: 1.5)
+                    .padding(.vertical, 14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .overlay(alignment: .bottom) { Rectangle().fill(ForgeDesign.divider).frame(height: 1.5) }
+
+                    planListSection("DELIBERATELY OUT OF SCOPE", values: revision.riskNotes ?? ["No work outside the reviewed plan and repository boundary."])
+
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text("GUARDRAILS ON THIS RUN")
+                            .font(ForgeDesign.mono(9, weight: .bold))
+                            .tracking(1)
+                            .foregroundStyle(ForgeDesign.muted)
+                        ForEach(runGuardrails, id: \.self) { value in
+                            Text("✓ \(value)")
+                                .font(ForgeDesign.mono(10))
+                                .foregroundStyle(ForgeDesign.muted)
+                                .lineLimit(1)
+                        }
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .overlay(alignment: .bottom) { Rectangle().fill(ForgeDesign.divider).frame(height: 1.5) }
+
+                    if selectedStepID != nil {
+                        VStack(alignment: .leading, spacing: 9) {
+                            Text("REVISE SELECTED STEP")
+                                .font(ForgeDesign.mono(9, weight: .bold))
+                                .tracking(1)
+                                .foregroundStyle(ForgeDesign.muted)
+                            HStack(spacing: 0) {
+                                TextField("describe the change…", text: $revisionInstruction)
+                                    .textFieldStyle(.plain)
+                                    .font(ForgeDesign.mono(10.5))
+                                    .padding(.horizontal, 11)
+                                    .frame(height: 38)
+                                Button("REQUEST") { requestRevision() }
+                                    .font(ForgeDesign.mono(9.5, weight: .bold))
+                                    .foregroundStyle(ForgeDesign.accent)
+                                    .padding(.horizontal, 12)
+                                    .frame(height: 38)
+                                    .background(ForgeDesign.ink)
+                                    .buttonStyle(.plain)
+                                    .disabled(trimmedInstruction.isEmpty)
+                            }
+                            .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                        }
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 13)
+                        .overlay(alignment: .bottom) {
+                            Rectangle().fill(ForgeDesign.divider).frame(height: 1.5)
+                        }
                     }
 
                     VStack(alignment: .leading, spacing: 9) {
@@ -6041,24 +6086,52 @@ private struct FullPlanApprovalView: View {
                             approvalModeButton("STEP BY STEP", mode: 1)
                         }
                         .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
-                        Text(approvalMode == 0 ? "runs within the bounded loop and stops at every trust gate" : "runs one agent step, then returns control to you")
+                        Text(approvalMode == 0 ? "agent runs the whole plan, pauses only on guardrails" : "runs one agent step, then returns control to you")
                             .font(ForgeDesign.mono(9.5))
-                            .foregroundStyle(Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255))
+                            .foregroundStyle(ForgeDesign.dashedBorder)
                     }
                     .padding(.horizontal, 18)
                     .padding(.vertical, 13)
 
                     Spacer(minLength: 6)
 
-                    HStack(spacing: 10) {
-                        Button("↻ REGENERATE") { workspace.generatePlanRevision(for: task) }
+                    VStack(spacing: 10) {
+                        Button {
+                            workspace.approvePlan(for: task, maxSteps: approvalMode == 0 ? 6 : 1)
+                        } label: {
+                            Text(approvalMode == 0 ? "✓ APPROVE & RUN ⌘↵" : "✓ APPROVE NEXT STEP ⌘↵")
+                                .font(ForgeDesign.mono(11.5, weight: .bold))
+                                .tracking(0.5)
+                                .foregroundStyle(ForgeDesign.accent)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 46)
+                                .background(ForgeDesign.ink)
+                                .forgeShadow(ForgeDesign.ink.opacity(0.35), x: 3, y: 3)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!canApprove)
+                        .keyboardShortcut(.return, modifiers: [.command])
+
+                        HStack(spacing: 10) {
+                            Button {
+                                workspace.generatePlanRevision(for: task)
+                            } label: {
+                                Text(workspace.isGeneratingPlanRevision(taskID: task.id) ? "↻ REPLANNING…" : "↻ REPLAN")
+                                    .frame(maxWidth: .infinity)
+                            }
                             .buttonStyle(ForgeSecondaryButtonStyle())
                             .disabled(workspace.isGeneratingPlanRevision(taskID: task.id))
-                        Button(approvalMode == 0 ? "✓ APPROVE & RUN" : "✓ APPROVE NEXT STEP") {
-                            workspace.approvePlan(for: task, maxSteps: approvalMode == 0 ? 6 : 1)
+
+                            Button {
+                                workspace.statusMessage = "Plan not approved — revise a step or replan before running."
+                                close()
+                            } label: {
+                                Text("✗ REJECT")
+                                    .foregroundStyle(ForgeDesign.danger)
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(ForgeSecondaryButtonStyle())
                         }
-                        .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.accent, foreground: ForgeDesign.ink))
-                        .disabled(!canApprove)
                     }
                     .padding(.horizontal, 18)
                     .padding(.bottom, 16)
@@ -6134,6 +6207,27 @@ private struct FullPlanApprovalView: View {
     private func shortTime(_ value: String) -> String {
         value.count > 8 ? String(value.suffix(8)) : value
     }
+
+    /// Real elapsed time between task creation and this revision.
+    private var planningDuration: String {
+        let parser = ISO8601DateFormatter()
+        parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard let created = parser.date(from: task.createdAt),
+              let planned = parser.date(from: revision.generatedAt)
+        else { return shortTime(revision.generatedAt) }
+        let seconds = max(Int(planned.timeIntervalSince(created).rounded()), 0)
+        return seconds < 90 ? "\(seconds)s" : "\(seconds / 60)m"
+    }
+
+    /// Accurate statements of the runtime's actual execution boundaries.
+    private var runGuardrails: [String] {
+        [
+            "no file changes before your review",
+            "approved validation presets only",
+            "stops at every trust gate"
+        ]
+    }
+
     private func requestRevision() {
         guard !trimmedInstruction.isEmpty else { return }
         workspace.sendTaskMessage(for: task, content: trimmedInstruction)
