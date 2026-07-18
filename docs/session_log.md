@@ -4494,3 +4494,44 @@ Next:
   core-anchor rows in `docs/design_handoff_coverage.md`.
 - Continue Phases 2-8 per the approved plan
   (`/Users/xuhaidong/.claude/plans/sleepy-juggling-fiddle.md`).
+
+## 2026-07-18 20:41:10 +0200 (CEST)
+
+Conversation summary:
+
+- Continued Phase 1 anchors: aligned `20a` with the handoff, produced real
+  evidence for `10a`, and exercised the full plan→approve→run→proposal loop
+  against the live runtime to drive states.
+
+Done:
+
+- `20a` restructured to the handoff's right-column order (HOW I READ with a
+  working "rephrase the task" link, OUT OF SCOPE, real GUARDRAILS ON THIS
+  RUN checklist, APPROVAL MODE with mockup helper copy, full-width black
+  APPROVE & RUN ⌘↵, REPLAN + red REJECT); REVISE SELECTED STEP only appears
+  after selecting a step; header shows real "planned in Ns" elapsed time
+  and curly-quoted title; left column hint/footer per mockup. Captured and
+  noted in docs/verification/20a/.
+- Answered the demo task's clarification via the runtime, regenerated the
+  plan, approved and ran it: produced a real edit proposal and captured
+  `10a` fullscreen diff review with live 3-file data.
+- Found during driving: the app's SSE event stream does not refresh task
+  state (new tasks and phase changes only appear after relaunch). Logged
+  for the Phase 5 queue/mission-control pass.
+
+Not done:
+
+- `10a` right column is paper-toned action cards; the handoff draws a dark
+  explanation panel (WHY THIS CHANGE + PLAN STEP badge, CONVENTION
+  MATCHED, TESTS COVERING THIS FILE). Functionality is complete and real;
+  the dark-panel restyle plus header +N/-N summary and file-row "index ? /
+  worktree ?" copy remain next.
+- `14a` needs a mid-run "CODING — LIVE" capture (step-by-step run on a
+  fresh task); `32a` needs the offline capture at session size; coverage
+  rows for the five anchors flip after those land.
+
+Next:
+
+- Restyle `10a`'s right column dark per the handoff, recapture, then `32a`
+  (stop the external runtime), `14a` live, and flip Phase 1 rows in
+  docs/design_handoff_coverage.md before starting Phase 2 compact states.
