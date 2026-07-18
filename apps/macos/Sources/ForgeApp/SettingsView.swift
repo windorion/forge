@@ -1094,7 +1094,7 @@ private struct ShortcutsSettingsPage: View {
                                     .frame(height: 26)
                                     .background(SettingsDesign.paper)
                                     .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
-                                    .shadow(color: SettingsDesign.ink, radius: 0, x: 2, y: 2)
+                                    .forgeShadow(SettingsDesign.ink, x: 2, y: 2)
                             }
                         }
                         .padding(.horizontal, 26)

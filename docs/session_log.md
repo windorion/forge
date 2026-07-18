@@ -4364,3 +4364,133 @@ Next:
   its specified viewport against the reference and fix measured visual deltas.
 - Continue the active V0 backlog after the presentation-isolation changes are
   committed.
+
+## 2026-07-18 19:35:21 +0200 (CEST)
+
+Conversation summary:
+
+- User asked how far the UI is from the design handoff; audited
+  `docs/design_handoff_coverage.md`, `docs/project_status.md`, `docs/todo.md`,
+  `docs/roadmap.md`, `docs/v0_scope.md`, `docs/macos_native.md`,
+  `docs/founder_notes.md`, the rendered handoff HTML, and the Swift source
+  directly, then reported the existing 25 Implemented / 5 Partial / 13
+  Missing / 0 Verified breakdown plus new spot-checked deltas (design tokens
+  match exactly; `14a` composer placeholder copy does not; `22a` notification
+  prefs and login-item toggle have real bugs). User then asked for a plan to
+  reach 100%, interpreted as all 43 screens reaching `Verified`. Planned in
+  full plan-mode (two Explore passes plus one Plan-agent pass), producing a
+  9-phase plan (`/Users/xuhaidong/.claude/plans/sleepy-juggling-fiddle.md`),
+  approved by the user. Began Phase 0.
+
+Done:
+
+- Confirmed via direct code reading (not just the tracker) that design
+  tokens (`ForgeDesign` colors/shadows in `WorkspaceView.swift`) match the
+  handoff's documented palette exactly, and that JetBrains Mono is genuinely
+  bundled and registered via `CTFontManagerRegisterFontsForURL` in
+  `AppDelegate.swift`, copied into the bundle by `script/build_and_run.sh`.
+- Confirmed all 13 "Missing" screens have zero code footprint anywhere
+  (`MenuBarExtra`, `NSStatusItem`, global hotkeys, `UNUserNotificationCenter`,
+  `CoreSpotlight`, `WidgetKit`, `Sparkle` all absent repo-wide), and that
+  `Package.swift` has one target, zero dependencies, and no test target.
+- Wrote `script/capture_screen.sh` (resolves the frontmost `ForgeApp` window
+  geometry via `osascript` and takes a deterministic region `screencapture`)
+  and `docs/verification/README.md` (Tier 1 real-pixel / Tier 2 structural-
+  fallback evidence convention, folder layout, known gotchas).
+- Attempted the Phase 0 permission probe: `screencapture -x` failed with
+  "could not create image from display" (Screen Recording permission
+  denied). Traced the process tree and confirmed the responsible app is
+  `/Applications/Claude.app` itself (this session's shell's ancestor), not a
+  terminal emulator. Presented the finding and three options to the user;
+  user chose to grant the permission and relaunch Claude.app, ending this
+  session.
+
+Not done:
+
+- Screen Recording permission has not yet been granted/verified working —
+  next session should retry `script/capture_screen.sh` first thing.
+- No screen has moved off its current status; Phase 0 is not complete until
+  a real Tier 1 capture succeeds end to end against a live screen.
+- Phases 1-8 (all 43 screens to `Verified`, plus the 13 net-new screens) are
+  fully unstarted; see the plan file for the full breakdown and the
+  consolidated founder-dependency list (GitHub OAuth App registration, the
+  `15a` hosted-account scope question, the `23a` hosting scope question).
+
+Next:
+
+- Retry the Phase 0 screencapture probe once Claude.app has been relaunched
+  with Screen Recording permission granted; confirm a real capture succeeds
+  and its pixel content is non-blank before trusting the pipeline.
+- Then proceed to Phase 1: verify `1a 1b 20a 10a 14a 32a` against the
+  rendered handoff, starting with the already-confirmed `14a` composer
+  placeholder fix (`WorkspaceView.swift:1450`, currently "Describe the next
+  task…" vs. the handoff's "describe a task… (↵ to plan)").
+
+## 2026-07-18 20:31:47 +0200 (CEST)
+
+Conversation summary:
+
+- Resumed after the Claude.app relaunch. TCC screencapture stayed denied even
+  after the grant (the responsible bundle is the nested claude-code app, and
+  grants did not take effect for the live process), so the plan's screenshot
+  dependency was removed entirely: the DEBUG build now renders its own
+  windows to PNG on a Darwin notification — no Screen Recording permission
+  involved. Phase 0 completed with that pipeline; Phase 1 anchor
+  verification started and `1a`/`1b`/`20a` produced their first real
+  evidence captures.
+
+Done:
+
+- `DebugWindowCapture.swift` (DEBUG-only): renders every visible window to
+  `~/Library/Caches/Forge/debug-captures/` on
+  `com.windorion.forge.debug.capture`; disables App Nap (delivery was
+  deferred indefinitely while occluded); forwards
+  `com.windorion.forge.debug.present` plus a `forge.debug.presentSurface`
+  default into an internal notification so verification scripts can drive
+  any exclusive surface (`missionControl`, `history`, `answerQueue`,
+  `taskQueue`, `palette`, `diff:<id>`, `audit:<id>`,
+  `fullPlan:<id>:<rev>`, `dismiss`).
+- `script/capture_screen.sh` (self-render primary, TCC region grab as
+  non-fatal bonus) and `script/drive_surface.sh`; evidence convention and
+  the measured 43-screen reference window-size table in
+  `docs/verification/README.md`.
+- `1a` verified: fixed PLAN IT font 12→12.5 + letter-spacing, removed the
+  disabled-state dimming the handoff does not have, added
+  `ForgeDesign.dashedBorder` (#9a9a92) for example chips, footer "1,204"
+  ink+bold, footer height 40→11px vertical padding. Evidence + notes in
+  `docs/verification/1a/`.
+- `1b` built as a real standalone state: new `CompactPlanApprovalState`
+  (PLAN PROPOSED header with real task ordinal, real step rows with per-row
+  EDIT into the full-plan surface, real estimate/regenerate/approve footer)
+  routed via `compactApprovalRevision(_:)` at compact window size; the
+  session layout no longer swallows pre-run plan approval. Evidence + notes
+  in `docs/verification/1b/`.
+- Replaced all 11 `.shadow(color:…radius:0)` uses with a `forgeShadow`
+  offset-rect modifier: SwiftUI's shadow projects per-layer content
+  silhouettes, which rendered doubled text under `cacheDisplay` capture and
+  is not what the handoff's `box-shadow: X Y 0` means; the offset filled
+  rect is exact in both.
+- Selected task now persists and restores across relaunch
+  (`forge.selectedTaskID`), fixing the app always reopening on the empty
+  state; also fixed the `14a` sidebar composer placeholder copy to
+  "describe a task… (↵ to plan)".
+- `20a` full-plan surface driven and captured with live plan data via the
+  new surface driver.
+
+Not done:
+
+- `20a` capture is not yet compared against its mockup section; `10a`,
+  `14a`, `32a` still need state driving, capture, and comparison; no
+  coverage-table rows flipped to Verified yet (1a/1b evidence exists, table
+  update pending phase completion).
+- The app's SSE event stream did not surface an API-created task without a
+  relaunch — worth a look during Phase 5 queue/mission-control work.
+
+Next:
+
+- Finish Phase 1: compare `20a`, drive+capture `10a` (approve & run the
+  demo task to produce an edit proposal), `14a` (mid-run session), `32a`
+  (stop the external runtime, offline at session size), then flip the five
+  core-anchor rows in `docs/design_handoff_coverage.md`.
+- Continue Phases 2-8 per the approved plan
+  (`/Users/xuhaidong/.claude/plans/sleepy-juggling-fiddle.md`).

@@ -7,6 +7,7 @@ enum ForgeDesign {
     static let paper = Color(red: 244 / 255, green: 244 / 255, blue: 241 / 255)
     static let ink = Color(red: 10 / 255, green: 10 / 255, blue: 10 / 255)
     static let muted = Color(red: 106 / 255, green: 106 / 255, blue: 100 / 255)
+    static let dashedBorder = Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255)
     static let border = Color(red: 10 / 255, green: 10 / 255, blue: 10 / 255)
     static let divider = Color(red: 226 / 255, green: 225 / 255, blue: 220 / 255)
     static let accent = Color(red: 166 / 255, green: 116 / 255, blue: 255 / 255)
@@ -19,12 +20,22 @@ enum ForgeDesign {
     }
 }
 
+/// Hard offset shadow matching the handoff's `box-shadow: Xpx Ypx 0 color`.
+/// Implemented as an offset filled rectangle behind the view (the box
+/// silhouette), not SwiftUI `.shadow`, which projects per-layer content
+/// silhouettes and mis-renders under `cacheDisplay`-based capture.
+extension View {
+    func forgeShadow(_ color: Color, x: CGFloat, y: CGFloat) -> some View {
+        background(Rectangle().fill(color).offset(x: x, y: y))
+    }
+}
+
 private extension View {
     func forgeCard(shadow: Bool = true) -> some View {
         self
             .background(Color.white)
             .overlay(Rectangle().stroke(ForgeDesign.border, lineWidth: 1.5))
-            .shadow(color: shadow ? ForgeDesign.ink : .clear, radius: 0, x: 4, y: 4)
+            .forgeShadow(shadow ? ForgeDesign.ink : .clear, x: 4, y: 4)
     }
 
     func forgeTerminal() -> some View {
@@ -47,7 +58,7 @@ private struct ForgePrimaryButtonStyle: ButtonStyle {
             .padding(.vertical, 8)
             .background(fill)
             .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
-            .shadow(color: ForgeDesign.ink, radius: 0, x: configuration.isPressed ? 1 : 3, y: configuration.isPressed ? 1 : 3)
+            .forgeShadow(ForgeDesign.ink, x: configuration.isPressed ? 1 : 3, y: configuration.isPressed ? 1 : 3)
             .offset(x: configuration.isPressed ? 2 : 0, y: configuration.isPressed ? 2 : 0)
     }
 }
@@ -179,6 +190,11 @@ struct WorkspaceView: View {
         .onReceive(NotificationCenter.default.publisher(for: .forgeApplicationWillTerminate)) { _ in
             workspace.stopMissionControlObservers()
         }
+        #if DEBUG
+        .onReceive(NotificationCenter.default.publisher(for: .forgeDebugPresentSurface)) { note in
+            presentDebugSurface(note.object as? String)
+        }
+        #endif
         .overlay {
             if showCommandPalette {
                 CommandPaletteView(isPresented: $showCommandPalette)
@@ -207,6 +223,40 @@ struct WorkspaceView: View {
             }
         }
     }
+
+    #if DEBUG
+    /// Resolve a verification-script surface spec. Formats:
+    /// `missionControl` `history` `answerQueue` `taskQueue` `palette`
+    /// `dismiss` `diff:<taskID>` `audit:<taskID>` `fullPlan:<taskID>:<revisionID>`
+    private func presentDebugSurface(_ spec: String?) {
+        guard let spec, !spec.isEmpty else { return }
+        let parts = spec.split(separator: ":").map(String.init)
+        switch parts[0] {
+        case "missionControl":
+            surfaceCoordinator.present(.missionControl)
+            workspace.refreshMissionControl()
+        case "history":
+            surfaceCoordinator.present(.history)
+        case "answerQueue":
+            surfaceCoordinator.present(.answerQueue)
+        case "taskQueue":
+            surfaceCoordinator.present(.taskQueue)
+        case "palette":
+            showCommandPalette = true
+        case "dismiss":
+            surfaceCoordinator.dismiss()
+            showCommandPalette = false
+        case "diff" where parts.count >= 2:
+            surfaceCoordinator.present(.diff(taskID: parts[1]))
+        case "audit" where parts.count >= 2:
+            surfaceCoordinator.present(.audit(taskID: parts[1]))
+        case "fullPlan" where parts.count >= 3:
+            surfaceCoordinator.present(.fullPlan(taskID: parts[1], revisionID: parts[2]))
+        default:
+            break
+        }
+    }
+    #endif
 
     @ViewBuilder
     private var workspaceContent: some View {
@@ -242,6 +292,8 @@ struct WorkspaceView: View {
                     AgentQuestionState(task: task)
                 } else if needsDecisionLayout(task) {
                     NeedsDecisionState(task: task)
+                } else if let revision = compactApprovalRevision(task) {
+                    CompactPlanApprovalState(task: task, revision: revision)
                 } else if usesNewSessionLayout(task) {
                     TaskWorkspaceView(task: task)
                 } else {
@@ -336,6 +388,18 @@ struct WorkspaceView: View {
             !["Running", "Testing", "Completed", "Failed"].contains(task.status)
     }
 
+    /// `1b` standalone plan approval: a proposed plan exists and nothing has
+    /// run yet — approval is the single next action, so the compact window
+    /// takes over instead of the full session layout.
+    private func compactApprovalRevision(_ task: ForgeTask) -> PlanRevision? {
+        guard task.status == "Human Review",
+              task.currentPhase == "Plan Review",
+              task.agentRunLoops.isEmpty,
+              task.editProposal == nil
+        else { return nil }
+        return task.planRevisions.last
+    }
+
     private func needsDecisionLayout(_ task: ForgeTask) -> Bool {
         task.status == "Human Review" &&
             task.currentPhase != "Plan Review" &&
@@ -354,6 +418,7 @@ struct WorkspaceView: View {
         if needsDetailedQuestionLayout(task) { return .review }
         if task.status == "Completed" || needsDecisionLayout(task) { return .compact }
         if task.status == "Failed" { return .review }
+        if compactApprovalRevision(task) != nil { return .compact }
         return .session
     }
 
@@ -641,7 +706,7 @@ private struct CommandPaletteView: View {
             .frame(width: 620)
             .background(ForgeDesign.paper)
             .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
-            .shadow(color: ForgeDesign.ink, radius: 0, x: 8, y: 8)
+            .forgeShadow(ForgeDesign.ink, x: 8, y: 8)
             .padding(.top, 56)
         }
         .onAppear { searchFocused = true }
@@ -1447,7 +1512,7 @@ private struct TaskComposer: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            TextField("Describe the next task…", text: $objective)
+            TextField("describe a task… (↵ to plan)", text: $objective)
                 .textFieldStyle(.plain)
                 .font(.custom("JetBrains Mono", fixedSize: 11))
                 .padding(.horizontal, 9)
@@ -1656,7 +1721,7 @@ private struct FirstTaskSuccessState: View {
                     .frame(width: 88, height: 88)
                     .background(ForgeDesign.accent)
                     .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
-                    .shadow(color: ForgeDesign.ink, radius: 0, x: 6, y: 6)
+                    .forgeShadow(ForgeDesign.ink, x: 6, y: 6)
                     .padding(.bottom, 24)
 
                 Text("FIRST TASK SHIPPED")
@@ -2506,7 +2571,7 @@ private struct AgentAnswerQueueView: View {
                 .foregroundStyle(selected ? ForgeDesign.accent : ForgeDesign.ink)
                 .background(selected ? ForgeDesign.ink : Color.white)
                 .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
-                .shadow(color: selected ? ForgeDesign.ink : .clear, radius: 0, x: 3, y: 3)
+                .forgeShadow(selected ? ForgeDesign.ink : .clear, x: 3, y: 3)
         }
         .buttonStyle(.plain)
         .disabled(disabled)
@@ -2590,7 +2655,7 @@ private struct AgentQuestionChoice: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(selected ? Color(red: 247 / 255, green: 242 / 255, blue: 255 / 255) : Color.white)
             .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
-            .shadow(color: selected ? ForgeDesign.ink : .clear, radius: 0, x: 4, y: 4)
+            .forgeShadow(selected ? ForgeDesign.ink : .clear, x: 4, y: 4)
         }
         .buttonStyle(.plain)
     }
@@ -2680,7 +2745,7 @@ private struct NeedsDecisionState: View {
             }
             .background(Color.white)
             .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
-            .shadow(color: ForgeDesign.ink, radius: 0, x: 5, y: 5)
+            .forgeShadow(ForgeDesign.ink, x: 5, y: 5)
             .padding(.horizontal, 28)
             .padding(.top, 26)
 
@@ -3005,7 +3070,7 @@ private struct CrashRecoveryState: View {
                         .frame(width: 56, height: 56)
                         .background(ForgeDesign.warning)
                         .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
-                        .shadow(color: ForgeDesign.ink, radius: 0, x: 4, y: 4)
+                        .forgeShadow(ForgeDesign.ink, x: 4, y: 4)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Forge quit unexpectedly. Your work didn't.")
                             .font(.system(size: 22, weight: .heavy))
@@ -3908,7 +3973,7 @@ private struct NewTaskEmptyState: View {
             Spacer()
 
             ForgeLogo(size: 56)
-                .shadow(color: ForgeDesign.ink, radius: 0, x: 4, y: 4)
+                .forgeShadow(ForgeDesign.ink, x: 4, y: 4)
                 .padding(.bottom, 22)
             Text("What should Forge build?")
                 .font(.system(size: 28, weight: .heavy))
@@ -3931,14 +3996,14 @@ private struct NewTaskEmptyState: View {
 
                 Button(action: createTask) {
                     Text("PLAN IT →")
-                        .font(.custom("JetBrains Mono", fixedSize: 12).weight(.bold))
+                        .font(.custom("JetBrains Mono", fixedSize: 12.5).weight(.bold))
+                        .tracking(0.5)
                         .foregroundStyle(ForgeDesign.accent)
                         .padding(.horizontal, 22)
                         .frame(height: 50)
                         .background(ForgeDesign.ink)
                 }
                 .buttonStyle(.plain)
-                .disabled(objective.isEmpty)
             }
             .frame(maxWidth: 640)
             .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
@@ -3961,12 +4026,14 @@ private struct NewTaskEmptyState: View {
             HStack {
                 Text("⌘N new task · ⌘K switch repo")
                 Spacer()
-                Text("indexed 1,204 files · in sync")
+                Text("indexed ")
+                    + Text("1,204").fontWeight(.bold).foregroundStyle(ForgeDesign.ink)
+                    + Text(" files · in sync")
             }
             .font(.custom("JetBrains Mono", fixedSize: 10))
             .foregroundStyle(ForgeDesign.muted)
             .padding(.horizontal, 20)
-            .frame(height: 40)
+            .padding(.vertical, 11)
             .overlay(alignment: .top) {
                 Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
             }
@@ -3989,6 +4056,145 @@ private struct NewTaskEmptyState: View {
     }
 }
 
+private struct CompactPlanApprovalState: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
+    @EnvironmentObject private var surfaceCoordinator: WorkspaceSurfaceCoordinator
+
+    var task: ForgeTask
+    var revision: PlanRevision
+
+    var body: some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 10) {
+                    Text("PLAN PROPOSED")
+                        .font(ForgeDesign.mono(9, weight: .bold))
+                        .tracking(0.5)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(Color.white)
+                        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                    Text("#\(taskNumber) · nothing has run yet")
+                        .font(ForgeDesign.mono(10.5))
+                        .foregroundStyle(ForgeDesign.muted)
+                }
+                Text(task.title)
+                    .font(.system(size: 17, weight: .heavy))
+                    .tracking(-0.3)
+            }
+            .padding(.horizontal, 28)
+            .padding(.vertical, 22)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.white)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+            }
+
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(Array(revision.steps.enumerated()), id: \.element.id) { index, step in
+                        HStack(alignment: .center, spacing: 14) {
+                            Text("\(index + 1)")
+                                .font(ForgeDesign.mono(10, weight: .heavy))
+                                .frame(width: 20, height: 20)
+                                .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(step.title)
+                                    .font(ForgeDesign.mono(12, weight: .bold))
+                                Text(step.summary)
+                                    .font(ForgeDesign.mono(10))
+                                    .foregroundStyle(ForgeDesign.dashedBorder)
+                                    .lineLimit(1)
+                            }
+                            Spacer(minLength: 8)
+                            Button("✎ EDIT") {
+                                surfaceCoordinator.present(.fullPlan(taskID: task.id, revisionID: revision.id))
+                            }
+                            .font(ForgeDesign.mono(10, weight: .bold))
+                            .tracking(0.5)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.white)
+                            .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 28)
+                        .padding(.vertical, 14)
+                        .overlay(alignment: .bottom) {
+                            Rectangle().fill(ForgeDesign.divider).frame(height: 1.5)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .background(Color.white)
+
+            HStack(spacing: 14) {
+                (Text("est. ")
+                    + Text(estimateText).fontWeight(.bold).foregroundStyle(ForgeDesign.ink)
+                    + Text(" · touches ")
+                    + Text(touchesText).fontWeight(.bold).foregroundStyle(ForgeDesign.ink)
+                    + Text(" · runs tests after each step"))
+                    .font(ForgeDesign.mono(10.5))
+                    .foregroundStyle(ForgeDesign.muted)
+                Spacer()
+                HStack(spacing: 10) {
+                    Button {
+                        workspace.generatePlanRevision(for: task)
+                    } label: {
+                        Text(workspace.isGeneratingPlanRevision(taskID: task.id) ? "↻ REGENERATING…" : "↻ REGENERATE")
+                            .font(ForgeDesign.mono(11.5, weight: .bold))
+                            .tracking(0.5)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 11)
+                            .background(Color.white)
+                            .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(workspace.isGeneratingPlanRevision(taskID: task.id))
+
+                    Button {
+                        workspace.approvePlan(for: task)
+                    } label: {
+                        Text(workspace.isApprovingPlan(taskID: task.id) ? "✓ APPROVING…" : "✓ APPROVE & RUN")
+                            .font(ForgeDesign.mono(11.5, weight: .bold))
+                            .tracking(0.5)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 11)
+                            .background(ForgeDesign.accent)
+                            .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                            .forgeShadow(ForgeDesign.ink, x: 3, y: 3)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(workspace.isApprovingPlan(taskID: task.id))
+                    .keyboardShortcut(.return, modifiers: [.command])
+                }
+            }
+            .padding(.horizontal, 28)
+            .padding(.vertical, 14)
+            .background(Color(red: 247 / 255, green: 247 / 255, blue: 244 / 255))
+            .overlay(alignment: .top) {
+                Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var taskNumber: Int {
+        let ordered = workspace.tasks.sorted { $0.createdAt < $1.createdAt }
+        return (ordered.firstIndex { $0.id == task.id }).map { $0 + 1 } ?? 1
+    }
+
+    private var estimateText: String {
+        revision.estimatedMinutes.map { "~\($0) min" } ?? "time pending"
+    }
+
+    private var touchesText: String {
+        let count = revision.expectedFileAreas?.count ?? 0
+        return count == 1 ? "1 file area" : "\(count) file areas"
+    }
+}
+
 private struct ExampleTaskButton: View {
     var title: String
     var action: () -> Void
@@ -4002,7 +4208,7 @@ private struct ExampleTaskButton: View {
                 .padding(.vertical, 6)
                 .overlay(
                     Rectangle()
-                        .stroke(ForgeDesign.muted, style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+                        .stroke(ForgeDesign.dashedBorder, style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
                 )
                 .lineLimit(2)
         }
@@ -6021,7 +6227,7 @@ private struct EmbeddedConversationPlanCard: View {
         .padding(11)
         .background(Color.white)
         .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
-        .shadow(color: ForgeDesign.ink, radius: 0, x: 4, y: 4)
+        .forgeShadow(ForgeDesign.ink, x: 4, y: 4)
     }
 
     private var approved: Bool {

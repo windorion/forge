@@ -10,7 +10,16 @@ final class WorkspaceModel: ObservableObject {
     nonisolated private static let missionControlRepositoriesKey = "forge.missionControlRepositories"
 
     @Published var tasks: [ForgeTask] = []
-    @Published var selectedTaskID: ForgeTask.ID?
+    @Published var selectedTaskID: ForgeTask.ID? {
+        didSet {
+            if let selectedTaskID {
+                UserDefaults.standard.set(selectedTaskID, forKey: Self.selectedTaskPreferenceKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Self.selectedTaskPreferenceKey)
+            }
+        }
+    }
+    nonisolated private static let selectedTaskPreferenceKey = "forge.selectedTaskID"
     @Published var runtimeHealth: RuntimeHealth?
     @Published var runtimeState: RuntimeConnectionState = .unchecked
     @Published var runtimeLastCheckedAt: Date?
@@ -2111,6 +2120,11 @@ final class WorkspaceModel: ObservableObject {
            remoteTasks.contains(where: { $0.id == pendingMissionControlTaskID }) {
             selectedTaskID = pendingMissionControlTaskID
             self.pendingMissionControlTaskID = nil
+        }
+        if selectedTaskID == nil,
+           let persisted = UserDefaults.standard.string(forKey: Self.selectedTaskPreferenceKey),
+           remoteTasks.contains(where: { $0.id == persisted }) {
+            selectedTaskID = persisted
         }
         if let selectedTaskID,
            !remoteTasks.contains(where: { $0.id == selectedTaskID }) {

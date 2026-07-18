@@ -10,6 +10,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
 
+        #if DEBUG
+        DebugWindowCapture.activate()
+        #endif
+
         DispatchQueue.main.async {
             for window in NSApp.windows {
                 window.titleVisibility = .hidden
