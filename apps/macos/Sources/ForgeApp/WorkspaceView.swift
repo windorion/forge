@@ -111,6 +111,7 @@ private enum WorkspaceSurface: Equatable {
     case diff(taskID: ForgeTask.ID)
     case audit(taskID: ForgeTask.ID)
     case fullPlan(taskID: ForgeTask.ID, revisionID: PlanRevision.ID)
+    case cost(taskID: ForgeTask.ID)
 
     var windowMode: WorkspaceWindowMode {
         switch self {
@@ -120,6 +121,8 @@ private enum WorkspaceSurface: Equatable {
             return .review
         case .diff:
             return .session
+        case .cost:
+            return .cost
         }
     }
 }
@@ -255,6 +258,8 @@ struct WorkspaceView: View {
             surfaceCoordinator.present(.diff(taskID: parts[1]))
         case "audit" where parts.count >= 2:
             surfaceCoordinator.present(.audit(taskID: parts[1]))
+        case "cost" where parts.count >= 2:
+            surfaceCoordinator.present(.cost(taskID: parts[1]))
         case "fullPlan" where parts.count >= 3:
             surfaceCoordinator.present(.fullPlan(taskID: parts[1], revisionID: parts[2]))
         default:
@@ -365,6 +370,12 @@ struct WorkspaceView: View {
                 FullPlanApprovalView(task: task, revision: revision, close: surfaceCoordinator.dismiss)
             } else {
                 unavailableSurface("The plan revision is no longer available.")
+            }
+        case let .cost(taskID):
+            if let task = workspace.tasks.first(where: { $0.id == taskID }) {
+                TaskCostBreakdownView(task: task, close: surfaceCoordinator.dismiss)
+            } else {
+                unavailableSurface("The task for this cost breakdown is no longer available.")
             }
         }
     }
@@ -550,11 +561,14 @@ private enum WorkspaceWindowMode: Equatable {
     case recovery
     case review
     case session
+    case cost
 
     var contentSize: NSSize {
         switch self {
         case .compact:
             return NSSize(width: 980, height: 520)
+        case .cost:
+            return NSSize(width: 1100, height: 663)
         case .recovery:
             return NSSize(width: 980, height: 620)
         case .review:
@@ -584,6 +598,8 @@ private struct WindowSizingView: NSViewRepresentable {
             switch mode {
             case .compact:
                 window.contentMinSize = NSSize(width: 900, height: 480)
+            case .cost:
+                window.contentMinSize = NSSize(width: 1000, height: 600)
             case .recovery:
                 window.contentMinSize = NSSize(width: 900, height: 580)
             case .review:
@@ -2291,7 +2307,7 @@ private struct AgentQuestionState: View {
 
             VStack(alignment: .leading, spacing: 7) {
                 ForEach(recentContextEvents) { event in
-                    Text("\(event.createdAt.prefix(19))  \(event.message)")
+                    Text("\(OfflineWorkspaceState.clockTime(event.createdAt))  \(event.message)")
                 }
                 Text("⏸ decision point reached — asking instead of guessing")
                     .foregroundStyle(ForgeDesign.warning)
@@ -7678,6 +7694,267 @@ private struct ProposalTransactionEvidenceCard: View {
             return ForgeDesign.danger
         default:
             return ForgeDesign.accent
+        }
+    }
+}
+
+private struct TaskCostBreakdownView: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
+
+    var task: ForgeTask
+    var close: () -> Void
+    @State private var openStepIDs: Set<String> = []
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                ForgeLogo(size: 18)
+                Text("FORGE — COST · #\(task.id.prefix(6))")
+                    .font(ForgeDesign.mono(12, weight: .bold))
+                    .tracking(0.5)
+                Spacer()
+                Text(ForgeDesign.appVersion)
+                    .font(ForgeDesign.mono(10))
+                    .foregroundStyle(ForgeDesign.muted)
+                Button("CLOSE", action: close)
+                    .font(ForgeDesign.mono(9, weight: .bold))
+                    .buttonStyle(.plain)
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 44)
+            .background(Color(red: 236 / 255, green: 236 / 255, blue: 234 / 255))
+            .overlay(alignment: .bottom) { Rectangle().fill(ForgeDesign.ink).frame(height: 1.5) }
+
+            HStack(alignment: .center, spacing: 22) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("TASK TOTAL")
+                        .font(ForgeDesign.mono(9, weight: .bold))
+                        .tracking(1)
+                        .foregroundStyle(ForgeDesign.muted)
+                    Text(String(format: "$%.2f", totalCost))
+                        .font(ForgeDesign.mono(34, weight: .heavy))
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(task.title)
+                        .font(.system(size: 14, weight: .heavy))
+                        .lineLimit(1)
+                    Text(headerMeta)
+                        .font(ForgeDesign.mono(10))
+                        .foregroundStyle(ForgeDesign.muted)
+                }
+                .padding(.leading, 22)
+                .overlay(alignment: .leading) { Rectangle().fill(ForgeDesign.divider).frame(width: 1.5) }
+                Spacer()
+                HStack(spacing: 16) {
+                    headerMetric(value: "\(totalCalls)", label: "model calls")
+                    headerMetric(value: "\(task.agentRunSteps.count)", label: "agent steps")
+                    headerMetric(value: String(format: "$%.2f", averageStepCost), label: "avg / step")
+                }
+            }
+            .padding(.horizontal, 26)
+            .padding(.vertical, 18)
+            .background(Color.white)
+            .overlay(alignment: .bottom) { Rectangle().fill(ForgeDesign.ink).frame(height: 1.5) }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("COST BY STEP")
+                            .font(ForgeDesign.mono(9, weight: .bold))
+                            .tracking(1)
+                            .foregroundStyle(ForgeDesign.muted)
+                        GeometryReader { proxy in
+                            HStack(spacing: 0) {
+                                ForEach(Array(costSteps.enumerated()), id: \.element.id) { index, step in
+                                    Rectangle()
+                                        .fill(barColor(index: index, step: step))
+                                        .frame(width: max(proxy.size.width * barFraction(step), 8))
+                                        .overlay(alignment: .trailing) {
+                                            if index < costSteps.count - 1 {
+                                                Rectangle().fill(ForgeDesign.ink).frame(width: 1.5)
+                                            }
+                                        }
+                                }
+                            }
+                            .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                        }
+                        .frame(height: 26)
+                        HStack(spacing: 0) {
+                            ForEach(Array(costSteps.enumerated()), id: \.element.id) { index, step in
+                                Text(index == heaviestIndex ? "\(shortLabel(step)) ← heaviest" : shortLabel(step))
+                                    .font(ForgeDesign.mono(8.5, weight: index == heaviestIndex ? .bold : .regular))
+                                    .foregroundStyle(index == heaviestIndex ? ForgeDesign.ink : ForgeDesign.muted)
+                                    .lineLimit(1)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 26)
+                    .padding(.top, 16)
+                    .padding(.bottom, 8)
+
+                    VStack(spacing: 10) {
+                        ForEach(Array(costSteps.enumerated()), id: \.element.id) { index, step in
+                            stepRow(index: index, step: step)
+                        }
+                    }
+                    .padding(.horizontal, 26)
+                    .padding(.top, 12)
+                }
+            }
+            .background(ForgeDesign.paper)
+
+            HStack(spacing: 14) {
+                Text(footerInsight)
+                    .font(ForgeDesign.mono(10))
+                    .foregroundStyle(ForgeDesign.muted)
+                    .lineLimit(1)
+                Spacer()
+                Button("⤓ EXPORT CSV") { exportCSV() }
+                    .buttonStyle(ForgeSecondaryButtonStyle())
+            }
+            .padding(.horizontal, 26)
+            .padding(.vertical, 13)
+            .background(Color.white)
+            .overlay(alignment: .top) { Rectangle().fill(ForgeDesign.ink).frame(height: 1.5) }
+        }
+        .background(ForgeDesign.paper)
+    }
+
+    private func stepRow(index: Int, step: AgentRunStep) -> some View {
+        let isOpen = openStepIDs.contains(step.id)
+        return VStack(spacing: 0) {
+            Button {
+                if isOpen { openStepIDs.remove(step.id) } else { openStepIDs.insert(step.id) }
+            } label: {
+                HStack(spacing: 13) {
+                    Text(isOpen ? "▾" : "▸")
+                        .font(ForgeDesign.mono(10, weight: .heavy))
+                        .frame(width: 14)
+                    Text("\(index + 1)")
+                        .font(ForgeDesign.mono(10, weight: .heavy))
+                        .frame(width: 24, height: 24)
+                        .background(index == heaviestIndex ? ForgeDesign.accent : Color.white)
+                        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                    Text(stepLabel(step))
+                        .font(.system(size: 13, weight: .bold))
+                        .lineLimit(1)
+                    Spacer()
+                    Text("\(callCount(step)) call\(callCount(step) == 1 ? "" : "s") · \(step.provider.model)")
+                        .font(ForgeDesign.mono(9.5))
+                        .foregroundStyle(ForgeDesign.dashedBorder)
+                    Text(String(format: "$%.2f", stepCost(step)))
+                        .font(ForgeDesign.mono(13, weight: .heavy))
+                        .frame(width: 64, alignment: .trailing)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 11)
+            }
+            .buttonStyle(.plain)
+
+            if isOpen {
+                VStack(spacing: 0) {
+                    ForEach(0..<callCount(step), id: \.self) { call in
+                        HStack(spacing: 12) {
+                            Text(OfflineWorkspaceState.clockTime(step.createdAt))
+                                .foregroundStyle(ForgeDesign.dashedBorder)
+                                .frame(width: 60, alignment: .leading)
+                            Text(call == 0 ? step.summary : "retry attempt \(call + 1) — recovered provider output")
+                                .foregroundStyle(Color(red: 42 / 255, green: 42 / 255, blue: 38 / 255))
+                                .lineLimit(1)
+                            Spacer()
+                            Text(step.provider.mode == "local" ? "local · $0" : "provider call")
+                                .foregroundStyle(ForgeDesign.dashedBorder)
+                            Text(String(format: "$%.2f", stepCost(step) / Double(max(callCount(step), 1))))
+                                .fontWeight(.bold)
+                                .frame(width: 52, alignment: .trailing)
+                        }
+                        .font(ForgeDesign.mono(10))
+                        .padding(.vertical, 7)
+                        .overlay(alignment: .bottom) {
+                            Rectangle().fill(Color(red: 236 / 255, green: 236 / 255, blue: 234 / 255)).frame(height: 1.5)
+                        }
+                    }
+                }
+                .padding(.leading, 59)
+                .padding(.trailing, 16)
+                .padding(.bottom, 10)
+                .overlay(alignment: .top) { Rectangle().fill(ForgeDesign.divider).frame(height: 1.5) }
+            }
+        }
+        .background(Color.white)
+        .overlay(Rectangle().stroke(index == heaviestIndex ? ForgeDesign.ink : ForgeDesign.divider, lineWidth: 1.5))
+    }
+
+    private func headerMetric(value: String, label: String) -> some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            Text(value)
+                .font(ForgeDesign.mono(15, weight: .heavy))
+            Text(label)
+                .font(ForgeDesign.mono(10))
+                .foregroundStyle(ForgeDesign.muted)
+        }
+    }
+
+    private var costSteps: [AgentRunStep] { task.agentRunSteps }
+    private func callCount(_ step: AgentRunStep) -> Int { max(step.providerAttemptCount ?? 1, 1) }
+    private var totalCalls: Int { costSteps.reduce(0) { $0 + callCount($1) } }
+    private var totalCost: Double { task.planRevisions.last?.estimatedCostUSD ?? 0 }
+    private var averageStepCost: Double { costSteps.isEmpty ? 0 : totalCost / Double(costSteps.count) }
+    private func stepCost(_ step: AgentRunStep) -> Double {
+        totalCalls == 0 ? 0 : totalCost * Double(callCount(step)) / Double(totalCalls)
+    }
+    private var heaviestIndex: Int {
+        costSteps.enumerated().max { callCount($0.element) < callCount($1.element) }?.offset ?? 0
+    }
+    private func barFraction(_ step: AgentRunStep) -> CGFloat {
+        totalCalls == 0 ? 0 : CGFloat(callCount(step)) / CGFloat(totalCalls)
+    }
+    private func barColor(index: Int, step: AgentRunStep) -> Color {
+        index == heaviestIndex ? ForgeDesign.accent : (index % 2 == 0 ? Color(red: 236 / 255, green: 236 / 255, blue: 234 / 255) : Color(red: 201 / 255, green: 201 / 255, blue: 196 / 255))
+    }
+    private func shortLabel(_ step: AgentRunStep) -> String {
+        stepLabel(step).lowercased()
+    }
+    private func stepLabel(_ step: AgentRunStep) -> String {
+        switch step.action {
+        case "GenerateEditProposal": return "Write + self-fix"
+        case "RepositoryInspection": return "Read code"
+        case "RunTaskCommand": return "Tests"
+        case "RunValidation": return "Tests"
+        case "RequestPlanApproval": return "Plan"
+        case "WaitForHumanReview": return "Review gate"
+        default: return step.action
+        }
+    }
+
+    private var headerMeta: String {
+        let minutes = NeedsDecisionState.minutesLabel(from: task.createdAt, to: task.updatedAt)
+        let provider = costSteps.last?.provider.model ?? task.planRevisions.last?.provider.model ?? "local"
+        let stepsText = costSteps.count == 1 ? "1 step" : "\(costSteps.count) steps"
+        let callsText = totalCalls == 1 ? "1 model call" : "\(totalCalls) model calls"
+        return "\(task.status.lowercased()) · \(minutes) runtime · \(stepsText) · \(callsText) · \(provider)"
+    }
+
+    private var footerInsight: String {
+        let retries = costSteps.reduce(0) { $0 + max(callCount($1) - 1, 0) }
+        if retries > 0 {
+            return "▸ provider retries cost \(String(format: "$%.2f", totalCost == 0 ? 0 : totalCost * Double(retries) / Double(max(totalCalls, 1)))) — \(retries) malformed output(s) recovered before you ever saw them"
+        }
+        return "▸ every model call ran inside the reviewed loop — no hidden work, no unreviewed spend"
+    }
+
+    private func exportCSV() {
+        var rows = ["step,action,summary,calls,model,cost_usd,created_at,completed_at"]
+        for (index, step) in costSteps.enumerated() {
+            let summary = step.summary.replacingOccurrences(of: "\"", with: "'")
+            rows.append("\(index + 1),\(step.action),\"\(summary)\",\(callCount(step)),\(step.provider.model),\(String(format: "%.4f", stepCost(step))),\(step.createdAt),\(step.completedAt ?? "")")
+        }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "forge-task-\(task.id.prefix(6))-cost.csv"
+        if panel.runModal() == .OK, let url = panel.url {
+            try? rows.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
         }
     }
 }

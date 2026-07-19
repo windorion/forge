@@ -4690,3 +4690,36 @@ Next:
 - Remaining Phase 4: 18a merge conflict (construct a real conflicted
   merge in the demo repo), 33a detailed agent question, and the 37a
   step/model-call cost accordion build.
+
+## 2026-07-19 14:56:06 +0200 (CEST)
+
+Conversation summary:
+
+- Phase 4 complete: 18a, 33a driven on real states and the 37a cost
+  breakdown surface built; 21/43 Verified.
+
+Done:
+
+- 18a: constructed a real conflicted merge in the demo repo (divergent
+  README edits on main vs forge/retry-tuning); the conflict state rendered
+  real three-way content and was captured; merge aborted afterward.
+- 33a: enriched the real WaitForHumanReview step with persisted
+  inspection context (contextFilePaths/readPaths/searchTerms) so the
+  detailed question layout routed naturally; context stream times fixed
+  to HH:mm:ss.
+- 37a: new TaskCostBreakdownView exclusive surface (1100x663 cost mode):
+  TASK TOTAL header with real meta and metric trio, proportional COST BY
+  STEP bar with heaviest highlight, per-step accordion with per-call
+  rows, insight footer, real EXPORT CSV; driven via a new cost:<taskID>
+  debug spec. Honest substitutions recorded (local $0 costs, no token
+  columns yet).
+- One capture-infra hiccup diagnosed: an app instance stopped responding
+  to Darwin notifications after a clock jump; relaunching restored the
+  pipeline.
+- Coverage: 21 Verified / 6 Implemented / 3 Partial / 13 Missing;
+  readiness ~79-83%.
+
+Next:
+
+- Phase 5: fix the SSE task-refresh gap, finish Mission Control
+  background-task routing (4a), verify 26a/2a/2b/34a/21a/5a.

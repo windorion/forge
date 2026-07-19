@@ -36,12 +36,12 @@ the actual visual source of truth.
 | Core | `10a` Fullscreen diff review | Verified | Layout aligned and compared on live proposal data (docs/verification/10a); PLAN STEP badge, CONVENTION MATCHED, and OPEN PR await runtime/P2 capability. |
 | Core | `26a` Task queue | Implemented | The opaque exclusive 1240px real-data surface has running/queued/needs-you lanes, 1-3 persisted concurrency settings, ordered priority controls, removal, pause, estimates, automatic restart dispatch, and enforced same-repository serialization. Pointer drag polish and exact rendered comparison remain. |
 | Core | `4a` Mission control | Partial | The opaque exclusive 1240px three-column surface, verified observers, explicit session-scoped active-runtime authorization, authorization evidence, live health/task/queue/git aggregation, focus shortcuts, New Task, and cross-runtime Pause All are real. Full background task creation/detail/review routing and rendered comparison remain. |
-| Decisions | `33a` Agent question | Implemented | Context-backed `WaitForHumanReview` steps open the 1240px choice/consequence/frozen-context layout; answer-and-resume and confirmed abort are real, while rendered comparison remains. |
+| Decisions | `33a` Agent question | Verified | Rendered comparison done on a real enriched WaitForHumanReview step (docs/verification/33a). |
 | Decisions | `34a` Batch questions | Implemented | The sidebar and detailed question state open an opaque exclusive 1240px answer queue backed by all waiting tasks; partial submit leaves unanswered tasks paused and resumes answered loops independently. |
-| Decisions | `18a` Merge conflict | Implemented | Actual unmerged index entries open the 1240px conflicted-file/three-way/draft/action layout; Base/Ours/Theirs/working contents, explicit confirmation, stale-review protection, manual/side selection, single-file staging, and no-auto-continue boundary are real. Rendered comparison remains. |
+| Decisions | `18a` Merge conflict | Verified | Rendered comparison done on a real conflicted merge (docs/verification/18a). |
 | Decisions | `19a` Failed/rollback | Verified | Rendered comparison done via the real startup-recovery fail path (docs/verification/19a). |
 | Decisions | `24a` First success | Verified | Rendered comparison done on the real first Completed task (docs/verification/24a); runtime branch-name bug fixed. Merged-PR wording stays P2. |
-| Decisions | `37a` Cost breakdown | Partial | Task estimates exist; step/model-call accordion is missing. |
+| Decisions | `37a` Cost breakdown | Verified | Step/model-call accordion surface built and compared (docs/verification/37a); token columns await token accounting; in-app cost-metric entry point pending. |
 | Settings | `22a` General | Implemented | Shared 980px navigation, startup, appearance, notification, sound, and update rows exist; rendered comparison remains. |
 | Settings | `3a` Model | Verified | Rendered comparison done (docs/verification/3a); STANDARD/MAX labels, real budget usage, real stats footer. Provider cards list real runtime providers, not the illustrative Claude lineup. |
 | Settings | `6a` GitHub | Partial | Visual structure verified (docs/verification/6a); only the OAuth device-flow connection remains, blocked on the founder GitHub OAuth App Client ID (Phase 8 with 15a). |
@@ -78,13 +78,14 @@ the actual visual source of truth.
 - Primary V0 screen implementation: all 5 primary targets (`1a` `1b` `10a`
   `14a` `32a`) are now `Verified` with rendered-comparison evidence in
   `docs/verification/`.
-- Full handoff: 18 `Verified` (`1a` `1b` `1c` `1d` `1e` `3a` `5b` `10a`
-  `14a` `16a` `17a` `19a` `20a` `24a` `29a` `30a` `31a` `32a`), 8
-  `Implemented`, 4 `Partial`, 13 `Missing` out of 43 named screens/states.
+- Full handoff: 21 `Verified` (`1a` `1b` `1c` `1d` `1e` `3a` `5b` `10a`
+  `14a` `16a` `17a` `18a` `19a` `20a` `24a` `29a` `30a` `31a` `32a` `33a`
+  `37a`), 6 `Implemented`, 3 `Partial`, 13 `Missing` out of 43 named
+  screens/states.
 - Verification evidence lives in `docs/verification/<screen-id>/` (self-
   rendered captures + notes; see `docs/verification/README.md` for the
   capture pipeline and per-screen reference sizes).
-- Weighted full-handoff UI readiness: approximately 76-80%.
+- Weighted full-handoff UI readiness: approximately 79-83%.
 
 These metrics must remain separate. Functional completion never implies design
 completion.
