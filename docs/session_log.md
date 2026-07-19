@@ -4631,3 +4631,32 @@ Next:
 
 - Compare/fix 6a, 30a, 5b, 16a from the captured evidence; 5b shortcut
   remapping; 6a blocked on the founder's GitHub OAuth App Client ID.
+
+## 2026-07-19 09:18:27 +0200 (CEST)
+
+Conversation summary:
+
+- Completed Phase 3's remaining settings screens: 30a, 5b, 16a flipped to
+  Verified; 6a visual structure confirmed with only the OAuth device-flow
+  left (blocked on the founder's GitHub OAuth Client ID); 13/43 Verified.
+
+Done:
+
+- 30a: ANTHROPIC/OPENAI/CUSTOM provider labels, reveal-key eye toggle,
+  black TEST KEY with mockup helper copy, real THIS MONTH spend card;
+  Windorion-credits card deliberately kept as the honest local-provider
+  fallback pending the 15a hosted-account decision.
+- 5b: real shortcut remapping shipped — new ForgeShortcuts registry
+  (handoff defaults, UserDefaults overrides, keycap rendering, NSEvent
+  recording), click-to-record UI with RESET ALL, CommandMenu and sidebar
+  bindings read the registry live. Override-proven end to end
+  (forge.shortcut.newTask=t|cmd renders and binds ⌘T).
+- 16a verified with the local-first profile card standing in for hosted
+  identity; TOKENS→COMPLETED substitute recorded.
+- Coverage: 13 Verified / 13 Implemented / 4 Partial / 13 Missing;
+  readiness ~72-76%.
+
+Next:
+
+- Phase 4 decision/recovery states (33a 19a 31a 29a 17a 18a 24a) and the
+  37a step/model-call cost accordion.

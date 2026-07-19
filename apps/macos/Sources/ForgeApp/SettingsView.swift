@@ -76,7 +76,8 @@ struct SettingsView: View {
                         openAIAPIKey: key,
                         clearOpenAIAPIKey: clear ? true : nil
                     )
-                }
+                },
+                tasks: workspace.tasks
             )
         case .account:
             AccountUsageSettingsPage(tasks: workspace.tasks, repoRoot: workspace.runtimeHealth?.workspace?.repoRoot)
@@ -353,16 +354,23 @@ private struct APIKeySettingsPage: View {
     var isSaving: Bool
     var save: (String?, Bool) -> Void
 
+    var tasks: [ForgeTask] = []
+
     @State private var provider = "OPENAI"
     @State private var keyInput = ""
     @State private var statusMessage = ""
+    @State private var revealKey = false
+
+    private var estimatedSpend: Double {
+        tasks.compactMap { $0.planRevisions.last?.estimatedCostUSD }.reduce(0, +)
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: 10) {
                     settingsLabel("PROVIDER")
-                    SettingsSegmented(options: ["OPENAI", "ANTHROPIC", "GEMINI"], selection: $provider)
+                    SettingsSegmented(options: ["ANTHROPIC", "OPENAI", "CUSTOM"], selection: $provider)
                 }
                 .padding(.horizontal, 26)
                 .padding(.top, 18)
@@ -377,22 +385,43 @@ private struct APIKeySettingsPage: View {
                             .overlay(alignment: .trailing) {
                                 Rectangle().fill(SettingsDesign.divider).frame(width: 1.5)
                             }
-                        SecureField(provider == "OPENAI" ? "sk-…" : "paste provider key", text: $keyInput)
-                            .textFieldStyle(.plain)
-                            .font(.custom("JetBrains Mono", fixedSize: 12))
-                            .padding(.horizontal, 14)
-                            .frame(height: 44)
-                            .disabled(provider != "OPENAI")
+                        Group {
+                            if revealKey {
+                                TextField(provider == "OPENAI" ? "sk-…" : "paste provider key", text: $keyInput)
+                            } else {
+                                SecureField(provider == "OPENAI" ? "sk-…" : "paste provider key", text: $keyInput)
+                            }
+                        }
+                        .textFieldStyle(.plain)
+                        .font(.custom("JetBrains Mono", fixedSize: 12))
+                        .padding(.horizontal, 14)
+                        .frame(height: 44)
+                        .disabled(provider != "OPENAI")
+
+                        Button(revealKey ? "🙈" : "👁") {
+                            revealKey.toggle()
+                        }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12))
+                        .frame(width: 40, height: 44)
                     }
                     .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
 
                     HStack(spacing: 12) {
-                        Button(isSaving ? "TESTING…" : "TEST KEY") {
+                        Button {
                             testAndStoreKey()
+                        } label: {
+                            Text(isSaving ? "▸ TESTING…" : "▸ TEST KEY")
+                                .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
+                                .tracking(0.5)
+                                .foregroundStyle(SettingsDesign.accent)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 9)
+                                .background(SettingsDesign.ink)
                         }
-                        .buttonStyle(SettingsOutlineButtonStyle())
+                        .buttonStyle(.plain)
                         .disabled(provider != "OPENAI" || trimmedKey.isEmpty || isSaving)
-                        Text(statusMessage.isEmpty ? keyStatusNote : statusMessage)
+                        Text(statusMessage.isEmpty ? (trimmedKey.isEmpty ? keyStatusNote : "sends one tiny request to verify") : statusMessage)
                             .font(.custom("JetBrains Mono", fixedSize: 10))
                             .foregroundStyle(statusColor)
                     }
@@ -416,7 +445,7 @@ private struct APIKeySettingsPage: View {
                     HStack(spacing: 10) {
                         keyMetric(label: "STATE", value: hasStoredKey ? "● ACTIVE" : "○ MISSING")
                         keyMetric(label: "MODELS VISIBLE", value: hasStoredKey ? "1+" : "0")
-                        keyMetric(label: "STORAGE", value: "KEYCHAIN")
+                        keyMetric(label: "THIS MONTH", value: String(format: "$%.2f", estimatedSpend))
                     }
                 }
                 .padding(.horizontal, 26)
@@ -1089,62 +1118,102 @@ private struct GitHubSettingsPage: View {
 }
 
 private struct ShortcutsSettingsPage: View {
-    private let groups: [(String, [(String, [String])])] = [
-        ("GLOBAL", [
-            ("New task", ["⌘", "N"]),
-            ("Switch repository", ["⌘", "K"]),
-            ("Quick capture", ["⌥", "SPACE"]),
-            ("Open settings", ["⌘", ","])
-        ]),
-        ("TASK", [
-            ("Approve plan and run", ["⌘", "↵"]),
-            ("Open full diff", ["⌘", "1"]),
-            ("Previous file", ["⌘", "←"]),
-            ("Next file", ["⌘", "→"])
-        ]),
-        ("DIFF REVIEW", [
-            ("Previous hunk", ["K"]),
-            ("Next hunk", ["J"]),
-            ("Approve file", ["⌘", "↵"]),
-            ("Close review", ["ESC"])
-        ])
-    ]
+    @State private var recordingID: String?
+    @State private var monitor: Any?
+    @State private var revision = 0
+
+    private var groups: [(String, [ForgeShortcuts.Definition])] {
+        let order = ["TASKS", "NAVIGATE", "REVIEW"]
+        return order.map { group in
+            (group, ForgeShortcuts.definitions.filter { $0.group == group })
+        }
+    }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                ForEach(Array(groups.enumerated()), id: \.offset) { _, group in
+                ForEach(groups, id: \.0) { group in
                     SettingsSectionHeader(title: group.0)
-                    ForEach(Array(group.1.enumerated()), id: \.offset) { _, item in
-                        HStack(spacing: 14) {
-                            Text(item.0)
-                                .font(.system(size: 13.5))
-                            Spacer()
-                            ForEach(item.1, id: \.self) { key in
-                                Text(key)
-                                    .font(.custom("JetBrains Mono", fixedSize: 11).weight(.bold))
-                                    .frame(minWidth: 30)
-                                    .padding(.horizontal, 9)
-                                    .frame(height: 26)
-                                    .background(SettingsDesign.paper)
-                                    .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
-                                    .forgeShadow(SettingsDesign.ink, x: 2, y: 2)
-                            }
-                        }
-                        .padding(.horizontal, 26)
-                        .frame(height: 50)
-                        .overlay(alignment: .bottom) {
-                            Rectangle().fill(SettingsDesign.divider).frame(height: 1.5)
+                    ForEach(group.1) { definition in
+                        shortcutRow(definition)
+                    }
+                }
+                HStack {
+                    Text("▸ click any binding to remap · esc cancels recording")
+                        .font(.custom("JetBrains Mono", fixedSize: 10))
+                        .foregroundStyle(SettingsDesign.faint)
+                    Spacer()
+                    Button("RESET ALL") {
+                        ForgeShortcuts.resetAll()
+                        revision += 1
+                    }
+                    .buttonStyle(SettingsOutlineButtonStyle())
+                }
+                .padding(.horizontal, 26)
+                .frame(height: 52)
+            }
+        }
+        .onDisappear(perform: stopRecording)
+        .id(revision)
+    }
+
+    private func shortcutRow(_ definition: ForgeShortcuts.Definition) -> some View {
+        HStack(spacing: 14) {
+            Text(definition.title)
+                .font(.system(size: 13.5))
+            Spacer()
+            Button {
+                startRecording(definition.id)
+            } label: {
+                HStack(spacing: 6) {
+                    if recordingID == definition.id {
+                        Text("press keys…")
+                            .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
+                            .padding(.horizontal, 10)
+                            .frame(height: 26)
+                            .background(SettingsDesign.accent)
+                            .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
+                    } else {
+                        ForEach(ForgeShortcuts.keycaps(definition.id), id: \.self) { cap in
+                            Text(cap)
+                                .font(.custom("JetBrains Mono", fixedSize: 11).weight(.bold))
+                                .frame(minWidth: 30)
+                                .padding(.horizontal, 9)
+                                .frame(height: 26)
+                                .background(SettingsDesign.paper)
+                                .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
+                                .forgeShadow(SettingsDesign.ink, x: 2, y: 2)
                         }
                     }
                 }
-                Text("▸ bindings shown here match the active app commands · remapping is not enabled yet")
-                    .font(.custom("JetBrains Mono", fixedSize: 10))
-                    .foregroundStyle(SettingsDesign.faint)
-                    .padding(.horizontal, 26)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .frame(height: 48)
             }
+            .buttonStyle(.plain)
         }
+        .padding(.horizontal, 26)
+        .frame(height: 50)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(SettingsDesign.divider).frame(height: 1.5)
+        }
+    }
+
+    private func startRecording(_ id: String) {
+        stopRecording()
+        recordingID = id
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if let captured = ForgeShortcuts.capture(from: event) {
+                ForgeShortcuts.store(id, key: captured.key, modifiers: captured.modifiers)
+            }
+            DispatchQueue.main.async {
+                stopRecording()
+                revision += 1
+            }
+            return nil
+        }
+    }
+
+    private func stopRecording() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        recordingID = nil
     }
 }

@@ -27,24 +27,24 @@ struct ForgeApp: App {
                 Button("Command Palette") {
                     NotificationCenter.default.post(name: .forgeToggleCommandPalette, object: nil)
                 }
-                .keyboardShortcut("k", modifiers: [.command])
+                .keyboardShortcut(ForgeShortcuts.shortcut("commandPalette"))
 
                 Divider()
 
                 Button("New Task") {
                     NotificationCenter.default.post(name: .forgeNewTask, object: nil)
                 }
-                .keyboardShortcut("n", modifiers: [.command])
+                .keyboardShortcut(ForgeShortcuts.shortcut("newTask"))
 
                 Button("Mission Control") {
                     NotificationCenter.default.post(name: .forgeToggleMissionControl, object: nil)
                 }
-                .keyboardShortcut("m", modifiers: [.command, .shift])
+                .keyboardShortcut(ForgeShortcuts.shortcut("missionControl"))
 
                 Button("Switch Repository…") {
                     NotificationCenter.default.post(name: .forgeSwitchRepository, object: nil)
                 }
-                .keyboardShortcut("k", modifiers: [.command, .shift])
+                .keyboardShortcut(ForgeShortcuts.shortcut("switchRepo"))
             }
         }
 

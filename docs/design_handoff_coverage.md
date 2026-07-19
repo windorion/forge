@@ -43,11 +43,11 @@ the actual visual source of truth.
 | Decisions | `24a` First success | Implemented | The first persisted Completed task opens the one-time 980px celebration/receipt/next-step layout with real elapsed/agent/diff/check/review/cost evidence; Queue Next is real and GitHub opens only a safely derived GitHub remote. True merged-PR wording/URL and rendered comparison remain. |
 | Decisions | `37a` Cost breakdown | Partial | Task estimates exist; step/model-call accordion is missing. |
 | Settings | `22a` General | Implemented | Shared 980px navigation, startup, appearance, notification, sound, and update rows exist; rendered comparison remains. |
-| Settings | `3a` Model | Implemented | Square provider cards, API-key handoff, effort selector, budget guardrail, and real save action exist; rendered comparison remains. |
-| Settings | `6a` GitHub | Partial | Exact three-scope and repository-access layout uses real local git state; OAuth/device-flow connection remains. |
-| Settings | `30a` API key | Implemented | Dedicated provider/key/status layout uses real Keychain storage and removal; exact provider test semantics and rendered comparison remain. |
-| Settings | `5b` Shortcuts | Partial | Handoff shortcut groups now reflect active commands; runtime remapping remains. |
-| Settings | `16a` Account/usage | Implemented | Usage summary, activity chart, budget, and repository breakdown use persisted task estimates; rendered comparison remains. |
+| Settings | `3a` Model | Verified | Rendered comparison done (docs/verification/3a); STANDARD/MAX labels, real budget usage, real stats footer. Provider cards list real runtime providers, not the illustrative Claude lineup. |
+| Settings | `6a` GitHub | Partial | Visual structure verified (docs/verification/6a); only the OAuth device-flow connection remains, blocked on the founder GitHub OAuth App Client ID (Phase 8 with 15a). |
+| Settings | `30a` API key | Verified | Rendered comparison done (docs/verification/30a); mockup provider labels, reveal toggle, THIS MONTH card. Windorion-credits card awaits the 15a hosted-account decision. |
+| Settings | `5b` Shortcuts | Verified | Real remapping shipped (ForgeShortcuts registry + recording UI + live menu bindings, override-proven). Focus-repo/cycle-tab/PR/copy-branch bindings and a human keypress pass remain (docs/verification/5b). |
+| Settings | `16a` Account/usage | Verified | Rendered comparison done (docs/verification/16a); local-first profile card replaces hosted identity pending 15a; TOKENS→COMPLETED honest substitute. |
 | Quick entry | `5a` Command palette | Implemented | Scene-level `⌘K` and the visible sidebar entry open the dimmed 620px palette with fuzzy task/command search, keyboard navigation, and real task/runtime/repository/settings actions. |
 | Quick entry | `12a` Quick capture | Missing | Global floating capture window is missing. |
 | Quick entry | `7a` Menu bar mini window | Missing | Menu bar item and mini window are missing. |
@@ -78,13 +78,13 @@ the actual visual source of truth.
 - Primary V0 screen implementation: all 5 primary targets (`1a` `1b` `10a`
   `14a` `32a`) are now `Verified` with rendered-comparison evidence in
   `docs/verification/`.
-- Full handoff: 9 `Verified` (`1a` `1b` `1c` `1d` `1e` `10a` `14a` `20a`
-  `32a`), 17 `Implemented`, 4 `Partial`, 13 `Missing` out of 43 named
-  screens/states.
+- Full handoff: 13 `Verified` (`1a` `1b` `1c` `1d` `1e` `3a` `5b` `10a`
+  `14a` `16a` `20a` `30a` `32a`), 13 `Implemented`, 4 `Partial`, 13
+  `Missing` out of 43 named screens/states.
 - Verification evidence lives in `docs/verification/<screen-id>/` (self-
   rendered captures + notes; see `docs/verification/README.md` for the
   capture pipeline and per-screen reference sizes).
-- Weighted full-handoff UI readiness: approximately 68-72%.
+- Weighted full-handoff UI readiness: approximately 72-76%.
 
 These metrics must remain separate. Functional completion never implies design
 completion.

@@ -931,7 +931,7 @@ private struct SidebarView: View {
                 .overlay(alignment: .top) { Rectangle().fill(ForgeDesign.ink).frame(height: 1.5) }
             }
             .buttonStyle(.plain)
-            .keyboardShortcut("m", modifiers: [.command, .shift])
+            .keyboardShortcut(ForgeShortcuts.shortcut("missionControl"))
 
             Button {
                 surfaceCoordinator.present(.taskQueue)
@@ -953,7 +953,7 @@ private struct SidebarView: View {
                 .overlay(alignment: .top) { Rectangle().fill(ForgeDesign.ink).frame(height: 1.5) }
             }
             .buttonStyle(.plain)
-            .keyboardShortcut("q", modifiers: [.command, .shift])
+            .keyboardShortcut(ForgeShortcuts.shortcut("taskQueue"))
 
             Button {
                 surfaceCoordinator.present(.history)
