@@ -191,6 +191,25 @@ struct WorkspaceView: View {
             surfaceCoordinator.present(.missionControl)
             workspace.refreshMissionControl()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .forgeToggleTaskQueue)) { _ in
+            showCommandPalette = false
+            surfaceCoordinator.present(.taskQueue)
+            workspace.refreshTaskQueue()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .forgeToggleHistory)) { _ in
+            showCommandPalette = false
+            surfaceCoordinator.present(.history)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .forgeOpenSelectedDiff)) { _ in
+            if let task = workspace.selectedTask {
+                surfaceCoordinator.present(.diff(taskID: task.id))
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .forgeOpenSelectedAudit)) { _ in
+            if let task = workspace.selectedTask {
+                surfaceCoordinator.present(.audit(taskID: task.id))
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .forgeApplicationWillTerminate)) { _ in
             workspace.stopMissionControlObservers()
         }

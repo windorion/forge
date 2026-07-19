@@ -34,10 +34,10 @@ the actual visual source of truth.
 | Core | `20a` Full plan approval | Verified | Right column matches handoff order with real guardrails and planned-in timing (docs/verification/20a); per-step minutes, ADD A STEP, and PRODUCT CALL badges await plan-editing runtime capability. |
 | Core | `32a` New session | Verified | Chat session structure compared (docs/verification/32a); mid-run chat perspective is the recorded gap (run switches to 14a layout). |
 | Core | `10a` Fullscreen diff review | Verified | Layout aligned and compared on live proposal data (docs/verification/10a); PLAN STEP badge, CONVENTION MATCHED, and OPEN PR await runtime/P2 capability. |
-| Core | `26a` Task queue | Implemented | The opaque exclusive 1240px real-data surface has running/queued/needs-you lanes, 1-3 persisted concurrency settings, ordered priority controls, removal, pause, estimates, automatic restart dispatch, and enforced same-repository serialization. Pointer drag polish and exact rendered comparison remain. |
+| Core | `26a` Task queue | Verified | Rendered comparison done on real queue data (docs/verification/26a); drag polish recorded. |
 | Core | `4a` Mission control | Partial | The opaque exclusive 1240px three-column surface, verified observers, explicit session-scoped active-runtime authorization, authorization evidence, live health/task/queue/git aggregation, focus shortcuts, New Task, and cross-runtime Pause All are real. Full background task creation/detail/review routing and rendered comparison remain. |
 | Decisions | `33a` Agent question | Verified | Rendered comparison done on a real enriched WaitForHumanReview step (docs/verification/33a). |
-| Decisions | `34a` Batch questions | Implemented | The sidebar and detailed question state open an opaque exclusive 1240px answer queue backed by all waiting tasks; partial submit leaves unanswered tasks paused and resumes answered loops independently. |
+| Decisions | `34a` Batch questions | Verified | Rendered comparison done with a real waiting task (docs/verification/34a). |
 | Decisions | `18a` Merge conflict | Verified | Rendered comparison done on a real conflicted merge (docs/verification/18a). |
 | Decisions | `19a` Failed/rollback | Verified | Rendered comparison done via the real startup-recovery fail path (docs/verification/19a). |
 | Decisions | `24a` First success | Verified | Rendered comparison done on the real first Completed task (docs/verification/24a); runtime branch-name bug fixed. Merged-PR wording stays P2. |
@@ -48,7 +48,7 @@ the actual visual source of truth.
 | Settings | `30a` API key | Verified | Rendered comparison done (docs/verification/30a); mockup provider labels, reveal toggle, THIS MONTH card. Windorion-credits card awaits the 15a hosted-account decision. |
 | Settings | `5b` Shortcuts | Verified | Real remapping shipped (ForgeShortcuts registry + recording UI + live menu bindings, override-proven). Focus-repo/cycle-tab/PR/copy-branch bindings and a human keypress pass remain (docs/verification/5b). |
 | Settings | `16a` Account/usage | Verified | Rendered comparison done (docs/verification/16a); local-first profile card replaces hosted identity pending 15a; TOKENS→COMPLETED honest substitute. |
-| Quick entry | `5a` Command palette | Implemented | Scene-level `⌘K` and the visible sidebar entry open the dimmed 620px palette with fuzzy task/command search, keyboard navigation, and real task/runtime/repository/settings actions. |
+| Quick entry | `5a` Command palette | Verified | Rendered comparison done (docs/verification/5a). |
 | Quick entry | `12a` Quick capture | Missing | Global floating capture window is missing. |
 | Quick entry | `7a` Menu bar mini window | Missing | Menu bar item and mini window are missing. |
 | Quick entry | `27a` CLI companion | Missing | Shared-background CLI is missing. |
@@ -56,7 +56,7 @@ the actual visual source of truth.
 | System | `8a` Dock menu | Missing | Native Dock menu commands are missing. |
 | System | `9a` Notifications | Missing | Four native notification states are missing. |
 | System | `11a` Spotlight | Missing | Core Spotlight task indexing is missing. |
-| System | `21a` App menu | Partial | A native Forge menu now exposes Command Palette, New Task, and Switch Repository with the documented shortcuts; the full handoff command set and context validation remain. |
+| System | `21a` App menu | Verified | Full handoff command set with registry shortcuts and real enable state; dropdown chrome is system-rendered (docs/verification/21a). |
 | System | `35a` Widget | Missing | WidgetKit S/M/L widgets are missing. |
 | Recovery | `15a` Sign in | Missing | GitHub device-flow screen is missing. |
 | Recovery | `25a` Onboarding | Missing | Four-step first-run flow is missing. |
@@ -66,8 +66,8 @@ the actual visual source of truth.
 | Recovery | `13a` Update dialog | Missing | Sparkle update dialog is missing. |
 | Recovery | `28a` Update ready | Missing | Deferred restart banner and mini-window status are missing. |
 | Recovery | `23a` Share/collaboration | Missing | Read-only web review link flow is missing. |
-| Recovery | `2a` Task history | Implemented | Dedicated opaque filter/search surface uses persisted task status, phases, changed files, and timestamps without leaving the workspace visible behind it. |
-| Recovery | `2b` Audit log | Implemented | Dedicated opaque terminal-style event surface uses real task events, exports a local clipboard record, and does not layer over a visible task screen. |
+| Recovery | `2a` Task history | Verified | Rendered comparison done (docs/verification/2a). |
+| Recovery | `2b` Audit log | Verified | Rendered comparison done (docs/verification/2b). |
 | Compact states | `1c` Needs decision | Verified | Rendered comparison done (docs/verification/1c); real provider A/B options, paused/blocked durations live. |
 | Compact states | `1d` PR ready | Verified | Rendered comparison done (docs/verification/1d); real metrics/files/branch, finished-in timing; hosted PR publication remains P2. |
 | Compact states | `1e` Guardrails | Verified | Rendered comparison done (docs/verification/1e); always-on badges, real preset count; Settings-scene system titlebar is a recorded platform limitation. |
@@ -78,14 +78,14 @@ the actual visual source of truth.
 - Primary V0 screen implementation: all 5 primary targets (`1a` `1b` `10a`
   `14a` `32a`) are now `Verified` with rendered-comparison evidence in
   `docs/verification/`.
-- Full handoff: 21 `Verified` (`1a` `1b` `1c` `1d` `1e` `3a` `5b` `10a`
-  `14a` `16a` `17a` `18a` `19a` `20a` `24a` `29a` `30a` `31a` `32a` `33a`
-  `37a`), 6 `Implemented`, 3 `Partial`, 13 `Missing` out of 43 named
-  screens/states.
+- Full handoff: 27 `Verified` (`1a` `1b` `1c` `1d` `1e` `2a` `2b` `3a`
+  `5a` `5b` `10a` `14a` `16a` `17a` `18a` `19a` `20a` `21a` `24a` `26a`
+  `29a` `30a` `31a` `32a` `33a` `34a` `37a`), 0 `Implemented`, 3
+  `Partial`, 13 `Missing` out of 43 named screens/states.
 - Verification evidence lives in `docs/verification/<screen-id>/` (self-
   rendered captures + notes; see `docs/verification/README.md` for the
   capture pipeline and per-screen reference sizes).
-- Weighted full-handoff UI readiness: approximately 79-83%.
+- Weighted full-handoff UI readiness: approximately 82-86%.
 
 These metrics must remain separate. Functional completion never implies design
 completion.

@@ -4723,3 +4723,36 @@ Next:
 
 - Phase 5: fix the SSE task-refresh gap, finish Mission Control
   background-task routing (4a), verify 26a/2a/2b/34a/21a/5a.
+
+## 2026-07-19 15:28:16 +0200 (CEST)
+
+Conversation summary:
+
+- Phase 5 (except 4a routing): SSE root cause fixed, multi-task surfaces
+  verified, and the app menu completed; 27/43 Verified.
+
+Done:
+
+- SSE root cause found and fixed: URLSession's bytes.lines silently drops
+  the blank lines SSE uses as frame terminators, so the app never
+  dispatched a single runtime event; RuntimeClient.events() now assembles
+  lines from raw bytes. Verified with a standalone parser probe receiving
+  live task.created events.
+- 2a/2b/26a/34a/5a captured on real data via the surface driver and
+  verified.
+- 21a: Forge menu extended to the full handoff command set (approve,
+  pause/resume, abort with real loop arguments and enable states; queue,
+  history, diff, audit routed through the coordinator); dropdown chrome
+  recorded as system-rendered.
+- Coverage: 27 Verified / 0 Implemented / 3 Partial / 13 Missing;
+  readiness ~82-86%.
+
+Not done:
+
+- 4a background-task detail/review routing (the one remaining Partial
+  with real work) — next session's first item.
+
+Next:
+
+- 4a routing, then Phase 6 quick-entry surfaces (36a templates, 27a CLI,
+  7a menu bar, 12a quick capture).
