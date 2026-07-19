@@ -3,7 +3,7 @@
 Document role: track implementation and exact visual/interaction verification
 for every named screen in `design_handoff_forge/Forge App States.dc.html`.
 
-Last updated: 2026-07-15
+Last updated: 2026-07-19
 
 ## Completion Rule
 
@@ -28,12 +28,12 @@ the actual visual source of truth.
 
 | Group | Screen | Status | Current gap |
 | --- | --- | --- | --- |
-| Core | `14a` Main window | Implemented | Exact rendered comparison and typography remain. |
-| Core | `1a` New task empty state | Implemented | Exact rendered comparison and typography remain. |
-| Core | `1b` Plan approval | Implemented | Standalone state and exact rendered comparison remain. |
-| Core | `20a` Full plan approval | Implemented | Compact plan cards expand into an opaque, window-filling 1240px steps/context/risk/validation/revision surface; the underlying session is hidden from drawing, hit testing, and accessibility while open. Run All uses the bounded six-step loop and Step by Step uses the runtime's real one-step limit. |
-| Core | `32a` New session | Implemented | Exact rendered comparison and responsive verification remain. |
-| Core | `10a` Fullscreen diff review | Implemented | Opens as an opaque exclusive workspace surface instead of a Sheet, with the prior session hidden and a real Close/Escape path. Exact rendered comparison and larger diff edge states remain. |
+| Core | `14a` Main window | Verified | Rendered comparison done (docs/verification/14a); thinking-stream format, plan strip timing, and sidebar running/budget footer aligned. Sidebar nav rows and FULL DIFF/AUDIT entries are recorded additions. |
+| Core | `1a` New task empty state | Verified | Rendered comparison done (docs/verification/1a); button spec, chip border token, footer weights fixed. Indexed-file count stays illustrative until P3 indexing. |
+| Core | `1b` Plan approval | Verified | Standalone compact approval state built and compared (docs/verification/1b); routes only for dialog-free proposals, chat sessions keep the embedded card. |
+| Core | `20a` Full plan approval | Verified | Right column matches handoff order with real guardrails and planned-in timing (docs/verification/20a); per-step minutes, ADD A STEP, and PRODUCT CALL badges await plan-editing runtime capability. |
+| Core | `32a` New session | Verified | Chat session structure compared (docs/verification/32a); mid-run chat perspective is the recorded gap (run switches to 14a layout). |
+| Core | `10a` Fullscreen diff review | Verified | Layout aligned and compared on live proposal data (docs/verification/10a); PLAN STEP badge, CONVENTION MATCHED, and OPEN PR await runtime/P2 capability. |
 | Core | `26a` Task queue | Implemented | The opaque exclusive 1240px real-data surface has running/queued/needs-you lanes, 1-3 persisted concurrency settings, ordered priority controls, removal, pause, estimates, automatic restart dispatch, and enforced same-repository serialization. Pointer drag polish and exact rendered comparison remain. |
 | Core | `4a` Mission control | Partial | The opaque exclusive 1240px three-column surface, verified observers, explicit session-scoped active-runtime authorization, authorization evidence, live health/task/queue/git aggregation, focus shortcuts, New Task, and cross-runtime Pause All are real. Full background task creation/detail/review routing and rendered comparison remain. |
 | Decisions | `33a` Agent question | Implemented | Context-backed `WaitForHumanReview` steps open the 1240px choice/consequence/frozen-context layout; answer-and-resume and confirmed abort are real, while rendered comparison remains. |
@@ -75,11 +75,15 @@ the actual visual source of truth.
 ## Measured Status
 
 - Functional Coding-Agent Demo V0: 100% of its documented behavior criteria.
-- Primary V0 screen implementation: 5 of 5 substantially implemented, none
-  yet marked `Verified` under the strict rule above.
-- Full handoff: 25 `Implemented`, 5 `Partial`, 13 `Missing`, 0 `Verified` out
-  of 43 named screens/states.
-- Weighted full-handoff UI readiness: approximately 63-66%.
+- Primary V0 screen implementation: all 5 primary targets (`1a` `1b` `10a`
+  `14a` `32a`) are now `Verified` with rendered-comparison evidence in
+  `docs/verification/`.
+- Full handoff: 6 `Verified` (`1a` `1b` `10a` `14a` `20a` `32a`), 20
+  `Implemented`, 4 `Partial`, 13 `Missing` out of 43 named screens/states.
+- Verification evidence lives in `docs/verification/<screen-id>/` (self-
+  rendered captures + notes; see `docs/verification/README.md` for the
+  capture pipeline and per-screen reference sizes).
+- Weighted full-handoff UI readiness: approximately 66-70%.
 
 These metrics must remain separate. Functional completion never implies design
 completion.

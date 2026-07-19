@@ -4535,3 +4535,38 @@ Next:
 - Restyle `10a`'s right column dark per the handoff, recapture, then `32a`
   (stop the external runtime), `14a` live, and flip Phase 1 rows in
   docs/design_handoff_coverage.md before starting Phase 2 compact states.
+
+## 2026-07-19 08:03:20 +0200 (CEST)
+
+Conversation summary:
+
+- Completed Phase 1: all six core-anchor screens (`1a` `1b` `10a` `14a`
+  `20a` `32a`) now carry rendered-comparison evidence and are flipped to
+  `Verified` in the coverage tracker.
+
+Done:
+
+- `14a` aligned: "PLAN — STEP N OF M" strip with real elapsed/left timing,
+  numbered lowercase step labels, thinking-stream heading and
+  time+colored-text row format (HH:mm:ss local), bare cursor row, sidebar
+  footer now shows live "N running" plus real "$spend / $cap".
+- `32a` correctly identified as the chat-style New Session screen (offline
+  captures rearchived under `29a`), driven with a real clarification-phase
+  task and verified; routing refined so tasks with a real user dialog stay
+  in the chat session with the embedded plan card while dialog-free
+  proposals use the `1b` compact approval window.
+- Coverage tracker updated: 6 Verified / 20 Implemented / 4 Partial /
+  13 Missing; readiness estimate raised to ~66-70%; evidence pointers
+  added.
+
+Not done:
+
+- Mid-run chat perspective (mockup 32a shows chat persisting while the
+  agent codes; the app switches to the 14a layout) — recorded as a P1
+  session-work gap in the 32a notes.
+- Phases 2-8 of the approved plan.
+
+Next:
+
+- Phase 2: verify compact states `1c` `1d` `1e` (drive decision/PR-ready/
+  guardrails states, compare, fix, flip).

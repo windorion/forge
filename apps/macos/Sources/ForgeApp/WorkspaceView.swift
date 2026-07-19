@@ -388,14 +388,17 @@ struct WorkspaceView: View {
             !["Running", "Testing", "Completed", "Failed"].contains(task.status)
     }
 
-    /// `1b` standalone plan approval: a proposed plan exists and nothing has
-    /// run yet — approval is the single next action, so the compact window
-    /// takes over instead of the full session layout.
+    /// `1b` standalone plan approval: a proposed plan exists, nothing has
+    /// run yet, and there is no real back-and-forth conversation — approval
+    /// is the single next action, so the compact window takes over. Tasks
+    /// with an actual user dialog stay in the `32a` chat session, where the
+    /// plan appears as an embedded conversation card instead.
     private func compactApprovalRevision(_ task: ForgeTask) -> PlanRevision? {
         guard task.status == "Human Review",
               task.currentPhase == "Plan Review",
               task.agentRunLoops.isEmpty,
-              task.editProposal == nil
+              task.editProposal == nil,
+              task.messages.filter({ $0.role == "User" }).count <= 1
         else { return nil }
         return task.planRevisions.last
     }
@@ -996,21 +999,20 @@ private struct SidebarView: View {
 
 private struct RuntimeBadge: View {
     @EnvironmentObject private var workspace: WorkspaceModel
+    @AppStorage("forge.monthlyBudgetCap") private var monthlyBudgetCap = 40
 
     var body: some View {
         HStack(spacing: 8) {
             Circle()
                 .fill(runtimeColor)
                 .frame(width: 8, height: 8)
-            Text(workspace.runtimeState.rawValue.uppercased())
-                .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
+            Text(statusLabel)
+                .font(.custom("JetBrains Mono", fixedSize: 9.5))
                 .lineLimit(1)
             Spacer()
-            if let version = workspace.runtimeHealth?.version {
-                Text(version)
-                    .font(.custom("JetBrains Mono", fixedSize: 9))
-                    .foregroundStyle(ForgeDesign.muted)
-            }
+            Text(String(format: "$%.2f / $%d", estimatedSpend, monthlyBudgetCap))
+                .font(.custom("JetBrains Mono", fixedSize: 9.5))
+                .foregroundStyle(ForgeDesign.muted)
             Button {
                 workspace.refreshRuntimeHealth()
             } label: {
@@ -1020,6 +1022,21 @@ private struct RuntimeBadge: View {
             .help("Refresh local runtime status")
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var statusLabel: String {
+        guard workspace.runtimeState == .running else {
+            return workspace.runtimeState.rawValue.uppercased()
+        }
+        let running = workspace.tasks.filter {
+            workspace.isRunningAgentLoop(taskID: $0.id) ||
+                ["Running", "Testing"].contains($0.status)
+        }.count
+        return "\(running) running"
+    }
+
+    private var estimatedSpend: Double {
+        workspace.tasks.compactMap { $0.planRevisions.last?.estimatedCostUSD }.reduce(0, +)
     }
 
     private var runtimeColor: Color {
@@ -4257,17 +4274,17 @@ private struct PlanProgressStrip: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("PLAN PROGRESS")
+                Text("PLAN — STEP \(currentStepNumber) OF \(max(task.planSteps.count, 1))")
                     .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
                     .foregroundStyle(ForgeDesign.muted)
                 Spacer()
-                Text("\(doneCount)/\(max(task.planSteps.count, 1)) STEPS")
-                    .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
+                Text(timingSummary)
+                    .font(.custom("JetBrains Mono", fixedSize: 10))
                     .foregroundStyle(ForgeDesign.muted)
             }
 
             HStack(alignment: .top, spacing: 6) {
-                ForEach(task.planSteps.prefix(6)) { step in
+                ForEach(Array(task.planSteps.prefix(6).enumerated()), id: \.element.id) { index, step in
                     VStack(alignment: .leading, spacing: 5) {
                         Rectangle()
                             .fill(stepColor(step.status))
@@ -4278,7 +4295,7 @@ private struct PlanProgressStrip: View {
                                     lineWidth: 1.5
                                 )
                             )
-                        Text(step.title.uppercased())
+                        Text("\(String(format: "%02d", index + 1)) \(step.title.lowercased())")
                             .font(.custom("JetBrains Mono", fixedSize: 8).weight(step.status == "Active" ? .bold : .regular))
                             .foregroundStyle(step.status == "Pending" ? ForgeDesign.muted : ForgeDesign.ink)
                             .lineLimit(1)
@@ -4296,6 +4313,33 @@ private struct PlanProgressStrip: View {
 
     private var doneCount: Int {
         task.planSteps.filter { $0.status == "Done" }.count
+    }
+
+    private var currentStepNumber: Int {
+        if let active = task.planSteps.firstIndex(where: { $0.status == "Active" }) {
+            return active + 1
+        }
+        return min(doneCount + 1, max(task.planSteps.count, 1))
+    }
+
+    /// Real elapsed time since task creation, plus remaining estimate when
+    /// the latest plan revision carries one.
+    private var timingSummary: String {
+        let parser = ISO8601DateFormatter()
+        parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard let created = parser.date(from: task.createdAt) else { return "" }
+        let elapsedMinutes = max(Int(Date().timeIntervalSince(created) / 60), 0)
+        let elapsed: String
+        switch elapsedMinutes {
+        case ..<1: elapsed = "<1m elapsed"
+        case ..<90: elapsed = "\(elapsedMinutes)m elapsed"
+        default: elapsed = "\(elapsedMinutes / 60)h \(elapsedMinutes % 60)m elapsed"
+        }
+        if let estimate = task.planRevisions.last?.estimatedMinutes {
+            let left = max(estimate - elapsedMinutes, 0)
+            return "\(elapsed) · ~\(left)m left"
+        }
+        return elapsed
     }
 
     private func stepColor(_ status: String) -> Color {
@@ -4318,13 +4362,10 @@ private struct LiveAgentStream: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("LIVE AGENT STREAM")
-                    .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
-                    .foregroundStyle(ForgeDesign.paper)
+                Text(streamHeading)
+                    .font(.custom("JetBrains Mono", fixedSize: 10))
+                    .foregroundStyle(Color.gray)
                 Spacer()
-                Text(task.currentPhase.uppercased())
-                    .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
-                    .foregroundStyle(ForgeDesign.accent)
             }
             .padding(10)
             .background(Color(red: 26 / 255, green: 26 / 255, blue: 23 / 255))
@@ -4336,14 +4377,10 @@ private struct LiveAgentStream: View {
                             Text(row.time)
                                 .font(.custom("JetBrains Mono", fixedSize: 10))
                                 .foregroundStyle(Color.gray)
-                                .frame(width: 72, alignment: .leading)
-                            Text(row.kind)
-                                .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
-                                .foregroundStyle(row.color)
-                                .frame(width: 92, alignment: .leading)
+                                .frame(width: 64, alignment: .leading)
                             Text(row.message)
                                 .font(.custom("JetBrains Mono", fixedSize: 12))
-                                .foregroundStyle(ForgeDesign.paper)
+                                .foregroundStyle(row.color)
                                 .textSelection(.enabled)
                             Spacer(minLength: 0)
                         }
@@ -4353,11 +4390,7 @@ private struct LiveAgentStream: View {
                         Text("now")
                             .font(.custom("JetBrains Mono", fixedSize: 10))
                             .foregroundStyle(Color.gray)
-                            .frame(width: 72, alignment: .leading)
-                        Text("CURSOR")
-                            .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
-                            .foregroundStyle(ForgeDesign.accent)
-                            .frame(width: 92, alignment: .leading)
+                            .frame(width: 64, alignment: .leading)
                         Rectangle()
                             .fill(ForgeDesign.accent)
                             .frame(width: 8, height: 14)
@@ -4371,6 +4404,16 @@ private struct LiveAgentStream: View {
         .background(ForgeDesign.ink)
     }
 
+    private var streamHeading: String {
+        let stepLabel: String
+        if let active = task.planSteps.enumerated().first(where: { $0.element.status == "Active" }) {
+            stepLabel = "step \(active.offset + 1): \(active.element.title.lowercased())"
+        } else {
+            stepLabel = task.currentPhase.lowercased()
+        }
+        return "— thinking stream · \(stepLabel) —"
+    }
+
     private var streamRows: [AgentStreamRow] {
         var rows: [AgentStreamRow] = []
 
@@ -4381,7 +4424,7 @@ private struct LiveAgentStream: View {
         }
 
         for call in task.toolCalls.suffix(6) {
-            rows.append(AgentStreamRow(kind: call.name.uppercased(), message: call.outputSummary, color: toolColor(call.status), time: shortTime(call.startedAt)))
+            rows.append(AgentStreamRow(kind: call.name.uppercased(), message: "\(call.name.lowercased()) — \(call.outputSummary)", color: toolColor(call.status), time: shortTime(call.startedAt)))
         }
 
         for event in task.events.suffix(7) {
@@ -4407,11 +4450,19 @@ private struct LiveAgentStream: View {
     }
 
     private func shortTime(_ value: String) -> String {
-        if value.count > 8 {
-            return String(value.suffix(8))
+        let parser = ISO8601DateFormatter()
+        parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = parser.date(from: value) {
+            return Self.clockFormatter.string(from: date)
         }
-        return value
+        return value.count > 8 ? String(value.suffix(8)) : value
     }
+
+    private static let clockFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
 }
 
 private struct AgentStreamRow: Identifiable {
