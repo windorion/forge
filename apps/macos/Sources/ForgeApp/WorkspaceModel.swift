@@ -2119,7 +2119,12 @@ final class WorkspaceModel: ObservableObject {
 
     private func refreshTasks() async throws {
         let remoteTasks = try await runtime.listTasks()
+        let previous = tasks
         tasks = remoteTasks
+        ForgeNotifications.emitTransitions(old: previous, new: remoteTasks)
+        updateDockBadge()
+        let repoName = missionControlCurrentRepositoryPath?.split(separator: "/").last.map(String.init) ?? "workspace"
+        ForgeSpotlight.reindex(tasks: remoteTasks, repoName: repoName)
         if let pendingMissionControlTaskID,
            remoteTasks.contains(where: { $0.id == pendingMissionControlTaskID }) {
             selectedTaskID = pendingMissionControlTaskID
@@ -2134,6 +2139,13 @@ final class WorkspaceModel: ObservableObject {
            !remoteTasks.contains(where: { $0.id == selectedTaskID }) {
             self.selectedTaskID = nil
         }
+    }
+
+    private func updateDockBadge() {
+        let waiting = tasks.filter {
+            $0.status == "Human Review" && $0.agentRunSteps.last?.action == "WaitForHumanReview"
+        }.count
+        NSApp.dockTile.badgeLabel = waiting > 0 ? "\(waiting)" : ""
     }
 
     private func refreshTaskQueueSnapshot() async {

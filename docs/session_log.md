@@ -4881,3 +4881,31 @@ Next:
 - Phase 7: 8a Dock menu, 9a notifications, 11a Spotlight, 35a widget
   timebox; then Phase 8 (onboarding/sign-in/updates/share; 6a OAuth still
   awaits the founder Client ID).
+
+## 2026-07-19 20:08:32 +0200 (CEST)
+
+Conversation summary:
+
+- Phase 7 first batch: 8a Dock menu, 9a notifications, 11a Spotlight all
+  built from Missing to Verified on live state (35/43); only 35a widgets
+  (timeboxed experiment) remains in Phase 7.
+
+Done:
+
+- 8a: applicationDockMenu built fresh from live tasks (summary, running
+  progress items, Answer items, New Task/Mission Control/Pause All) plus
+  the Dock tile waiting-count badge; live menu dumped as evidence via a
+  debug spec. AppDelegate.shared added (SwiftUI's adaptor wraps
+  NSApp.delegate, so as? casts fail — root-caused when the dump came back
+  empty).
+- 9a: ForgeNotifications with the four handoff kinds, contextual
+  authorization, the 22a ALL/NEEDS ME/NONE gate, real state-diff
+  emitters, and deep-linking actions; test notification fired through
+  the real system center.
+- 11a: ForgeSpotlight reindexes tasks on refresh (accepted: "indexed 9
+  task(s)") with CSSearchableItemActionType continuation into the task.
+
+Next:
+
+- 35a widget: strictly timeboxed hand-assembled .appex + pluginkit
+  experiment with descope fallback; then Phase 8.

@@ -167,6 +167,7 @@ struct WorkspaceView: View {
         .background(ForgeDesign.paper)
         .environmentObject(surfaceCoordinator)
         .task {
+            AppDelegate.shared?.workspace = workspace
             MenuBarController.shared.activate(workspace: workspace)
             QuickCaptureController.shared.activate(workspace: workspace)
             if workspace.runtimeState == .unchecked {
@@ -308,6 +309,19 @@ struct WorkspaceView: View {
             MenuBarController.shared.showPanel()
         case "quickCapture":
             QuickCaptureController.shared.show()
+        case "testNotification":
+            ForgeNotifications.notify(
+                .prReady(taskTitle: "Migrate logger to structured JSON", checks: "3 checks ✓"),
+                taskID: workspace.tasks.first(where: { $0.status == "Completed" })?.id
+            )
+        case "dumpDockMenu":
+            if let menu = AppDelegate.shared?.applicationDockMenu(NSApp) {
+                let lines = menu.items.map { $0.isSeparatorItem ? "---" : $0.title }
+                try? lines.joined(separator: "\n").write(
+                    toFile: NSTemporaryDirectory() + "forge-dock-menu.txt",
+                    atomically: true, encoding: .utf8
+                )
+            }
         case "closePanels":
             MenuBarController.shared.hidePanel()
             QuickCaptureController.shared.hide()
