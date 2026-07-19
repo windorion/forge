@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 import SwiftUI
 
 struct SettingsView: View {
@@ -45,6 +46,7 @@ struct SettingsView: View {
             ModelSettingsPage(
                 envelope: workspace.modelProviderSettingsEnvelope,
                 fallbackConfiguration: workspace.runtimeHealth?.modelProviderConfiguration,
+                tasks: workspace.tasks,
                 save: { providerID, modelName, openAIBaseURL, timeout, maxOutputTokens, apiKey, clearKey in
                     workspace.updateModelProviderSettings(
                         providerID: providerID,
@@ -258,8 +260,8 @@ private struct GeneralSettingsPage: View {
     @AppStorage("forge.reopenLastWorkspace") private var reopenLastWorkspace = true
     @AppStorage("forge.keepRuntimeRunning") private var keepRuntimeRunning = true
     @AppStorage("forge.completionSound") private var completionSound = true
-    @State private var theme = "AUTO"
-    @State private var notify = "ALL"
+    @AppStorage("forge.theme") private var theme = "AUTO"
+    @AppStorage("forge.notifyMode") private var notify = "ALL"
 
     var body: some View {
         ScrollView {
@@ -299,6 +301,23 @@ private struct GeneralSettingsPage: View {
                     Button("CHECK NOW", action: refresh).buttonStyle(SettingsOutlineButtonStyle())
                 }
             }
+        }
+        .onChange(of: launchAtLogin) { _, enabled in
+            applyLoginItem(enabled)
+        }
+    }
+
+    /// Register/unregister the real macOS login item; revert the toggle if
+    /// the OS refuses (e.g. unsigned dev build not yet approved).
+    private func applyLoginItem(_ enabled: Bool) {
+        do {
+            if enabled {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+        } catch {
+            launchAtLogin = !enabled
         }
     }
 }
@@ -505,14 +524,19 @@ private struct APIKeySettingsPage: View {
 private struct ModelSettingsPage: View {
     var envelope: ModelProviderSettingsEnvelope?
     var fallbackConfiguration: ModelProviderConfiguration?
+    var tasks: [ForgeTask]
     var save: (String, String?, String?, Int?, Int?, String?, Bool?) -> Void
     var isSaving: Bool
     var openAPIKey: () -> Void
 
     @State private var providerID = "local"
     @State private var modelName = ""
-    @AppStorage("forge.reasoningEffort") private var effort = "MEDIUM"
+    @AppStorage("forge.reasoningEffort") private var effort = "STANDARD"
     @AppStorage("forge.monthlyBudgetCap") private var monthlyBudgetCap = 40
+
+    private var estimatedSpend: Double {
+        tasks.compactMap { $0.planRevisions.last?.estimatedCostUSD }.reduce(0, +)
+    }
 
     var body: some View {
         ScrollView {
@@ -572,7 +596,7 @@ private struct ModelSettingsPage: View {
                 HStack(alignment: .top, spacing: 22) {
                     VStack(alignment: .leading, spacing: 10) {
                         modelLabel("REASONING EFFORT")
-                        SettingsSegmented(options: ["LOW", "MEDIUM", "HIGH"], selection: $effort)
+                        SettingsSegmented(options: ["LOW", "STANDARD", "MAX"], selection: $effort)
                         Text(effortNote)
                             .font(.custom("JetBrains Mono", fixedSize: 9.5))
                             .foregroundStyle(SettingsDesign.faint)
@@ -585,13 +609,14 @@ private struct ModelSettingsPage: View {
                             Text("$\(monthlyBudgetCap)")
                                 .font(.custom("JetBrains Mono", fixedSize: 20).weight(.bold))
                             GeometryReader { proxy in
+                                let fraction = min(CGFloat(estimatedSpend / Double(max(monthlyBudgetCap, 1))), 1)
                                 ZStack(alignment: .leading) {
                                     Rectangle().fill(SettingsDesign.paper)
                                     Rectangle().fill(SettingsDesign.accent)
-                                        .frame(width: proxy.size.width * 0.31)
+                                        .frame(width: proxy.size.width * fraction)
                                     Rectangle().fill(SettingsDesign.ink)
                                         .frame(width: 1.5)
-                                        .offset(x: proxy.size.width * 0.31)
+                                        .offset(x: proxy.size.width * fraction)
                                 }
                                 .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
                             }
@@ -599,7 +624,7 @@ private struct ModelSettingsPage: View {
                         }
                         Stepper("Budget", value: $monthlyBudgetCap, in: 5...500, step: 5)
                             .labelsHidden()
-                        Text("pauses — never aborts — when the configured cap is reached")
+                        Text(String(format: "$%.2f used this month · pauses (never aborts) at cap", estimatedSpend))
                             .font(.custom("JetBrains Mono", fixedSize: 9.5))
                             .foregroundStyle(SettingsDesign.faint)
                     }
@@ -609,7 +634,11 @@ private struct ModelSettingsPage: View {
                 .padding(.vertical, 16)
 
                 HStack {
-                    Text(configuration?.summary ?? "Choose a provider and save it to the local runtime.")
+                    (Text("this month: ")
+                        + Text("\(tasks.count) runs").fontWeight(.bold).foregroundStyle(SettingsDesign.ink)
+                        + Text(" · avg ")
+                        + Text(String(format: "$%.2f/run", tasks.isEmpty ? 0 : estimatedSpend / Double(tasks.count))).fontWeight(.bold).foregroundStyle(SettingsDesign.ink)
+                        + Text(" · cheaper than the coffee you drink while it works"))
                         .font(.custom("JetBrains Mono", fixedSize: 10))
                         .foregroundStyle(SettingsDesign.muted)
                         .lineLimit(2)
@@ -637,8 +666,8 @@ private struct ModelSettingsPage: View {
     private var effortNote: String {
         switch effort {
         case "LOW": return "faster and cheaper for straightforward tasks"
-        case "HIGH": return "more reasoning budget for ambiguous or risky work"
-        default: return "balanced default for normal repository tasks"
+        case "MAX": return "more reasoning budget for ambiguous or risky work"
+        default: return "thinks before each step — the default"
         }
     }
 
