@@ -58,7 +58,7 @@ the actual visual source of truth.
 | System | `11a` Spotlight | Verified | CSSearchableIndex reindex on refresh + result continuation into the task (docs/verification/11a); dynamic create-task row stays a stretch goal. |
 | System | `21a` App menu | Verified | Full handoff command set with registry shortcuts and real enable state; dropdown chrome is system-rendered (docs/verification/21a). |
 | System | `35a` Widget | Missing | Timeboxed hand-assembled .appex experiment ran and failed as pre-declared (pluginkit never discovers an ad-hoc-signed hand-built extension; embedded runtime resource forks block deep signing). Widget code compiles and is kept in-tree; unblocks with P6 signing infrastructure (docs/verification/35a). |
-| Recovery | `15a` Sign in | Missing | GitHub device-flow screen is missing. |
+| Recovery | `15a` Sign in | Verified | Welcome + device-flow states built with the real OAuth device-flow client (docs/verification/15a); live code capture activates once the founder registers the Client ID; email stays an inert affordance pending the hosted-account decision. |
 | Recovery | `25a` Onboarding | Missing | Four-step first-run flow is missing. |
 | Recovery | `17a` No repository | Verified | Rendered comparison done (docs/verification/17a); subtitle truncation fixed; both actions real. |
 | Recovery | `29a` Offline | Verified | Rendered comparison done with cached tasks (docs/verification/29a); mid-session disconnect detection fixed en route. |
@@ -81,12 +81,12 @@ the actual visual source of truth.
 - Full handoff: 35 `Verified` (`1a` `1b` `1c` `1d` `1e` `2a` `2b` `3a`
   `4a` `5a` `5b` `7a` `8a` `9a` `10a` `11a` `12a` `14a` `16a` `17a`
   `18a` `19a` `20a` `21a` `24a` `26a` `27a` `29a` `30a` `31a` `32a`
-  `33a` `34a` `36a` `37a`), 0 `Implemented`, 2 `Partial`, 6 `Missing`
-  out of 43 named screens/states.
+  `33a` `34a` `36a` `37a` `15a`), 0 `Implemented`, 2 `Partial`, 5
+  `Missing` out of 43 named screens/states.
 - Verification evidence lives in `docs/verification/<screen-id>/` (self-
   rendered captures + notes; see `docs/verification/README.md` for the
   capture pipeline and per-screen reference sizes).
-- Weighted full-handoff UI readiness: approximately 91-93%.
+- Weighted full-handoff UI readiness: approximately 92-94%.
 
 These metrics must remain separate. Functional completion never implies design
 completion.

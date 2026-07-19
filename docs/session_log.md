@@ -4927,3 +4927,25 @@ Next:
 - Phase 8: 25a onboarding, 15a sign-in (GitHub wired/inert email), 13a/28a
   Sparkle against a local appcast, 23a share popover with local link
   generation. 6a OAuth still awaits the founder Client ID.
+
+## 2026-07-19 20:35:00 +0200 (CEST)
+
+Conversation summary:
+
+- Phase 8 opened: 15a sign-in built from Missing to Verified (36/43).
+
+Done:
+
+- GitHubAuth: real OAuth device flow (device-code request, polling, token
+  stored via new generic KeychainStore.save, login fetch); phases surface
+  missing-Client-ID honestly and activate the moment forge.githubClientID
+  is set.
+- SignInView: welcome state (verified pixel-for-structure against the
+  mockup) + device-flow state (code display, copy, countdown, scopes
+  footnote) hosted in a floating panel; wired from 6a CONNECT GITHUB and
+  debug specs.
+
+Next:
+
+- 25a onboarding wizard, 13a/28a Sparkle against a local appcast, 23a
+  share popover with local link generation.

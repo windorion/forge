@@ -1021,7 +1021,9 @@ private struct GitHubSettingsPage: View {
                             .foregroundStyle(SettingsDesign.muted)
                     }
                     Spacer()
-                    Button("CONNECT GITHUB") {}
+                    Button("CONNECT GITHUB") {
+                        NotificationCenter.default.post(name: .forgeShowSignIn, object: nil)
+                    }
                         .buttonStyle(SettingsOutlineButtonStyle())
                         .disabled(true)
                 }

@@ -62,6 +62,20 @@ enum KeychainStore {
         }
     }
 
+    /// Generic save used for additional secrets (e.g. GitHub OAuth token).
+    static func save(account: String, secret: String) throws {
+        let data = Data(secret.utf8)
+        let query = baseQuery(account: account)
+        let update = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+        if update == errSecSuccess { return }
+        guard update == errSecItemNotFound else { throw KeychainStoreError.keychainStatus(update) }
+        var addQuery = query
+        addQuery[kSecValueData as String] = data
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        let add = SecItemAdd(addQuery as CFDictionary, nil)
+        guard add == errSecSuccess else { throw KeychainStoreError.keychainStatus(add) }
+    }
+
     static func deleteOpenAIAPIKey() throws {
         let status = SecItemDelete(baseQuery(account: openAIAPIKeyAccount) as CFDictionary)
         if status == errSecSuccess || status == errSecItemNotFound {

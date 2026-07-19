@@ -309,6 +309,11 @@ struct WorkspaceView: View {
             MenuBarController.shared.showPanel()
         case "quickCapture":
             QuickCaptureController.shared.show()
+        case "signIn":
+            SignInPanelController.shared.show(workspace: workspace)
+        case "signInFlow":
+            SignInPanelController.shared.show(workspace: workspace)
+            GitHubAuth.shared.start()
         case "testNotification":
             ForgeNotifications.notify(
                 .prReady(taskTitle: "Migrate logger to structured JSON", checks: "3 checks ✓"),
