@@ -4570,3 +4570,42 @@ Next:
 
 - Phase 2: verify compact states `1c` `1d` `1e` (drive decision/PR-ready/
   guardrails states, compare, fix, flip).
+
+## 2026-07-19 08:17:27 +0200 (CEST)
+
+Conversation summary:
+
+- Completed Phase 2: compact states `1c` `1d` `1e` driven on real runtime
+  flows, compared, fixed, and flipped to `Verified` (9/43 now Verified).
+
+Done:
+
+- Drove the full real loop for evidence: per-file review approval →
+  apply-edit-proposal → validation passed → Completed (`1d`); a second task
+  ran approve→proposal→extra step so the provider returned its real
+  WaitForHumanReview decision (`1c`); Settings opened onto Guardrails via
+  the new openSettings debug driver (`1e`, captured as a separate window).
+- `1d` fixes: real "finished in Xm" header, "N runs · M self-fix", file
+  stats follow the filename, bold branch name. Runtime bug fixed:
+  parseGitBranchLine returned the sentence "No commits yet on main" as the
+  branch name — now the real branch. `24a` rendered-comparison evidence
+  captured en route (first-success celebration), including the fixed
+  "complete on main" subtitle.
+- `1c` fixes: "paused at step N of M · Xm elapsed" and "blocked Xm"
+  footnote, both computed from real timestamps.
+- `1e` infra: settings pane selection persists (@AppStorage, native
+  remember-last-pane) and is script-drivable; recorded the Settings-scene
+  system-titlebar platform limitation.
+- Coverage: 9 Verified / 17 Implemented / 4 Partial / 13 Missing;
+  readiness ~68-72%.
+
+Not done:
+
+- 24a's own status row stays Implemented pending its focused comparison
+  pass (evidence already on disk); Phases 3-8 remain.
+
+Next:
+
+- Phase 3 settings shell: fix 22a's notification-prefs persistence and
+  SMAppService login item, finish 5b shortcut remapping, then compare all
+  six settings pages (evidence via the Settings-window capture path).

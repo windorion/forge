@@ -4371,7 +4371,13 @@ function parseGitBranchLine(line: string | undefined): {
   const content = line.slice(3).trim();
   const bracketMatch = content.match(/\[(.*)\]$/);
   const relation = bracketMatch?.[1];
-  const branchContent = bracketMatch ? content.slice(0, bracketMatch.index).trim() : content;
+  let branchContent = bracketMatch ? content.slice(0, bracketMatch.index).trim() : content;
+  // An unborn branch reports "## No commits yet on <name>"; keep the real
+  // branch name instead of the human-readable sentence.
+  const unbornMatch = branchContent.match(/^No commits yet on (.+)$/);
+  if (unbornMatch) {
+    branchContent = unbornMatch[1];
+  }
   const [branch, upstream] = branchContent.split("...").map((part) => part.trim()).filter(Boolean);
   const ahead = relation?.match(/ahead (\d+)/)?.[1];
   const behind = relation?.match(/behind (\d+)/)?.[1];

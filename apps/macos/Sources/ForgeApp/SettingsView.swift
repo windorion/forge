@@ -3,14 +3,19 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var workspace: WorkspaceModel
-    @State private var selection = ForgeSettingsSection.general
+    @AppStorage("forge.settingsSection") private var selectionRaw = ForgeSettingsSection.general.rawValue
+
+    private var selection: ForgeSettingsSection {
+        get { ForgeSettingsSection(rawValue: selectionRaw) ?? .general }
+        nonmutating set { selectionRaw = newValue.rawValue }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             SettingsTitleBar()
 
             HStack(spacing: 0) {
-                SettingsSidebar(selection: $selection)
+                SettingsSidebar(selection: Binding(get: { selection }, set: { selection = $0 }))
                     .frame(width: 200)
 
                 Rectangle()

@@ -139,6 +139,7 @@ private final class WorkspaceSurfaceCoordinator: ObservableObject {
 
 struct WorkspaceView: View {
     @EnvironmentObject private var workspace: WorkspaceModel
+    @Environment(\.openSettings) private var openSettings
     @StateObject private var surfaceCoordinator = WorkspaceSurfaceCoordinator()
     @State private var recoveryDismissed = false
     @State private var showCommandPalette = false
@@ -243,6 +244,8 @@ struct WorkspaceView: View {
             surfaceCoordinator.present(.taskQueue)
         case "palette":
             showCommandPalette = true
+        case "settings":
+            openSettings()
         case "dismiss":
             surfaceCoordinator.dismiss()
             showCommandPalette = false
@@ -1951,7 +1954,7 @@ private struct RunCompleteState: View {
                     .tracking(-0.3)
                     .lineLimit(1)
                 Spacer()
-                Text("#\(task.id.prefix(6)) · finished · \(task.currentPhase.lowercased())")
+                Text("#\(task.id.prefix(6)) · finished in \(completionDuration)")
                     .font(.custom("JetBrains Mono", fixedSize: 10))
                     .foregroundStyle(ForgeDesign.muted)
             }
@@ -1971,7 +1974,7 @@ private struct RunCompleteState: View {
                 completionMetric(
                     label: "TESTS",
                     value: "\(passedCommandCount) passed",
-                    detail: "\(newTestCount) run(s) · \(task.commandRerunEvidence.count) self-fix"
+                    detail: "\(newTestCount) runs · \(task.commandRerunEvidence.count) self-fix"
                 )
                 completionMetric(
                     label: "REVIEW LOAD",
@@ -1994,9 +1997,9 @@ private struct RunCompleteState: View {
                             .fontWeight(.bold)
                         Text(path)
                             .foregroundStyle(ForgeDesign.ink)
-                        Spacer()
                         Text(fileDetail(path))
                             .foregroundStyle(Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255))
+                        Spacer()
                     }
                     .font(.custom("JetBrains Mono", fixedSize: 11.5))
                     .frame(height: 30)
@@ -2022,7 +2025,9 @@ private struct RunCompleteState: View {
             Spacer(minLength: 0)
 
             HStack(spacing: 10) {
-                Text("branch \(branchName) · PR body ready for reviewed handoff")
+                (Text("branch ")
+                    + Text(branchName).fontWeight(.bold).foregroundStyle(ForgeDesign.ink)
+                    + Text(" · PR body ready for reviewed handoff"))
                     .font(.custom("JetBrains Mono", fixedSize: 10.5))
                     .foregroundStyle(ForgeDesign.muted)
                     .lineLimit(1)
@@ -2045,6 +2050,21 @@ private struct RunCompleteState: View {
             }
         }
         .background(ForgeDesign.paper)
+    }
+
+    /// Real elapsed time from creation to the final update.
+    private var completionDuration: String {
+        let parser = ISO8601DateFormatter()
+        parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard let created = parser.date(from: task.createdAt),
+              let updated = parser.date(from: task.updatedAt)
+        else { return "under review" }
+        let minutes = max(Int(updated.timeIntervalSince(created) / 60), 0)
+        switch minutes {
+        case ..<1: return "<1m"
+        case ..<90: return "\(minutes)m"
+        default: return "\(minutes / 60)h \(minutes % 60)m"
+        }
     }
 
     private func completionMetric(
@@ -2340,6 +2360,27 @@ private struct AgentQuestionState: View {
     }
 
     private var latestStep: AgentRunStep? { task.agentRunSteps.last }
+
+    private var pausedElapsed: String {
+        Self.minutesLabel(from: task.createdAt, to: nil)
+    }
+
+    private var blockedDuration: String {
+        Self.minutesLabel(from: latestStep?.createdAt ?? task.updatedAt, to: nil)
+    }
+
+    static func minutesLabel(from startISO: String, to endISO: String?) -> String {
+        let parser = ISO8601DateFormatter()
+        parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard let start = parser.date(from: startISO) else { return "<1m" }
+        let end = endISO.flatMap { parser.date(from: $0) } ?? Date()
+        let minutes = max(Int(end.timeIntervalSince(start) / 60), 0)
+        switch minutes {
+        case ..<1: return "<1m"
+        case ..<90: return "\(minutes)m"
+        default: return "\(minutes / 60)h \(minutes % 60)m"
+        }
+    }
     private var question: String {
         latestStep?.summary ?? task.reviewSummary ?? "Forge reached a decision point. Which direction should it take?"
     }
@@ -2693,7 +2734,7 @@ private struct NeedsDecisionState: View {
                     .tracking(-0.3)
                     .lineLimit(1)
                 Spacer()
-                Text("paused · \(stepProgress)")
+                Text("paused at \(stepProgress) · \(pausedElapsed) elapsed")
                     .font(.custom("JetBrains Mono", fixedSize: 10))
                     .foregroundStyle(ForgeDesign.muted)
             }
@@ -2766,7 +2807,7 @@ private struct NeedsDecisionState: View {
             .padding(.horizontal, 28)
             .padding(.top, 26)
 
-            Text("▸ the agent never guesses on architecture — it asks · paused work does not spend budget")
+            Text("▸ blocked \(blockedDuration) · the agent never guesses on architecture — it asks")
                 .font(.custom("JetBrains Mono", fixedSize: 10))
                 .foregroundStyle(Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255))
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -2778,6 +2819,27 @@ private struct NeedsDecisionState: View {
     }
 
     private var latestStep: AgentRunStep? { task.agentRunSteps.last }
+
+    private var pausedElapsed: String {
+        Self.minutesLabel(from: task.createdAt, to: nil)
+    }
+
+    private var blockedDuration: String {
+        Self.minutesLabel(from: latestStep?.createdAt ?? task.updatedAt, to: nil)
+    }
+
+    static func minutesLabel(from startISO: String, to endISO: String?) -> String {
+        let parser = ISO8601DateFormatter()
+        parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard let start = parser.date(from: startISO) else { return "<1m" }
+        let end = endISO.flatMap { parser.date(from: $0) } ?? Date()
+        let minutes = max(Int(end.timeIntervalSince(start) / 60), 0)
+        switch minutes {
+        case ..<1: return "<1m"
+        case ..<90: return "\(minutes)m"
+        default: return "\(minutes / 60)h \(minutes % 60)m"
+        }
+    }
     private var question: String {
         latestStep?.summary ?? task.reviewSummary ?? "Forge reached a decision point and needs your instruction before continuing."
     }

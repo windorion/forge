@@ -68,9 +68,9 @@ the actual visual source of truth.
 | Recovery | `23a` Share/collaboration | Missing | Read-only web review link flow is missing. |
 | Recovery | `2a` Task history | Implemented | Dedicated opaque filter/search surface uses persisted task status, phases, changed files, and timestamps without leaving the workspace visible behind it. |
 | Recovery | `2b` Audit log | Implemented | Dedicated opaque terminal-style event surface uses real task events, exports a local clipboard record, and does not layer over a visible task screen. |
-| Compact states | `1c` Needs decision | Implemented | Runtime `WaitForHumanReview` decisions now open the compact two-route/freeform state; rendered comparison remains. |
-| Compact states | `1d` PR ready | Implemented | Completed tasks now open a compact metrics/files/diff/PR-handoff state backed by real task/git data; hosted PR publication remains. |
-| Compact states | `1e` Guardrails | Implemented | Shared settings navigation now exposes the exact always-on/toggle guardrail pattern; rendered comparison remains. |
+| Compact states | `1c` Needs decision | Verified | Rendered comparison done (docs/verification/1c); real provider A/B options, paused/blocked durations live. |
+| Compact states | `1d` PR ready | Verified | Rendered comparison done (docs/verification/1d); real metrics/files/branch, finished-in timing; hosted PR publication remains P2. |
+| Compact states | `1e` Guardrails | Verified | Rendered comparison done (docs/verification/1e); always-on badges, real preset count; Settings-scene system titlebar is a recorded platform limitation. |
 
 ## Measured Status
 
@@ -78,12 +78,13 @@ the actual visual source of truth.
 - Primary V0 screen implementation: all 5 primary targets (`1a` `1b` `10a`
   `14a` `32a`) are now `Verified` with rendered-comparison evidence in
   `docs/verification/`.
-- Full handoff: 6 `Verified` (`1a` `1b` `10a` `14a` `20a` `32a`), 20
-  `Implemented`, 4 `Partial`, 13 `Missing` out of 43 named screens/states.
+- Full handoff: 9 `Verified` (`1a` `1b` `1c` `1d` `1e` `10a` `14a` `20a`
+  `32a`), 17 `Implemented`, 4 `Partial`, 13 `Missing` out of 43 named
+  screens/states.
 - Verification evidence lives in `docs/verification/<screen-id>/` (self-
   rendered captures + notes; see `docs/verification/README.md` for the
   capture pipeline and per-screen reference sizes).
-- Weighted full-handoff UI readiness: approximately 66-70%.
+- Weighted full-handoff UI readiness: approximately 68-72%.
 
 These metrics must remain separate. Functional completion never implies design
 completion.
