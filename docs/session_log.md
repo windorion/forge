@@ -4609,3 +4609,25 @@ Next:
 - Phase 3 settings shell: fix 22a's notification-prefs persistence and
   SMAppService login item, finish 5b shortcut remapping, then compare all
   six settings pages (evidence via the Settings-window capture path).
+
+## 2026-07-19 08:25:29 +0200 (CEST)
+
+Conversation summary:
+
+- Phase 3 first batch: settings shell fixes and the 3a model page aligned;
+  captures taken for all six settings pages via the settings driver.
+
+Done:
+
+- 22a: theme/notify persistence bug fixed (@AppStorage), launch-at-login
+  wired to real SMAppService with failure revert.
+- 3a: LOW/STANDARD/MAX effort labels + mockup default note, real
+  used-this-month budget line and bar fraction, real footer stats.
+- Sidebar ruling recorded: the handoff draws 5/6/7-item settings sidebars
+  inconsistently; 30a's 7-item version matches the app and is treated as
+  the latest design evolution.
+
+Next:
+
+- Compare/fix 6a, 30a, 5b, 16a from the captured evidence; 5b shortcut
+  remapping; 6a blocked on the founder's GitHub OAuth App Client ID.
