@@ -23,6 +23,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls where url.scheme == "forge" {
+            guard url.host == "task" else { continue }
+            let taskID = url.lastPathComponent
+            guard !taskID.isEmpty else { continue }
+            NSApp.activate(ignoringOtherApps: true)
+            NotificationCenter.default.post(name: .forgeOpenTaskDeepLink, object: taskID)
+        }
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         NotificationCenter.default.post(name: .forgeApplicationWillTerminate, object: nil)
     }

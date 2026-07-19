@@ -48,6 +48,17 @@ cat >"$INFO_PLIST" <<PLIST
   <string>$BUNDLE_ID</string>
   <key>CFBundleName</key>
   <string>$BUNDLE_NAME</string>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>com.windorion.forge.deeplink</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>forge</string>
+      </array>
+    </dict>
+  </array>
   <key>CFBundleShortVersionString</key>
   <string>0.4.2</string>
   <key>CFBundleVersion</key>

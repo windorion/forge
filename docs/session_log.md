@@ -4856,3 +4856,28 @@ Next:
   target + forge-cli executable + URL-scheme deep link), then Phase 7
   native integrations (8a Dock, 9a notifications, 11a Spotlight, 35a
   widget timebox).
+
+## 2026-07-19 19:53:22 +0200 (CEST)
+
+Conversation summary:
+
+- Phase 6 complete: 27a CLI companion built and exercised live (32/43
+  Verified, 9 Missing).
+
+Done:
+
+- New self-contained forge-cli SPM executable (no app-module dependency;
+  slim Decodables over the runtime HTTP API): forge task with repo
+  detection, plan summary, y/e/n approval prompt and graceful
+  open-questions guidance; forge status with mockup-format colored rows
+  and suggested next commands (exercised against seven live tasks);
+  forge answer; forge review/open deep-linking forge://task/<id>.
+- forge:// URL scheme registered in the packaged Info.plist;
+  AppDelegate open-URLs handler routes deep links to select the task and
+  front the app.
+
+Next:
+
+- Phase 7: 8a Dock menu, 9a notifications, 11a Spotlight, 35a widget
+  timebox; then Phase 8 (onboarding/sign-in/updates/share; 6a OAuth still
+  awaits the founder Client ID).
