@@ -39,8 +39,8 @@ the actual visual source of truth.
 | Decisions | `33a` Agent question | Implemented | Context-backed `WaitForHumanReview` steps open the 1240px choice/consequence/frozen-context layout; answer-and-resume and confirmed abort are real, while rendered comparison remains. |
 | Decisions | `34a` Batch questions | Implemented | The sidebar and detailed question state open an opaque exclusive 1240px answer queue backed by all waiting tasks; partial submit leaves unanswered tasks paused and resumes answered loops independently. |
 | Decisions | `18a` Merge conflict | Implemented | Actual unmerged index entries open the 1240px conflicted-file/three-way/draft/action layout; Base/Ours/Theirs/working contents, explicit confirmation, stale-review protection, manual/side selection, single-file staging, and no-auto-continue boundary are real. Rendered comparison remains. |
-| Decisions | `19a` Failed/rollback | Implemented | Failed tasks open a dedicated evidence/diagnosis/repo-state/reviewed-repair surface with guarded rollback/reject actions. |
-| Decisions | `24a` First success | Implemented | The first persisted Completed task opens the one-time 980px celebration/receipt/next-step layout with real elapsed/agent/diff/check/review/cost evidence; Queue Next is real and GitHub opens only a safely derived GitHub remote. True merged-PR wording/URL and rendered comparison remain. |
+| Decisions | `19a` Failed/rollback | Verified | Rendered comparison done via the real startup-recovery fail path (docs/verification/19a). |
+| Decisions | `24a` First success | Verified | Rendered comparison done on the real first Completed task (docs/verification/24a); runtime branch-name bug fixed. Merged-PR wording stays P2. |
 | Decisions | `37a` Cost breakdown | Partial | Task estimates exist; step/model-call accordion is missing. |
 | Settings | `22a` General | Implemented | Shared 980px navigation, startup, appearance, notification, sound, and update rows exist; rendered comparison remains. |
 | Settings | `3a` Model | Verified | Rendered comparison done (docs/verification/3a); STANDARD/MAX labels, real budget usage, real stats footer. Provider cards list real runtime providers, not the illustrative Claude lineup. |
@@ -60,9 +60,9 @@ the actual visual source of truth.
 | System | `35a` Widget | Missing | WidgetKit S/M/L widgets are missing. |
 | Recovery | `15a` Sign in | Missing | GitHub device-flow screen is missing. |
 | Recovery | `25a` Onboarding | Missing | Four-step first-run flow is missing. |
-| Recovery | `17a` No repository | Implemented | First launch without a selected workspace opens the 980px no-repo state; native folder selection persists a usable repository and starts the runtime, while Demo creates a local git sandbox. |
-| Recovery | `29a` Offline | Implemented | Disconnected/wrong-version runtime states open the 1240px offline queue/checkpoint screen with real tasks, cached state, runtime events, and retry; rendered comparison remains. |
-| Recovery | `31a` Crash recovery | Implemented | Persisted recovered/recovery-required evidence opens a checkpoint summary with review/resume actions. |
+| Recovery | `17a` No repository | Verified | Rendered comparison done (docs/verification/17a); subtitle truncation fixed; both actions real. |
+| Recovery | `29a` Offline | Verified | Rendered comparison done with cached tasks (docs/verification/29a); mid-session disconnect detection fixed en route. |
+| Recovery | `31a` Crash recovery | Verified | Rendered comparison done via a real interrupted-apply startup recovery (docs/verification/31a). |
 | Recovery | `13a` Update dialog | Missing | Sparkle update dialog is missing. |
 | Recovery | `28a` Update ready | Missing | Deferred restart banner and mini-window status are missing. |
 | Recovery | `23a` Share/collaboration | Missing | Read-only web review link flow is missing. |
@@ -78,13 +78,13 @@ the actual visual source of truth.
 - Primary V0 screen implementation: all 5 primary targets (`1a` `1b` `10a`
   `14a` `32a`) are now `Verified` with rendered-comparison evidence in
   `docs/verification/`.
-- Full handoff: 13 `Verified` (`1a` `1b` `1c` `1d` `1e` `3a` `5b` `10a`
-  `14a` `16a` `20a` `30a` `32a`), 13 `Implemented`, 4 `Partial`, 13
-  `Missing` out of 43 named screens/states.
+- Full handoff: 18 `Verified` (`1a` `1b` `1c` `1d` `1e` `3a` `5b` `10a`
+  `14a` `16a` `17a` `19a` `20a` `24a` `29a` `30a` `31a` `32a`), 8
+  `Implemented`, 4 `Partial`, 13 `Missing` out of 43 named screens/states.
 - Verification evidence lives in `docs/verification/<screen-id>/` (self-
   rendered captures + notes; see `docs/verification/README.md` for the
   capture pipeline and per-screen reference sizes).
-- Weighted full-handoff UI readiness: approximately 72-76%.
+- Weighted full-handoff UI readiness: approximately 76-80%.
 
 These metrics must remain separate. Functional completion never implies design
 completion.

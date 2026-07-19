@@ -2088,12 +2088,16 @@ final class WorkspaceModel: ObservableObject {
                     if !Task.isCancelled {
                         eventStreamState = .disconnected
                         eventStreamStatus = "Event stream disconnected"
+                        refreshRuntimeHealth()
                     }
                 }
             } catch {
                 await MainActor.run {
                     eventStreamState = .disconnected
                     eventStreamStatus = "Event stream stopped: \(error.localizedDescription)"
+                    if !Task.isCancelled {
+                        refreshRuntimeHealth()
+                    }
                 }
             }
         }

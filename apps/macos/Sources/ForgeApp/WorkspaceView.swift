@@ -249,6 +249,8 @@ struct WorkspaceView: View {
         case "dismiss":
             surfaceCoordinator.dismiss()
             showCommandPalette = false
+        case "recoveryDismiss":
+            recoveryDismissed = true
         case "diff" where parts.count >= 2:
             surfaceCoordinator.present(.diff(taskID: parts[1]))
         case "audit" where parts.count >= 2:
@@ -3606,6 +3608,8 @@ private struct NoRepositoryState: View {
                     .foregroundStyle(ForgeDesign.muted)
                     .multilineTextAlignment(.center)
                     .lineSpacing(5)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: 430)
                     .padding(.bottom, 28)
 
@@ -3798,7 +3802,7 @@ private struct OfflineWorkspaceState: View {
                             Text("— thinking stream · frozen at checkpoint —")
                                 .foregroundStyle(Color(red: 85 / 255, green: 85 / 255, blue: 79 / 255))
                             ForEach(activeTask?.events.suffix(8) ?? []) { event in
-                                Text("\(event.createdAt.prefix(19))  \(event.message)")
+                                Text("\(Self.clockTime(event.createdAt))  \(event.message)")
                             }
                             Text("⏸ runtime unavailable — retry only on explicit refresh")
                                 .foregroundStyle(ForgeDesign.warning)
@@ -3818,6 +3822,15 @@ private struct OfflineWorkspaceState: View {
 
     private var activeTask: ForgeTask? {
         tasks.first(where: { ["Running", "Testing", "Human Review"].contains($0.status) }) ?? tasks.first
+    }
+
+    static func clockTime(_ iso: String) -> String {
+        let parser = ISO8601DateFormatter()
+        parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard let date = parser.date(from: iso) else { return String(iso.prefix(19)) }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter.string(from: date)
     }
 
     private func offlineStatus(_ task: ForgeTask) -> String {

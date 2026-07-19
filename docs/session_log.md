@@ -4660,3 +4660,33 @@ Next:
 
 - Phase 4 decision/recovery states (33a 19a 31a 29a 17a 18a 24a) and the
   37a step/model-call cost accordion.
+
+## 2026-07-19 13:50:03 +0200 (CEST)
+
+Conversation summary:
+
+- Phase 4 first batch: recovery/decision states 29a, 17a, 19a, 31a, 24a
+  all Verified on real driven states; 18/43 Verified.
+
+Done:
+
+- Fixed mid-session disconnect detection: event-stream end/error now
+  refreshes runtime health, so killing the runtime flips the app to the
+  offline state with cached tasks (previously stayed green RUNNING).
+  29a captured with two real cached tasks and HH:mm:ss frozen stream.
+- 17a captured after clearing the repo preference; fixed the subtitle
+  truncation (environment lineLimit inheritance).
+- Drove the real fail-closed path for 19a/31a: injected a journaled
+  Running apply transaction into the store, restarted the runtime, and
+  the startup recovery produced task Failed/Apply Recovered plus the
+  startup_recovered event. 31a captured (recovery banner), then a new
+  recoveryDismiss debug spec revealed 19a (Failed layout).
+- 24a notes written against the branch-fix capture.
+- Coverage: 18 Verified / 8 Implemented / 4 Partial / 13 Missing;
+  readiness ~76-80%.
+
+Next:
+
+- Remaining Phase 4: 18a merge conflict (construct a real conflicted
+  merge in the demo repo), 33a detailed agent question, and the 37a
+  step/model-call cost accordion build.
