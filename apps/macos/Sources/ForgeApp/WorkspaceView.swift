@@ -112,12 +112,13 @@ private enum WorkspaceSurface: Equatable {
     case audit(taskID: ForgeTask.ID)
     case fullPlan(taskID: ForgeTask.ID, revisionID: PlanRevision.ID)
     case cost(taskID: ForgeTask.ID)
+    case templates
 
     var windowMode: WorkspaceWindowMode {
         switch self {
         case .history, .audit:
             return .recovery
-        case .missionControl, .answerQueue, .taskQueue, .fullPlan:
+        case .missionControl, .answerQueue, .taskQueue, .fullPlan, .templates:
             return .review
         case .diff:
             return .session
@@ -173,51 +174,7 @@ struct WorkspaceView: View {
         .onChange(of: workspace.selectedTaskID) { _, taskID in
             workspace.refreshValidationPermissions(for: taskID)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .forgeToggleCommandPalette)) { _ in
-            showCommandPalette.toggle()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .forgeNewTask)) { _ in
-            surfaceCoordinator.dismiss()
-            workspace.selectedTaskID = nil
-            showCommandPalette = false
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .forgeSwitchRepository)) { _ in
-            surfaceCoordinator.dismiss()
-            showCommandPalette = false
-            workspace.connectRepository()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .forgeToggleMissionControl)) { _ in
-            showCommandPalette = false
-            surfaceCoordinator.present(.missionControl)
-            workspace.refreshMissionControl()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .forgeToggleTaskQueue)) { _ in
-            showCommandPalette = false
-            surfaceCoordinator.present(.taskQueue)
-            workspace.refreshTaskQueue()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .forgeToggleHistory)) { _ in
-            showCommandPalette = false
-            surfaceCoordinator.present(.history)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .forgeOpenSelectedDiff)) { _ in
-            if let task = workspace.selectedTask {
-                surfaceCoordinator.present(.diff(taskID: task.id))
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .forgeOpenSelectedAudit)) { _ in
-            if let task = workspace.selectedTask {
-                surfaceCoordinator.present(.audit(taskID: task.id))
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .forgeApplicationWillTerminate)) { _ in
-            workspace.stopMissionControlObservers()
-        }
-        #if DEBUG
-        .onReceive(NotificationCenter.default.publisher(for: .forgeDebugPresentSurface)) { note in
-            presentDebugSurface(note.object as? String)
-        }
-        #endif
+        .background(notificationBridges)
         .overlay {
             if showCommandPalette {
                 CommandPaletteView(isPresented: $showCommandPalette)
@@ -245,6 +202,64 @@ struct WorkspaceView: View {
                 surfaceCoordinator.dismiss()
             }
         }
+    }
+
+
+    /// Notification listeners live on a zero-size view so the main body
+    /// modifier chain stays small enough for the type checker.
+    private var notificationBridges: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .onReceive(NotificationCenter.default.publisher(for: .forgeToggleCommandPalette)) { _ in
+            showCommandPalette.toggle()
+        }
+            .onReceive(NotificationCenter.default.publisher(for: .forgeNewTask)) { _ in
+            surfaceCoordinator.dismiss()
+            workspace.selectedTaskID = nil
+            showCommandPalette = false
+        }
+            .onReceive(NotificationCenter.default.publisher(for: .forgeSwitchRepository)) { _ in
+            surfaceCoordinator.dismiss()
+            showCommandPalette = false
+            workspace.connectRepository()
+        }
+            .onReceive(NotificationCenter.default.publisher(for: .forgeToggleMissionControl)) { _ in
+            showCommandPalette = false
+            surfaceCoordinator.present(.missionControl)
+            workspace.refreshMissionControl()
+        }
+            .onReceive(NotificationCenter.default.publisher(for: .forgeToggleTaskQueue)) { _ in
+            showCommandPalette = false
+            surfaceCoordinator.present(.taskQueue)
+            workspace.refreshTaskQueue()
+        }
+            .onReceive(NotificationCenter.default.publisher(for: .forgeToggleHistory)) { _ in
+            showCommandPalette = false
+            surfaceCoordinator.present(.history)
+        }
+            .onReceive(NotificationCenter.default.publisher(for: .forgeToggleTemplates)) { _ in
+            showCommandPalette = false
+            surfaceCoordinator.present(.templates)
+        }
+            .onReceive(NotificationCenter.default.publisher(for: .forgeOpenSelectedDiff)) { _ in
+            if let task = workspace.selectedTask {
+                surfaceCoordinator.present(.diff(taskID: task.id))
+            }
+        }
+            .onReceive(NotificationCenter.default.publisher(for: .forgeOpenSelectedAudit)) { _ in
+            if let task = workspace.selectedTask {
+                surfaceCoordinator.present(.audit(taskID: task.id))
+            }
+        }
+            .onReceive(NotificationCenter.default.publisher(for: .forgeApplicationWillTerminate)) { _ in
+            workspace.stopMissionControlObservers()
+        }
+        #if DEBUG
+            .onReceive(NotificationCenter.default.publisher(for: .forgeDebugPresentSurface)) { note in
+            presentDebugSurface(note.object as? String)
+        }
+        #endif
+
     }
 
     #if DEBUG
@@ -279,6 +294,8 @@ struct WorkspaceView: View {
             surfaceCoordinator.present(.audit(taskID: parts[1]))
         case "cost" where parts.count >= 2:
             surfaceCoordinator.present(.cost(taskID: parts[1]))
+        case "templates":
+            surfaceCoordinator.present(.templates)
         case "fullPlan" where parts.count >= 3:
             surfaceCoordinator.present(.fullPlan(taskID: parts[1], revisionID: parts[2]))
         default:
@@ -395,6 +412,12 @@ struct WorkspaceView: View {
                 TaskCostBreakdownView(task: task, close: surfaceCoordinator.dismiss)
             } else {
                 unavailableSurface("The task for this cost breakdown is no longer available.")
+            }
+        case .templates:
+            TaskTemplatesLibraryView(close: surfaceCoordinator.dismiss) { prompt in
+                surfaceCoordinator.dismiss()
+                workspace.selectedTaskID = nil
+                NotificationCenter.default.post(name: .forgePrefillComposer, object: prompt)
             }
         }
     }
@@ -1570,6 +1593,9 @@ private struct TaskComposer: View {
     var body: some View {
         HStack(spacing: 0) {
             TextField("describe a task… (↵ to plan)", text: $objective)
+                .onReceive(NotificationCenter.default.publisher(for: .forgePrefillComposer)) { note in
+                    if let text = note.object as? String { objective = text }
+                }
                 .textFieldStyle(.plain)
                 .font(.custom("JetBrains Mono", fixedSize: 11))
                 .padding(.horizontal, 9)
@@ -4114,6 +4140,9 @@ private struct NewTaskEmptyState: View {
 
             HStack(spacing: 0) {
                 TextField("e.g. \"add rate limiting to the public API\"", text: $prompt)
+                    .onReceive(NotificationCenter.default.publisher(for: .forgePrefillComposer)) { note in
+                        if let text = note.object as? String { prompt = text }
+                    }
                     .font(.system(size: 13))
                     .textFieldStyle(.plain)
                     .padding(.horizontal, 18)

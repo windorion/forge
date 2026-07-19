@@ -9,6 +9,8 @@ extension Notification.Name {
     static let forgeToggleHistory = Notification.Name("forge.toggleHistory")
     static let forgeOpenSelectedDiff = Notification.Name("forge.openSelectedDiff")
     static let forgeOpenSelectedAudit = Notification.Name("forge.openSelectedAudit")
+    static let forgePrefillComposer = Notification.Name("forge.prefillComposer")
+    static let forgeToggleTemplates = Notification.Name("forge.toggleTemplates")
     static let forgeApplicationWillTerminate = Notification.Name("forge.applicationWillTerminate")
 }
 
@@ -84,6 +86,10 @@ struct ForgeApp: App {
                     NotificationCenter.default.post(name: .forgeToggleHistory, object: nil)
                 }
                 .keyboardShortcut(ForgeShortcuts.shortcut("taskHistory"))
+
+                Button("Task Templates") {
+                    NotificationCenter.default.post(name: .forgeToggleTemplates, object: nil)
+                }
 
                 Button("Switch Repository…") {
                     NotificationCenter.default.post(name: .forgeSwitchRepository, object: nil)

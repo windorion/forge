@@ -4781,3 +4781,29 @@ Next:
 
 - Phase 6 quick-entry surfaces: 36a templates, 27a CLI, 7a menu bar, 12a
   quick capture.
+
+## 2026-07-19 19:17:47 +0200 (CEST)
+
+Conversation summary:
+
+- Phase 6 opened with 36a Task Templates built from Missing to Verified;
+  29/43 Verified, 12 Missing remain.
+
+Done:
+
+- New TaskTemplates.swift: ForgeTaskTemplate model + UserDefaults store
+  with four seeded real-use templates; TaskTemplatesLibraryView exclusive
+  surface (search/stats/NEW TEMPLATE header, two-column card grid with
+  selection shadow, detail pane with ⟦placeholder⟧-highlighted task text,
+  PRESETS BAKED IN from real runtime/settings values, RECENT RUNS bound
+  to real task IDs, USE TEMPLATE prefill via forgePrefillComposer into
+  both composers, EDIT/DELETE/CREATE, plan-gate footnote).
+- Templates menu entry + templates debug spec; WorkspaceView notification
+  chain extracted into a zero-size bridge view after the modifier chain
+  outgrew the type checker.
+
+Next:
+
+- Phase 6 remainder: 27a CLI companion (RuntimeClient extraction + second
+  SPM target + URL-scheme deep link), 7a MenuBarExtra, 12a Quick Capture
+  (global hotkey + NSPanel).
