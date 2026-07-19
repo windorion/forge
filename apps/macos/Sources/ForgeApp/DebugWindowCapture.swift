@@ -32,6 +32,10 @@ enum DebugWindowCapture {
             CFNotificationCenterGetDarwinNotifyCenter(),
             nil,
             { _, _, _, _, _ in
+                try? "callback \(Date())".write(
+                    toFile: NSTemporaryDirectory() + "forge-debug-callback.txt",
+                    atomically: true, encoding: .utf8
+                )
                 DispatchQueue.main.async {
                     DebugWindowCapture.captureAllVisibleWindows()
                 }

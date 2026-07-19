@@ -167,9 +167,16 @@ struct WorkspaceView: View {
         .background(ForgeDesign.paper)
         .environmentObject(surfaceCoordinator)
         .task {
+            MenuBarController.shared.activate(workspace: workspace)
             if workspace.runtimeState == .unchecked {
                 workspace.refreshRuntimeHealth()
             }
+        }
+        .onChange(of: workspace.tasks) { _, tasks in
+            let running = tasks.filter {
+                workspace.isRunningAgentLoop(taskID: $0.id) || ["Running", "Testing"].contains($0.status)
+            }.count
+            MenuBarController.shared.updateBadge(running: running)
         }
         .onChange(of: workspace.selectedTaskID) { _, taskID in
             workspace.refreshValidationPermissions(for: taskID)
@@ -296,6 +303,10 @@ struct WorkspaceView: View {
             surfaceCoordinator.present(.cost(taskID: parts[1]))
         case "templates":
             surfaceCoordinator.present(.templates)
+        case "menubarPanel":
+            MenuBarController.shared.showPanel()
+        case "closePanels":
+            MenuBarController.shared.hidePanel()
         case "fullPlan" where parts.count >= 3:
             surfaceCoordinator.present(.fullPlan(taskID: parts[1], revisionID: parts[2]))
         default:

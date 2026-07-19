@@ -4807,3 +4807,30 @@ Next:
 - Phase 6 remainder: 27a CLI companion (RuntimeClient extraction + second
   SPM target + URL-scheme deep link), 7a MenuBarExtra, 12a Quick Capture
   (global hotkey + NSPanel).
+
+## 2026-07-19 19:33:22 +0200 (CEST)
+
+Conversation summary:
+
+- 7a menu bar mini window built from Missing to Verified (30/43), after
+  root-causing a serious toolchain conflict: SwiftUI's MenuBarExtra scene
+  silently breaks Darwin-notification delivery for the whole app.
+
+Done:
+
+- Bisected the dead capture pipeline to the MenuBarExtra scene itself
+  (baseline commit fine; scene added → callbacks never fire; scene
+  removed → restored). Replaced with an AppKit MenuBarController:
+  NSStatusItem (logo + accent running badge) plus a floating borderless
+  NSPanel hosting the SwiftUI MenuBarMiniWindow.
+- MenuBarMiniWindow: black FORGE header with live status, running task
+  cards with progress, NEEDS YOU / PR READY rows from real tasks, quick
+  task input (creates real tasks), OPEN FORGE / pause all / real budget
+  footer. Badge tracks live task state; menubarPanel/closePanels debug
+  specs drive it for captures.
+
+Next:
+
+- Phase 6 remainder: 12a Quick Capture (global hotkey + panel — can share
+  MenuBarController's panel machinery), 27a CLI companion (SPM target
+  split + URL scheme).
