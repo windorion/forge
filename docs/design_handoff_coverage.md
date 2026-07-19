@@ -57,7 +57,7 @@ the actual visual source of truth.
 | System | `9a` Notifications | Verified | Four UN categories with contextual auth, 22a gate, real transition emitters, deep-link actions (docs/verification/9a). |
 | System | `11a` Spotlight | Verified | CSSearchableIndex reindex on refresh + result continuation into the task (docs/verification/11a); dynamic create-task row stays a stretch goal. |
 | System | `21a` App menu | Verified | Full handoff command set with registry shortcuts and real enable state; dropdown chrome is system-rendered (docs/verification/21a). |
-| System | `35a` Widget | Missing | WidgetKit S/M/L widgets are missing. |
+| System | `35a` Widget | Missing | Timeboxed hand-assembled .appex experiment ran and failed as pre-declared (pluginkit never discovers an ad-hoc-signed hand-built extension; embedded runtime resource forks block deep signing). Widget code compiles and is kept in-tree; unblocks with P6 signing infrastructure (docs/verification/35a). |
 | Recovery | `15a` Sign in | Missing | GitHub device-flow screen is missing. |
 | Recovery | `25a` Onboarding | Missing | Four-step first-run flow is missing. |
 | Recovery | `17a` No repository | Verified | Rendered comparison done (docs/verification/17a); subtitle truncation fixed; both actions real. |

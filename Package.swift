@@ -9,7 +9,8 @@ let package = Package(
     ],
     products: [
         .executable(name: "ForgeApp", targets: ["ForgeApp"]),
-        .executable(name: "forge-cli", targets: ["ForgeCLI"])
+        .executable(name: "forge-cli", targets: ["ForgeCLI"]),
+        .executable(name: "ForgeWidgets", targets: ["ForgeWidgets"])
     ],
     targets: [
         .executableTarget(
@@ -19,6 +20,10 @@ let package = Package(
         .executableTarget(
             name: "ForgeCLI",
             path: "apps/cli/Sources/ForgeCLI"
+        ),
+        .executableTarget(
+            name: "ForgeWidgets",
+            path: "apps/widgets/Sources/ForgeWidgets"
         )
     ]
 )

@@ -52,6 +52,10 @@ the core runtime smoke. Preserve these completed boundaries:
 - plan approval before mutation, human review
   before apply, explicit command approval, and explicit git actions.
 
+- `35a` widgets: hand-assembled extension experiment failed as
+  pre-declared (see docs/verification/35a); revisit only with P6 signing
+  infrastructure. Do not block other screens on this.
+
 ## P1: Real Agent Behavior
 
 - Add safe query-variation handling beyond the current exact-fingerprint repeat

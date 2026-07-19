@@ -4909,3 +4909,21 @@ Next:
 
 - 35a widget: strictly timeboxed hand-assembled .appex + pluginkit
   experiment with descope fallback; then Phase 8.
+
+## 2026-07-19 20:24:35 +0200 (CEST)
+
+Conversation summary:
+
+- 35a widget experiment ran its timebox and triggered the pre-declared
+  descope: pluginkit never discovers a hand-assembled ad-hoc-signed
+  extension, and the embedded Node runtime's resource forks block deep
+  bundle signing entirely. Failure modes documented
+  (docs/verification/35a), widget code kept in-tree (compiles cleanly),
+  todo notes the P6-signing dependency. Phase 7 closes with 8a/9a/11a
+  Verified and 35a as the one documented platform-blocked gap.
+
+Next:
+
+- Phase 8: 25a onboarding, 15a sign-in (GitHub wired/inert email), 13a/28a
+  Sparkle against a local appcast, 23a share popover with local link
+  generation. 6a OAuth still awaits the founder Client ID.
