@@ -2180,6 +2180,13 @@ final class WorkspaceModel: ObservableObject {
 
     private func registerMissionControlRepository(path: String) {
         guard !path.isEmpty else { return }
+        // Normalize so "/repo" and "/repo/" register as one repository.
+        let normalized = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL.path
+        if let duplicate = missionControlRepositories.firstIndex(where: {
+            URL(fileURLWithPath: $0.path, isDirectory: true).standardizedFileURL.path == normalized && $0.path != path
+        }) {
+            missionControlRepositories.remove(at: duplicate)
+        }
         if missionControlRepositories.contains(where: { $0.path == path }) {
             return
         }

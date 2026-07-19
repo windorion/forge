@@ -35,7 +35,7 @@ the actual visual source of truth.
 | Core | `32a` New session | Verified | Chat session structure compared (docs/verification/32a); mid-run chat perspective is the recorded gap (run switches to 14a layout). |
 | Core | `10a` Fullscreen diff review | Verified | Layout aligned and compared on live proposal data (docs/verification/10a); PLAN STEP badge, CONVENTION MATCHED, and OPEN PR await runtime/P2 capability. |
 | Core | `26a` Task queue | Verified | Rendered comparison done on real queue data (docs/verification/26a); drag polish recorded. |
-| Core | `4a` Mission control | Partial | The opaque exclusive 1240px three-column surface, verified observers, explicit session-scoped active-runtime authorization, authorization evidence, live health/task/queue/git aggregation, focus shortcuts, New Task, and cross-runtime Pause All are real. Full background task creation/detail/review routing and rendered comparison remain. |
+| Core | `4a` Mission control | Verified | Rendered comparison done on live multi-repo data (docs/verification/4a); duplicate registration fixed; cross-runtime click-through awaits a real second runtime session. |
 | Decisions | `33a` Agent question | Verified | Rendered comparison done on a real enriched WaitForHumanReview step (docs/verification/33a). |
 | Decisions | `34a` Batch questions | Verified | Rendered comparison done with a real waiting task (docs/verification/34a). |
 | Decisions | `18a` Merge conflict | Verified | Rendered comparison done on a real conflicted merge (docs/verification/18a). |
@@ -78,14 +78,14 @@ the actual visual source of truth.
 - Primary V0 screen implementation: all 5 primary targets (`1a` `1b` `10a`
   `14a` `32a`) are now `Verified` with rendered-comparison evidence in
   `docs/verification/`.
-- Full handoff: 27 `Verified` (`1a` `1b` `1c` `1d` `1e` `2a` `2b` `3a`
-  `5a` `5b` `10a` `14a` `16a` `17a` `18a` `19a` `20a` `21a` `24a` `26a`
-  `29a` `30a` `31a` `32a` `33a` `34a` `37a`), 0 `Implemented`, 3
+- Full handoff: 28 `Verified` (`1a` `1b` `1c` `1d` `1e` `2a` `2b` `3a`
+  `4a` `5a` `5b` `10a` `14a` `16a` `17a` `18a` `19a` `20a` `21a` `24a`
+  `26a` `29a` `30a` `31a` `32a` `33a` `34a` `37a`), 0 `Implemented`, 2
   `Partial`, 13 `Missing` out of 43 named screens/states.
 - Verification evidence lives in `docs/verification/<screen-id>/` (self-
   rendered captures + notes; see `docs/verification/README.md` for the
   capture pipeline and per-screen reference sizes).
-- Weighted full-handoff UI readiness: approximately 82-86%.
+- Weighted full-handoff UI readiness: approximately 83-87%.
 
 These metrics must remain separate. Functional completion never implies design
 completion.

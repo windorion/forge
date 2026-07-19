@@ -4756,3 +4756,28 @@ Next:
 
 - 4a routing, then Phase 6 quick-entry surfaces (36a templates, 27a CLI,
   7a menu bar, 12a quick capture).
+
+## 2026-07-19 19:11:12 +0200 (CEST)
+
+Conversation summary:
+
+- Phase 5 complete: 4a Mission Control verified on live multi-repo data;
+  28/43 Verified, 0 Implemented, 2 Partial (6a OAuth, 22a Sparkle), 13
+  Missing.
+
+Done:
+
+- 4a captured with real three-column data: a CONNECTING observer column
+  showing 3-day-old cached task cards from the windorion/forge repo, the
+  live NEEDS YOU column with progress bars, aggregate counters, and the
+  empty ADD REPOSITORY slot. Task-card routing
+  (openTask/activateMissionControlRepositoryForTask) confirmed wired; a
+  live cross-runtime click-through is recorded as awaiting a genuine
+  second-runtime session.
+- Fixed duplicate repository registration (trailing-slash path variants
+  now normalize and dedupe).
+
+Next:
+
+- Phase 6 quick-entry surfaces: 36a templates, 27a CLI, 7a menu bar, 12a
+  quick capture.
