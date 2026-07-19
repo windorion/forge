@@ -168,6 +168,7 @@ struct WorkspaceView: View {
         .environmentObject(surfaceCoordinator)
         .task {
             MenuBarController.shared.activate(workspace: workspace)
+            QuickCaptureController.shared.activate(workspace: workspace)
             if workspace.runtimeState == .unchecked {
                 workspace.refreshRuntimeHealth()
             }
@@ -305,8 +306,11 @@ struct WorkspaceView: View {
             surfaceCoordinator.present(.templates)
         case "menubarPanel":
             MenuBarController.shared.showPanel()
+        case "quickCapture":
+            QuickCaptureController.shared.show()
         case "closePanels":
             MenuBarController.shared.hidePanel()
+            QuickCaptureController.shared.hide()
         case "fullPlan" where parts.count >= 3:
             surfaceCoordinator.present(.fullPlan(taskID: parts[1], revisionID: parts[2]))
         default:

@@ -4834,3 +4834,25 @@ Next:
 - Phase 6 remainder: 12a Quick Capture (global hotkey + panel — can share
   MenuBarController's panel machinery), 27a CLI companion (SPM target
   split + URL scheme).
+
+## 2026-07-19 19:39:08 +0200 (CEST)
+
+Conversation summary:
+
+- 12a Quick Capture built from Missing to Verified (31/43); Phase 6 has
+  only 27a CLI left.
+
+Done:
+
+- QuickCaptureController: Carbon RegisterEventHotKey global hotkey
+  (⌥Space default, configurable, no Accessibility permission) toggling a
+  floating all-Spaces NSPanel; QuickCaptureView with real repo chips,
+  honest template-matching AI hint, real model/effort/guardrails row,
+  PLAN ONLY / PLAN & RUN creating real tasks. quickCapture debug spec.
+
+Next:
+
+- 27a CLI companion (RuntimeClient/DTO extraction into a shared SPM
+  target + forge-cli executable + URL-scheme deep link), then Phase 7
+  native integrations (8a Dock, 9a notifications, 11a Spotlight, 35a
+  widget timebox).

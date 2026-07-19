@@ -49,7 +49,7 @@ the actual visual source of truth.
 | Settings | `5b` Shortcuts | Verified | Real remapping shipped (ForgeShortcuts registry + recording UI + live menu bindings, override-proven). Focus-repo/cycle-tab/PR/copy-branch bindings and a human keypress pass remain (docs/verification/5b). |
 | Settings | `16a` Account/usage | Verified | Rendered comparison done (docs/verification/16a); local-first profile card replaces hosted identity pending 15a; TOKENS→COMPLETED honest substitute. |
 | Quick entry | `5a` Command palette | Verified | Rendered comparison done (docs/verification/5a). |
-| Quick entry | `12a` Quick capture | Missing | Global floating capture window is missing. |
+| Quick entry | `12a` Quick capture | Verified | Global-hotkey floating panel with real repos/presets and honest AI hint (docs/verification/12a); file-match intelligence awaits P3 indexing. |
 | Quick entry | `7a` Menu bar mini window | Verified | NSStatusItem + floating panel with live tasks, quick entry, budget footer (docs/verification/7a); MenuBarExtra scene avoided due to a Darwin-notification conflict. |
 | Quick entry | `27a` CLI companion | Missing | Shared-background CLI is missing. |
 | Quick entry | `36a` Task templates | Verified | Library built with local store, placeholder prompts, real presets, prefill flow (docs/verification/36a). |
@@ -78,14 +78,14 @@ the actual visual source of truth.
 - Primary V0 screen implementation: all 5 primary targets (`1a` `1b` `10a`
   `14a` `32a`) are now `Verified` with rendered-comparison evidence in
   `docs/verification/`.
-- Full handoff: 30 `Verified` (`1a` `1b` `1c` `1d` `1e` `2a` `2b` `3a`
-  `4a` `5a` `5b` `7a` `10a` `14a` `16a` `17a` `18a` `19a` `20a` `21a`
-  `24a` `26a` `29a` `30a` `31a` `32a` `33a` `34a` `36a` `37a`), 0
-  `Implemented`, 2 `Partial`, 11 `Missing` out of 43 named screens/states.
+- Full handoff: 31 `Verified` (`1a` `1b` `1c` `1d` `1e` `2a` `2b` `3a`
+  `4a` `5a` `5b` `7a` `10a` `12a` `14a` `16a` `17a` `18a` `19a` `20a`
+  `21a` `24a` `26a` `29a` `30a` `31a` `32a` `33a` `34a` `36a` `37a`), 0
+  `Implemented`, 2 `Partial`, 10 `Missing` out of 43 named screens/states.
 - Verification evidence lives in `docs/verification/<screen-id>/` (self-
   rendered captures + notes; see `docs/verification/README.md` for the
   capture pipeline and per-screen reference sizes).
-- Weighted full-handoff UI readiness: approximately 86-89%.
+- Weighted full-handoff UI readiness: approximately 87-90%.
 
 These metrics must remain separate. Functional completion never implies design
 completion.
