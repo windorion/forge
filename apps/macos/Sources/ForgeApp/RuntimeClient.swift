@@ -709,16 +709,26 @@ struct RuntimeClient {
 
                     var eventType = "message"
                     var eventData = ""
+                    var lineBuffer = Data()
 
-                    for try await line in bytes.lines {
-                        if line.hasPrefix("event: ") {
-                            eventType = String(line.dropFirst("event: ".count))
-                        } else if line.hasPrefix("data: ") {
-                            eventData += String(line.dropFirst("data: ".count))
-                        } else if line.isEmpty, !eventData.isEmpty {
-                            continuation.yield(RuntimeStreamEvent(type: eventType, data: eventData))
-                            eventType = "message"
-                            eventData = ""
+                    // SSE frames terminate on a blank line, but
+                    // `bytes.lines` silently drops empty lines, so events
+                    // were never dispatched. Assemble lines manually.
+                    for try await byte in bytes {
+                        if byte == UInt8(ascii: "\n") {
+                            let line = String(data: lineBuffer, encoding: .utf8) ?? ""
+                            lineBuffer.removeAll(keepingCapacity: true)
+                            if line.hasPrefix("event: ") {
+                                eventType = String(line.dropFirst("event: ".count))
+                            } else if line.hasPrefix("data: ") {
+                                eventData += String(line.dropFirst("data: ".count))
+                            } else if line.isEmpty, !eventData.isEmpty {
+                                continuation.yield(RuntimeStreamEvent(type: eventType, data: eventData))
+                                eventType = "message"
+                                eventData = ""
+                            }
+                        } else if byte != UInt8(ascii: "\r") {
+                            lineBuffer.append(byte)
                         }
                     }
 
