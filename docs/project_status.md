@@ -19,9 +19,12 @@ task-scoped commands with streamed output,
 record rerun evidence after reviewed self-fixes, let a model provider choose
 safe next agent steps inside a bounded multi-step loop, and persist task state
 locally. The loop now has cooperative controls and a provider-selected,
-runtime-executed read-only repository inspection step. Agent-step format errors
-now get one bounded correction attempt and fail closed with persisted evidence;
-the next milestone is broader search/symbol choices and patch breadth.
+runtime-executed read-only repository inspection step. Malformed provider outputs (agent steps, intent briefs, plan-context requests,
+plan revisions, and edit proposals) now get one bounded, side-effect-free
+correction attempt; near-duplicate repository inspections are blocked by a
+unified subset-aware guard across both the InspectRepository step and the
+plan-context loop. The next milestone is broader search/symbol choices, patch
+breadth, and approved PR publication.
 
 ## Current Implementation
 

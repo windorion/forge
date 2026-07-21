@@ -5072,3 +5072,39 @@ Next:
   smoke:core passes, ideally with a real/mock provider exercising the
   loop). The two completed guards are additive and low-risk; the loop
   refactor is not, and should be verified before landing.
+
+## 2026-07-21 21:40:00 +0200 (CEST)
+
+Conversation summary:
+
+- Unblocked my own verification environment and completed all three P1
+  Real Agent Behavior items, each verified against the full smoke suite.
+
+Done:
+
+- Verification unblock: built a ripgrep-compatible `rg` shim (the local
+  tool binary invoked with argv0=rg emulates ripgrep 14.1.1) and put it on
+  PATH so Node's spawn("rg") works. smoke:core now runs green in this
+  environment without a standalone ripgrep install. Technique documented in
+  development.md.
+- P1 item 2 completed: the plan-context loop's redundancy stop condition
+  now uses the same subset-aware repositoryInspectionSubsumedBy guard as
+  InspectRepository, unifying and hardening the two bounded read-only
+  context paths' stop conditions. Tool execution stays runtime-owned; the
+  provider only advises terms/paths. Verified by the full smoke:core flow.
+- Full regression green with the shim: smoke:core, smoke:queue,
+  smoke:observer, smoke:git-remote, smoke:git-conflicts, plus the two new
+  pure-logic suites (smoke:inspection-guard 9, smoke:provider-recovery 8).
+
+All three P1 items are now done:
+1. subset-aware inspection redundancy guard (inspectionGuard.ts)
+2. bounded output recovery for planning + patch generation (providerRecovery.ts)
+3. unified/hardened bounded context-loop stop conditions
+
+Next:
+
+- P1's remaining depth (a fully general runtime-owned tool-call loop
+  abstraction beyond hardened stop conditions) is optional architecture,
+  not a correctness gap. Natural next tracks: P2 (approved GitHub branch/PR
+  publication — needs the founder OAuth Client ID, same as 6a) or P3
+  (durable text + lightweight symbol indexing).
