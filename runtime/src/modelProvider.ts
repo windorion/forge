@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { withStructuredRecovery, type StructuredRecoveryResult } from "./providerRecovery.js";
 import type {
   AgentRunStepDecision,
   CommandRerunEvidence,
@@ -329,7 +330,7 @@ class OpenAIResponsesModelProvider implements ModelProvider {
   ) {}
 
   async createIntentBrief(request: IntentBriefRequest): Promise<IntentBrief> {
-    const output = await this.createStructuredOutput(
+    const recovered = await this.createStructuredOutputRecovered(
       "forge_intent_brief",
       intentBriefSchema,
       [
@@ -337,14 +338,16 @@ class OpenAIResponsesModelProvider implements ModelProvider {
         "Return constraints, acceptance criteria, open questions, and the next action.",
         "If the task is unclear, use openQuestions instead of inventing details.",
         taskProviderContext(request.task, request.latestUserMessage)
-      ].join("\n\n")
+      ].join("\n\n"),
+      (raw) => normalizeIntentBrief(raw),
+      "Return exactly one object matching the supplied schema with valid constraint, acceptance, open-question, and next-action fields."
     );
 
-    return normalizeIntentBrief(output);
+    return recovered.value;
   }
 
   async createPlanContextRequest(request: PlanContextRequest): Promise<PlanContextRequestResult> {
-    const output = await this.createStructuredOutput(
+    const recovered = await this.createStructuredOutputRecovered(
       "forge_plan_context_request",
       planContextRequestSchema,
       [
@@ -357,14 +360,16 @@ class OpenAIResponsesModelProvider implements ModelProvider {
         "Do not request secrets, generated files, .git, .forge, node_modules, build output, or absolute paths.",
         "The runtime will validate every request, execute only allowlisted read-only tools, and summarize results before planning.",
         taskProviderContext(request.task, request.sourceMessage)
-      ].join("\n\n")
+      ].join("\n\n"),
+      (raw) => normalizePlanContextRequestOutput(raw),
+      "Return exactly one object matching the schema. Use a valid status and only repo-relative search terms and read paths."
     );
 
-    return normalizePlanContextRequestOutput(output);
+    return recovered.value;
   }
 
   async createPlanRevision(request: PlanRevisionRequest): Promise<PlanRevision> {
-    const output = await this.createStructuredOutput(
+    const recovered = await this.createStructuredOutputRecovered(
       "forge_plan_revision",
       planRevisionSchema,
       [
@@ -372,10 +377,12 @@ class OpenAIResponsesModelProvider implements ModelProvider {
         "Do not claim files were changed or commands were run.",
         "Keep the plan task-centered and stop at human review before side effects.",
         taskProviderContext(request.task, request.sourceMessage)
-      ].join("\n\n")
+      ].join("\n\n"),
+      (raw) => normalizePlanRevisionOutput(raw, request.task),
+      "Return exactly one object matching the schema with a non-empty, ordered list of task-centered steps and valid summary/rationale/risk fields."
     );
 
-    const normalized = normalizePlanRevisionOutput(output, request.task);
+    const normalized = recovered.value;
     return {
       id: randomUUID(),
       provider: this.info,
@@ -470,7 +477,7 @@ class OpenAIResponsesModelProvider implements ModelProvider {
   }
 
   async createEditProposal(request: EditProposalRequest): Promise<EditProposal> {
-    const output = await this.createStructuredOutput(
+    const recovered = await this.createStructuredOutputRecovered(
       "forge_edit_proposal",
       editProposalSchema,
       [
@@ -491,9 +498,11 @@ class OpenAIResponsesModelProvider implements ModelProvider {
         "Never claim files were changed. This proposal is not a workspace mutation.",
         taskProviderContext(request.task, request.sourceMessage),
         editProposalRequestContext(request)
-      ].join("\n\n")
+      ].join("\n\n"),
+      (raw) => normalizeRichEditProposalOutput(raw, request),
+      "Return exactly one object matching the schema. Every file change must use an allowed operation with a path and, for patch/replace/diff operations, exact find/context text."
     );
-    const proposalOutput = normalizeRichEditProposalOutput(output, request);
+    const proposalOutput = recovered.value;
 
     return {
       id: randomUUID(),
@@ -547,6 +556,33 @@ class OpenAIResponsesModelProvider implements ModelProvider {
       riskLevel: normalized.riskLevel,
       generatedAt: new Date().toISOString()
     };
+  }
+
+  /// Bounded, side-effect-free recovery around a generation call: on a
+  /// malformed output (decode failure or a normalize throw) it re-requests
+  /// once with a correction. Used for review artifacts that never mutate the
+  /// workspace, so re-requesting is safe. Non-format errors (network/timeout)
+  /// propagate immediately.
+  private async createStructuredOutputRecovered<T>(
+    name: string,
+    schema: JsonSchema,
+    basePrompt: string,
+    normalize: (raw: unknown) => T,
+    correctionGuidance: string
+  ): Promise<StructuredRecoveryResult<T>> {
+    return withStructuredRecovery<T>({
+      maxAttempts: 2,
+      produce: (correction) =>
+        this.createStructuredOutput(
+          name,
+          schema,
+          correction ? `${basePrompt}\n\n${correction}` : basePrompt
+        ),
+      normalize,
+      correctionGuidance,
+      isFormatError: (error) => error instanceof ModelProviderOutputFormatError,
+      compactError: (error) => compactProviderError(error)
+    });
   }
 
   private async createStructuredOutput(name: string, schema: JsonSchema, prompt: string): Promise<unknown> {

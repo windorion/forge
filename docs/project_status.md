@@ -131,9 +131,15 @@ Implemented:
   Strong/Partial/Weak/NoNewContext rating, a concise quality explanation,
   query-term coverage, match/file/new-context counts, total context bytes, and
   per-file byte length, SHA-256, matched-line count, and match reasons.
-- Bounded Agent Run Step output recovery. OpenAI structured-output decode,
-  required-field, and action-enum failures receive one corrective retry. A
-  successful retry stores its attempt count and first error; exhaustion stores
+- Bounded output recovery for generation calls. OpenAI structured-output
+  decode, required-field, and action-enum failures receive one corrective
+  retry, now covering intent briefs, plan-context requests, plan revisions,
+  and edit proposals in addition to Agent Run Step decisions
+  (runtime/src/providerRecovery.ts; `smoke:provider-recovery`). These calls
+  produce review artifacts and never mutate the workspace, so re-requesting is
+  side-effect-free; non-format errors (network/timeout) still propagate
+  immediately. For Agent Run Step decisions, a successful retry stores its
+  attempt count and first error; exhaustion stores
   a failed `WaitForHumanReview` step with both bounded errors and stops the loop
   before any tool, command, or file side effect.
 - Bounded Agent Run Loop v0. `POST /tasks/:taskID/run-agent-loop` repeatedly

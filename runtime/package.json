@@ -13,7 +13,8 @@
     "smoke:observer": "npm run build && node scripts/observer-runtime-fixtures.mjs",
     "smoke:git-conflicts": "npm run build && node scripts/git-conflict-fixtures.mjs",
     "smoke:git-remote": "npm run build && node scripts/git-remote-fixtures.mjs",
-    "smoke:inspection-guard": "npm run build && node scripts/inspection-guard-test.mjs"
+    "smoke:inspection-guard": "npm run build && node scripts/inspection-guard-test.mjs",
+    "smoke:provider-recovery": "npm run build && node scripts/provider-recovery-test.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
