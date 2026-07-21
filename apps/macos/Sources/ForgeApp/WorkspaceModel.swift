@@ -298,6 +298,7 @@ final class WorkspaceModel: ObservableObject {
                 await refreshGitStatusSnapshot()
                 await refreshValidationPermissionSnapshotIfPossible(for: selectedTaskID)
                 startEventStream()
+                await ensureRepositoryIndex(health)
             } catch {
                 runtimeHealth = nil
                 modelProviderSettingsEnvelope = nil
@@ -311,6 +312,23 @@ final class WorkspaceModel: ObservableObject {
                 eventStreamStatus = "Event stream disconnected"
                 eventStreamTask?.cancel()
             }
+        }
+    }
+
+    /// Build the durable repository index once per connected workspace when
+    /// it has not been indexed yet, then refresh health so the file count
+    /// shows real data. Non-fatal: a failure just leaves the "indexing…"
+    /// footer until the next refresh.
+    private func ensureRepositoryIndex(_ health: RuntimeHealth) async {
+        guard health.readOnly != true else { return }
+        if health.index?.lastIndexedAt != nil { return }
+        do {
+            _ = try await runtime.rebuildIndex()
+            if let refreshed = try? await runtime.health() {
+                runtimeHealth = refreshed
+            }
+        } catch {
+            // Leave the index unbuilt; a later refresh retries.
         }
     }
 

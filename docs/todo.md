@@ -88,11 +88,14 @@ the core runtime smoke. Preserve these completed boundaries:
 
 ## P3: Repository Understanding
 
-- Add a durable repository index.
+- [x] Durable repository index (SQLite repo_index table + repo_index_meta;
+  runtime/src/repositoryIndex.ts; GET /index, POST /index/rebuild;
+  incremental re-index; smoke:repo-index, smoke:repo-index-pure).
 - Add ripgrep-backed text search as an explicit runtime tool.
 - Add Tree-sitter or equivalent symbol parsing for common languages.
-- Store index metadata in SQLite.
-- Add ignore/secret filtering before indexing.
+- [x] Index metadata stored in SQLite (repo_index_meta: last_indexed_at, git_root).
+- [x] Ignore/secret filtering before indexing (reuses the runtime skip rules:
+  ignored dirs/names, size cap; broadened language allowlist for the index).
 - Add semantic search only after symbol/text search is useful.
 
 ## P4: Runtime And Permissions

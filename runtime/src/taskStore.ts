@@ -2,8 +2,9 @@ import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import type { ForgeTask } from "./types.js";
+import type { IndexedFile } from "./repositoryIndex.js";
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 export class SqliteTaskStore {
   readonly dbPath: string;
@@ -103,9 +104,102 @@ export class SqliteTaskStore {
 
       CREATE INDEX IF NOT EXISTS idx_tasks_updated_at ON tasks(updated_at DESC);
 
+      CREATE TABLE IF NOT EXISTS repo_index (
+        path TEXT PRIMARY KEY,
+        language TEXT NOT NULL,
+        byte_size INTEGER NOT NULL,
+        line_count INTEGER NOT NULL,
+        content_hash TEXT NOT NULL,
+        indexed_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_repo_index_language ON repo_index(language);
+
+      CREATE TABLE IF NOT EXISTS repo_index_meta (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        last_indexed_at TEXT,
+        git_root TEXT
+      );
+
       INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
-      VALUES (${SCHEMA_VERSION}, 'create_task_store', datetime('now'));
+      VALUES (1, 'create_task_store', datetime('now'));
+      INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
+      VALUES (2, 'create_repo_index', datetime('now'));
     `);
+  }
+
+  loadIndexedFiles(): IndexedFile[] {
+    const rows = this.db
+      .prepare("SELECT path, language, byte_size, line_count, content_hash, indexed_at FROM repo_index")
+      .all();
+    return rows.map((row) => ({
+      path: String(row.path),
+      language: String(row.language),
+      byteSize: Number(row.byte_size),
+      lineCount: Number(row.line_count),
+      contentHash: String(row.content_hash),
+      indexedAt: String(row.indexed_at)
+    }));
+  }
+
+  upsertIndexedFile(file: IndexedFile): void {
+    this.requireWritable();
+    this.db
+      .prepare(`
+        INSERT INTO repo_index (path, language, byte_size, line_count, content_hash, indexed_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(path) DO UPDATE SET
+          language = excluded.language,
+          byte_size = excluded.byte_size,
+          line_count = excluded.line_count,
+          content_hash = excluded.content_hash,
+          indexed_at = excluded.indexed_at
+      `)
+      .run(file.path, file.language, file.byteSize, file.lineCount, file.contentHash, file.indexedAt);
+  }
+
+  /** Remove indexed rows whose path is not in the provided set (deleted files). */
+  removeIndexedFilesNotIn(paths: Set<string>): number {
+    this.requireWritable();
+    let removed = 0;
+    for (const row of this.db.prepare("SELECT path FROM repo_index").all()) {
+      const filePath = String(row.path);
+      if (!paths.has(filePath)) {
+        this.db.prepare("DELETE FROM repo_index WHERE path = ?").run(filePath);
+        removed += 1;
+      }
+    }
+    return removed;
+  }
+
+  getIndexMeta(): { lastIndexedAt: string | null; gitRoot: string | null } {
+    const row = this.db.prepare("SELECT last_indexed_at, git_root FROM repo_index_meta WHERE id = 1").get();
+    if (!row) {
+      return { lastIndexedAt: null, gitRoot: null };
+    }
+    return {
+      lastIndexedAt: row.last_indexed_at ? String(row.last_indexed_at) : null,
+      gitRoot: row.git_root ? String(row.git_root) : null
+    };
+  }
+
+  setIndexMeta(meta: { lastIndexedAt: string; gitRoot: string | null }): void {
+    this.requireWritable();
+    this.db
+      .prepare(`
+        INSERT INTO repo_index_meta (id, last_indexed_at, git_root)
+        VALUES (1, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          last_indexed_at = excluded.last_indexed_at,
+          git_root = excluded.git_root
+      `)
+      .run(meta.lastIndexedAt, meta.gitRoot);
+  }
+
+  private requireWritable(): void {
+    if (this.readOnly) {
+      throw new Error("Repository index is read-only in observer runtime mode.");
+    }
   }
 }
 

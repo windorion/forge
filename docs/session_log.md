@@ -5108,3 +5108,44 @@ Next:
   not a correctness gap. Natural next tracks: P2 (approved GitHub branch/PR
   publication — needs the founder OAuth Client ID, same as 6a) or P3
   (durable text + lightweight symbol indexing).
+
+## 2026-07-21 22:05:00 +0200 (CEST)
+
+Conversation summary:
+
+- Started P3 Repository Understanding and delivered the durable repository
+  index foundation (3 of 6 P3 items), fully tested, and wired the real file
+  count into the 1a footer.
+
+Done:
+
+- Durable file-tree index in SQLite (schema v2: repo_index +
+  repo_index_meta). runtime/src/repositoryIndex.ts holds pure language
+  classification / metadata / summary helpers; taskStore.ts gains index
+  upsert/load/remove/meta methods (read-only-guarded for observers).
+  indexRepository() walks the skip-filtered tree with a broadened language
+  allowlist, reads each file, and incrementally upserts (unchanged skipped
+  by content hash, deleted removed, meta refreshed). GET /index and
+  POST /index/rebuild; a compact index summary added to /health.
+- App: RuntimeIndexInfo model; the 1a footer now shows the real indexed
+  count ("indexed 3 files · in sync" on DemoTodo) instead of the hardcoded
+  "1,204"; the app builds the index once on connect (ensureRepositoryIndex)
+  and refreshes health.
+- Tests: smoke:repo-index-pure (15 assertions: classification, metadata
+  determinism, summary) and smoke:repo-index (e2e: full build, ignore
+  filtering, language distribution, incremental skip/reindex/remove, health
+  summary, restart persistence). Full suite green with the rg shim (9
+  suites), including smoke:core which exercises the refactored
+  listRepositoryFiles/shouldSkipRepositoryFile.
+
+Not done (remaining P3):
+
+- Tree-sitter (or lightweight regex) symbol extraction.
+- ripgrep-backed text search as an explicit index-backed runtime tool.
+- Semantic search/embeddings (only after symbol/text search is useful).
+
+Next:
+
+- Lightweight symbol extraction is the natural next P3 increment (regex-based
+  for common languages avoids a native Tree-sitter dependency and stays
+  testable), building on the durable index just landed.

@@ -14,7 +14,9 @@
     "smoke:git-conflicts": "npm run build && node scripts/git-conflict-fixtures.mjs",
     "smoke:git-remote": "npm run build && node scripts/git-remote-fixtures.mjs",
     "smoke:inspection-guard": "npm run build && node scripts/inspection-guard-test.mjs",
-    "smoke:provider-recovery": "npm run build && node scripts/provider-recovery-test.mjs"
+    "smoke:provider-recovery": "npm run build && node scripts/provider-recovery-test.mjs",
+    "smoke:repo-index": "npm run build && node scripts/repo-index-fixtures.mjs",
+    "smoke:repo-index-pure": "npm run build && node scripts/repo-index-test.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

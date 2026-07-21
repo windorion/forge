@@ -4303,9 +4303,7 @@ private struct NewTaskEmptyState: View {
             HStack {
                 Text("⌘N new task · ⌘K switch repo")
                 Spacer()
-                Text("indexed ")
-                    + Text("1,204").fontWeight(.bold).foregroundStyle(ForgeDesign.ink)
-                    + Text(" files · in sync")
+                indexFooter
             }
             .font(.custom("JetBrains Mono", fixedSize: 10))
             .foregroundStyle(ForgeDesign.muted)
@@ -4324,6 +4322,16 @@ private struct NewTaskEmptyState: View {
 
     private var title: String {
         String(objective.prefix(60))
+    }
+
+    private var indexFooter: Text {
+        guard let index = workspace.runtimeHealth?.index, index.lastIndexedAt != nil else {
+            return Text("indexing…")
+        }
+        let count = index.fileCount.formatted(.number.grouping(.automatic))
+        return Text("indexed ")
+            + Text(count).fontWeight(.bold).foregroundStyle(ForgeDesign.ink)
+            + Text(index.inSync ? " files · in sync" : " files · reindexing")
     }
 
     private func createTask() {

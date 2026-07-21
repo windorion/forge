@@ -29,7 +29,7 @@ the actual visual source of truth.
 | Group | Screen | Status | Current gap |
 | --- | --- | --- | --- |
 | Core | `14a` Main window | Verified | Rendered comparison done (docs/verification/14a); thinking-stream format, plan strip timing, and sidebar running/budget footer aligned. Sidebar nav rows and FULL DIFF/AUDIT entries are recorded additions. |
-| Core | `1a` New task empty state | Verified | Rendered comparison done (docs/verification/1a); button spec, chip border token, footer weights fixed. Indexed-file count stays illustrative until P3 indexing. |
+| Core | `1a` New task empty state | Verified | Rendered comparison done (docs/verification/1a); button spec, chip border token, footer weights fixed. Indexed-file count is now real (durable SQLite index; docs/verification/1a/real-indexed-footer.png). |
 | Core | `1b` Plan approval | Verified | Standalone compact approval state built and compared (docs/verification/1b); routes only for dialog-free proposals, chat sessions keep the embedded card. |
 | Core | `20a` Full plan approval | Verified | Right column matches handoff order with real guardrails and planned-in timing (docs/verification/20a); per-step minutes, ADD A STEP, and PRODUCT CALL badges await plan-editing runtime capability. |
 | Core | `32a` New session | Verified | Chat session structure compared (docs/verification/32a); mid-run chat perspective is the recorded gap (run switches to 14a layout). |

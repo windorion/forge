@@ -47,8 +47,13 @@ Current implementation:
   `node_modules`, `.build`, `.swiftpm`, and `dist`.
 - It scans a limited set of source, config, script, and documentation file
   types, then scores matches from task-derived search terms.
-- It stores compact context summaries on the task rather than building a
-  durable full-text or symbol index.
+- A durable file-tree index now persists in SQLite (repo_index table): each
+  indexed file records language, byte size, line count, and a content hash,
+  with incremental re-indexing (unchanged files skipped by hash, deleted files
+  removed) and a repo_index_meta row. GET /index and POST /index/rebuild
+  expose status/rebuild; the app builds it on connect and shows the real file
+  count in the 1a footer. It stores compact per-task context summaries in
+  addition to this durable index. Symbol/reference extraction is still future.
 - It records search mode, engine, budgets, inspected/new paths and a normalized
   request fingerprint; repeats and zero-new-context steps are blocked.
 - It persists query coverage, matched lines/files, context byte totals, content
@@ -57,7 +62,6 @@ Current implementation:
 
 Still future work:
 
-- persistent file-tree index
 - Tree-sitter symbol extraction
 - dependency graph hints
 - semantic search and embeddings

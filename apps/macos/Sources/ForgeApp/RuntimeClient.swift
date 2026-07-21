@@ -18,6 +18,19 @@ struct RuntimeClient {
         return envelope.tasks
     }
 
+    /// Trigger a durable repository re-index (incremental) and return status.
+    @discardableResult
+    func rebuildIndex() async throws -> RuntimeIndexInfo {
+        let url = baseURL.appending(path: "index/rebuild")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data("{}".utf8)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response, data: data)
+        return try JSONDecoder().decode(RuntimeIndexInfo.self, from: data)
+    }
+
     func taskQueue() async throws -> TaskQueueSnapshot {
         let url = baseURL.appending(path: "queue")
         let (data, response) = try await URLSession.shared.data(from: url)

@@ -983,6 +983,13 @@ struct RuntimeHealth: Codable, Hashable {
     var modelProviderConfiguration: ModelProviderConfiguration?
     var workspace: RuntimeWorkspaceInfo?
     var persistence: RuntimePersistenceInfo?
+    var index: RuntimeIndexInfo?
+}
+
+struct RuntimeIndexInfo: Codable, Hashable {
+    var fileCount: Int
+    var lastIndexedAt: String?
+    var inSync: Bool
 }
 
 struct RuntimeAuthorizationInfo: Codable, Hashable {

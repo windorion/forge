@@ -7,6 +7,7 @@ import path from "node:path";
 import { URL } from "node:url";
 import { fileURLToPath } from "node:url";
 import { repositoryInspectionSubsumedBy } from "./inspectionGuard.js";
+import { fileMetadata, summarizeIndex, type IndexStatus } from "./repositoryIndex.js";
 import {
   AgentRunStepProviderError,
   createModelProvider,
@@ -544,7 +545,11 @@ const server = createServer(async (request, response) => {
         persistence: {
           databasePath: taskStore.dbPath,
           taskCount: tasks.size
-        }
+        },
+        index: observerMode ? undefined : (() => {
+          const status = readRepositoryIndexStatus();
+          return { fileCount: status.fileCount, lastIndexedAt: status.lastIndexedAt, inSync: status.inSync };
+        })()
       });
       return;
     }
@@ -552,6 +557,17 @@ const server = createServer(async (request, response) => {
     if (request.method === "GET" && url.pathname === "/tasks") {
       reloadObserverTasks();
       writeJson(response, 200, { tasks: listTasks() });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/index") {
+      writeJson(response, 200, readRepositoryIndexStatus());
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/index/rebuild") {
+      const result = await indexRepository();
+      writeJson(response, 200, result);
       return;
     }
 
@@ -10941,7 +10957,87 @@ function shouldContinueAgentLoopV0(task: ForgeTask): boolean {
   );
 }
 
-async function listRepositoryFiles(): Promise<string[]> {
+const repositoryIndexMaxFileBytes = 2_000_000;
+// The durable index covers a broader language set than bounded context search
+// (which is intentionally narrow); anything editable plus common source types.
+const repositoryIndexableExtensions = new Set([
+  ...repositoryContextExtensions,
+  ...editProposalEditableExtensions,
+  ".rb", ".php", ".mjs", ".cjs", ".mts", ".jsx"
+]);
+
+/**
+ * Durable file-tree index (P3). Walks the same skip-filtered file set as
+ * bounded inspection, computes per-file language/size/lines/content-hash, and
+ * incrementally upserts into SQLite: unchanged files (same hash) are skipped,
+ * deleted files are removed, and index metadata is refreshed. Runtime-owned
+ * and read-only over the working tree; never mutates repository content.
+ */
+async function indexRepository(): Promise<IndexStatus & { indexed: number; skipped: number; removed: number }> {
+  if (observerMode) {
+    throw new HttpError(409, "Repository index is read-only in observer runtime mode.");
+  }
+  const files = await listRepositoryFiles(repositoryIndexableExtensions);
+  const existing = new Map(taskStore.loadIndexedFiles().map((file) => [file.path, file]));
+  const seenPaths = new Set<string>();
+  const indexedAt = new Date().toISOString();
+  let indexed = 0;
+  let skipped = 0;
+
+  for (const relativePath of files) {
+    seenPaths.add(relativePath);
+    let content: string;
+    try {
+      const stats = await stat(path.join(repoRoot, relativePath));
+      if (stats.size > repositoryIndexMaxFileBytes) {
+        // Too large to hash cheaply; record size-only metadata without content.
+        const meta = fileMetadata(relativePath, "", indexedAt);
+        meta.byteSize = stats.size;
+        const prior = existing.get(relativePath);
+        if (!prior || prior.byteSize !== meta.byteSize) {
+          taskStore.upsertIndexedFile(meta);
+          indexed += 1;
+        } else {
+          skipped += 1;
+        }
+        continue;
+      }
+      content = await readFile(path.join(repoRoot, relativePath), "utf8");
+    } catch {
+      continue;
+    }
+    const meta = fileMetadata(relativePath, content, indexedAt);
+    const prior = existing.get(relativePath);
+    if (prior && prior.contentHash === meta.contentHash) {
+      skipped += 1;
+      continue;
+    }
+    taskStore.upsertIndexedFile(meta);
+    indexed += 1;
+  }
+
+  const removed = taskStore.removeIndexedFilesNotIn(seenPaths);
+  let gitRoot: string | null = null;
+  try {
+    const rootResult = await runGitCommand(["rev-parse", "--show-toplevel"], repoRoot, 8_000);
+    gitRoot = rootResult.output.trim() || repoRoot;
+  } catch {
+    gitRoot = repoRoot;
+  }
+  taskStore.setIndexMeta({ lastIndexedAt: indexedAt, gitRoot });
+
+  const status = summarizeIndex(taskStore.loadIndexedFiles(), indexedAt, true);
+  return { ...status, indexed, skipped, removed };
+}
+
+function readRepositoryIndexStatus(): IndexStatus {
+  const meta = taskStore.getIndexMeta();
+  return summarizeIndex(taskStore.loadIndexedFiles(), meta.lastIndexedAt, meta.lastIndexedAt !== null);
+}
+
+async function listRepositoryFiles(
+  extensionAllowlist: Set<string> = repositoryContextExtensions
+): Promise<string[]> {
   const files: string[] = [];
 
   async function walk(relativeDirectory: string): Promise<void> {
@@ -10972,7 +11068,7 @@ async function listRepositoryFiles(): Promise<string[]> {
         continue;
       }
 
-      if (!entry.isFile() || shouldSkipRepositoryFile(entry.name, relativePath)) {
+      if (!entry.isFile() || shouldSkipRepositoryFile(entry.name, relativePath, extensionAllowlist)) {
         continue;
       }
 
@@ -10998,7 +11094,11 @@ function shouldSkipRepositoryDirectory(name: string, relativePath: string): bool
   return relativePath.split("/").some((part) => repositoryIgnoredDirectories.has(part));
 }
 
-function shouldSkipRepositoryFile(name: string, relativePath: string): boolean {
+function shouldSkipRepositoryFile(
+  name: string,
+  relativePath: string,
+  extensionAllowlist: Set<string> = repositoryContextExtensions
+): boolean {
   if (repositoryIgnoredFileNames.has(name) || name.endsWith(".sqlite") || name.endsWith(".sqlite-shm") || name.endsWith(".sqlite-wal")) {
     return true;
   }
@@ -11011,7 +11111,7 @@ function shouldSkipRepositoryFile(name: string, relativePath: string): boolean {
     return false;
   }
 
-  return !repositoryContextExtensions.has(path.extname(name));
+  return !extensionAllowlist.has(path.extname(name));
 }
 
 async function searchRepositoryContext(
