@@ -6,6 +6,7 @@ import { appendFile, lstat, mkdir, readdir, readFile, realpath, rename, stat, un
 import path from "node:path";
 import { URL } from "node:url";
 import { fileURLToPath } from "node:url";
+import { repositoryInspectionSubsumedBy } from "./inspectionGuard.js";
 import {
   AgentRunStepProviderError,
   createModelProvider,
@@ -7352,6 +7353,26 @@ async function executeRepositoryInspectionStep(task: ForgeTask, step: AgentRunSt
       task,
       step,
       `Repeated repository inspection request ${requestFingerprint} was blocked before search/read tools; first recorded by step ${repeatedStep.id}.`
+    );
+  }
+
+  const priorInspections = task.agentRunSteps
+    .filter((candidate) => candidate.id !== step.id && candidate.action === "InspectRepository")
+    .map((candidate) => ({
+      id: candidate.id,
+      searchMode: candidate.inspectionSearchMode === "Symbol" ? "Symbol" as const : "Text" as const,
+      searchTerms: candidate.searchTerms ?? [],
+      readPaths: candidate.readPaths ?? []
+    }));
+  const subsumedBy = repositoryInspectionSubsumedBy(
+    { searchMode, searchTerms, readPaths: requestedReadPaths },
+    priorInspections
+  );
+  if (subsumedBy) {
+    return blockAgentRunStep(
+      task,
+      step,
+      `Repository inspection adds no new terms or paths beyond step ${subsumedBy}; blocked before search/read tools to avoid redundant work.`
     );
   }
 

@@ -58,8 +58,10 @@ the core runtime smoke. Preserve these completed boundaries:
 
 ## P1: Real Agent Behavior
 
-- Add safe query-variation handling beyond the current exact-fingerprint repeat
-  guard.
+- [x] Safe query-variation handling beyond the exact-fingerprint repeat guard:
+  a subset-aware, order-insensitive, case-folded redundancy guard now blocks
+  near-duplicate repository inspections before search/read tools
+  (runtime/src/inspectionGuard.ts; `smoke:inspection-guard`).
 - Extend the bounded read-only planning/execution context loops into a
   runtime-owned tool-call loop with strict allowed tools and stop conditions.
 - Extend bounded output recovery beyond Agent Run Step decisions to malformed

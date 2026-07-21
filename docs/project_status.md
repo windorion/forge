@@ -122,7 +122,12 @@ Implemented:
   and lets the bounded loop continue to its next provider decision. Each
   normalized request stores a short SHA-256 fingerprint and visible scan,
   search, context, term, and read budgets. A later identical request is blocked
-  before duplicate search/read calls. A completed inspection also stores a
+  before duplicate search/read calls, and a near-duplicate request whose
+  case-folded terms and read paths add nothing beyond an earlier inspection
+  (same search mode) is also blocked as redundant — order-insensitive and
+  subset-aware, so reordered or narrowed re-queries no longer spend tools
+  (P1 query-variation guard; pure logic covered by `smoke:inspection-guard`).
+  A completed inspection also stores a
   Strong/Partial/Weak/NoNewContext rating, a concise quality explanation,
   query-term coverage, match/file/new-context counts, total context bytes, and
   per-file byte length, SHA-256, matched-line count, and match reasons.
