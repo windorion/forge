@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>Forge</title>
+    <link>https://windorion.com/appcast.xml</link>
+    <item>
+      <title>Forge 0.5.0</title>
+      <sparkle:releaseNotesLink>windorion.com/changelog</sparkle:releaseNotesLink>
+      <description>
+NEW: Mission Control — run agents across 3 repos side by side
+NEW: Quick capture panel on ⌥Space
+FIX: Diff view no longer loses scroll position on refresh
+      </description>
+      <pubDate>Mon, 21 Jul 2026 10:00:00 +0000</pubDate>
+      <enclosure url="https://windorion.com/releases/Forge-0.5.0.dmg"
+                 sparkle:shortVersionString="0.5.0"
+                 sparkle:version="50"
+                 length="19293798"
+                 type="application/octet-stream" />
+    </item>
+  </channel>
+</rss>

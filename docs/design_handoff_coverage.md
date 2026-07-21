@@ -63,8 +63,8 @@ the actual visual source of truth.
 | Recovery | `17a` No repository | Verified | Rendered comparison done (docs/verification/17a); subtitle truncation fixed; both actions real. |
 | Recovery | `29a` Offline | Verified | Rendered comparison done with cached tasks (docs/verification/29a); mid-session disconnect detection fixed en route. |
 | Recovery | `31a` Crash recovery | Verified | Rendered comparison done via a real interrupted-apply startup recovery (docs/verification/31a). |
-| Recovery | `13a` Update dialog | Missing | Sparkle update dialog is missing. |
-| Recovery | `28a` Update ready | Missing | Deferred restart banner and mini-window status are missing. |
+| Recovery | `13a` Update dialog | Verified | Custom update dialog on real appcast fetch/parse/compare (docs/verification/13a); signed appcast + install/relaunch are the Sparkle/P6 remainder. |
+| Recovery | `28a` Update ready | Verified | Deferred-restart banner honoring live running-task count (docs/verification/28a); restart-relaunch is the P6/Sparkle install remainder. |
 | Recovery | `23a` Share/collaboration | Verified | Real share popover + local opaque token/read-only export (docs/verification/23a); hosted forge.windorion.com viewer + comment reflux are the documented founder-level gap. |
 | Recovery | `2a` Task history | Verified | Rendered comparison done (docs/verification/2a). |
 | Recovery | `2b` Audit log | Verified | Rendered comparison done (docs/verification/2b). |
@@ -81,12 +81,12 @@ the actual visual source of truth.
 - Full handoff: 35 `Verified` (`1a` `1b` `1c` `1d` `1e` `2a` `2b` `3a`
   `4a` `5a` `5b` `7a` `8a` `9a` `10a` `11a` `12a` `14a` `16a` `17a`
   `18a` `19a` `20a` `21a` `24a` `26a` `27a` `29a` `30a` `31a` `32a`
-  `33a` `34a` `36a` `37a` `15a` `23a`), 0 `Implemented`, 2 `Partial`, 4
-  `Missing` out of 43 named screens/states.
+  `33a` `34a` `36a` `37a` `15a` `23a` `13a` `28a`), 0 `Implemented`, 2
+  `Partial`, 2 `Missing` out of 43 named screens/states.
 - Verification evidence lives in `docs/verification/<screen-id>/` (self-
   rendered captures + notes; see `docs/verification/README.md` for the
   capture pipeline and per-screen reference sizes).
-- Weighted full-handoff UI readiness: approximately 93-95%.
+- Weighted full-handoff UI readiness: approximately 95-97%.
 
 These metrics must remain separate. Functional completion never implies design
 completion.

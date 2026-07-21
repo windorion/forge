@@ -13,6 +13,7 @@ extension Notification.Name {
     static let forgeToggleTemplates = Notification.Name("forge.toggleTemplates")
     static let forgeOpenTaskDeepLink = Notification.Name("forge.openTaskDeepLink")
     static let forgeShowSignIn = Notification.Name("forge.showSignIn")
+    static let forgeCheckForUpdates = Notification.Name("forge.checkForUpdates")
     static let forgeApplicationWillTerminate = Notification.Name("forge.applicationWillTerminate")
 }
 

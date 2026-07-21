@@ -299,7 +299,9 @@ private struct GeneralSettingsPage: View {
                     SettingsToggle(isOn: $completionSound)
                 }
                 SettingsRow(title: "Updates", subtitle: "v0.4.2 · release notes in changelog") {
-                    Button("CHECK NOW", action: refresh).buttonStyle(SettingsOutlineButtonStyle())
+                    Button("CHECK NOW") {
+                        NotificationCenter.default.post(name: .forgeCheckForUpdates, object: nil)
+                    }.buttonStyle(SettingsOutlineButtonStyle())
                 }
             }
         }

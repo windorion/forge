@@ -113,6 +113,7 @@ private enum WorkspaceSurface: Equatable {
     case fullPlan(taskID: ForgeTask.ID, revisionID: PlanRevision.ID)
     case cost(taskID: ForgeTask.ID)
     case templates
+    case update
 
     var windowMode: WorkspaceWindowMode {
         switch self {
@@ -120,6 +121,8 @@ private enum WorkspaceSurface: Equatable {
             return .recovery
         case .missionControl, .answerQueue, .taskQueue, .fullPlan, .templates:
             return .review
+        case .update:
+            return .compact
         case .diff:
             return .session
         case .cost:
@@ -151,17 +154,22 @@ struct WorkspaceView: View {
 
     var body: some View {
         ZStack {
-            workspaceContent
-                .opacity(surfaceCoordinator.surface == nil ? 1 : 0)
-                .allowsHitTesting(surfaceCoordinator.surface == nil)
-                .accessibilityHidden(surfaceCoordinator.surface != nil)
+            VStack(spacing: 0) {
+                ZStack {
+                    workspaceContent
+                        .opacity(surfaceCoordinator.surface == nil ? 1 : 0)
+                        .allowsHitTesting(surfaceCoordinator.surface == nil)
+                        .accessibilityHidden(surfaceCoordinator.surface != nil)
 
-            if let surface = surfaceCoordinator.surface {
-                exclusiveSurface(surface)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(ForgeDesign.paper.ignoresSafeArea())
-                    .transition(.opacity)
-                    .zIndex(10)
+                    if let surface = surfaceCoordinator.surface {
+                        exclusiveSurface(surface)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(ForgeDesign.paper.ignoresSafeArea())
+                            .transition(.opacity)
+                            .zIndex(10)
+                    }
+                }
+                UpdateReadyBanner(runningTaskCount: runningTaskCount)
             }
         }
         .background(ForgeDesign.paper)
@@ -216,6 +224,12 @@ struct WorkspaceView: View {
 
     /// Notification listeners live on a zero-size view so the main body
     /// modifier chain stays small enough for the type checker.
+    private var runningTaskCount: Int {
+        workspace.tasks.filter {
+            workspace.isRunningAgentLoop(taskID: $0.id) || ["Running", "Testing"].contains($0.status)
+        }.count
+    }
+
     private var notificationBridges: some View {
         Color.clear
             .frame(width: 0, height: 0)
@@ -258,6 +272,23 @@ struct WorkspaceView: View {
             .onReceive(NotificationCenter.default.publisher(for: .forgeOpenSelectedAudit)) { _ in
             if let task = workspace.selectedTask {
                 surfaceCoordinator.present(.audit(taskID: task.id))
+            }
+        }
+            .onReceive(NotificationCenter.default.publisher(for: .forgeOpenTaskDeepLink)) { note in
+            if let taskID = note.object as? String {
+                surfaceCoordinator.dismiss()
+                showCommandPalette = false
+                workspace.selectedTaskID = taskID
+            }
+        }
+            .onReceive(NotificationCenter.default.publisher(for: .forgeShowSignIn)) { _ in
+            SignInPanelController.shared.show(workspace: workspace)
+        }
+            .onReceive(NotificationCenter.default.publisher(for: .forgeCheckForUpdates)) { _ in
+            Task { @MainActor in
+                ForgeUpdater.shared.checkForUpdates()
+                try? await Task.sleep(for: .milliseconds(400))
+                surfaceCoordinator.present(.update)
             }
         }
             .onReceive(NotificationCenter.default.publisher(for: .forgeApplicationWillTerminate)) { _ in
@@ -317,6 +348,20 @@ struct WorkspaceView: View {
         case "share" where parts.count >= 2:
             if let task = workspace.tasks.first(where: { $0.id.hasPrefix(parts[1]) }) {
                 SharePanelController.shared.show(task: task)
+            }
+        case "checkUpdate":
+            Task { @MainActor in
+                ForgeUpdater.shared.checkForUpdates()
+                try? await Task.sleep(for: .milliseconds(400))
+                surfaceCoordinator.present(.update)
+            }
+        case "updateReady":
+            Task { @MainActor in
+                ForgeUpdater.shared.checkForUpdates()
+                try? await Task.sleep(for: .milliseconds(400))
+                if case let .available(a) = ForgeUpdater.shared.state {
+                    ForgeUpdater.shared.download(a)
+                }
             }
         case "testNotification":
             ForgeNotifications.notify(
@@ -453,6 +498,12 @@ struct WorkspaceView: View {
             } else {
                 unavailableSurface("The task for this cost breakdown is no longer available.")
             }
+        case .update:
+            ZStack {
+                ForgeDesign.paper
+                UpdateDialogView(close: surfaceCoordinator.dismiss)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .templates:
             TaskTemplatesLibraryView(close: surfaceCoordinator.dismiss) { prompt in
                 surfaceCoordinator.dismiss()
