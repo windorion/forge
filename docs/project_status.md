@@ -3,7 +3,7 @@
 Document role: record the current product state, objective completion estimate,
 major gaps, and what "finished" means at each product horizon.
 
-Last updated: 2026-07-15
+Last updated: 2026-07-21
 
 ## One-Line Status
 

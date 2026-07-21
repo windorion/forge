@@ -5026,3 +5026,49 @@ Next:
 - Optional: P6 commercial packaging (Developer ID signing, notarization,
   DMG, Sparkle appcast hosting) unblocks 35a widgets and real update
   install.
+
+## 2026-07-21 21:10:00 +0200 (CEST)
+
+Conversation summary:
+
+- Started the P1 Real Agent Behavior track (chosen after the handoff
+  verification pass closed at 41/43). Delivered two of the three P1 items,
+  each as an isolated pure module with a standalone test so it is
+  verifiable without ripgrep or a running provider.
+
+Done:
+
+- P1 query-variation guard: runtime/src/inspectionGuard.ts adds an
+  order-insensitive, case-folded, subset-aware redundancy check so a
+  repository inspection whose terms+read-paths add nothing beyond a prior
+  same-mode inspection is blocked before search/read tools. Read-only-safe
+  (never relaxes an approval gate; a request adding any term/path is never
+  blocked). smoke:inspection-guard (9 assertions).
+- P1 output-recovery extension: runtime/src/providerRecovery.ts factors
+  the bounded corrective-retry loop into a pure injectable function, now
+  applied to intent briefs, plan-context requests, plan revisions, and edit
+  proposals (patch artifacts) via createStructuredOutputRecovered — not
+  just Agent Run Step decisions. Side-effect-free (these produce review
+  artifacts); non-format errors propagate immediately.
+  smoke:provider-recovery (8 assertions).
+- Regression: swift build (3 targets), runtime typecheck, and
+  git-remote/git-conflicts/queue/observer smokes all pass. smoke:core still
+  fails only on its ripgrep-mode assertion (no standalone rg binary in this
+  environment — documented in development.md, not a regression).
+
+Not done:
+
+- P1 item 2 (extend the bounded read-only context loops into a single
+  runtime-owned tool-call loop with strict allowed tools and stop
+  conditions) is a structural refactor of the core agent execution loop.
+  It touches the ripgrep-dependent inspection path, which cannot be
+  end-to-end verified in this environment (no rg binary, no real provider),
+  so it was deliberately not rushed. It deserves a focused pass in an
+  environment where smoke:core runs green.
+
+Next:
+
+- Do P1 item 2 where the full smoke suite can run (install ripgrep so
+  smoke:core passes, ideally with a real/mock provider exercising the
+  loop). The two completed guards are additive and low-risk; the loop
+  refactor is not, and should be verified before landing.
