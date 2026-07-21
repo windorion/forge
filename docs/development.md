@@ -604,6 +604,24 @@ It covers:
 In sandboxed Codex sessions, the command may need approval because it listens
 on `127.0.0.1`.
 
+### Environment requirement: standalone ripgrep binary
+
+`smoke:core` asserts the bounded repository-inspection step runs in
+`ripgrep-word`/`ripgrep-fixed` mode. The runtime spawns `rg` directly
+(`spawn("rg", args, { shell: false })`), so a real `rg` executable must be on
+`PATH`. If only a shell-function `rg` is present (e.g. an interactive tool
+wrapper), Node's `spawn` cannot use it, the runtime correctly falls back to
+substring search, and the smoke asserts:
+
+```
+Error: Expected ripgrep-word, got fallback-substring.
+```
+
+This is an environment gap, not a runtime regression — install a standalone
+ripgrep binary (`brew install ripgrep`) so the Node process can exec it. The
+git-specific suites below do not depend on ripgrep and cover the git status /
+branch-parse paths independently.
+
 ## Git Remote Fixtures
 
 ```bash
