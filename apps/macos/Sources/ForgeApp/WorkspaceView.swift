@@ -314,6 +314,10 @@ struct WorkspaceView: View {
         case "signInFlow":
             SignInPanelController.shared.show(workspace: workspace)
             GitHubAuth.shared.start()
+        case "share" where parts.count >= 2:
+            if let task = workspace.tasks.first(where: { $0.id.hasPrefix(parts[1]) }) {
+                SharePanelController.shared.show(task: task)
+            }
         case "testNotification":
             ForgeNotifications.notify(
                 .prReady(taskTitle: "Migrate logger to structured JSON", checks: "3 checks ✓"),
@@ -330,6 +334,8 @@ struct WorkspaceView: View {
         case "closePanels":
             MenuBarController.shared.hidePanel()
             QuickCaptureController.shared.hide()
+            SharePanelController.shared.hide()
+            SignInPanelController.shared.hide()
         case "fullPlan" where parts.count >= 3:
             surfaceCoordinator.present(.fullPlan(taskID: parts[1], revisionID: parts[2]))
         default:
