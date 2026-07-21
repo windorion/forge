@@ -1,6 +1,6 @@
 # 13a · Software Update Dialog — 2026-07-21
 
-Evidence: `update-dialog.png` (found-new-version state, real appcast data).
+Evidence: `update-dialog.png` (found-new-version) and `update-downloading.png` (download progress) — both states, real appcast data.
 
 Built from Missing (custom Sparkle-driver-style UI, per the handoff's
 "Sparkle 允许自定义更新 UI"): ForgeUpdater performs a real appcast

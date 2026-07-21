@@ -35,7 +35,11 @@ final class ForgeUpdater: ObservableObject {
         case failed(String)
     }
 
+    #if DEBUG
+    @Published var state: State = .idle
+    #else
     @Published private(set) var state: State = .idle
+    #endif
 
     var currentVersion: String { ForgeDesign.appVersion.replacingOccurrences(of: "v", with: "") }
 

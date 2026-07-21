@@ -16,6 +16,7 @@ forge.hasCompletedOnboarding), orchestrating existing capability:
   runs the real 1a createTask flow.
 skip setup and completion both persist forge.hasCompletedOnboarding.
 
-The step indicator (all four steps visible/clickable) and step 1 are
-captured; steps 2-4 are real and reachable by clicking (a per-step
-capture needs a human click pass). Verified (with notes).
+All four steps captured (onboarding-step1..4.png) via the onboardingStep
+debug driver: step 1 GitHub scopes, step 2 repo pick from real registered
+repos, step 3 guardrails preview with real values (ALWAYS/LOCKED/$40/2),
+step 4 first-task suggestions + composer. Verified.

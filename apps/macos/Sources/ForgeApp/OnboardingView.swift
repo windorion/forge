@@ -8,7 +8,14 @@ struct OnboardingView: View {
     var close: () -> Void
 
     @AppStorage("forge.monthlyBudgetCap") private var monthlyBudgetCap = 40
-    @State private var step = 1
+    @State private var step = {
+        #if DEBUG
+        let override = UserDefaults.standard.integer(forKey: "forge.debug.onboardingStep")
+        return override >= 1 && override <= 4 ? override : 1
+        #else
+        return 1
+        #endif
+    }()
     @State private var firstTask = ""
 
     private let steps = ["CONNECT GITHUB", "PICK A REPO", "SET THE LEASH", "FIRST TASK"]

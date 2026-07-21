@@ -59,7 +59,7 @@ the actual visual source of truth.
 | System | `21a` App menu | Verified | Full handoff command set with registry shortcuts and real enable state; dropdown chrome is system-rendered (docs/verification/21a). |
 | System | `35a` Widget | Missing | Timeboxed hand-assembled .appex experiment ran and failed as pre-declared (pluginkit never discovers an ad-hoc-signed hand-built extension; embedded runtime resource forks block deep signing). Widget code compiles and is kept in-tree; unblocks with P6 signing infrastructure (docs/verification/35a). |
 | Recovery | `15a` Sign in | Verified | Welcome + device-flow states built with the real OAuth device-flow client (docs/verification/15a); live code capture activates once the founder registers the Client ID; email stays an inert affordance pending the hosted-account decision. |
-| Recovery | `25a` Onboarding | Verified | Four-step first-run wizard orchestrating GitHub connect, repo pick, real guardrails preview, and the 1a first-task flow (docs/verification/25a); per-step capture needs a human click pass. |
+| Recovery | `25a` Onboarding | Verified | Four-step first-run wizard orchestrating GitHub connect, repo pick, real guardrails preview, and the 1a first-task flow (docs/verification/25a); all four steps captured. |
 | Recovery | `17a` No repository | Verified | Rendered comparison done (docs/verification/17a); subtitle truncation fixed; both actions real. |
 | Recovery | `29a` Offline | Verified | Rendered comparison done with cached tasks (docs/verification/29a); mid-session disconnect detection fixed en route. |
 | Recovery | `31a` Crash recovery | Verified | Rendered comparison done via a real interrupted-apply startup recovery (docs/verification/31a). |

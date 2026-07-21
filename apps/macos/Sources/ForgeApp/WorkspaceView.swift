@@ -355,7 +355,24 @@ struct WorkspaceView: View {
                 SharePanelController.shared.show(task: task)
             }
         case "onboarding":
+            UserDefaults.standard.removeObject(forKey: "forge.debug.onboardingStep")
             surfaceCoordinator.present(.onboarding)
+        case "onboardingStep" where parts.count >= 2:
+            UserDefaults.standard.set(Int(parts[1]) ?? 1, forKey: "forge.debug.onboardingStep")
+            surfaceCoordinator.dismiss()
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(120))
+                surfaceCoordinator.present(.onboarding)
+            }
+        case "updateDownloading":
+            Task { @MainActor in
+                ForgeUpdater.shared.checkForUpdates()
+                try? await Task.sleep(for: .milliseconds(400))
+                if case let .available(a) = ForgeUpdater.shared.state {
+                    ForgeUpdater.shared.state = .downloading(a, progress: 0.45)
+                }
+                surfaceCoordinator.present(.update)
+            }
         case "checkUpdate":
             Task { @MainActor in
                 ForgeUpdater.shared.checkForUpdates()
