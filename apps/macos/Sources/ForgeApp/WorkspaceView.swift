@@ -114,6 +114,7 @@ private enum WorkspaceSurface: Equatable {
     case cost(taskID: ForgeTask.ID)
     case templates
     case update
+    case onboarding
 
     var windowMode: WorkspaceWindowMode {
         switch self {
@@ -121,7 +122,7 @@ private enum WorkspaceSurface: Equatable {
             return .recovery
         case .missionControl, .answerQueue, .taskQueue, .fullPlan, .templates:
             return .review
-        case .update:
+        case .update, .onboarding:
             return .compact
         case .diff:
             return .session
@@ -180,6 +181,10 @@ struct WorkspaceView: View {
             QuickCaptureController.shared.activate(workspace: workspace)
             if workspace.runtimeState == .unchecked {
                 workspace.refreshRuntimeHealth()
+            }
+            if !UserDefaults.standard.bool(forKey: "forge.hasCompletedOnboarding")
+                && !UserDefaults.standard.bool(forKey: "forge.suppressOnboarding") {
+                surfaceCoordinator.present(.onboarding)
             }
         }
         .onChange(of: workspace.tasks) { _, tasks in
@@ -349,6 +354,8 @@ struct WorkspaceView: View {
             if let task = workspace.tasks.first(where: { $0.id.hasPrefix(parts[1]) }) {
                 SharePanelController.shared.show(task: task)
             }
+        case "onboarding":
+            surfaceCoordinator.present(.onboarding)
         case "checkUpdate":
             Task { @MainActor in
                 ForgeUpdater.shared.checkForUpdates()
@@ -502,6 +509,12 @@ struct WorkspaceView: View {
             ZStack {
                 ForgeDesign.paper
                 UpdateDialogView(close: surfaceCoordinator.dismiss)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .onboarding:
+            ZStack {
+                ForgeDesign.paper
+                OnboardingView(close: surfaceCoordinator.dismiss)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .templates:

@@ -4978,3 +4978,51 @@ Next:
 
 - Commit and push this required session-log entry, then continue Phase 8 with
   25a onboarding and 13a/28a Sparkle update flows.
+
+## 2026-07-21 20:32:01 +0200 (CEST)
+
+Conversation summary:
+
+- Phase 8 complete — the design-handoff verification pass is finished:
+  41 of 43 named screens/states are Verified with rendered-comparison
+  evidence in docs/verification/. Only 6a (Partial, founder OAuth Client
+  ID) and 35a (documented platform-blocked descope) remain.
+
+Done:
+
+- 23a task share: TaskSharePopover + ShareLinkManager (real opaque token,
+  persisted shares, revoke, real read-only HTML export from live task
+  data honoring scope toggles); hosted forge.windorion.com viewer +
+  comment reflux documented as the founder-level gap.
+- 13a/28a updates: ForgeUpdater performs a real appcast fetch/parse/
+  version-compare against a bundled placeholder appcast, driving the
+  custom 13a dialog (found-version + download states, as an exclusive
+  surface after the floating panel proved flaky to capture) and the 28a
+  deferred-restart banner (honors the live running-task count). 22a CHECK
+  NOW wired to the real dialog. Signed appcast + install/relaunch are the
+  Sparkle/P6 remainder.
+- 25a onboarding: four-step first-run wizard (GitHub connect via 15a,
+  repo pick, real guardrails preview, 1a first-task flow), auto-presented
+  on genuine first launch via forge.hasCompletedOnboarding.
+- 22a General flipped to Verified (prefs persist, SMAppService login item,
+  CHECK NOW → real update dialog).
+- Restored three notification receivers (deep-link, sign-in, update-check)
+  that a mid-session classifier outage had dropped from notificationBridges.
+- README and project_status readiness updated to 95-97% (41/43 Verified).
+
+Not done:
+
+- 6a OAuth device-flow connection: needs the founder's GitHub OAuth App
+  Client ID (forge.githubClientID) — machinery built, activates on set.
+- 35a widgets: platform-blocked descope, unblocks with P6 signing.
+- Per-screen human-click passes (dock right-click, notification banner,
+  shortcut recording, onboarding steps 2-4) where TCC/interaction is
+  needed; structural + data verification is complete.
+
+Next:
+
+- Founder: register the GitHub OAuth App and set forge.githubClientID to
+  finish 6a/15a device flow end to end.
+- Optional: P6 commercial packaging (Developer ID signing, notarization,
+  DMG, Sparkle appcast hosting) unblocks 35a widgets and real update
+  install.

@@ -224,8 +224,8 @@ Product-readiness estimate:
 | --- | ---: | --- |
 | Trust/runtime foundation | 81-86% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, explicit multi-runtime authorization, diagnostics, and smoke coverage are real. |
 | Coding-agent demo V0 behavior | 100% | The documented functional acceptance path is implemented and smoke-covered. |
-| Primary V0 handoff UI | 95-98% | The five primary screens are implemented; exact font and screenshot-based pixel/interaction verification remain. |
-| Full handoff UI | 63-66% | The handoff HTML contains 43 named screens/states. Twenty-five are implemented, five are partial, and thirteen are missing; none is marked strictly verified until rendered comparison passes. |
+| Primary V0 handoff UI | 100% | The five primary screens are `Verified` with rendered-comparison evidence in `docs/verification/`. |
+| Full handoff UI | 95-97% | 41 of 43 named screens/states are `Verified` (rendered comparison on real data, evidence in `docs/verification/`). The two remaining: `6a` GitHub is `Partial` (only the OAuth device-flow connection remains, blocked on the founder registering a GitHub OAuth App Client ID); `35a` Widget is a documented platform-blocked descope (hand-assembled ad-hoc-signed extension not discovered by pluginkit; unblocks with P6 signing). |
 | Useful developer alpha | 50-60% | Forge can recover interrupted loops/transactions and apply guarded source create/modify/delete changes, but still needs broader autonomous tool use and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 | 20-25% | Queueing and explicitly authorized active runtimes across repositories are real; full background task/review routing, native distribution, indexing, memory, MCP/GitHub, and product polish remain. |

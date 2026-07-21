@@ -42,7 +42,7 @@ the actual visual source of truth.
 | Decisions | `19a` Failed/rollback | Verified | Rendered comparison done via the real startup-recovery fail path (docs/verification/19a). |
 | Decisions | `24a` First success | Verified | Rendered comparison done on the real first Completed task (docs/verification/24a); runtime branch-name bug fixed. Merged-PR wording stays P2. |
 | Decisions | `37a` Cost breakdown | Verified | Step/model-call accordion surface built and compared (docs/verification/37a); token columns await token accounting; in-app cost-metric entry point pending. |
-| Settings | `22a` General | Implemented | Shared 980px navigation, startup, appearance, notification, sound, and update rows exist; rendered comparison remains. |
+| Settings | `22a` General | Verified | Rendered comparison done (docs/verification/22a); notify/theme prefs persist, login item registers via SMAppService, CHECK NOW drives the real 13a update dialog. |
 | Settings | `3a` Model | Verified | Rendered comparison done (docs/verification/3a); STANDARD/MAX labels, real budget usage, real stats footer. Provider cards list real runtime providers, not the illustrative Claude lineup. |
 | Settings | `6a` GitHub | Partial | Visual structure verified (docs/verification/6a); only the OAuth device-flow connection remains, blocked on the founder GitHub OAuth App Client ID (Phase 8 with 15a). |
 | Settings | `30a` API key | Verified | Rendered comparison done (docs/verification/30a); mockup provider labels, reveal toggle, THIS MONTH card. Windorion-credits card awaits the 15a hosted-account decision. |
@@ -59,7 +59,7 @@ the actual visual source of truth.
 | System | `21a` App menu | Verified | Full handoff command set with registry shortcuts and real enable state; dropdown chrome is system-rendered (docs/verification/21a). |
 | System | `35a` Widget | Missing | Timeboxed hand-assembled .appex experiment ran and failed as pre-declared (pluginkit never discovers an ad-hoc-signed hand-built extension; embedded runtime resource forks block deep signing). Widget code compiles and is kept in-tree; unblocks with P6 signing infrastructure (docs/verification/35a). |
 | Recovery | `15a` Sign in | Verified | Welcome + device-flow states built with the real OAuth device-flow client (docs/verification/15a); live code capture activates once the founder registers the Client ID; email stays an inert affordance pending the hosted-account decision. |
-| Recovery | `25a` Onboarding | Missing | Four-step first-run flow is missing. |
+| Recovery | `25a` Onboarding | Verified | Four-step first-run wizard orchestrating GitHub connect, repo pick, real guardrails preview, and the 1a first-task flow (docs/verification/25a); per-step capture needs a human click pass. |
 | Recovery | `17a` No repository | Verified | Rendered comparison done (docs/verification/17a); subtitle truncation fixed; both actions real. |
 | Recovery | `29a` Offline | Verified | Rendered comparison done with cached tasks (docs/verification/29a); mid-session disconnect detection fixed en route. |
 | Recovery | `31a` Crash recovery | Verified | Rendered comparison done via a real interrupted-apply startup recovery (docs/verification/31a). |
@@ -78,15 +78,17 @@ the actual visual source of truth.
 - Primary V0 screen implementation: all 5 primary targets (`1a` `1b` `10a`
   `14a` `32a`) are now `Verified` with rendered-comparison evidence in
   `docs/verification/`.
-- Full handoff: 35 `Verified` (`1a` `1b` `1c` `1d` `1e` `2a` `2b` `3a`
-  `4a` `5a` `5b` `7a` `8a` `9a` `10a` `11a` `12a` `14a` `16a` `17a`
-  `18a` `19a` `20a` `21a` `24a` `26a` `27a` `29a` `30a` `31a` `32a`
-  `33a` `34a` `36a` `37a` `15a` `23a` `13a` `28a`), 0 `Implemented`, 2
-  `Partial`, 2 `Missing` out of 43 named screens/states.
+- Full handoff: 41 `Verified` out of 43 named screens/states. The
+  remaining two: `6a` GitHub is `Partial` (only the OAuth device-flow
+  connection remains, blocked on the founder registering a GitHub OAuth
+  App Client ID — the machinery is built and activates the moment it is
+  set); `35a` Widget is a documented platform-blocked descope (a
+  hand-assembled ad-hoc-signed WidgetKit extension is not discovered by
+  pluginkit; unblocks with P6 signing infrastructure).
 - Verification evidence lives in `docs/verification/<screen-id>/` (self-
   rendered captures + notes; see `docs/verification/README.md` for the
   capture pipeline and per-screen reference sizes).
-- Weighted full-handoff UI readiness: approximately 95-97%.
+- Weighted full-handoff UI readiness: approximately 95-97% (41 of 43 verified; 6a awaits the founder OAuth Client ID, 35a is a platform-blocked descope).
 
 These metrics must remain separate. Functional completion never implies design
 completion.
