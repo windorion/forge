@@ -62,8 +62,12 @@ the core runtime smoke. Preserve these completed boundaries:
   a subset-aware, order-insensitive, case-folded redundancy guard now blocks
   near-duplicate repository inspections before search/read tools
   (runtime/src/inspectionGuard.ts; `smoke:inspection-guard`).
-- Extend the bounded read-only planning/execution context loops into a
-  runtime-owned tool-call loop with strict allowed tools and stop conditions.
+- [x] Bounded read-only context loop stop conditions hardened and unified:
+  the plan-context loop now uses the same subset-aware redundancy guard as
+  InspectRepository (runtime/src/inspectionGuard.ts), so reordered/narrowed
+  re-queries stop the loop before spending read-only tools. Verified by the
+  full smoke:core flow. Tool execution stays runtime-owned; the provider only
+  advises terms/paths and never runs tools directly.
 - [x] Bounded output recovery extended beyond Agent Run Step decisions to
   intent briefs, plan-context requests, plan revisions, and edit proposals
   (patch artifacts) — side-effect-free re-request on malformed output

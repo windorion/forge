@@ -622,6 +622,17 @@ ripgrep binary (`brew install ripgrep`) so the Node process can exec it. The
 git-specific suites below do not depend on ripgrep and cover the git status /
 branch-parse paths independently.
 
+If a real `rg` binary cannot be installed but a ripgrep-compatible executable
+exists behind a shell function (some tool wrappers ship one), a small shim on
+`PATH` lets Node's `spawn("rg")` reach it, e.g.:
+
+```bash
+mkdir -p /tmp/rgbin
+printf '#!/bin/bash\nexec -a rg "%s" "$@"\n' "$RG_COMPATIBLE_BINARY" > /tmp/rgbin/rg
+chmod +x /tmp/rgbin/rg
+PATH="/tmp/rgbin:$PATH" npm run smoke:core
+```
+
 ## Git Remote Fixtures
 
 ```bash

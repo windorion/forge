@@ -5622,6 +5622,9 @@ async function buildProviderGuidedPlanContext(
   let projectFiles: string[] | undefined;
   const executedSearchKeys = new Set<string>();
   const inspectedPaths = new Set(task.contextFiles.map((file) => file.path));
+  // Prior context requests this loop, for the subset-aware redundancy guard
+  // (same order-insensitive/case-folded logic as InspectRepository).
+  const priorContextRequests: { id: string; searchMode: "Text"; searchTerms: string[]; readPaths: string[] }[] = [];
   const roundSummaries: string[] = [];
   let stopReason = "Reached the bounded context round limit.";
 
@@ -5666,6 +5669,20 @@ async function buildProviderGuidedPlanContext(
       roundSummaries.push(`Round ${round}: stopped because no new safe context was requested.`);
       break;
     }
+
+    // Subset-aware guard: also stop when this round's terms and read paths add
+    // nothing beyond an earlier round even if reordered or narrowed (the exact
+    // searchKey check above is order-sensitive and misses those).
+    const subsumedBy = repositoryInspectionSubsumedBy(
+      { searchMode: "Text", searchTerms, readPaths: requestedReadPaths },
+      priorContextRequests
+    );
+    if (subsumedBy) {
+      stopReason = `Provider requested context already covered by round ${subsumedBy}: ${contextRequest.rationale}`;
+      roundSummaries.push(`Round ${round}: stopped because the request added no new safe context.`);
+      break;
+    }
+    priorContextRequests.push({ id: `round ${round}`, searchMode: "Text", searchTerms, readPaths: requestedReadPaths });
 
     executedSearchKeys.add(searchKey);
     const contextMatches = await runTool(
