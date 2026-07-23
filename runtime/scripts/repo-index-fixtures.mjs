@@ -23,9 +23,9 @@ try {
   await mkdir(join(repo, "src"), { recursive: true });
   await mkdir(join(repo, "node_modules", "dep"), { recursive: true });
   await writeFile(join(repo, "README.md"), "# Repo\n\nHello.\n", "utf8");
-  await writeFile(join(repo, "src", "a.ts"), "export const a = 1;\n", "utf8");
+  await writeFile(join(repo, "src", "a.ts"), "export function alpha() {}\nexport class Widget {}\n", "utf8");
   await writeFile(join(repo, "src", "b.ts"), "export const b = 2;\n", "utf8");
-  await writeFile(join(repo, "src", "app.swift"), "let x = 1\n", "utf8");
+  await writeFile(join(repo, "src", "app.swift"), "struct AppView {}\nfunc render() {}\n", "utf8");
   // ignored: should never be indexed
   await writeFile(join(repo, "node_modules", "dep", "index.js"), "module.exports = {}\n", "utf8");
 
@@ -51,6 +51,15 @@ try {
     const after = await get(port, "/index");
     assert(after.fileCount === 4 && after.inSync === true, `Expected 4 in-sync files, got ${JSON.stringify(after)}`);
 
+    // symbols: extracted and searchable
+    assert(built.symbolCount >= 3, `Expected >=3 symbols, got ${built.symbolCount}`);
+    const alphaHits = await get(port, "/index/symbols?q=alpha");
+    assert(alphaHits.symbols.some((s) => s.name === "alpha" && s.kind === "function" && s.path === "src/a.ts"), `alpha function not found: ${JSON.stringify(alphaHits.symbols)}`);
+    const widgetHits = await get(port, "/index/symbols?q=Widget");
+    assert(widgetHits.symbols.some((s) => s.name === "Widget" && s.kind === "class"), "Widget class not found");
+    const swiftHits = await get(port, "/index/symbols?q=AppView");
+    assert(swiftHits.symbols.some((s) => s.name === "AppView" && s.kind === "struct"), "AppView struct not found");
+
     // health carries a compact index summary
     const health = await get(port, "/health");
     assert(health.index && health.index.fileCount === 4 && health.index.inSync === true, `health.index wrong: ${JSON.stringify(health.index)}`);
@@ -69,6 +78,9 @@ try {
     assert(incremental.fileCount === 4, `Expected 4 files after churn, got ${incremental.fileCount}`);
     const langs2 = Object.fromEntries(incremental.languages.map((l) => [l.language, l.files]));
     assert(langs2.Go === 1 && langs2.TypeScript === 1, `Expected Go=1, TS=1 after churn, got ${JSON.stringify(langs2)}`);
+    // a.ts changed content removed its symbols (new content has none) — search returns nothing for alpha
+    const alphaAfter = await get(port, "/index/symbols?q=alpha");
+    assert(!alphaAfter.symbols.some((s) => s.path === "src/a.ts"), "changed a.ts should have refreshed (no) symbols");
 
     // persistence: restart runtime, index survives without rebuild
     await stopRuntime(runtime);
@@ -87,6 +99,7 @@ try {
   console.log("Repo index fixtures passed.");
   console.log("- Full build, ignore filtering, language distribution");
   console.log("- Incremental: unchanged skipped, changed/added reindexed, deleted removed");
+  console.log("- Symbol extraction, search, and refresh on change");
   console.log("- Health summary and restart persistence");
 } finally {
   await rm(tempRoot, { recursive: true, force: true });

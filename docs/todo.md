@@ -91,8 +91,20 @@ the core runtime smoke. Preserve these completed boundaries:
 - [x] Durable repository index (SQLite repo_index table + repo_index_meta;
   runtime/src/repositoryIndex.ts; GET /index, POST /index/rebuild;
   incremental re-index; smoke:repo-index, smoke:repo-index-pure).
-- Add ripgrep-backed text search as an explicit runtime tool.
-- Add Tree-sitter or equivalent symbol parsing for common languages.
+- [x] Lightweight symbol parsing for common languages (runtime/src/symbolExtract.ts;
+  regex per language family — TS/JS/Swift/Python/Go/Rust/Java/C#/Kotlin/Ruby —
+  no native Tree-sitter dependency). Symbols persisted in the repo_symbols table
+  (SQLite schema v3), extracted on (re)index and backfilled for files that
+  predate symbol support, refreshed/removed with their file. GET /index/symbols?q=
+  exposes exact-match-first name lookup; smoke:symbol-extract, smoke:symbol-search.
+- [x] Symbol inspection is index-backed: the agent's `Symbol` InspectRepository
+  mode consults repo_symbols first (exact `kind name` declaration sites from a
+  fast SQLite lookup, restricted to the safe bounded file set) and merges the
+  live scan on top, so it works even when ripgrep is unavailable (engine
+  `symbol-index+ripgrep-word` / `symbol-index`; runtime/src/symbolSearch.ts).
+  smoke:core proves the end-to-end path against a populated index.
+- Add ripgrep-backed text search as an explicit runtime tool (Text mode still
+  scans live; a durable text/trigram index is the remaining piece).
 - [x] Index metadata stored in SQLite (repo_index_meta: last_indexed_at, git_root).
 - [x] Ignore/secret filtering before indexing (reuses the runtime skip rules:
   ignored dirs/names, size cap; broadened language allowlist for the index).
@@ -235,10 +247,13 @@ the core runtime smoke. Preserve these completed boundaries:
   event, and allows a new loop to resume with append-only lineage. Smoke edits
   the SQLite fixture, restarts the runtime, and verifies recovery plus Resume.
 - Added explicit runtime-owned `Text` and `Symbol` inspection modes. Text uses
-  bounded fixed-string ripgrep search; Symbol uses whole-identifier matching.
-  Both use JSON output, no shell, safe file lists, output/time budgets, and a
-  recorded fallback engine when ripgrep is unavailable. Smoke verifies the
-  symbol engine and repeat guard.
+  bounded fixed-string ripgrep search; Symbol is now index-backed — it consults
+  the durable repo_symbols index for exact declaration sites (restricted to the
+  safe bounded file set) and merges the live whole-identifier scan on top, so it
+  still works when ripgrep is unavailable. Both use JSON output, no shell, safe
+  file lists, output/time budgets, and a recorded fallback engine. Smoke verifies
+  the index-backed symbol engine (smoke:core against a populated index) and the
+  repeat guard.
 - Added cross-step `InspectRepository` request fingerprints and visible budget
   evidence. Normalized search terms/read paths produce a stable short SHA-256
   fingerprint; a later identical inspection is blocked before duplicate search

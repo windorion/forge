@@ -3,8 +3,11 @@ import path from "node:path";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import type { ForgeTask } from "./types.js";
 import type { IndexedFile } from "./repositoryIndex.js";
+import type { ExtractedSymbol } from "./symbolExtract.js";
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
+
+export type StoredSymbol = ExtractedSymbol & { path: string };
 
 export class SqliteTaskStore {
   readonly dbPath: string;
@@ -121,11 +124,71 @@ export class SqliteTaskStore {
         git_root TEXT
       );
 
+      CREATE TABLE IF NOT EXISTS repo_symbols (
+        path TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        name TEXT NOT NULL,
+        line INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_repo_symbols_name ON repo_symbols(name);
+      CREATE INDEX IF NOT EXISTS idx_repo_symbols_path ON repo_symbols(path);
+
       INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
       VALUES (1, 'create_task_store', datetime('now'));
       INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
       VALUES (2, 'create_repo_index', datetime('now'));
+      INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
+      VALUES (3, 'create_repo_symbols', datetime('now'));
     `);
+  }
+
+  /** Replace all symbol rows for one file (called when the file is (re)indexed). */
+  replaceSymbolsForFile(filePath: string, symbols: ExtractedSymbol[]): void {
+    this.requireWritable();
+    this.db.prepare("DELETE FROM repo_symbols WHERE path = ?").run(filePath);
+    const insert = this.db.prepare("INSERT INTO repo_symbols (path, kind, name, line) VALUES (?, ?, ?, ?)");
+    for (const symbol of symbols) {
+      insert.run(filePath, symbol.kind, symbol.name, symbol.line);
+    }
+  }
+
+  removeSymbolsForFile(filePath: string): void {
+    this.requireWritable();
+    this.db.prepare("DELETE FROM repo_symbols WHERE path = ?").run(filePath);
+  }
+
+  hasSymbolsForFile(filePath: string): boolean {
+    const row = this.db.prepare("SELECT 1 FROM repo_symbols WHERE path = ? LIMIT 1").get(filePath);
+    return row !== undefined;
+  }
+
+  countSymbols(): number {
+    const row = this.db.prepare("SELECT COUNT(*) AS n FROM repo_symbols").get();
+    return row ? Number(row.n) : 0;
+  }
+
+  /** Case-insensitive prefix (or substring) symbol lookup by name. */
+  searchSymbols(query: string, limit = 50): StoredSymbol[] {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      return [];
+    }
+    const like = `%${trimmed.replace(/[%_]/g, (c) => `\\${c}`)}%`;
+    const rows = this.db
+      .prepare(`
+        SELECT path, kind, name, line FROM repo_symbols
+        WHERE name LIKE ? ESCAPE '\\'
+        ORDER BY (LOWER(name) = LOWER(?)) DESC, LENGTH(name), name
+        LIMIT ?
+      `)
+      .all(like, trimmed, limit);
+    return rows.map((row) => ({
+      path: String(row.path),
+      kind: String(row.kind),
+      name: String(row.name),
+      line: Number(row.line)
+    }));
   }
 
   loadIndexedFiles(): IndexedFile[] {
@@ -166,6 +229,7 @@ export class SqliteTaskStore {
       const filePath = String(row.path);
       if (!paths.has(filePath)) {
         this.db.prepare("DELETE FROM repo_index WHERE path = ?").run(filePath);
+        this.db.prepare("DELETE FROM repo_symbols WHERE path = ?").run(filePath);
         removed += 1;
       }
     }

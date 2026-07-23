@@ -53,7 +53,19 @@ Current implementation:
   removed) and a repo_index_meta row. GET /index and POST /index/rebuild
   expose status/rebuild; the app builds it on connect and shows the real file
   count in the 1a footer. It stores compact per-task context summaries in
-  addition to this durable index. Symbol/reference extraction is still future.
+  addition to this durable index.
+- Lightweight symbol extraction now persists in SQLite (repo_symbols table,
+  schema v3): a dependency-free per-language-family regex extractor
+  (runtime/src/symbolExtract.ts) records top-level declarations
+  (function/class/struct/enum/interface/type/...) with their line, extracted on
+  (re)index and backfilled for files that predate it. GET /index/symbols?q=
+  gives exact-match-first name lookup. This is deliberately not a full parser —
+  it trades some precision for zero native dependencies, keeping the runtime
+  pure Node.
+- The agent's `Symbol` inspection mode is index-backed: it looks up declaration
+  sites in repo_symbols (restricted to the safe bounded file set) and merges the
+  live scan on top, so it returns exact `kind name` locations and works even
+  when ripgrep is unavailable (runtime/src/symbolSearch.ts).
 - It records search mode, engine, budgets, inspected/new paths and a normalized
   request fingerprint; repeats and zero-new-context steps are blocked.
 - It persists query coverage, matched lines/files, context byte totals, content
@@ -62,10 +74,11 @@ Current implementation:
 
 Still future work:
 
-- Tree-sitter symbol extraction
-- dependency graph hints
+- richer symbol parsing (Tree-sitter or language servers) if the regex
+  extractor's precision proves insufficient
+- reference/imports graph and dependency hints
+- durable text (trigram) index so `Text` search is index-backed too
 - semantic search and embeddings
-- incremental re-indexing
 
 Potential tools:
 

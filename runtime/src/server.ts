@@ -8,6 +8,8 @@ import { URL } from "node:url";
 import { fileURLToPath } from "node:url";
 import { repositoryInspectionSubsumedBy } from "./inspectionGuard.js";
 import { fileMetadata, summarizeIndex, type IndexStatus } from "./repositoryIndex.js";
+import { extractSymbols } from "./symbolExtract.js";
+import { symbolIndexMatches, mergeRepositoryMatches } from "./symbolSearch.js";
 import {
   AgentRunStepProviderError,
   createModelProvider,
@@ -568,6 +570,13 @@ const server = createServer(async (request, response) => {
     if (request.method === "POST" && url.pathname === "/index/rebuild") {
       const result = await indexRepository();
       writeJson(response, 200, result);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/index/symbols") {
+      const query = url.searchParams.get("q") ?? "";
+      const limit = Math.min(Math.max(Number.parseInt(url.searchParams.get("limit") ?? "50", 10) || 50, 1), 200);
+      writeJson(response, 200, { query, symbols: taskStore.searchSymbols(query, limit) });
       return;
     }
 
@@ -10973,7 +10982,7 @@ const repositoryIndexableExtensions = new Set([
  * deleted files are removed, and index metadata is refreshed. Runtime-owned
  * and read-only over the working tree; never mutates repository content.
  */
-async function indexRepository(): Promise<IndexStatus & { indexed: number; skipped: number; removed: number }> {
+async function indexRepository(): Promise<IndexStatus & { symbolCount: number; indexed: number; skipped: number; removed: number }> {
   if (observerMode) {
     throw new HttpError(409, "Repository index is read-only in observer runtime mode.");
   }
@@ -11009,10 +11018,19 @@ async function indexRepository(): Promise<IndexStatus & { indexed: number; skipp
     const meta = fileMetadata(relativePath, content, indexedAt);
     const prior = existing.get(relativePath);
     if (prior && prior.contentHash === meta.contentHash) {
+      // Unchanged: backfill symbols if this file predates symbol indexing
+      // (content is already in hand, so this is free).
+      if (!taskStore.hasSymbolsForFile(relativePath)) {
+        const backfilled = extractSymbols(meta.language, content);
+        if (backfilled.length > 0) {
+          taskStore.replaceSymbolsForFile(relativePath, backfilled);
+        }
+      }
       skipped += 1;
       continue;
     }
     taskStore.upsertIndexedFile(meta);
+    taskStore.replaceSymbolsForFile(relativePath, extractSymbols(meta.language, content));
     indexed += 1;
   }
 
@@ -11027,12 +11045,13 @@ async function indexRepository(): Promise<IndexStatus & { indexed: number; skipp
   taskStore.setIndexMeta({ lastIndexedAt: indexedAt, gitRoot });
 
   const status = summarizeIndex(taskStore.loadIndexedFiles(), indexedAt, true);
-  return { ...status, indexed, skipped, removed };
+  return { ...status, symbolCount: taskStore.countSymbols(), indexed, skipped, removed };
 }
 
-function readRepositoryIndexStatus(): IndexStatus {
+function readRepositoryIndexStatus(): IndexStatus & { symbolCount: number } {
   const meta = taskStore.getIndexMeta();
-  return summarizeIndex(taskStore.loadIndexedFiles(), meta.lastIndexedAt, meta.lastIndexedAt !== null);
+  const status = summarizeIndex(taskStore.loadIndexedFiles(), meta.lastIndexedAt, meta.lastIndexedAt !== null);
+  return { ...status, symbolCount: taskStore.countSymbols() };
 }
 
 async function listRepositoryFiles(
@@ -11140,17 +11159,28 @@ async function searchRepositoryWithRipgrep(
   explicitPaths: string[],
   searchMode: "Text" | "Symbol"
 ): Promise<{ engine: string; matches: RepositorySearchMatch[] }> {
+  // Symbol mode: the durable symbol index gives exact declaration sites from a
+  // fast SQLite lookup, and works with no ripgrep dependency. Consult it first,
+  // then merge in whatever the scan engine finds (usages, path hits).
+  const indexMatches = searchMode === "Symbol"
+    ? symbolIndexMatches(searchTerms, files, explicitPaths, (term, limit) => taskStore.searchSymbols(term, limit), repositoryContextMaxFiles)
+    : [];
   try {
     const output = await runBoundedRipgrep(files.slice(0, repositorySearchMaxFiles), searchTerms, searchMode);
+    const scanned = parseRipgrepRepositoryMatches(output, files, searchTerms, explicitPaths, searchMode);
+    if (indexMatches.length > 0) {
+      return { engine: "symbol-index+ripgrep-word", matches: mergeRepositoryMatches(indexMatches, scanned, 12) };
+    }
     return {
       engine: searchMode === "Symbol" ? "ripgrep-word" : "ripgrep-fixed",
-      matches: parseRipgrepRepositoryMatches(output, files, searchTerms, explicitPaths, searchMode)
+      matches: scanned
     };
   } catch {
-    return {
-      engine: "fallback-substring",
-      matches: await searchRepositoryContext(files, searchTerms, explicitPaths)
-    };
+    const fallback = await searchRepositoryContext(files, searchTerms, explicitPaths);
+    if (indexMatches.length > 0) {
+      return { engine: "symbol-index", matches: mergeRepositoryMatches(indexMatches, fallback, 12) };
+    }
+    return { engine: "fallback-substring", matches: fallback };
   }
 }
 

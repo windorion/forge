@@ -1205,6 +1205,12 @@ async function runOpenAIInspectionRepeatGuardFlow() {
   const searchCallsBefore = before.toolCalls?.filter((tool) => tool.name === "search_repository_symbols").length ?? 0;
   const readCallsBefore = before.toolCalls?.filter((tool) => tool.name === "read_context_file").length ?? 0;
 
+  // Populate the durable symbol index so this Symbol-mode inspection is served
+  // by the index (KeychainStore is a real indexed enum), proving the
+  // index-backed inspection path end-to-end.
+  const indexBuilt = await post(`/index/rebuild`, {});
+  assert((indexBuilt.symbolCount ?? 0) > 0, "Index rebuild did not extract any symbols for the Symbol-inspection proof.");
+
   const current = await post(`/tasks/${task.id}/run-agent-loop`, { maxSteps: 3 });
   const loop = current.agentRunLoops?.at(-1);
   const steps = loop?.stepIDs?.map((stepID) => current.agentRunSteps?.find((step) => step.id === stepID));
@@ -1220,7 +1226,14 @@ async function runOpenAIInspectionRepeatGuardFlow() {
   );
   assert(steps?.[0]?.inspectionBudgetSummary?.includes("scan<=400"), "Inspection step did not retain visible budget evidence.");
   assert(steps?.[0]?.inspectionSearchMode === "Symbol", "Inspection step did not retain the selected Symbol mode.");
-  assert(steps?.[0]?.inspectionSearchEngine === "ripgrep-word", `Expected ripgrep-word, got ${steps?.[0]?.inspectionSearchEngine}.`);
+  assert(
+    steps?.[0]?.inspectionSearchEngine === "symbol-index+ripgrep-word" || steps?.[0]?.inspectionSearchEngine === "symbol-index",
+    `Expected an index-backed Symbol engine, got ${steps?.[0]?.inspectionSearchEngine}.`
+  );
+  assert(
+    steps?.[0]?.contextFilePaths?.includes("apps/macos/Sources/ForgeApp/KeychainStore.swift"),
+    "Index-backed Symbol inspection did not surface the KeychainStore declaration file."
+  );
   assert(steps?.[0]?.inspectionQualitySummary?.includes("query term"), "Inspection step did not retain result-quality summary.");
   assert(
     (current.toolCalls?.filter((tool) => tool.name === "search_repository_symbols").length ?? 0) - searchCallsBefore === 1,

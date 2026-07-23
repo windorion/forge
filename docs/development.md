@@ -606,25 +606,22 @@ on `127.0.0.1`.
 
 ### Environment requirement: standalone ripgrep binary
 
-`smoke:core` asserts the bounded repository-inspection step runs in
-`ripgrep-word`/`ripgrep-fixed` mode. The runtime spawns `rg` directly
-(`spawn("rg", args, { shell: false })`), so a real `rg` executable must be on
-`PATH`. If only a shell-function `rg` is present (e.g. an interactive tool
-wrapper), Node's `spawn` cannot use it, the runtime correctly falls back to
-substring search, and the smoke asserts:
+`smoke:core` no longer requires a standalone `rg` binary. The one engine
+assertion — the `Symbol`-mode inspection — now rebuilds the durable symbol
+index first and is served by it (engine `symbol-index+ripgrep-word` when a real
+`rg` is present, `symbol-index` when the runtime falls back), so the suite
+passes whether or not `spawn("rg")` can exec. The runtime still spawns `rg`
+directly (`spawn("rg", args, { shell: false })`) for `Text`-mode search
+fidelity; if only a shell-function `rg` is present (e.g. an interactive tool
+wrapper), Node's `spawn` cannot use it and the runtime falls back to substring
+search — correct behavior, and no smoke assertion depends on it. Install a
+standalone ripgrep binary (`brew install ripgrep`) for production-grade Text
+search. The git-specific suites below do not depend on ripgrep either.
 
-```
-Error: Expected ripgrep-word, got fallback-substring.
-```
-
-This is an environment gap, not a runtime regression — install a standalone
-ripgrep binary (`brew install ripgrep`) so the Node process can exec it. The
-git-specific suites below do not depend on ripgrep and cover the git status /
-branch-parse paths independently.
-
-If a real `rg` binary cannot be installed but a ripgrep-compatible executable
-exists behind a shell function (some tool wrappers ship one), a small shim on
-`PATH` lets Node's `spawn("rg")` reach it, e.g.:
+If you want to exercise the real ripgrep path (so `Text` search and the
+`symbol-index+ripgrep-word` engine run through `rg`) but only a
+ripgrep-compatible executable behind a shell function is available, a small
+shim on `PATH` lets Node's `spawn("rg")` reach it:
 
 ```bash
 mkdir -p /tmp/rgbin
