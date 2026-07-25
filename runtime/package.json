@@ -19,7 +19,9 @@
     "smoke:repo-index-pure": "npm run build && node scripts/repo-index-test.mjs",
     "smoke:symbol-extract": "npm run build && node scripts/symbol-extract-test.mjs",
     "smoke:symbol-search": "npm run build && node scripts/symbol-search-test.mjs",
-    "smoke:text-search": "npm run build && node scripts/text-search-test.mjs"
+    "smoke:text-search": "npm run build && node scripts/text-search-test.mjs",
+    "smoke:github-remote": "npm run build && node scripts/github-remote-test.mjs",
+    "smoke:pr-publish": "npm run build && node scripts/pr-publish-fixtures.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

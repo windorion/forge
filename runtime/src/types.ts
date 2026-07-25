@@ -36,7 +36,8 @@ export interface ApprovalRecord {
     | "Push Git Branch"
     | "Create Git Branch"
     | "Switch Git Branch"
-    | "Publish Git Branch";
+    | "Publish Git Branch"
+    | "Publish Pull Request";
   decision: "Approved" | "Rejected";
   summary: string;
   decidedAt: string;
@@ -946,6 +947,7 @@ export interface GitPullRequestPreview {
   preflight?: GitPullRequestPreflight;
   baseBranch: string;
   headBranch?: string;
+  head?: string;
   upstream?: string;
   remote?: string;
   remoteBranch?: string;
@@ -974,6 +976,40 @@ export interface GitPullRequestPreflight {
   validationSummary: string;
   testEvidence: string[];
   publishReadinessSummary: string;
+}
+
+export interface GitPullRequestPublishRequest {
+  taskID?: string;
+  // Optimistic concurrency: must match the reviewed preview.
+  expectedHead: string;
+  expectedHeadBranch: string;
+  baseBranch: string;
+  headBranch: string;
+  title: string;
+  body: string;
+  draft?: boolean;
+  // Supplied per-request by the app from the Keychain; never persisted or logged.
+  githubToken: string;
+  confirmation: "PublishPullRequest";
+}
+
+export interface GitPullRequestResult {
+  generatedAt: string;
+  number: number;
+  url: string;
+  state: string;
+  draft: boolean;
+  baseBranch: string;
+  headBranch: string;
+  title: string;
+  remote: string;
+  owner: string;
+  repo: string;
+  pushedCommits: GitCommitToPush[];
+  relatedTask?: GitCommitRelatedTask;
+  summary: string;
+  outputSummary: string;
+  operationBoundary: string;
 }
 
 export interface ContextFile {

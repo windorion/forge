@@ -12,6 +12,7 @@ import { extractSymbols } from "./symbolExtract.js";
 import { symbolIndexMatches, mergeRepositoryMatches } from "./symbolSearch.js";
 import { extractTrigrams } from "./textIndex.js";
 import { textIndexCandidates } from "./textSearch.js";
+import { parseGitHubRemote } from "./githubRemote.js";
 import {
   AgentRunStepProviderError,
   createModelProvider,
@@ -58,6 +59,8 @@ import type {
   GitFileChange,
   GitFileDiff,
   GitPullRequestPreview,
+  GitPullRequestPublishRequest,
+  GitPullRequestResult,
   GitPushPreview,
   GitPushRequest,
   GitPushResult,
@@ -681,6 +684,12 @@ const server = createServer(async (request, response) => {
 
     if (request.method === "GET" && url.pathname === "/git/pr-preview") {
       writeJson(response, 200, await getGitPullRequestPreview(url.searchParams.get("taskID")));
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/git/pr-publish") {
+      const input = await readJson<GitPullRequestPublishRequest>(request);
+      writeJson(response, 200, await publishGitPullRequest(input));
       return;
     }
 
@@ -3366,6 +3375,7 @@ async function getGitPullRequestPreview(rawTaskID: string | null): Promise<GitPu
       preflight,
       baseBranch: fallbackBaseBranch,
       headBranch: status.branch,
+      head: status.head,
       upstream: status.upstream,
       suggestedBranchName: suggestPullRequestBranchName(task, status.branch, fallbackBaseBranch),
       title: suggestPullRequestTitle(task, []),
@@ -3418,6 +3428,7 @@ async function getGitPullRequestPreview(rawTaskID: string | null): Promise<GitPu
     preflight,
     baseBranch,
     headBranch: status.branch,
+    head: status.head,
     upstream: status.upstream,
     remote: upstreamParts?.remote ?? remote,
     remoteBranch: upstreamParts?.remoteBranch,
@@ -3437,6 +3448,239 @@ async function getGitPullRequestPreview(rawTaskID: string | null): Promise<GitPu
     riskNotes,
     blockers,
     operationBoundary
+  };
+}
+
+const githubApiBase = (process.env.FORGE_GITHUB_API_BASE ?? "https://api.github.com").replace(/\/+$/, "");
+
+function normalizeGitPullRequestPublishRequest(input: GitPullRequestPublishRequest): GitPullRequestPublishRequest {
+  if (!isRecord(input)) {
+    throw new HttpError(400, "Pull request publish request must be an object.");
+  }
+  if (input.confirmation !== "PublishPullRequest") {
+    throw new HttpError(400, "Publishing a pull request requires explicit confirmation: PublishPullRequest.");
+  }
+  const githubToken = typeof input.githubToken === "string" ? input.githubToken.trim() : "";
+  if (!githubToken) {
+    throw new HttpError(400, "Publishing a pull request requires a GitHub token.");
+  }
+  return {
+    taskID: typeof input.taskID === "string" ? input.taskID.trim() : "",
+    expectedHead: normalizeSingleLineField(input.expectedHead, "expectedHead", 4, 64),
+    expectedHeadBranch: normalizeSingleLineField(input.expectedHeadBranch, "expectedHeadBranch", 1, 200),
+    baseBranch: normalizeSingleLineField(input.baseBranch, "baseBranch", 1, 200),
+    headBranch: normalizeSingleLineField(input.headBranch, "headBranch", 1, 200),
+    title: normalizeSingleLineField(input.title, "title", 1, 300),
+    body: typeof input.body === "string" ? input.body.slice(0, 60_000) : "",
+    draft: input.draft === true,
+    githubToken,
+    confirmation: "PublishPullRequest"
+  };
+}
+
+async function publishGitPullRequest(input: GitPullRequestPublishRequest): Promise<GitPullRequestResult> {
+  const request = normalizeGitPullRequestPublishRequest(input);
+  const generatedAt = new Date().toISOString();
+
+  const status = await getGitStatusSnapshot();
+  if (!status.isRepository || !status.root) {
+    throw new HttpError(409, status.error ?? "Workspace is not inside a git repository.");
+  }
+
+  // Re-derive the preview and enforce optimistic concurrency against the review.
+  const preview = await getGitPullRequestPreview(request.taskID || null);
+  if (preview.blockers.length > 0) {
+    throw new HttpError(409, `Pull request is blocked: ${preview.blockers.join(" ")}`);
+  }
+  if (status.head !== request.expectedHead) {
+    throw new HttpError(409, `Git HEAD changed since PR review. Expected ${request.expectedHead}, current ${status.head ?? "unknown"}.`);
+  }
+  if (!status.branch || status.branch !== request.expectedHeadBranch || status.branch !== request.headBranch) {
+    throw new HttpError(409, `Git branch changed since PR review. Expected ${request.expectedHeadBranch}, current ${status.branch ?? "unknown"}.`);
+  }
+  if (preview.baseBranch !== request.baseBranch) {
+    throw new HttpError(409, `PR base branch changed since review. Expected ${request.baseBranch}, current ${preview.baseBranch}.`);
+  }
+  if (request.baseBranch === request.headBranch) {
+    throw new HttpError(409, "Pull request head and base branches must differ.");
+  }
+
+  const remote = preview.remote ?? await getFirstGitRemote(status.root);
+  if (!remote) {
+    throw new HttpError(409, "Publishing a pull request requires a configured git remote.");
+  }
+  const remoteUrlResult = await runGitCommand(["remote", "get-url", remote], status.root, 8_000);
+  if (remoteUrlResult.exitCode !== 0) {
+    throw new HttpError(409, `Could not resolve URL for remote "${remote}".`);
+  }
+  const githubRemote = parseGitHubRemote(remoteUrlResult.output.trim());
+  if (!githubRemote) {
+    throw new HttpError(409, `Remote "${remote}" is not a recognizable GitHub repository URL.`);
+  }
+
+  // Push the head branch so the PR has a remote head to open against.
+  const pushResult = await runGitCommand(
+    ["push", remote, `HEAD:refs/heads/${request.headBranch}`],
+    status.root,
+    96_000
+  );
+  if (pushResult.exitCode !== 0) {
+    throw new HttpError(409, gitPushFailureMessage(pushResult.output, "Push before PR failed"));
+  }
+
+  const created = await createGitHubPullRequest(githubRemote, request);
+
+  const relatedTask = recordGitPullRequestOnTask(request.taskID, created, request, githubRemote);
+
+  return {
+    generatedAt,
+    number: created.number,
+    url: created.htmlUrl,
+    state: created.state,
+    draft: created.draft,
+    baseBranch: request.baseBranch,
+    headBranch: request.headBranch,
+    title: request.title,
+    remote,
+    owner: githubRemote.owner,
+    repo: githubRemote.repo,
+    pushedCommits: preview.commits,
+    relatedTask,
+    summary: `Opened ${created.draft ? "draft " : ""}pull request #${created.number} (${request.headBranch} → ${request.baseBranch}) on ${githubRemote.owner}/${githubRemote.repo}.`,
+    outputSummary: summarizeGitCommandOutput(pushResult.output),
+    operationBoundary: "Pushed the head branch and opened a pull request. Forge did not merge, force push, reset, or delete branches."
+  };
+}
+
+interface CreatedGitHubPullRequest {
+  number: number;
+  htmlUrl: string;
+  state: string;
+  draft: boolean;
+}
+
+async function createGitHubPullRequest(
+  remote: { owner: string; repo: string },
+  request: GitPullRequestPublishRequest
+): Promise<CreatedGitHubPullRequest> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+  let response: Response;
+  try {
+    response = await fetch(`${githubApiBase}/repos/${encodeURIComponent(remote.owner)}/${encodeURIComponent(remote.repo)}/pulls`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${request.githubToken}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "Forge",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        title: request.title,
+        head: request.headBranch,
+        base: request.baseBranch,
+        body: request.body,
+        draft: request.draft === true
+      }),
+      signal: controller.signal
+    });
+  } catch (error) {
+    throw new HttpError(502, `GitHub pull request request failed: ${(error as Error).message}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  const text = await response.text();
+  if (!response.ok) {
+    // GitHub error bodies do not echo the Authorization header; surface the
+    // status and GitHub's own message without leaking the token.
+    throw new HttpError(response.status === 401 || response.status === 403 ? 401 : 409, gitHubApiErrorMessage(response.status, text));
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new HttpError(502, "GitHub returned an unparseable pull request response.");
+  }
+  if (!isRecord(parsed) || typeof parsed.number !== "number" || typeof parsed.html_url !== "string") {
+    throw new HttpError(502, "GitHub pull request response was missing required fields.");
+  }
+  return {
+    number: parsed.number,
+    htmlUrl: parsed.html_url,
+    state: typeof parsed.state === "string" ? parsed.state : "open",
+    draft: parsed.draft === true
+  };
+}
+
+function gitHubApiErrorMessage(statusCode: number, body: string): string {
+  let detail = "";
+  try {
+    const parsed = JSON.parse(body);
+    if (isRecord(parsed) && typeof parsed.message === "string") {
+      detail = parsed.message;
+      if (Array.isArray(parsed.errors) && parsed.errors.length > 0) {
+        const first = parsed.errors[0];
+        if (isRecord(first) && typeof first.message === "string") {
+          detail += ` (${first.message})`;
+        }
+      }
+    }
+  } catch {
+    detail = "";
+  }
+  const base = statusCode === 401 || statusCode === 403
+    ? "GitHub rejected the token (check its scopes and repository access)"
+    : statusCode === 422
+      ? "GitHub could not create the pull request"
+      : `GitHub responded with status ${statusCode}`;
+  return detail ? `${base}: ${detail}` : `${base}.`;
+}
+
+function recordGitPullRequestOnTask(
+  taskID: string | undefined,
+  created: CreatedGitHubPullRequest,
+  request: GitPullRequestPublishRequest,
+  remote: { owner: string; repo: string }
+): GitPullRequestResult["relatedTask"] {
+  if (!taskID) {
+    return undefined;
+  }
+  const task = tasks.get(taskID);
+  if (!task) {
+    return undefined;
+  }
+  const now = new Date().toISOString();
+  const summary = `Opened pull request #${created.number} on ${remote.owner}/${remote.repo} (${request.headBranch} → ${request.baseBranch}).`;
+  const updatedTask: ForgeTask = {
+    ...task,
+    updatedAt: now,
+    approvals: [
+      ...task.approvals,
+      {
+        id: randomUUID(),
+        action: "Publish Pull Request" as ApprovalRecord["action"],
+        decision: "Approved" as const,
+        summary,
+        decidedAt: now,
+        targetID: created.htmlUrl
+      }
+    ],
+    events: [
+      ...task.events,
+      event("git.pull_request.published", `${summary} ${created.htmlUrl}`)
+    ]
+  };
+  tasks.set(updatedTask.id, updatedTask);
+  taskStore.saveTask(updatedTask);
+  return {
+    id: task.id,
+    title: task.title,
+    status: task.status,
+    currentPhase: task.currentPhase,
+    summary
   };
 }
 
@@ -11938,6 +12182,7 @@ function renderRuntimeHome(): string {
       <li><a href="/git/push-preview">GET /git/push-preview</a></li>
       <li><code>POST /git/push</code></li>
       <li><a href="/git/pr-preview">GET /git/pr-preview</a></li>
+      <li><code>POST /git/pr-publish</code></li>
       <li><a href="/validation-presets">GET /validation-presets</a></li>
       <li><a href="/settings/model-provider">GET /settings/model-provider</a></li>
       <li><code>POST /settings/model-provider</code></li>

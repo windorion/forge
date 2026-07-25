@@ -79,10 +79,22 @@ the core runtime smoke. Preserve these completed boundaries:
   file states, and packaged app workflows.
 - Connect accepted diffs to commit preparation, local commit, branch publish,
   push, and PR handoff surfaces without letting git dominate the primary demo.
-- Add approved PR creation/publication after the read-only PR handoff
-  preflight.
-- Add GitHub integration for PR metadata, draft PR creation, and remote
-  branch/fork awareness.
+- [x] Add approved PR creation/publication after the read-only PR handoff
+  preflight. POST /git/pr-publish opens a real GitHub pull request:
+  optimistic-concurrency guard reusing the pr-preview (HEAD/branch/base must
+  match, blockers must be clear, explicit `PublishPullRequest` confirmation),
+  pushes the head branch, then POSTs to {FORGE_GITHUB_API_BASE}/repos/:owner/
+  :repo/pulls. owner/repo parsed from the remote (runtime/src/githubRemote.ts).
+  The GitHub token is supplied per-request (app holds it in the Keychain) and is
+  never persisted or logged. Records a `Publish Pull Request` approval +
+  `git.pull_request.published` event on the task. smoke:github-remote (pure
+  parser) + smoke:pr-publish (e2e: local bare repo via pushurl + mock GitHub API,
+  covering 400/409 guards, real push, payload/auth, task lineage).
+- Add GitHub integration for PR metadata and remote branch/fork awareness
+  (draft PRs are supported; fork-head `owner:branch` PRs are still TODO).
+- Follow-on: macOS token entry (paste a PAT into the Keychain) + wire the real
+  PR URL/state into the `1d`/`24a` surfaces; the OAuth device flow (`6a`/`15a`)
+  stays blocked on a founder-registered Client ID.
 - Add hosted-remote fixtures for push/branch-publish auth failures,
   disconnected networks, hosting-provider branch protection, and fork remotes.
 
