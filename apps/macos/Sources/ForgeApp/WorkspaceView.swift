@@ -327,6 +327,9 @@ struct WorkspaceView: View {
         case "palette":
             showCommandPalette = true
         case "settings":
+            if parts.count >= 2 {
+                UserDefaults.standard.set(parts[1].uppercased(), forKey: "forge.settingsSection")
+            }
             openSettings()
         case "dismiss":
             surfaceCoordinator.dismiss()
@@ -2206,6 +2209,10 @@ private struct RunCompleteState: View {
             .frame(maxWidth: .infinity, minHeight: 126, alignment: .topLeading)
             .background(Color.white)
 
+            if let preview = workspace.gitPullRequestPreview(for: task.id) {
+                pullRequestHandoffPanel(task: task, preview: preview)
+            }
+
             Spacer(minLength: 0)
 
             HStack(spacing: 10) {
@@ -2234,6 +2241,79 @@ private struct RunCompleteState: View {
             }
         }
         .background(ForgeDesign.paper)
+    }
+
+    /// PR handoff panel: shows the reviewed preview, a real publish action, and
+    /// the resulting PR URL/state once opened (1d/24a).
+    @ViewBuilder
+    private func pullRequestHandoffPanel(task: ForgeTask, preview: GitPullRequestPreview) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let result = workspace.gitPullRequestResult(for: task.id) {
+                HStack(spacing: 8) {
+                    Text("✓ PR #\(result.number) opened")
+                        .font(.custom("JetBrains Mono", fixedSize: 12).weight(.bold))
+                        .foregroundStyle(ForgeDesign.ink)
+                    Text("\(result.headBranch) → \(result.baseBranch)\(result.draft ? " · draft" : "")")
+                        .font(.custom("JetBrains Mono", fixedSize: 10.5))
+                        .foregroundStyle(ForgeDesign.muted)
+                    Spacer()
+                    if let url = URL(string: result.url) {
+                        Link("VIEW ON GITHUB →", destination: url)
+                            .font(.custom("JetBrains Mono", fixedSize: 10.5).weight(.bold))
+                            .foregroundStyle(ForgeDesign.ink)
+                    }
+                }
+                Text(result.url)
+                    .font(.custom("JetBrains Mono", fixedSize: 10))
+                    .foregroundStyle(ForgeDesign.muted)
+                    .textSelection(.enabled)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            } else {
+                HStack(spacing: 8) {
+                    Text(preview.readiness.uppercased())
+                        .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
+                        .foregroundStyle(preview.readiness == "Blocked" ? ForgeDesign.danger : ForgeDesign.ink)
+                    Text("\(preview.headBranch ?? "current") → \(preview.baseBranch)")
+                        .font(.custom("JetBrains Mono", fixedSize: 10.5))
+                        .foregroundStyle(ForgeDesign.muted)
+                    Spacer()
+                    Button(workspace.isPublishingPullRequest(taskID: task.id) ? "PUBLISHING…" : "PUBLISH PULL REQUEST") {
+                        workspace.publishPullRequest(for: task, preview: preview)
+                    }
+                    .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.accent, foreground: ForgeDesign.ink))
+                    .disabled(
+                        workspace.isPublishingPullRequest(taskID: task.id)
+                            || preview.readiness == "Blocked"
+                            || !preview.blockers.isEmpty
+                            || !workspace.hasGitHubToken
+                    )
+                }
+                if !workspace.hasGitHubToken {
+                    Text("Add a GitHub token in Settings → Git to publish.")
+                        .font(.custom("JetBrains Mono", fixedSize: 10))
+                        .foregroundStyle(ForgeDesign.muted)
+                } else if let blocker = preview.blockers.first {
+                    Text(blocker)
+                        .font(.custom("JetBrains Mono", fixedSize: 10))
+                        .foregroundStyle(ForgeDesign.danger)
+                        .lineLimit(2)
+                }
+            }
+            if let error = workspace.pullRequestPublishError(for: task.id) {
+                Text(error)
+                    .font(.custom("JetBrains Mono", fixedSize: 10))
+                    .foregroundStyle(ForgeDesign.danger)
+                    .lineLimit(2)
+            }
+        }
+        .padding(.horizontal, 28)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(red: 247 / 255, green: 247 / 255, blue: 244 / 255))
+        .overlay(alignment: .top) {
+            Rectangle().fill(ForgeDesign.divider).frame(height: 1)
+        }
     }
 
     /// Real elapsed time from creation to the final update.

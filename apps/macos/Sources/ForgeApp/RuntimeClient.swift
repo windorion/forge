@@ -302,6 +302,20 @@ struct RuntimeClient {
         return try JSONDecoder().decode(GitPullRequestPreview.self, from: data)
     }
 
+    func publishPullRequest(_ requestBody: GitPullRequestPublishRequest) async throws -> GitPullRequestResult {
+        let url = baseURL
+            .appending(path: "git")
+            .appending(path: "pr-publish")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(requestBody)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try validate(response, data: data)
+        return try JSONDecoder().decode(GitPullRequestResult.self, from: data)
+    }
+
     func modelProviderSettings() async throws -> ModelProviderSettingsEnvelope {
         let url = baseURL
             .appending(path: "settings")

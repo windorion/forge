@@ -3,6 +3,8 @@ import Security
 
 enum KeychainStore {
     static let openAIAPIKeyAccount = "openai-api-key"
+    /// Shared account for the GitHub token (a pasted PAT or an OAuth token).
+    static let githubTokenAccount = "githubAccessToken"
 
     private static var service: String {
         Bundle.main.bundleIdentifier ?? "com.windorion.forge"
@@ -62,9 +64,14 @@ enum KeychainStore {
         }
     }
 
-    /// Generic save used for additional secrets (e.g. GitHub OAuth token).
+    /// Generic save used for additional secrets (e.g. GitHub OAuth token/PAT).
     static func save(account: String, secret: String) throws {
-        let data = Data(secret.utf8)
+        let trimmed = secret.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            try delete(account: account)
+            return
+        }
+        let data = Data(trimmed.utf8)
         let query = baseQuery(account: account)
         let update = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
         if update == errSecSuccess { return }
@@ -74,6 +81,34 @@ enum KeychainStore {
         addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         let add = SecItemAdd(addQuery as CFDictionary, nil)
         guard add == errSecSuccess else { throw KeychainStoreError.keychainStatus(add) }
+    }
+
+    /// Generic read for additional secrets (e.g. GitHub token/PAT).
+    static func read(account: String) throws -> String? {
+        var query = baseQuery(account: account)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound {
+            return nil
+        }
+        guard status == errSecSuccess else {
+            throw KeychainStoreError.keychainStatus(status)
+        }
+        guard let data = result as? Data, let value = String(data: data, encoding: .utf8) else {
+            throw KeychainStoreError.invalidData
+        }
+        return value
+    }
+
+    /// Generic delete for additional secrets.
+    static func delete(account: String) throws {
+        let status = SecItemDelete(baseQuery(account: account) as CFDictionary)
+        if status == errSecSuccess || status == errSecItemNotFound {
+            return
+        }
+        throw KeychainStoreError.keychainStatus(status)
     }
 
     static func deleteOpenAIAPIKey() throws {

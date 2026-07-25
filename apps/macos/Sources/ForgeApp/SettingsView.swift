@@ -997,6 +997,9 @@ private struct GitHubSettingsPage: View {
     var repoRoot: String?
 
     @AppStorage("forge.githubRepoEnabled") private var repoEnabled = false
+    @State private var tokenInput = ""
+    @State private var tokenStatus = ""
+    @State private var hasToken = false
 
     var body: some View {
         ScrollView {
@@ -1060,6 +1063,50 @@ private struct GitHubSettingsPage: View {
 
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
+                        Text("PERSONAL ACCESS TOKEN")
+                            .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
+                            .tracking(1)
+                            .foregroundStyle(SettingsDesign.muted)
+                        Spacer()
+                        Text(hasToken ? "STORED IN KEYCHAIN" : "NOT SET")
+                            .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(hasToken ? SettingsDesign.accent : SettingsDesign.paper)
+                            .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
+                    }
+                    Text("Paste a GitHub token (a fine-grained PAT with Pull requests: read/write, or a classic token with the repo scope). Used to open pull requests until OAuth sign-in is available.")
+                        .font(.custom("JetBrains Mono", fixedSize: 10.5))
+                        .foregroundStyle(SettingsDesign.muted)
+                    HStack(spacing: 10) {
+                        SecureField("ghp_… or github_pat_…", text: $tokenInput)
+                            .textFieldStyle(.plain)
+                            .font(.custom("JetBrains Mono", fixedSize: 12))
+                            .padding(.horizontal, 12)
+                            .frame(height: 34)
+                            .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
+                        Button("SAVE TOKEN", action: saveToken)
+                            .buttonStyle(SettingsOutlineButtonStyle())
+                            .disabled(tokenInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        if hasToken {
+                            Button("REMOVE", action: removeToken)
+                                .buttonStyle(SettingsOutlineButtonStyle())
+                        }
+                    }
+                    if !tokenStatus.isEmpty {
+                        Text(tokenStatus)
+                            .font(.custom("JetBrains Mono", fixedSize: 10))
+                            .foregroundStyle(SettingsDesign.muted)
+                    }
+                }
+                .padding(.horizontal, 26)
+                .padding(.vertical, 18)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(SettingsDesign.ink).frame(height: 1.5)
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
                         Text("REPO ACCESS")
                             .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
                             .tracking(1)
@@ -1097,6 +1144,34 @@ private struct GitHubSettingsPage: View {
                 .padding(.horizontal, 26)
                 .padding(.vertical, 18)
             }
+        }
+        .onAppear { refreshTokenState() }
+    }
+
+    private func refreshTokenState() {
+        hasToken = (try? KeychainStore.read(account: KeychainStore.githubTokenAccount))?.isEmpty == false
+    }
+
+    private func saveToken() {
+        let trimmed = tokenInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        do {
+            try KeychainStore.save(account: KeychainStore.githubTokenAccount, secret: trimmed)
+            tokenInput = ""
+            tokenStatus = "Token saved to the macOS Keychain."
+            refreshTokenState()
+        } catch {
+            tokenStatus = "Could not save token: \(error.localizedDescription)"
+        }
+    }
+
+    private func removeToken() {
+        do {
+            try KeychainStore.delete(account: KeychainStore.githubTokenAccount)
+            tokenStatus = "Token removed from the Keychain."
+            refreshTokenState()
+        } catch {
+            tokenStatus = "Could not remove token: \(error.localizedDescription)"
         }
     }
 

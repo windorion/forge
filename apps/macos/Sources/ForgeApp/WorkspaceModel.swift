@@ -93,6 +93,9 @@ final class WorkspaceModel: ObservableObject {
     @Published private var gitPushPreviews: [ForgeTask.ID: GitPushPreview] = [:]
     @Published private var gitPushResults: [ForgeTask.ID: GitPushResult] = [:]
     @Published private var gitPullRequestPreviews: [ForgeTask.ID: GitPullRequestPreview] = [:]
+    @Published private var gitPullRequestResults: [ForgeTask.ID: GitPullRequestResult] = [:]
+    @Published private var publishingPullRequestTaskIDs = Set<ForgeTask.ID>()
+    @Published private var pullRequestPublishErrors: [ForgeTask.ID: String] = [:]
     @Published private var updatingModelProviderSettings = false
 
     private let runtime = RuntimeClient()
@@ -1521,6 +1524,65 @@ final class WorkspaceModel: ObservableObject {
 
     func isPreparingGitPullRequestReview(taskID: ForgeTask.ID) -> Bool {
         loadingGitPullRequestPreviewTaskIDs.contains(taskID)
+    }
+
+    /// Whether a GitHub token is stored (a pasted PAT or an OAuth token). Used
+    /// to gate the publish action and prompt the user toward Settings.
+    var hasGitHubToken: Bool {
+        (try? KeychainStore.read(account: KeychainStore.githubTokenAccount))?.isEmpty == false
+    }
+
+    func gitPullRequestResult(for taskID: ForgeTask.ID) -> GitPullRequestResult? {
+        gitPullRequestResults[taskID]
+    }
+
+    func isPublishingPullRequest(taskID: ForgeTask.ID) -> Bool {
+        publishingPullRequestTaskIDs.contains(taskID)
+    }
+
+    func pullRequestPublishError(for taskID: ForgeTask.ID) -> String? {
+        pullRequestPublishErrors[taskID]
+    }
+
+    /// Publish a real GitHub PR from the reviewed preview. The token is read
+    /// from the Keychain at call time and passed to the loopback runtime; it is
+    /// never stored in view state.
+    func publishPullRequest(for task: ForgeTask, preview: GitPullRequestPreview) {
+        guard let head = preview.head, let headBranch = preview.headBranch, !headBranch.isEmpty else {
+            pullRequestPublishErrors[task.id] = "PR preview is missing the branch/HEAD needed to publish."
+            return
+        }
+        guard let token = try? KeychainStore.read(account: KeychainStore.githubTokenAccount), !token.isEmpty else {
+            pullRequestPublishErrors[task.id] = "Add a GitHub token in Settings → Git before publishing."
+            return
+        }
+
+        publishingPullRequestTaskIDs.insert(task.id)
+        pullRequestPublishErrors.removeValue(forKey: task.id)
+
+        Task {
+            do {
+                let taskID = task.id == ForgeTask.sample.id ? nil : task.id
+                let request = GitPullRequestPublishRequest(
+                    taskID: taskID,
+                    expectedHead: head,
+                    expectedHeadBranch: headBranch,
+                    baseBranch: preview.baseBranch,
+                    headBranch: headBranch,
+                    title: preview.title,
+                    body: preview.body.joined(separator: "\n"),
+                    draft: false,
+                    githubToken: token,
+                    confirmation: "PublishPullRequest"
+                )
+                gitPullRequestResults[task.id] = try await runtime.publishPullRequest(request)
+                gitStatusLastError = nil
+            } catch {
+                pullRequestPublishErrors[task.id] = "Publish PR failed: \(error.localizedDescription)"
+            }
+
+            publishingPullRequestTaskIDs.remove(task.id)
+        }
     }
 
     func revealGitFile(path: String) {

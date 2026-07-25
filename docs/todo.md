@@ -92,9 +92,17 @@ the core runtime smoke. Preserve these completed boundaries:
   covering 400/409 guards, real push, payload/auth, task lineage).
 - Add GitHub integration for PR metadata and remote branch/fork awareness
   (draft PRs are supported; fork-head `owner:branch` PRs are still TODO).
-- Follow-on: macOS token entry (paste a PAT into the Keychain) + wire the real
-  PR URL/state into the `1d`/`24a` surfaces; the OAuth device flow (`6a`/`15a`)
+- [x] macOS wiring for PR publish: a PERSONAL ACCESS TOKEN block in Settings →
+  GITHUB stores a PAT via KeychainStore (generic read/save/delete on the shared
+  `githubAccessToken` account); `RuntimeClient.publishPullRequest` calls
+  /git/pr-publish with the token read from the Keychain at call time (never held
+  in view state); the completion surface renders a PR handoff panel with the
+  reviewed preview, a publish action gated on token presence and preview
+  blockers, and the real PR number/URL/state once opened (`1d`/`24a`). Evidence:
+  docs/verification/github-pat-settings/. The OAuth device flow (`6a`/`15a`)
   stays blocked on a founder-registered Client ID.
+- Follow-on: fork-head PRs (`owner:branch`), draft-PR toggle in the UI, and
+  showing PR review state as it changes.
 - Add hosted-remote fixtures for push/branch-publish auth failures,
   disconnected networks, hosting-provider branch protection, and fork remotes.
 

@@ -747,6 +747,7 @@ struct GitPullRequestPreview: Codable, Hashable {
     var preflight: GitPullRequestPreflight?
     var baseBranch: String
     var headBranch: String?
+    var head: String?
     var upstream: String?
     var remote: String?
     var remoteBranch: String?
@@ -775,6 +776,38 @@ struct GitPullRequestPreflight: Codable, Hashable {
     var validationSummary: String
     var testEvidence: [String]
     var publishReadinessSummary: String
+}
+
+struct GitPullRequestPublishRequest: Codable, Hashable {
+    var taskID: String?
+    var expectedHead: String
+    var expectedHeadBranch: String
+    var baseBranch: String
+    var headBranch: String
+    var title: String
+    var body: String
+    var draft: Bool
+    var githubToken: String
+    var confirmation: String
+}
+
+struct GitPullRequestResult: Codable, Hashable {
+    var generatedAt: String
+    var number: Int
+    var url: String
+    var state: String
+    var draft: Bool
+    var baseBranch: String
+    var headBranch: String
+    var title: String
+    var remote: String
+    var owner: String
+    var repo: String
+    var pushedCommits: [GitCommitToPush]
+    var relatedTask: GitCommitRelatedTask?
+    var summary: String
+    var outputSummary: String
+    var operationBoundary: String
 }
 
 struct ContextFile: Identifiable, Codable, Hashable {
