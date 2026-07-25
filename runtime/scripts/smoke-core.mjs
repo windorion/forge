@@ -1088,11 +1088,21 @@ async function runOpenAIRepositoryInspectionLoopFlow() {
   const contextBefore = new Set(current.contextFiles?.map((file) => file.path));
   assert(!contextBefore.has("apps/macos/Sources/ForgeApp/KeychainStore.swift"), "Inspection fixture path was already in context.");
 
+  // Populate the durable index so this Text-mode inspection is narrowed by the
+  // trigram index (all terms are >=3 chars and the index covers the scan set),
+  // proving the index-backed Text path end-to-end.
+  const textIndexBuilt = await post(`/index/rebuild`, {});
+  assert((textIndexBuilt.fileCount ?? 0) > 0, "Index rebuild did not index any files for the Text-inspection proof.");
+
   current = await post(`/tasks/${task.id}/run-agent-loop`, { maxSteps: 3 });
   const loop = current.agentRunLoops?.at(-1);
   const loopSteps = loop?.stepIDs?.map((stepID) => current.agentRunSteps.find((step) => step.id === stepID));
   assert(loopSteps?.[0]?.action === "InspectRepository", `Expected InspectRepository first, got ${loopSteps?.[0]?.action}.`);
   assert(loopSteps?.[0]?.status === "Completed", "Repository inspection step did not complete.");
+  assert(
+    loopSteps?.[0]?.inspectionSearchEngine === "trigram-index+ripgrep-fixed" || loopSteps?.[0]?.inspectionSearchEngine === "trigram-index+substring",
+    `Expected an index-backed Text engine, got ${loopSteps?.[0]?.inspectionSearchEngine}.`
+  );
   assert(["Strong", "Partial"].includes(loopSteps?.[0]?.inspectionQuality), `Unexpected inspection quality ${loopSteps?.[0]?.inspectionQuality}.`);
   assert((loopSteps?.[0]?.inspectionMatchCount ?? 0) > 0, "Repository inspection did not persist matched-line evidence.");
   assert((loopSteps?.[0]?.inspectionMatchedFileCount ?? 0) > 0, "Repository inspection did not persist matched-file evidence.");

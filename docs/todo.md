@@ -103,8 +103,17 @@ the core runtime smoke. Preserve these completed boundaries:
   live scan on top, so it works even when ripgrep is unavailable (engine
   `symbol-index+ripgrep-word` / `symbol-index`; runtime/src/symbolSearch.ts).
   smoke:core proves the end-to-end path against a populated index.
-- Add ripgrep-backed text search as an explicit runtime tool (Text mode still
-  scans live; a durable text/trigram index is the remaining piece).
+- [x] Durable text (trigram) index (repo_trigrams table, SQLite schema v4;
+  runtime/src/textIndex.ts extracts distinct case-folded within-line 3-grams,
+  runtime/src/textSearch.ts resolves candidates). The agent's `Text`
+  InspectRepository mode is now index-backed: when the index covers the scan set
+  (a superset check on paths) and every term is >=3 chars, the trigram inverted
+  index narrows the scan to candidate files (verified by the live scan, so no
+  false positives), working with or without ripgrep (engine
+  `trigram-index+ripgrep-fixed` / `trigram-index+substring`). Falls back to the
+  full scan when the index does not cover the set or a term is too short.
+  Real-repo check: 130 files -> 14 candidates for "KeychainStore".
+  smoke:text-search (pure) + smoke:core (end-to-end against a populated index).
 - [x] Index metadata stored in SQLite (repo_index_meta: last_indexed_at, git_root).
 - [x] Ignore/secret filtering before indexing (reuses the runtime skip rules:
   ignored dirs/names, size cap; broadened language allowlist for the index).

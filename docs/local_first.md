@@ -66,6 +66,16 @@ Current implementation:
   sites in repo_symbols (restricted to the safe bounded file set) and merges the
   live scan on top, so it returns exact `kind name` locations and works even
   when ripgrep is unavailable (runtime/src/symbolSearch.ts).
+- A durable text (trigram) index now persists in SQLite (repo_trigrams table,
+  schema v4): distinct case-folded within-line 3-grams per file
+  (runtime/src/textIndex.ts) form an inverted index. The agent's `Text`
+  inspection mode is index-backed — when the index covers the current scan set
+  and every term is at least a trigram long, the index narrows the scan to
+  candidate files (runtime/src/textSearch.ts) that the live scan then verifies,
+  so there are no false positives and the coverage gate avoids false negatives.
+  It works with or without ripgrep, and degrades to the full scan when the index
+  is not applicable. On the Forge repo this narrows ~130 files to ~14 candidates
+  for a typical identifier.
 - It records search mode, engine, budgets, inspected/new paths and a normalized
   request fingerprint; repeats and zero-new-context steps are blocked.
 - It persists query coverage, matched lines/files, context byte totals, content
@@ -77,7 +87,9 @@ Still future work:
 - richer symbol parsing (Tree-sitter or language servers) if the regex
   extractor's precision proves insufficient
 - reference/imports graph and dependency hints
-- durable text (trigram) index so `Text` search is index-backed too
+- content-freshness gating for the trigram narrowing (today it gates on
+  file-set coverage; mid-session edits to an already-indexed file are a small
+  residual staleness risk until the next re-index)
 - semantic search and embeddings
 
 Potential tools:

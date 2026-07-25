@@ -18,7 +18,8 @@
     "smoke:repo-index": "npm run build && node scripts/repo-index-fixtures.mjs",
     "smoke:repo-index-pure": "npm run build && node scripts/repo-index-test.mjs",
     "smoke:symbol-extract": "npm run build && node scripts/symbol-extract-test.mjs",
-    "smoke:symbol-search": "npm run build && node scripts/symbol-search-test.mjs"
+    "smoke:symbol-search": "npm run build && node scripts/symbol-search-test.mjs",
+    "smoke:text-search": "npm run build && node scripts/text-search-test.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

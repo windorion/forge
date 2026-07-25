@@ -10,6 +10,8 @@ import { repositoryInspectionSubsumedBy } from "./inspectionGuard.js";
 import { fileMetadata, summarizeIndex, type IndexStatus } from "./repositoryIndex.js";
 import { extractSymbols } from "./symbolExtract.js";
 import { symbolIndexMatches, mergeRepositoryMatches } from "./symbolSearch.js";
+import { extractTrigrams } from "./textIndex.js";
+import { textIndexCandidates } from "./textSearch.js";
 import {
   AgentRunStepProviderError,
   createModelProvider,
@@ -11018,7 +11020,7 @@ async function indexRepository(): Promise<IndexStatus & { symbolCount: number; i
     const meta = fileMetadata(relativePath, content, indexedAt);
     const prior = existing.get(relativePath);
     if (prior && prior.contentHash === meta.contentHash) {
-      // Unchanged: backfill symbols if this file predates symbol indexing
+      // Unchanged: backfill symbols/trigrams if this file predates that index
       // (content is already in hand, so this is free).
       if (!taskStore.hasSymbolsForFile(relativePath)) {
         const backfilled = extractSymbols(meta.language, content);
@@ -11026,11 +11028,18 @@ async function indexRepository(): Promise<IndexStatus & { symbolCount: number; i
           taskStore.replaceSymbolsForFile(relativePath, backfilled);
         }
       }
+      if (!taskStore.hasTrigramsForFile(relativePath)) {
+        const trigrams = extractTrigrams(content);
+        if (trigrams.length > 0) {
+          taskStore.replaceTrigramsForFile(relativePath, trigrams);
+        }
+      }
       skipped += 1;
       continue;
     }
     taskStore.upsertIndexedFile(meta);
     taskStore.replaceSymbolsForFile(relativePath, extractSymbols(meta.language, content));
+    taskStore.replaceTrigramsForFile(relativePath, extractTrigrams(content));
     indexed += 1;
   }
 
@@ -11153,6 +11162,40 @@ async function searchRepositoryContext(
     .slice(0, 12);
 }
 
+/**
+ * For Text search, narrow the scan to durable trigram-index candidates when the
+ * index covers every file the scan would read (a superset check on paths). A
+ * file is a candidate if it may contain any term, plus any file whose path
+ * matches a term (path-name hits are scored by the scan and must be preserved).
+ * When the index does not cover the scan set, or a term is too short to index,
+ * returns the full file list unchanged so no true match is missed.
+ */
+function narrowTextSearchFiles(
+  files: string[],
+  searchTerms: string[],
+  searchMode: "Text" | "Symbol"
+): { files: string[]; narrowed: boolean } {
+  if (searchMode !== "Text" || searchTerms.length === 0) {
+    return { files, narrowed: false };
+  }
+  const indexedSet = new Set(taskStore.indexedFilePaths());
+  const indexCoversScan = indexedSet.size > 0 && files.every((file) => indexedSet.has(file));
+  if (!indexCoversScan) {
+    return { files, narrowed: false };
+  }
+  const { usable, candidates } = textIndexCandidates(searchTerms, files, (trigrams) =>
+    taskStore.filesContainingAllTrigrams(trigrams)
+  );
+  if (!usable) {
+    return { files, narrowed: false };
+  }
+  const pathHits = files.filter((file) => {
+    const lower = file.toLowerCase();
+    return searchTerms.some((term) => lower.includes(term.toLowerCase()));
+  });
+  return { files: [...new Set([...candidates, ...pathHits])], narrowed: true };
+}
+
 async function searchRepositoryWithRipgrep(
   files: string[],
   searchTerms: string[],
@@ -11165,22 +11208,28 @@ async function searchRepositoryWithRipgrep(
   const indexMatches = searchMode === "Symbol"
     ? symbolIndexMatches(searchTerms, files, explicitPaths, (term, limit) => taskStore.searchSymbols(term, limit), repositoryContextMaxFiles)
     : [];
+
+  // Text mode: narrow the scan to trigram-index candidates when the durable
+  // index covers the current file set. The scan still verifies content (no
+  // false positives); the coverage gate prevents false negatives.
+  const { files: searchFiles, narrowed: textIndexNarrowed } = narrowTextSearchFiles(files, searchTerms, searchMode);
+
   try {
-    const output = await runBoundedRipgrep(files.slice(0, repositorySearchMaxFiles), searchTerms, searchMode);
-    const scanned = parseRipgrepRepositoryMatches(output, files, searchTerms, explicitPaths, searchMode);
+    const output = await runBoundedRipgrep(searchFiles.slice(0, repositorySearchMaxFiles), searchTerms, searchMode);
+    const scanned = parseRipgrepRepositoryMatches(output, searchFiles, searchTerms, explicitPaths, searchMode);
     if (indexMatches.length > 0) {
       return { engine: "symbol-index+ripgrep-word", matches: mergeRepositoryMatches(indexMatches, scanned, 12) };
     }
     return {
-      engine: searchMode === "Symbol" ? "ripgrep-word" : "ripgrep-fixed",
+      engine: searchMode === "Symbol" ? "ripgrep-word" : textIndexNarrowed ? "trigram-index+ripgrep-fixed" : "ripgrep-fixed",
       matches: scanned
     };
   } catch {
-    const fallback = await searchRepositoryContext(files, searchTerms, explicitPaths);
+    const fallback = await searchRepositoryContext(searchFiles, searchTerms, explicitPaths);
     if (indexMatches.length > 0) {
       return { engine: "symbol-index", matches: mergeRepositoryMatches(indexMatches, fallback, 12) };
     }
-    return { engine: "fallback-substring", matches: fallback };
+    return { engine: textIndexNarrowed ? "trigram-index+substring" : "fallback-substring", matches: fallback };
   }
 }
 

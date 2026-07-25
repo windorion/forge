@@ -606,17 +606,18 @@ on `127.0.0.1`.
 
 ### Environment requirement: standalone ripgrep binary
 
-`smoke:core` no longer requires a standalone `rg` binary. The one engine
-assertion — the `Symbol`-mode inspection — now rebuilds the durable symbol
-index first and is served by it (engine `symbol-index+ripgrep-word` when a real
-`rg` is present, `symbol-index` when the runtime falls back), so the suite
-passes whether or not `spawn("rg")` can exec. The runtime still spawns `rg`
-directly (`spawn("rg", args, { shell: false })`) for `Text`-mode search
-fidelity; if only a shell-function `rg` is present (e.g. an interactive tool
+`smoke:core` no longer requires a standalone `rg` binary. Both inspection-engine
+assertions rebuild the durable index first and are served by it: the `Symbol`
+inspection by the symbol index (engine `symbol-index+ripgrep-word` with a real
+`rg`, `symbol-index` on fallback) and the `Text` inspection by the trigram index
+(engine `trigram-index+ripgrep-fixed` with a real `rg`, `trigram-index+substring`
+on fallback), so the suite passes whether or not `spawn("rg")` can exec. The
+runtime still spawns `rg` directly (`spawn("rg", args, { shell: false })`) for
+scan fidelity; if only a shell-function `rg` is present (e.g. an interactive tool
 wrapper), Node's `spawn` cannot use it and the runtime falls back to substring
 search — correct behavior, and no smoke assertion depends on it. Install a
-standalone ripgrep binary (`brew install ripgrep`) for production-grade Text
-search. The git-specific suites below do not depend on ripgrep either.
+standalone ripgrep binary (`brew install ripgrep`) for production-grade scans.
+The git-specific suites below do not depend on ripgrep either.
 
 If you want to exercise the real ripgrep path (so `Text` search and the
 `symbol-index+ripgrep-word` engine run through `rg`) but only a

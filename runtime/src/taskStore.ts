@@ -5,7 +5,7 @@ import type { ForgeTask } from "./types.js";
 import type { IndexedFile } from "./repositoryIndex.js";
 import type { ExtractedSymbol } from "./symbolExtract.js";
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 export type StoredSymbol = ExtractedSymbol & { path: string };
 
@@ -134,12 +134,22 @@ export class SqliteTaskStore {
       CREATE INDEX IF NOT EXISTS idx_repo_symbols_name ON repo_symbols(name);
       CREATE INDEX IF NOT EXISTS idx_repo_symbols_path ON repo_symbols(path);
 
+      CREATE TABLE IF NOT EXISTS repo_trigrams (
+        path TEXT NOT NULL,
+        trigram TEXT NOT NULL,
+        PRIMARY KEY (path, trigram)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_repo_trigrams_trigram ON repo_trigrams(trigram);
+
       INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
       VALUES (1, 'create_task_store', datetime('now'));
       INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
       VALUES (2, 'create_repo_index', datetime('now'));
       INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
       VALUES (3, 'create_repo_symbols', datetime('now'));
+      INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
+      VALUES (4, 'create_repo_trigrams', datetime('now'));
     `);
   }
 
@@ -191,6 +201,60 @@ export class SqliteTaskStore {
     }));
   }
 
+  /** Replace all trigram rows for one file (called when the file is (re)indexed). */
+  replaceTrigramsForFile(filePath: string, trigrams: string[]): void {
+    this.requireWritable();
+    this.db.exec("BEGIN");
+    try {
+      this.db.prepare("DELETE FROM repo_trigrams WHERE path = ?").run(filePath);
+      const insert = this.db.prepare("INSERT OR IGNORE INTO repo_trigrams (path, trigram) VALUES (?, ?)");
+      for (const trigram of trigrams) {
+        insert.run(filePath, trigram);
+      }
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  hasTrigramsForFile(filePath: string): boolean {
+    const row = this.db.prepare("SELECT 1 FROM repo_trigrams WHERE path = ? LIMIT 1").get(filePath);
+    return row !== undefined;
+  }
+
+  countTrigramFiles(): number {
+    const row = this.db.prepare("SELECT COUNT(DISTINCT path) AS n FROM repo_trigrams").get();
+    return row ? Number(row.n) : 0;
+  }
+
+  /**
+   * Files whose trigram set contains every one of the provided trigrams. This
+   * is the inverted-index candidate lookup for text search; the result is a
+   * superset of files actually containing the source term.
+   */
+  filesContainingAllTrigrams(trigrams: string[]): string[] {
+    const unique = [...new Set(trigrams)];
+    if (unique.length === 0) {
+      return [];
+    }
+    const placeholders = unique.map(() => "?").join(", ");
+    const rows = this.db
+      .prepare(`
+        SELECT path FROM repo_trigrams
+        WHERE trigram IN (${placeholders})
+        GROUP BY path
+        HAVING COUNT(*) = ?
+      `)
+      .all(...unique, unique.length);
+    return rows.map((row) => String(row.path));
+  }
+
+  /** Just the indexed file paths — a cheap in-sync check for text-search narrowing. */
+  indexedFilePaths(): string[] {
+    return this.db.prepare("SELECT path FROM repo_index").all().map((row) => String(row.path));
+  }
+
   loadIndexedFiles(): IndexedFile[] {
     const rows = this.db
       .prepare("SELECT path, language, byte_size, line_count, content_hash, indexed_at FROM repo_index")
@@ -230,6 +294,7 @@ export class SqliteTaskStore {
       if (!paths.has(filePath)) {
         this.db.prepare("DELETE FROM repo_index WHERE path = ?").run(filePath);
         this.db.prepare("DELETE FROM repo_symbols WHERE path = ?").run(filePath);
+        this.db.prepare("DELETE FROM repo_trigrams WHERE path = ?").run(filePath);
         removed += 1;
       }
     }
