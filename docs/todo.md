@@ -90,8 +90,16 @@ the core runtime smoke. Preserve these completed boundaries:
   `git.pull_request.published` event on the task. smoke:github-remote (pure
   parser) + smoke:pr-publish (e2e: local bare repo via pushurl + mock GitHub API,
   covering 400/409 guards, real push, payload/auth, task lineage).
-- Add GitHub integration for PR metadata and remote branch/fork awareness
-  (draft PRs are supported; fork-head `owner:branch` PRs are still TODO).
+- [x] Add GitHub integration for PR metadata and remote branch/fork awareness.
+  The opened PR is persisted on the task (`pullRequest`: number/url/state/merged/
+  draft/owner/repo/branches, SQLite-backed so it survives restart).
+  POST /git/pr-status refreshes the real state from GitHub (open / closed /
+  merged) with a per-request token — POST, not GET, so the token never enters a
+  URL — and records a `git.pull_request.state_changed` event when it moves.
+  Fork heads are supported via an optional `headOwner` (sent as `owner:branch`),
+  and the publish UI has a DRAFT toggle. This unblocked `1d`'s true merged-PR
+  wording: the completion header now shows the real PR number and live state
+  (docs/verification/1d-merged-pr).
 - [x] macOS wiring for PR publish: a PERSONAL ACCESS TOKEN block in Settings →
   GITHUB stores a PAT via KeychainStore (generic read/save/delete on the shared
   `githubAccessToken` account); `RuntimeClient.publishPullRequest` calls
@@ -101,8 +109,9 @@ the core runtime smoke. Preserve these completed boundaries:
   blockers, and the real PR number/URL/state once opened (`1d`/`24a`). Evidence:
   docs/verification/github-pat-settings/. The OAuth device flow (`6a`/`15a`)
   stays blocked on a founder-registered Client ID.
-- Follow-on: fork-head PRs (`owner:branch`), draft-PR toggle in the UI, and
-  showing PR review state as it changes.
+- Follow-on: detect the fork owner automatically (today `headOwner` must be
+  supplied), surface PR review/check status (approvals, CI) alongside the
+  merge state, and poll status in the background rather than on demand.
 - Add hosted-remote fixtures for push/branch-publish auth failures,
   disconnected networks, hosting-provider branch protection, and fork remotes.
 

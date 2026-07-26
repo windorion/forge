@@ -1544,10 +1544,34 @@ final class WorkspaceModel: ObservableObject {
         pullRequestPublishErrors[taskID]
     }
 
+    /// Refresh the real state (open / closed / merged) of the task's published
+    /// PR from GitHub. Read-only; the token is read from the Keychain per call.
+    func refreshPullRequestStatus(for task: ForgeTask) {
+        guard task.pullRequest != nil else { return }
+        guard let token = try? KeychainStore.read(account: KeychainStore.githubTokenAccount), !token.isEmpty else {
+            pullRequestPublishErrors[task.id] = "Add a GitHub token in Settings → Git to check PR status."
+            return
+        }
+
+        Task {
+            do {
+                _ = try await runtime.pullRequestStatus(
+                    GitPullRequestStatusRequest(taskID: task.id, githubToken: token)
+                )
+                // The runtime persists the refreshed state on the task; reload
+                // so every surface (including 1d) reflects it.
+                try await refreshTasks()
+                pullRequestPublishErrors.removeValue(forKey: task.id)
+            } catch {
+                pullRequestPublishErrors[task.id] = "PR status check failed: \(error.localizedDescription)"
+            }
+        }
+    }
+
     /// Publish a real GitHub PR from the reviewed preview. The token is read
     /// from the Keychain at call time and passed to the loopback runtime; it is
     /// never stored in view state.
-    func publishPullRequest(for task: ForgeTask, preview: GitPullRequestPreview) {
+    func publishPullRequest(for task: ForgeTask, preview: GitPullRequestPreview, draft: Bool = false) {
         guard let head = preview.head, let headBranch = preview.headBranch, !headBranch.isEmpty else {
             pullRequestPublishErrors[task.id] = "PR preview is missing the branch/HEAD needed to publish."
             return
@@ -1571,11 +1595,15 @@ final class WorkspaceModel: ObservableObject {
                     headBranch: headBranch,
                     title: preview.title,
                     body: preview.body.joined(separator: "\n"),
-                    draft: false,
+                    draft: draft,
+                    headOwner: nil,
                     githubToken: token,
                     confirmation: "PublishPullRequest"
                 )
                 gitPullRequestResults[task.id] = try await runtime.publishPullRequest(request)
+                // The runtime persisted the PR on the task; reload so 1d and the
+                // other surfaces pick up the real PR number/state.
+                try await refreshTasks()
                 gitStatusLastError = nil
             } catch {
                 pullRequestPublishErrors[task.id] = "Publish PR failed: \(error.localizedDescription)"

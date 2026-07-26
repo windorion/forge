@@ -988,6 +988,11 @@ export interface GitPullRequestPublishRequest {
   title: string;
   body: string;
   draft?: boolean;
+  /**
+   * Owner of the head branch when it lives in a fork. When set, the PR head is
+   * sent as `owner:branch`. Omit for same-repository branches.
+   */
+  headOwner?: string;
   // Supplied per-request by the app from the Keychain; never persisted or logged.
   githubToken: string;
   confirmation: "PublishPullRequest";
@@ -1049,6 +1054,28 @@ export interface ForgeTask {
   changedFiles: string[];
   reviewSummary?: string;
   queueRequest?: AgentRunQueueRequest;
+  pullRequest?: TaskPullRequest;
+}
+
+/** The pull request opened for this task, persisted so it survives restarts. */
+export interface TaskPullRequest {
+  number: number;
+  url: string;
+  /** GitHub PR state: "open" | "closed". `merged` is tracked separately. */
+  state: string;
+  merged: boolean;
+  draft: boolean;
+  owner: string;
+  repo: string;
+  baseBranch: string;
+  headBranch: string;
+  openedAt: string;
+  lastCheckedAt: string;
+}
+
+export interface GitPullRequestStatusRequest {
+  taskID: string;
+  githubToken: string;
 }
 
 export interface CreateTaskRequest {

@@ -342,6 +342,17 @@ struct WorkspaceView: View {
             surfaceCoordinator.present(.audit(taskID: parts[1]))
         case "cost" where parts.count >= 2:
             surfaceCoordinator.present(.cost(taskID: parts[1]))
+        case "selectTask" where parts.count >= 2:
+            if let task = workspace.tasks.first(where: { $0.id.hasPrefix(parts[1]) }) {
+                surfaceCoordinator.dismiss()
+                workspace.selectedTaskID = task.id
+            }
+        case "prReview" where parts.count >= 2:
+            if let task = workspace.tasks.first(where: { $0.id.hasPrefix(parts[1]) }) {
+                surfaceCoordinator.dismiss()
+                workspace.selectedTaskID = task.id
+                workspace.prepareGitPullRequestReview(for: task)
+            }
         case "templates":
             surfaceCoordinator.present(.templates)
         case "menubarPanel":
@@ -2130,6 +2141,8 @@ private struct RunCompleteState: View {
     @EnvironmentObject private var workspace: WorkspaceModel
     @EnvironmentObject private var surfaceCoordinator: WorkspaceSurfaceCoordinator
 
+    @State private var publishAsDraft = false
+
     var task: ForgeTask
 
     var body: some View {
@@ -2141,9 +2154,17 @@ private struct RunCompleteState: View {
                     .tracking(-0.3)
                     .lineLimit(1)
                 Spacer()
-                Text("#\(task.id.prefix(6)) · finished in \(completionDuration)")
-                    .font(.custom("JetBrains Mono", fixedSize: 10))
-                    .foregroundStyle(ForgeDesign.muted)
+                // Once a real PR exists, 1d shows its number and live state
+                // (open / draft / closed / merged) instead of the task ID.
+                if let pr = task.pullRequest {
+                    (Text("#\(pr.number) · \(pr.stateLabel.lowercased()) · finished in \(completionDuration)"))
+                        .font(.custom("JetBrains Mono", fixedSize: 10))
+                        .foregroundStyle(pr.merged ? ForgeDesign.ink : ForgeDesign.muted)
+                } else {
+                    Text("#\(task.id.prefix(6)) · finished in \(completionDuration)")
+                        .font(.custom("JetBrains Mono", fixedSize: 10))
+                        .foregroundStyle(ForgeDesign.muted)
+                }
             }
             .padding(.horizontal, 28)
             .frame(height: 62)
@@ -2248,22 +2269,34 @@ private struct RunCompleteState: View {
     @ViewBuilder
     private func pullRequestHandoffPanel(task: ForgeTask, preview: GitPullRequestPreview) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            if let result = workspace.gitPullRequestResult(for: task.id) {
+            // Prefer the persisted PR (survives restart and carries live state);
+            // fall back to the in-session publish result.
+            if let pr = task.pullRequest ?? workspace.gitPullRequestResult(for: task.id).map(TaskPullRequest.init(result:)) {
                 HStack(spacing: 8) {
-                    Text("✓ PR #\(result.number) opened")
+                    Text("PR #\(pr.number)")
                         .font(.custom("JetBrains Mono", fixedSize: 12).weight(.bold))
                         .foregroundStyle(ForgeDesign.ink)
-                    Text("\(result.headBranch) → \(result.baseBranch)\(result.draft ? " · draft" : "")")
+                    Text(pr.stateLabel)
+                        .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(pr.merged ? ForgeDesign.accent : Color.clear)
+                        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                    Text("\(pr.headBranch) → \(pr.baseBranch)")
                         .font(.custom("JetBrains Mono", fixedSize: 10.5))
                         .foregroundStyle(ForgeDesign.muted)
                     Spacer()
-                    if let url = URL(string: result.url) {
+                    Button("CHECK STATUS") {
+                        workspace.refreshPullRequestStatus(for: task)
+                    }
+                    .buttonStyle(ForgeSecondaryButtonStyle())
+                    if let url = URL(string: pr.url) {
                         Link("VIEW ON GITHUB →", destination: url)
                             .font(.custom("JetBrains Mono", fixedSize: 10.5).weight(.bold))
                             .foregroundStyle(ForgeDesign.ink)
                     }
                 }
-                Text(result.url)
+                Text(pr.url)
                     .font(.custom("JetBrains Mono", fixedSize: 10))
                     .foregroundStyle(ForgeDesign.muted)
                     .textSelection(.enabled)
@@ -2278,8 +2311,11 @@ private struct RunCompleteState: View {
                         .font(.custom("JetBrains Mono", fixedSize: 10.5))
                         .foregroundStyle(ForgeDesign.muted)
                     Spacer()
+                    Toggle("DRAFT", isOn: $publishAsDraft)
+                        .toggleStyle(.checkbox)
+                        .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
                     Button(workspace.isPublishingPullRequest(taskID: task.id) ? "PUBLISHING…" : "PUBLISH PULL REQUEST") {
-                        workspace.publishPullRequest(for: task, preview: preview)
+                        workspace.publishPullRequest(for: task, preview: preview, draft: publishAsDraft)
                     }
                     .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.accent, foreground: ForgeDesign.ink))
                     .disabled(

@@ -23,10 +23,23 @@ function assert(condition, message) {
 }
 
 let captured = null;
+let statusRequest = null;
+// Flipped by the test to make the mock report the PR as merged.
+let prMerged = false;
 const mock = createServer((req, res) => {
   let body = "";
   req.on("data", (chunk) => { body += chunk; });
   req.on("end", () => {
+    if (req.method === "GET" && req.url === "/repos/acme/widgets/pulls/42") {
+      statusRequest = { authorization: req.headers.authorization, apiVersion: req.headers["x-github-api-version"] };
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(
+        prMerged
+          ? { number: 42, state: "closed", merged: true, merged_at: "2026-07-25T12:00:00Z", draft: false }
+          : { number: 42, state: "open", merged: false, draft: false }
+      ));
+      return;
+    }
     captured = { method: req.method, url: req.url, authorization: req.headers.authorization, apiVersion: req.headers["x-github-api-version"], body: JSON.parse(body || "{}") };
     if (req.method === "POST" && req.url === "/repos/acme/widgets/pulls") {
       res.writeHead(201, { "content-type": "application/json" });
@@ -126,10 +139,66 @@ try {
     assert(after.events?.some((e) => e.type === "git.pull_request.published"), "Task missing pull_request.published event.");
     assert(result.relatedTask?.id === task.id, "PR result did not link the related task.");
 
+    // The PR is persisted on the task (survives restart, drives 1d wording).
+    assert(after.pullRequest?.number === 42, `Task did not persist the PR: ${JSON.stringify(after.pullRequest)}`);
+    assert(after.pullRequest.state === "open" && after.pullRequest.merged === false, "Freshly opened PR should be open and unmerged.");
+    assert(after.pullRequest.owner === "acme" && after.pullRequest.repo === "widgets", "Persisted PR lost owner/repo.");
+
+    // Status refresh: still open.
+    const openStatus = await post(port, "/git/pr-status", { taskID: task.id, githubToken: "test-token-123" });
+    assert(openStatus.pullRequest.state === "open" && openStatus.pullRequest.merged === false, "Open PR status wrong.");
+    assert(openStatus.summary.includes("is open"), `Unexpected open summary: ${openStatus.summary}`);
+    assert(statusRequest?.authorization === "Bearer test-token-123", "Status refresh did not send Bearer auth.");
+
+    // Status refresh after the PR is merged — this is what drives 1d's real
+    // merged wording (previously blocked on hosted PR publication).
+    prMerged = true;
+    const mergedStatus = await post(port, "/git/pr-status", { taskID: task.id, githubToken: "test-token-123" });
+    assert(mergedStatus.pullRequest.merged === true, "Merged PR status not reflected.");
+    assert(mergedStatus.pullRequest.state === "closed", "Merged PR should report closed state.");
+    assert(mergedStatus.summary.includes("merged"), `Unexpected merged summary: ${mergedStatus.summary}`);
+    const merged = (await get(port, "/tasks")).tasks.find((t) => t.id === task.id);
+    assert(merged.pullRequest.merged === true, "Merged state was not persisted on the task.");
+    assert(merged.events.some((e) => e.type === "git.pull_request.state_changed"), "State change was not recorded as an event.");
+
+    // Status guards.
+    const noPRTask = await post(port, "/tasks", { title: "No PR", objective: "Task without a published PR." });
+    const noPR = await postRaw(port, "/git/pr-status", { taskID: noPRTask.id, githubToken: "t" });
+    assert(noPR.status === 409, `Expected 409 refreshing a task with no PR, got ${noPR.status}`);
+    const noTokenStatus = await postRaw(port, "/git/pr-status", { taskID: task.id, githubToken: "" });
+    assert(noTokenStatus.status === 400, `Expected 400 without a token, got ${noTokenStatus.status}`);
+
+    // Fork head: the PR head is sent as owner:branch.
+    await git(["checkout", "-b", "feature/fork"], worktree);
+    await writeFile(join(worktree, "fork.txt"), "fork work\n", "utf8");
+    await git(["add", "fork.txt"], worktree);
+    await git(["commit", "-m", "Add fork work"], worktree);
+    await git(["push", "-u", "origin", "feature/fork"], worktree);
+    const forkTask = await post(port, "/tasks", { title: "Fork PR", objective: "Open a PR from a fork head." });
+    const forkPreview = await get(port, `/git/pr-preview?taskID=${forkTask.id}`);
+    assert(forkPreview.blockers.length === 0, `Fork preview blocked: ${JSON.stringify(forkPreview.blockers)}`);
+    await post(port, "/git/pr-publish", {
+      taskID: forkTask.id,
+      confirmation: "PublishPullRequest",
+      expectedHead: forkPreview.head,
+      expectedHeadBranch: "feature/fork",
+      headBranch: "feature/fork",
+      baseBranch: "main",
+      title: "Fork work",
+      body: "From a fork.",
+      headOwner: "contributor",
+      draft: true,
+      githubToken: "test-token-123"
+    });
+    assert(captured.body.head === "contributor:feature/fork", `Fork head not owner-qualified: ${captured.body.head}`);
+    assert(captured.body.draft === true, "Draft flag was not forwarded.");
+
     console.log("PR publish fixtures passed.");
     console.log("- Preview readiness, 400 (confirmation/token), 409 (stale HEAD, no API call)");
     console.log("- Real PR creation: payload, Bearer auth, owner/repo parsed from remote");
     console.log("- Head branch pushed to remote; task approval + event recorded");
+    console.log("- PR persisted on the task; status refresh reports open → merged");
+    console.log("- Status guards (no PR, no token); fork head owner:branch; draft flag");
   } finally {
     await stopRuntime(runtime);
   }

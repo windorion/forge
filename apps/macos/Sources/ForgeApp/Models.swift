@@ -28,6 +28,7 @@ struct ForgeTask: Identifiable, Codable, Hashable {
     var changedFiles: [String]
     var reviewSummary: String?
     var queueRequest: AgentRunQueueRequest?
+    var pullRequest: TaskPullRequest?
 
     static let sample = ForgeTask(
         id: "local-demo",
@@ -787,8 +788,60 @@ struct GitPullRequestPublishRequest: Codable, Hashable {
     var title: String
     var body: String
     var draft: Bool
+    /// Set when the head branch lives in a fork; sent to GitHub as `owner:branch`.
+    var headOwner: String?
     var githubToken: String
     var confirmation: String
+}
+
+/// The pull request opened for a task, persisted by the runtime.
+struct TaskPullRequest: Codable, Hashable {
+    var number: Int
+    var url: String
+    var state: String
+    var merged: Bool
+    var draft: Bool
+    var owner: String
+    var repo: String
+    var baseBranch: String
+    var headBranch: String
+    var openedAt: String
+    var lastCheckedAt: String
+
+    /// Handoff wording for the completion header.
+    var stateLabel: String {
+        if merged { return "MERGED" }
+        if state == "closed" { return "CLOSED" }
+        return draft ? "DRAFT" : "OPEN"
+    }
+
+    /// Bridge an in-session publish result into the persisted shape, so the
+    /// handoff panel can render before the task list reload lands.
+    init(result: GitPullRequestResult) {
+        number = result.number
+        url = result.url
+        state = result.state
+        merged = false
+        draft = result.draft
+        owner = result.owner
+        repo = result.repo
+        baseBranch = result.baseBranch
+        headBranch = result.headBranch
+        openedAt = result.generatedAt
+        lastCheckedAt = result.generatedAt
+    }
+}
+
+struct GitPullRequestStatusRequest: Codable, Hashable {
+    var taskID: String
+    var githubToken: String
+}
+
+struct GitPullRequestStatusResult: Codable, Hashable {
+    var generatedAt: String
+    var pullRequest: TaskPullRequest
+    var summary: String
+    var relatedTask: GitCommitRelatedTask?
 }
 
 struct GitPullRequestResult: Codable, Hashable {

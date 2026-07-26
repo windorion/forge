@@ -69,7 +69,7 @@ the actual visual source of truth.
 | Recovery | `2a` Task history | Verified | Rendered comparison done (docs/verification/2a). |
 | Recovery | `2b` Audit log | Verified | Rendered comparison done (docs/verification/2b). |
 | Compact states | `1c` Needs decision | Verified | Rendered comparison done (docs/verification/1c); real provider A/B options, paused/blocked durations live. |
-| Compact states | `1d` PR ready | Verified | Rendered comparison done (docs/verification/1d); real metrics/files/branch, finished-in timing; hosted PR publication remains P2. |
+| Compact states | `1d` PR ready | Verified | Rendered comparison done (docs/verification/1d); real metrics/files/branch, finished-in timing. Real PR publication landed in P2: the header now shows the actual PR number and live state (docs/verification/1d-merged-pr). |
 | Compact states | `1e` Guardrails | Verified | Rendered comparison done (docs/verification/1e); always-on badges, real preset count; Settings-scene system titlebar is a recorded platform limitation. |
 
 ## Measured Status

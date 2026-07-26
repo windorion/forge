@@ -61,6 +61,8 @@ import type {
   GitPullRequestPreview,
   GitPullRequestPublishRequest,
   GitPullRequestResult,
+  GitPullRequestStatusRequest,
+  TaskPullRequest,
   GitPushPreview,
   GitPushRequest,
   GitPushResult,
@@ -690,6 +692,13 @@ const server = createServer(async (request, response) => {
     if (request.method === "POST" && url.pathname === "/git/pr-publish") {
       const input = await readJson<GitPullRequestPublishRequest>(request);
       writeJson(response, 200, await publishGitPullRequest(input));
+      return;
+    }
+
+    // POST (not GET) so the token stays out of the URL/query string.
+    if (request.method === "POST" && url.pathname === "/git/pr-status") {
+      const input = await readJson<GitPullRequestStatusRequest>(request);
+      writeJson(response, 200, await refreshGitPullRequestStatus(input));
       return;
     }
 
@@ -3473,6 +3482,9 @@ function normalizeGitPullRequestPublishRequest(input: GitPullRequestPublishReque
     title: normalizeSingleLineField(input.title, "title", 1, 300),
     body: typeof input.body === "string" ? input.body.slice(0, 60_000) : "",
     draft: input.draft === true,
+    headOwner: typeof input.headOwner === "string" && input.headOwner.trim()
+      ? normalizeSingleLineField(input.headOwner, "headOwner", 1, 100)
+      : undefined,
     githubToken,
     confirmation: "PublishPullRequest"
   };
@@ -3578,7 +3590,8 @@ async function createGitHubPullRequest(
       },
       body: JSON.stringify({
         title: request.title,
-        head: request.headBranch,
+        // Fork heads are addressed as `owner:branch`; same-repo heads are bare.
+        head: request.headOwner ? `${request.headOwner}:${request.headBranch}` : request.headBranch,
         base: request.baseBranch,
         body: request.body,
         draft: request.draft === true
@@ -3657,6 +3670,19 @@ function recordGitPullRequestOnTask(
   const updatedTask: ForgeTask = {
     ...task,
     updatedAt: now,
+    pullRequest: {
+      number: created.number,
+      url: created.htmlUrl,
+      state: created.state,
+      merged: false,
+      draft: created.draft,
+      owner: remote.owner,
+      repo: remote.repo,
+      baseBranch: request.baseBranch,
+      headBranch: request.headBranch,
+      openedAt: now,
+      lastCheckedAt: now
+    },
     approvals: [
       ...task.approvals,
       {
@@ -3681,6 +3707,111 @@ function recordGitPullRequestOnTask(
     status: task.status,
     currentPhase: task.currentPhase,
     summary
+  };
+}
+
+/**
+ * Refresh the persisted PR's real state from GitHub (open / closed / merged).
+ * Read-only against GitHub; the token is per-request and never stored.
+ */
+async function refreshGitPullRequestStatus(
+  input: GitPullRequestStatusRequest
+): Promise<{ generatedAt: string; pullRequest: TaskPullRequest; summary: string; relatedTask?: GitPullRequestResult["relatedTask"] }> {
+  if (!isRecord(input)) {
+    throw new HttpError(400, "Pull request status request must be an object.");
+  }
+  const taskID = typeof input.taskID === "string" ? input.taskID.trim() : "";
+  if (!taskID) {
+    throw new HttpError(400, "Pull request status requires a taskID.");
+  }
+  const githubToken = typeof input.githubToken === "string" ? input.githubToken.trim() : "";
+  if (!githubToken) {
+    throw new HttpError(400, "Pull request status requires a GitHub token.");
+  }
+  const task = tasks.get(taskID);
+  if (!task) {
+    throw new HttpError(404, `Task ${taskID} was not found.`);
+  }
+  const existing = task.pullRequest;
+  if (!existing) {
+    throw new HttpError(409, "This task has no published pull request to refresh.");
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+  let response: Response;
+  try {
+    response = await fetch(
+      `${githubApiBase}/repos/${encodeURIComponent(existing.owner)}/${encodeURIComponent(existing.repo)}/pulls/${existing.number}`,
+      {
+        headers: {
+          Authorization: `Bearer ${githubToken}`,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          "User-Agent": "Forge"
+        },
+        signal: controller.signal
+      }
+    );
+  } catch (error) {
+    throw new HttpError(502, `GitHub pull request status request failed: ${(error as Error).message}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  const text = await response.text();
+  if (!response.ok) {
+    throw new HttpError(response.status === 401 || response.status === 403 ? 401 : 409, gitHubApiErrorMessage(response.status, text));
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new HttpError(502, "GitHub returned an unparseable pull request status response.");
+  }
+  if (!isRecord(parsed)) {
+    throw new HttpError(502, "GitHub pull request status response was not an object.");
+  }
+
+  const now = new Date().toISOString();
+  const merged = parsed.merged === true || typeof parsed.merged_at === "string";
+  const refreshed: TaskPullRequest = {
+    ...existing,
+    state: typeof parsed.state === "string" ? parsed.state : existing.state,
+    merged,
+    draft: parsed.draft === true,
+    lastCheckedAt: now
+  };
+
+  const stateChanged = refreshed.state !== existing.state || refreshed.merged !== existing.merged || refreshed.draft !== existing.draft;
+  const summary = merged
+    ? `Pull request #${refreshed.number} is merged.`
+    : refreshed.state === "closed"
+      ? `Pull request #${refreshed.number} was closed without merging.`
+      : `Pull request #${refreshed.number} is ${refreshed.draft ? "an open draft" : "open"}.`;
+
+  const updatedTask: ForgeTask = {
+    ...task,
+    updatedAt: stateChanged ? now : task.updatedAt,
+    pullRequest: refreshed,
+    events: stateChanged
+      ? [...task.events, event("git.pull_request.state_changed", summary)]
+      : task.events
+  };
+  tasks.set(updatedTask.id, updatedTask);
+  taskStore.saveTask(updatedTask);
+
+  return {
+    generatedAt: now,
+    pullRequest: refreshed,
+    summary,
+    relatedTask: {
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      currentPhase: task.currentPhase,
+      summary
+    }
   };
 }
 
@@ -12183,6 +12314,7 @@ function renderRuntimeHome(): string {
       <li><code>POST /git/push</code></li>
       <li><a href="/git/pr-preview">GET /git/pr-preview</a></li>
       <li><code>POST /git/pr-publish</code></li>
+      <li><code>POST /git/pr-status</code></li>
       <li><a href="/validation-presets">GET /validation-presets</a></li>
       <li><a href="/settings/model-provider">GET /settings/model-provider</a></li>
       <li><code>POST /settings/model-provider</code></li>
