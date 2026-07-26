@@ -13,6 +13,7 @@ import { symbolIndexMatches, mergeRepositoryMatches } from "./symbolSearch.js";
 import { extractTrigrams } from "./textIndex.js";
 import { textIndexCandidates } from "./textSearch.js";
 import { parseGitHubRemote } from "./githubRemote.js";
+import { detectStuckWork, thresholdsFromEnv, type StuckFinding } from "./stuckDetection.js";
 import {
   AgentRunStepProviderError,
   createModelProvider,
@@ -223,9 +224,23 @@ const repositoryImportantFiles = [
   "Package.swift"
 ];
 
+const stuckThresholds = thresholdsFromEnv(process.env);
+const stuckSweepIntervalMs = Number(process.env.FORGE_STUCK_SWEEP_INTERVAL_MS ?? 60_000);
+
 if (!observerMode) {
   recoverInterruptedAgentRunLoopsOnStartup();
   recoverInterruptedEditProposalTransactionsOnStartup();
+  // Live watchdog for work that wedges while the runtime keeps running.
+  // unref() so the sweep never holds the process open on shutdown.
+  if (stuckSweepIntervalMs > 0) {
+    setInterval(() => {
+      try {
+        recoverStuckAgentWork();
+      } catch (error) {
+        console.error(`Stuck-work sweep failed: ${(error as Error).message}`);
+      }
+    }, stuckSweepIntervalMs).unref();
+  }
 }
 const repositorySearchStopWords = new Set([
   "about",
@@ -692,6 +707,16 @@ const server = createServer(async (request, response) => {
     if (request.method === "POST" && url.pathname === "/git/pr-publish") {
       const input = await readJson<GitPullRequestPublishRequest>(request);
       writeJson(response, 200, await publishGitPullRequest(input));
+      return;
+    }
+
+    // Run the stalled-work sweep on demand. The same sweep runs periodically;
+    // this exposes it for operators and makes it deterministically testable.
+    if (request.method === "POST" && url.pathname === "/maintenance/recover-stuck") {
+      if (observerMode) {
+        throw new HttpError(409, "Observer runtimes do not recover stalled work.");
+      }
+      writeJson(response, 200, recoverStuckAgentWork());
       return;
     }
 
@@ -6987,6 +7012,114 @@ function recoverInterruptedAgentRunLoopsOnStartup(): void {
   }
 }
 
+/**
+ * Live watchdog for wedged agent work. Per-command timeouts cover a command
+ * that runs too long, and startup recovery covers a crash — but a running
+ * runtime whose step never settles (a stalled provider socket, a tool that
+ * never returns) had nothing watching it. This finalizes such work at a safe,
+ * resumable checkpoint: it only rewrites task state, never files, and always
+ * lands in Human Review rather than continuing autonomously.
+ */
+function recoverStuckAgentWork(nowISO: string = new Date().toISOString()): {
+  generatedAt: string;
+  recovered: { taskID: string; findings: StuckFinding[] }[];
+} {
+  const recovered: { taskID: string; findings: StuckFinding[] }[] = [];
+
+  for (const task of tasks.values()) {
+    const findings = detectStuckWork(task, nowISO, stuckThresholds);
+    if (findings.length === 0) {
+      continue;
+    }
+
+    const byKind = (kind: StuckFinding["kind"]) => new Map(
+      findings.filter((finding) => finding.kind === kind).map((finding) => [finding.id, finding])
+    );
+    const stuckSteps = byKind("AgentRunStep");
+    const stuckLoops = byKind("AgentRunLoop");
+    const stuckCommandRuns = byKind("TaskCommandRun");
+    const stuckValidationRuns = byKind("ValidationRun");
+    const stuckToolCalls = byKind("ToolCall");
+
+    for (const step of task.agentRunSteps) {
+      const finding = stuckSteps.get(step.id);
+      if (finding && step.status === "Running") {
+        step.status = "Failed";
+        step.completedAt = nowISO;
+        step.error = finding.reason;
+        step.resultSummary = finding.reason;
+      }
+    }
+    for (const loop of task.agentRunLoops) {
+      const finding = stuckLoops.get(loop.id);
+      if (finding && loop.status === "Running") {
+        loop.status = "Paused";
+        loop.stopReason = "StepTimedOut";
+        loop.completedAt = nowISO;
+        loop.summary = `Agent loop ${loop.id} was paused because a step exceeded its deadline. Forge left it as a resumable safe checkpoint.`;
+        delete loop.controlState;
+        delete loop.controlRequestedAt;
+      }
+    }
+    for (const run of task.taskCommandRuns) {
+      const finding = stuckCommandRuns.get(run.id);
+      if (finding && run.status === "Running") {
+        run.status = "Failed";
+        run.endedAt = nowISO;
+        run.outputSummary = finding.reason;
+        run.outputChunks.push({
+          id: randomUUID(),
+          stream: "system",
+          text: `${finding.reason}\n`,
+          createdAt: nowISO
+        });
+      }
+    }
+    for (const run of task.validationRuns) {
+      const finding = stuckValidationRuns.get(run.id);
+      if (finding && run.status === "Running") {
+        run.status = "Failed";
+        run.endedAt = nowISO;
+        run.summary = finding.reason;
+        for (const command of run.commands) {
+          if (command.status === "Running") {
+            command.status = "Failed";
+            command.endedAt = nowISO;
+            command.outputSummary = finding.reason;
+          }
+        }
+      }
+    }
+    for (const toolCall of task.toolCalls) {
+      const finding = stuckToolCalls.get(toolCall.id);
+      if (finding && toolCall.status === "Started") {
+        toolCall.status = "Failed";
+        toolCall.endedAt = nowISO;
+        toolCall.outputSummary = finding.reason;
+      }
+    }
+
+    const summary = `Forge recovered ${findings.length} stalled item(s) on this task: ${findings
+      .map((finding) => `${finding.kind} stalled ${finding.stalledMinutes}m`)
+      .join(", ")}.`;
+    task.status = "Human Review";
+    task.currentPhase = "Stalled Work Recovered";
+    task.reviewSummary = summary;
+    setAgent(task, "Manager", "Ready", "Recovered stalled agent work at a safe checkpoint.");
+    setAgent(task, "Coder", "Idle", "No in-flight process was resumed after the stall.");
+    setAgent(task, "Reviewer", "Active", "Review the recovered checkpoint before resuming.");
+    const recoveredEvent = event("agent.stalled_work.recovered", summary);
+    recoveredEvent.createdAt = nowISO;
+    task.events.push(recoveredEvent);
+    task.updatedAt = nowISO;
+    tasks.set(task.id, task);
+    taskStore.saveTask(task);
+    recovered.push({ taskID: task.id, findings });
+  }
+
+  return { generatedAt: nowISO, recovered };
+}
+
 type PersistedEditFileState = {
   appliedChange: AppliedFileChange;
   state: "Applied" | "RolledBack";
@@ -12315,6 +12448,7 @@ function renderRuntimeHome(): string {
       <li><a href="/git/pr-preview">GET /git/pr-preview</a></li>
       <li><code>POST /git/pr-publish</code></li>
       <li><code>POST /git/pr-status</code></li>
+      <li><code>POST /maintenance/recover-stuck</code></li>
       <li><a href="/validation-presets">GET /validation-presets</a></li>
       <li><a href="/settings/model-provider">GET /settings/model-provider</a></li>
       <li><code>POST /settings/model-provider</code></li>

@@ -661,6 +661,27 @@ conflict, starts the runtime against it, and verifies conflict stage reading,
 confirmation and stale-review gates, side/manual resolution, staging, and the
 no-auto-continue boundary. It does not touch the Forge worktree.
 
+## Repository Index, PR, And Watchdog Suites
+
+```bash
+cd runtime
+npm run smoke:repo-index-pure    # index metadata/summary (pure)
+npm run smoke:repo-index         # index build/incremental/persistence (e2e)
+npm run smoke:symbol-extract     # per-language symbol regexes (pure)
+npm run smoke:symbol-search      # index-backed symbol matches (pure)
+npm run smoke:text-search        # trigram extraction + candidates (pure)
+npm run smoke:github-remote      # git remote URL parsing (pure)
+npm run smoke:pr-publish         # PR create/status against a mock GitHub API
+npm run smoke:stuck-detection    # stalled-work detection (pure)
+npm run smoke:stuck-recovery     # live watchdog against real in-flight work
+npm run smoke:inspection-guard   # redundant-inspection guard (pure)
+npm run smoke:provider-recovery  # bounded malformed-output recovery (pure)
+```
+
+The pure suites need no repository, network, provider, or ripgrep. The e2e
+suites build temporary repositories (and, for `smoke:pr-publish`, a local mock
+GitHub API plus a bare remote) and never touch the Forge worktree.
+
 ## Build Checks
 
 ```bash
@@ -671,6 +692,9 @@ cd runtime && npm run smoke:core
 cd runtime && npm run smoke:git-conflicts
 cd runtime && npm run smoke:git-remote
 ```
+
+Before a release-shaped change, run every `smoke:*` script — the full suite is
+16 scripts and takes a few minutes.
 
 ## Current Limitations
 

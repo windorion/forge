@@ -150,8 +150,25 @@ the core runtime smoke. Preserve these completed boundaries:
 
 ## P4: Runtime And Permissions
 
-- Add task cancellation.
-- Add timeout and stuck-task recovery.
+- Add task cancellation. (Command-run cancellation and agent-loop pause/abort
+  already exist; a single task-level cancel that composes them is still open.)
+- [x] Add timeout and stuck-task recovery. Per-command timeouts and startup
+  recovery already covered "the command ran too long" and "the process died";
+  the gap was a runtime that stays up while its own work wedges (a stalled
+  provider socket, a tool that never settles). A live watchdog now sweeps for
+  non-terminal work past its deadline (runtime/src/stuckDetection.ts, pure and
+  clock-injected) and finalizes it at a safe, resumable checkpoint: steps fail
+  closed with elapsed evidence, loops pause with a new `StepTimedOut` stop
+  reason, command/validation runs and tool calls are closed with a system
+  output chunk, and the task lands in Human Review with an
+  `agent.stalled_work.recovered` event. It only rewrites task state, never
+  files. Thresholds are env-tunable (`FORGE_STUCK_STEP_MINUTES`,
+  `FORGE_STUCK_COMMAND_MINUTES`, `FORGE_STUCK_TOOL_MINUTES`; sweep interval via
+  `FORGE_STUCK_SWEEP_INTERVAL_MS`), and `POST /maintenance/recover-stuck` runs
+  the same sweep on demand. Items with missing/unparseable/future timestamps are
+  never swept — failing to detect beats killing live work.
+  smoke:stuck-detection (pure) + smoke:stuck-recovery (e2e against real
+  in-flight work, no restart involved).
 - Add clearer audit log exports.
 
 ## P5: Native macOS Product
