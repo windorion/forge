@@ -13,9 +13,9 @@ final class WorkspaceModel: ObservableObject {
     @Published var selectedTaskID: ForgeTask.ID? {
         didSet {
             if let selectedTaskID {
-                UserDefaults.standard.set(selectedTaskID, forKey: Self.selectedTaskPreferenceKey)
+                userDefaults.set(selectedTaskID, forKey: Self.selectedTaskPreferenceKey)
             } else {
-                UserDefaults.standard.removeObject(forKey: Self.selectedTaskPreferenceKey)
+                userDefaults.removeObject(forKey: Self.selectedTaskPreferenceKey)
             }
         }
     }
@@ -98,15 +98,22 @@ final class WorkspaceModel: ObservableObject {
     @Published private var pullRequestPublishErrors: [ForgeTask.ID: String] = [:]
     @Published private var updatingModelProviderSettings = false
 
-    private let runtime = RuntimeClient()
+    private let runtime: RuntimeClient
+    private let userDefaults: UserDefaults
     private let missionControlSupervisor = MissionControlRuntimeSupervisor()
     private var eventStreamTask: Task<Void, Never>?
     private var runtimeProcess: Process?
     private var preferredRepositoryRoot: URL?
     private var pendingMissionControlTaskID: ForgeTask.ID?
 
-    init() {
-        if let data = UserDefaults.standard.data(forKey: Self.missionControlRepositoriesKey),
+    init(
+        runtime: RuntimeClient = RuntimeClient(),
+        userDefaults: UserDefaults = .standard
+    ) {
+        self.runtime = runtime
+        self.userDefaults = userDefaults
+
+        if let data = userDefaults.data(forKey: Self.missionControlRepositoriesKey),
            let decoded = try? JSONDecoder().decode([MissionControlRepositorySnapshot].self, from: data) {
             missionControlRepositories = decoded.prefix(3).map { snapshot in
                 var sanitized = snapshot
@@ -118,7 +125,7 @@ final class WorkspaceModel: ObservableObject {
                 return sanitized
             }
         }
-        if let path = UserDefaults.standard.string(forKey: Self.repositoryPreferenceKey), !path.isEmpty {
+        if let path = userDefaults.string(forKey: Self.repositoryPreferenceKey), !path.isEmpty {
             preferredRepositoryRoot = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
             registerMissionControlRepository(path: preferredRepositoryRoot!.path(percentEncoded: false))
         }
@@ -282,6 +289,10 @@ final class WorkspaceModel: ObservableObject {
     }
 
     func refreshRuntimeHealth() {
+        refreshRuntimeHealth(connectEventStream: true)
+    }
+
+    func refreshRuntimeHealth(connectEventStream: Bool) {
         runtimeState = .checking
         runtimeLastError = nil
         statusMessage = "Checking runtime..."
@@ -300,7 +311,9 @@ final class WorkspaceModel: ObservableObject {
                 try await refreshValidationPresets()
                 await refreshGitStatusSnapshot()
                 await refreshValidationPermissionSnapshotIfPossible(for: selectedTaskID)
-                startEventStream()
+                if connectEventStream {
+                    startEventStream()
+                }
                 await ensureRepositoryIndex(health)
             } catch {
                 runtimeHealth = nil
@@ -1830,7 +1843,7 @@ final class WorkspaceModel: ObservableObject {
         let path = standardized.path(percentEncoded: false)
         registerMissionControlRepository(path: path)
         synchronizeMissionControlObservers()
-        UserDefaults.standard.set(path, forKey: Self.repositoryPreferenceKey)
+        userDefaults.set(path, forKey: Self.repositoryPreferenceKey)
         runtimeRepositoryRoot = path
         repositorySelectionMessage = "Connected \(standardized.lastPathComponent). Starting the local runtime…"
         statusMessage = repositorySelectionMessage ?? "Repository connected."
@@ -2239,7 +2252,7 @@ final class WorkspaceModel: ObservableObject {
             self.pendingMissionControlTaskID = nil
         }
         if selectedTaskID == nil,
-           let persisted = UserDefaults.standard.string(forKey: Self.selectedTaskPreferenceKey),
+           let persisted = userDefaults.string(forKey: Self.selectedTaskPreferenceKey),
            remoteTasks.contains(where: { $0.id == persisted }) {
             selectedTaskID = persisted
         }
@@ -2253,7 +2266,7 @@ final class WorkspaceModel: ObservableObject {
         let waiting = tasks.filter {
             $0.status == "Human Review" && $0.agentRunSteps.last?.action == "WaitForHumanReview"
         }.count
-        NSApp.dockTile.badgeLabel = waiting > 0 ? "\(waiting)" : ""
+        NSApp?.dockTile.badgeLabel = waiting > 0 ? "\(waiting)" : ""
     }
 
     private func refreshTaskQueueSnapshot() async {
@@ -2465,7 +2478,7 @@ final class WorkspaceModel: ObservableObject {
             return durable
         }
         guard let data = try? JSONEncoder().encode(durableSnapshots) else { return }
-        UserDefaults.standard.set(data, forKey: Self.missionControlRepositoriesKey)
+        userDefaults.set(data, forKey: Self.missionControlRepositoriesKey)
     }
 
     private func synchronizeMissionControlObservers() {

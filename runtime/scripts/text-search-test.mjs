@@ -31,6 +31,8 @@ assert(termTrigrams("ab").length === 0, "2-char term → no trigrams");
 assert(JSON.stringify(termTrigrams("auth")) === JSON.stringify(["aut", "uth"]), `unexpected term trigrams: ${JSON.stringify(termTrigrams("auth"))}`);
 const longTerm = "a".repeat(200);
 assert(termTrigrams(longTerm).length <= maxTrigramsPerTerm, "term trigrams must honor the cap");
+const variedLongTerm = Array.from({ length: 100 }, (_, index) => String.fromCodePoint(0x100 + index)).join("");
+assert(termTrigrams(variedLongTerm).length === maxTrigramsPerTerm, "distinct long term should stop exactly at the term cap");
 
 // A fake inverted index: trigram -> files containing it.
 const postings = {

@@ -3,7 +3,7 @@
 Document role: record the current product state, objective completion estimate,
 major gaps, and what "finished" means at each product horizon.
 
-Last updated: 2026-07-21
+Last updated: 2026-07-31
 
 ## One-Line Status
 
@@ -303,6 +303,23 @@ Implemented:
   blocked-to-repaired proposal handling, and bounded blocked preview-only
   proposal handling, plus failed project validation repair brief generation
   and follow-up repair proposal generation.
+- Dependency-free runtime unit/coverage entrypoints cover the pure parser,
+  search/index, recovery, and stuck-detection modules plus focused model
+  provider configuration and SQLite task-store boundaries. The native app now
+  has its first SwiftPM `ForgeAppTests` target covering runtime JSON contracts,
+  provider-settings encoding, pull-request state labels, appcast parsing, and
+  actionable runtime errors. An injected `URLSession` also gives
+  `RuntimeClient` direct mock-transport coverage for representative GET/POST,
+  query encoding, HTTP and transport failures, secret placement, and SSE frame
+  parsing, plus review, validation, and agent-loop control parameters. Direct
+  `RuntimeClient.swift` line coverage is now 50.55%. Four mock-runtime
+  `WorkspaceModel` tests cover connected/disconnected refreshes, task creation
+  and selection persistence, runtime-process eligibility, validation-preset
+  approval success/loading state, and validation failure cleanup; direct
+  `WorkspaceModel.swift` line coverage is now 15.46%. GitHub Actions now runs
+  all 20 Swift tests with coverage on macOS for pull requests and pushes to
+  `main`. SwiftUI rendering, most model actions, and native integrations remain
+  the largest direct-test gaps.
 - A local foundation walkthrough in `docs/development.md`.
 - App-visible runtime state and diagnostics for unchecked/checking/running,
   disconnected, wrong version, provider configuration issues, SSE stream state,

@@ -5149,3 +5149,182 @@ Next:
 - Lightweight symbol extraction is the natural next P3 increment (regex-based
   for common languages avoids a native Tree-sitter dependency and stays
   testable), building on the durable index just landed.
+
+## 2026-07-31 21:39:00 +0200 (CEST)
+
+Conversation summary:
+
+- Reviewed test coverage across the full repository, ran all 16 existing
+  runtime smoke suites, and added missing native and runtime unit coverage.
+
+Done:
+
+- Added dependency-free `test:unit` and `coverage:unit` runtime entrypoints.
+  The unit set now runs 10 test files with 175 assertions.
+- Added focused model-provider configuration tests for local/OpenAI/
+  unsupported providers, environment parsing, secret-safe status, fallbacks,
+  and fail-closed unavailable-provider methods.
+- Added SQLite task-store boundary tests for legacy payload defaults, ordering,
+  symbols, escaped search, trigrams, transaction rollback, index cleanup,
+  metadata, observer read-only behavior, missing observer databases, and
+  corrupt payload rejection. All 35 task-store functions were exercised in
+  the combined smoke/unit V8 run.
+- Closed pure-module branches for GitHub remote cleanup, stuck-work terminal
+  states and invalid loop clocks, symbol caps, and trigram caps.
+- Added the first SwiftPM `ForgeAppTests` target with five tests for runtime
+  task/health JSON contracts, provider-settings encoding semantics, persisted
+  PR display state, publish-result bridging, appcast parsing, and runtime error
+  messages.
+- Updated development and project-status documentation with test and coverage
+  commands plus the remaining direct-test limitations.
+- Verification passed: all 16 pre-change smoke suites; final runtime unit/
+  coverage run; SwiftPM build plus five native tests; `git diff --check`.
+
+Not done:
+
+- The 12,496-line runtime server remains primarily end-to-end tested (90% of
+  V8-reported functions exercised, 69 unhit), not decomposed into unit-testable
+  handlers.
+- SwiftUI rendering, `WorkspaceModel`, `RuntimeClient` networking, CLI command
+  behavior, widgets, and native system integrations still have little or no
+  direct automated coverage. Swift source line coverage is only a starting
+  baseline; rendered handoff evidence remains separate from behavioral tests.
+
+Next:
+
+- Extract server route/preflight helpers and inject `URLSession` into
+  `RuntimeClient` so the largest remaining runtime and native integration gaps
+  can be tested without launching the full product UI.
+
+## 2026-07-31 22:27:59 +0200 (CEST)
+
+Conversation summary:
+
+- Continued the repository-wide coverage work with the highest-priority native
+  networking gap identified in the preceding audit.
+
+Done:
+
+- Made `RuntimeClient` accept an injected `URLSession` while preserving its
+  existing default and base-URL call sites; all 49 request and event-stream
+  operations now use the injected transport.
+- Added nine mock-transport tests covering health decoding, task-creation JSON
+  contracts, percent-encoded diff paths, structured/plain-text HTTP errors,
+  non-HTTP fail-closed behavior, pull-request token body placement, SSE frame
+  parsing, explicit review/validation parameters, and agent-loop controls.
+- Kept request assertions reliable when Foundation represents a request body as
+  `httpBodyStream` rather than `httpBody`.
+- Raised direct `RuntimeClient.swift` line coverage from approximately 1.47%
+  to 44.93% (368 of 819 lines exercised); the full Swift source aggregate is
+  1.37% because most application/UI source remains intentionally uninstantiated
+  by these unit tests.
+- Verification passed: SwiftPM build and all 14 Swift tests with coverage;
+  runtime TypeScript build and all 10 unit suites with 175 assertions.
+- Updated development and project-status documentation with the new test scope
+  and remaining limitations.
+
+Not done:
+
+- Most `RuntimeClient` endpoints still lack one-by-one request/response tests.
+- SwiftUI rendering, `WorkspaceModel`, CLI commands, widgets, Keychain/GitHub
+  authentication, updater behavior, and native system integrations still have
+  little or no direct automated coverage.
+- The runtime server route handlers remain primarily smoke-tested rather than
+  decomposed into narrow unit-testable handlers.
+
+Next:
+
+- Add `WorkspaceModel` state-transition tests around connection recovery,
+  queue/task refresh, approvals, and event handling using the injectable client
+  boundary.
+- Extract selected runtime server route/preflight helpers and add direct tests
+  for authorization, validation, and error-shaping branches.
+- Add a small number of high-value macOS UI tests for launch, task creation,
+  review approval, and offline/reconnect behavior.
+
+## 2026-07-31 22:50:00 +0200 (CEST)
+
+Conversation summary:
+
+- Continued native coverage with the next largest gap: `WorkspaceModel`
+  connection, task-selection, persistence, and runtime-process state behavior.
+
+Done:
+
+- Made `WorkspaceModel` accept an injected `RuntimeClient` and `UserDefaults`
+  store while preserving production defaults, so native state tests do not
+  contact the real runtime or modify the user's preferences.
+- Preserved the existing no-argument health-refresh entrypoint used by SwiftUI
+  and added an explicit no-event-stream test path to prevent SSE reconnect
+  loops from making refresh tests nondeterministic.
+- Added four `WorkspaceModel` tests covering successful health refresh and
+  dependent snapshots, fail-closed health errors and stale-state clearing,
+  task creation/upsert/selection persistence, and runtime-process start-state
+  eligibility.
+- Fixed Dock badge refresh to tolerate a missing `NSApp`, which prevented a
+  real crash when the model is exercised in a headless SwiftPM test process.
+- Full SwiftPM verification passed with 18 tests. Direct line coverage is now
+  13.40% for `WorkspaceModel.swift`, 50.55% for `RuntimeClient.swift`, and
+  2.99% across the full app target (whose large SwiftUI surfaces remain mostly
+  uninstantiated by unit tests).
+- Runtime TypeScript build and all 10 unit suites with 175 assertions also
+  passed, along with `git diff --check`.
+
+Not done:
+
+- Most action-specific `WorkspaceModel` transitions still lack direct tests,
+  especially approval, validation, queue, git, and event-driven refresh paths.
+- SwiftUI interaction, Keychain/GitHub authentication, CLI behavior, widgets,
+  and native notification/Spotlight/menu integrations still need dedicated
+  test boundaries or UI tests.
+
+Next:
+
+- Add mock-runtime `WorkspaceModel` tests for approval and validation loading
+  flags, success state replacement, and failure cleanup.
+- Then add a small UI-test target for launch, task creation, review approval,
+  and offline/reconnect behavior once a deterministic app launch fixture is
+  available.
+
+## 2026-07-31 23:06:22 +0200 (CEST)
+
+Conversation summary:
+
+- Continued the next `WorkspaceModel` test increment and added the repository's
+  first GitHub Actions workflow so Swift tests run in CI/CD.
+
+Done:
+
+- Added validation-preset approval success coverage, including the immediate
+  loading flag, runtime request, updated task replacement, permission refresh,
+  and loading cleanup.
+- Added validation-run failure coverage, including the immediate loading flag,
+  actionable HTTP error text, unchanged task snapshot, and failure cleanup.
+- Added `.github/workflows/swift-tests.yml`, triggered for pull requests,
+  pushes to `main`, and manual dispatch. It uses the official
+  `actions/checkout@v6` action on `macos-14`, grants read-only repository
+  contents permission, cancels superseded runs, and has a 20-minute timeout.
+- The CI job runs `swift test --enable-code-coverage` and prints an
+  application-only LLVM coverage report. The exact reporting commands were
+  reproduced locally; the first attempt revealed that
+  `swift test --show-codecov-path` returns `Forge.json`, so the workflow now
+  correctly resolves the sibling `default.profdata` file.
+- Full SwiftPM verification passed with all 20 tests. Direct line coverage is
+  now 15.46% for `WorkspaceModel.swift`, 50.55% for `RuntimeClient.swift`, and
+  3.20% across the full app target.
+- Workflow YAML parsing, the runtime TypeScript build and all 10 unit suites
+  with 175 assertions, and `git diff --check` also passed.
+
+Not done:
+
+- The new workflow has not run remotely until these changes are pushed to
+  GitHub.
+- Queue mutation, git handoff actions, event-driven refresh behavior, and
+  SwiftUI interaction remain the next native test gaps.
+
+Next:
+
+- Push the workflow and confirm the first `Swift Tests / SwiftPM tests` check
+  on GitHub.
+- Add mock-runtime queue mutation and git preview state tests, then introduce a
+  deterministic macOS UI launch fixture.

@@ -1,0 +1,42 @@
+name: Swift Tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: swift-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  swift-tests:
+    name: SwiftPM tests
+    runs-on: macos-14
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Show Swift toolchain
+        run: swift --version
+
+      - name: Run tests with coverage
+        run: swift test --enable-code-coverage
+
+      - name: Print application coverage
+        run: |
+          COVERAGE_JSON="$(swift test --show-codecov-path)"
+          COVERAGE_PROFILE="$(dirname "$COVERAGE_JSON")/default.profdata"
+          TEST_BINARY="$(find .build -type f -path '*/ForgePackageTests.xctest/Contents/MacOS/ForgePackageTests' -print -quit)"
+          test -f "$COVERAGE_PROFILE"
+          test -n "$TEST_BINARY"
+          xcrun llvm-cov report "$TEST_BINARY" \
+            -instr-profile="$COVERAGE_PROFILE" \
+            -ignore-filename-regex='(/Tests/|\.build/)'

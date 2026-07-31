@@ -52,14 +52,25 @@ assert(!loopFindings.some((f) => f.id === "loop2"), "old loop with only fresh st
 // loop3 is Paused, so not a candidate at all.
 assert(!loopFindings.some((f) => f.id === "loop3"), "paused loop must not be flagged");
 
+// A bad loop timestamp must not hide its stuck child step or produce NaN evidence.
+const invalidLoopClock = detectStuckWork({
+  ...steps,
+  agentRunLoops: [{ id: "loop-bad-clock", status: "Running", startedAt: "invalid", stepIDs: ["old"] }]
+}, now).find((f) => f.id === "loop-bad-clock");
+assert(invalidLoopClock?.stalledMinutes === 0, "invalid loop timestamp should fail safe to zero elapsed minutes");
+
 // 5. Command / validation runs use their own threshold.
 const runs = {
   ...empty,
   taskCommandRuns: [
     { id: "cmd-old", status: "Running", startedAt: minutesAgo(25) },
-    { id: "cmd-new", status: "Running", startedAt: minutesAgo(18) }
+    { id: "cmd-new", status: "Running", startedAt: minutesAgo(18) },
+    { id: "cmd-done", status: "Passed", startedAt: minutesAgo(200) }
   ],
-  validationRuns: [{ id: "val-old", status: "Running", startedAt: minutesAgo(30) }]
+  validationRuns: [
+    { id: "val-old", status: "Running", startedAt: minutesAgo(30) },
+    { id: "val-done", status: "Failed", startedAt: minutesAgo(200) }
+  ]
 };
 const runFindings = detectStuckWork(runs, now);
 assert(runFindings.some((f) => f.id === "cmd-old" && f.kind === "TaskCommandRun"), "old command run not flagged");

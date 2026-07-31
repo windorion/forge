@@ -52,4 +52,10 @@ const names = (syms) => syms.map((s) => `${s.kind}:${s.name}@${s.line}`);
 ok(extractSymbols("Other", "anything").length === 0, "unknown lang → empty");
 ok(extractSymbols("TypeScript", "").length === 0, "empty content → empty");
 
+// The indexer must remain bounded even for generated-looking declaration floods.
+const declarationFlood = Array.from({ length: 2_050 }, (_, index) => `export function symbol${index}() {}`).join("\n");
+const bounded = extractSymbols("TypeScript", declarationFlood);
+ok(bounded.length === 2_000, `symbol cap should be 2000, got ${bounded.length}`);
+ok(bounded.at(-1)?.name === "symbol1999", "symbol cap should preserve the first declarations deterministically");
+
 console.log(`Symbol extract test passed: ${passed} assertions.`);

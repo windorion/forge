@@ -1,0 +1,123 @@
+#!/usr/bin/env node
+import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import { SqliteTaskStore } from "../dist/taskStore.js";
+
+let count = 0;
+const ok = (condition, message) => {
+  assert.ok(condition, message);
+  count += 1;
+};
+
+const tempRoot = await mkdtemp(join(tmpdir(), "forge-task-store-"));
+const dbPath = join(tempRoot, "nested", "forge.sqlite");
+
+try {
+  const store = new SqliteTaskStore(dbPath);
+  ok(store.loadTasks().length === 0, "new store is empty");
+  ok(store.getIndexMeta().lastIndexedAt === null, "new index metadata is empty");
+
+  const legacyTask = {
+    id: "legacy",
+    title: "Legacy task",
+    objective: "Exercise compatibility defaults",
+    status: "Human Review",
+    currentPhase: "Plan Review",
+    createdAt: "2026-07-31T10:00:00Z",
+    updatedAt: "2026-07-31T10:00:00Z",
+    taskCommandRuns: [{ id: "command-1" }],
+    validationRuns: [{ id: "validation-1" }],
+    validationRepairBriefs: [{ id: "brief-1", taskCommandRunID: "command-1" }],
+    messages: [{ id: "message-1" }],
+    editProposalRevisions: [{ id: "proposal-1" }],
+    editProposal: { id: "proposal-current" }
+  };
+  store.saveTask(legacyTask);
+  const restoredLegacy = store.loadTasks()[0];
+  ok(restoredLegacy.approvals.length === 0 && restoredLegacy.agentRunSteps.length === 0, "missing task arrays receive compatibility defaults");
+  ok(restoredLegacy.taskCommandRuns[0].outputChunks.length === 0, "legacy command output chunks default empty");
+  ok(restoredLegacy.validationRuns[0].presetID === "forge-post-apply" && restoredLegacy.validationRuns[0].commands.length === 0, "legacy validation metadata defaults");
+  ok(restoredLegacy.validationRepairBriefs[0].source === "TaskCommandRun", "legacy repair source inferred");
+  ok(restoredLegacy.messages[0].fileReferences.length === 0, "legacy message references default empty");
+  ok(restoredLegacy.editProposalRevisions[0].revisionNumber === 1 && restoredLegacy.editProposal.revisionNumber === 1, "legacy proposal revisions default to one");
+
+  store.saveTask({
+    ...legacyTask,
+    id: "newer",
+    title: "Newer task",
+    updatedAt: "2026-07-31T11:00:00Z",
+    taskCommandRuns: [],
+    validationRuns: [],
+    validationRepairBriefs: [],
+    messages: [],
+    editProposalRevisions: [],
+    editProposal: undefined
+  });
+  ok(store.loadTasks().map((task) => task.id).join(",") === "newer,legacy", "tasks load newest first");
+
+  store.replaceSymbolsForFile("src/a.ts", [
+    { kind: "class", name: "Widget", line: 4 },
+    { kind: "function", name: "WidgetFactory", line: 9 },
+    { kind: "const", name: "Percent%Name", line: 12 }
+  ]);
+  store.replaceSymbolsForFile("src/b.ts", [{ kind: "class", name: "widget", line: 2 }]);
+  ok(store.hasSymbolsForFile("src/a.ts") && store.countSymbols() === 4, "symbol rows stored and counted");
+  const exactFirst = store.searchSymbols("Widget");
+  ok(exactFirst[0].name.toLowerCase() === "widget" && exactFirst.some((symbol) => symbol.name === "WidgetFactory"), "symbol search ranks exact names first");
+  ok(store.searchSymbols("%").length === 1, "symbol LIKE wildcards are escaped");
+  ok(store.searchSymbols("   ").length === 0, "blank symbol query is rejected");
+  store.removeSymbolsForFile("src/a.ts");
+  ok(!store.hasSymbolsForFile("src/a.ts") && store.countSymbols() === 1, "symbol removal is file-scoped");
+
+  store.replaceTrigramsForFile("src/a.ts", ["abc", "bcd", "abc"]);
+  store.replaceTrigramsForFile("src/b.ts", ["abc", "xyz"]);
+  ok(store.countTrigramFiles() === 2, "trigram file count ignores duplicate postings");
+  ok(store.hasTrigramsForFile("src/a.ts") && !store.hasTrigramsForFile("src/missing.ts"), "trigram presence is file-scoped");
+  ok(store.filesContainingAllTrigrams(["abc", "bcd", "abc"]).join(",") === "src/a.ts", "trigram lookup intersects unique terms");
+  ok(store.filesContainingAllTrigrams([]).length === 0, "empty trigram lookup is empty");
+  assert.throws(() => store.replaceTrigramsForFile("src/bad.ts", [{}]), /bound|type/i);
+  count += 1;
+  ok(store.countTrigramFiles() === 2, "failed trigram transaction rolls back cleanly");
+
+  const indexedAt = "2026-07-31T12:00:00Z";
+  store.upsertIndexedFile({ path: "src/a.ts", language: "TypeScript", byteSize: 10, lineCount: 1, contentHash: "a", indexedAt });
+  store.upsertIndexedFile({ path: "src/b.ts", language: "TypeScript", byteSize: 20, lineCount: 2, contentHash: "b", indexedAt });
+  store.upsertIndexedFile({ path: "src/a.ts", language: "TypeScript", byteSize: 11, lineCount: 2, contentHash: "a2", indexedAt });
+  ok(store.loadIndexedFiles().find((file) => file.path === "src/a.ts")?.byteSize === 11, "indexed file upsert refreshes metadata");
+  ok(store.indexedFilePaths().length === 2, "indexed paths listed independently of metadata");
+  ok(store.removeIndexedFilesNotIn(new Set(["src/a.ts"])) === 1, "deleted indexed files are removed");
+  ok(store.countTrigramFiles() === 1 && !store.hasSymbolsForFile("src/b.ts"), "index deletion cascades symbol and trigram rows");
+
+  store.setIndexMeta({ lastIndexedAt: indexedAt, gitRoot: "/tmp/repo" });
+  ok(store.getIndexMeta().lastIndexedAt === indexedAt && store.getIndexMeta().gitRoot === "/tmp/repo", "index metadata round-trips");
+  store.close();
+
+  const readOnly = new SqliteTaskStore(dbPath, { readOnly: true });
+  ok(readOnly.loadTasks().length === 2 && readOnly.countTrigramFiles() === 1, "read-only store loads persisted task and index state");
+  assert.throws(() => readOnly.saveTask(legacyTask), /read-only in observer runtime mode/);
+  assert.throws(() => readOnly.replaceSymbolsForFile("x.ts", []), /Repository index is read-only/);
+  assert.throws(() => readOnly.replaceTrigramsForFile("x.ts", []), /Repository index is read-only/);
+  count += 3;
+  readOnly.close();
+
+  const missingReadOnly = new SqliteTaskStore(join(tempRoot, "missing", "forge.sqlite"), { readOnly: true });
+  ok(missingReadOnly.loadTasks().length === 0, "missing observer database uses an empty in-memory store");
+  assert.throws(() => missingReadOnly.setIndexMeta({ lastIndexedAt: indexedAt, gitRoot: null }), /Repository index is read-only/);
+  count += 1;
+  missingReadOnly.close();
+
+  const raw = new DatabaseSync(dbPath);
+  raw.prepare("UPDATE tasks SET payload_json = ? WHERE id = ?").run(new Uint8Array([1, 2, 3]), "legacy");
+  raw.close();
+  const corrupt = new SqliteTaskStore(dbPath, { readOnly: true });
+  assert.throws(() => corrupt.loadTasks(), /Invalid task payload/);
+  count += 1;
+  corrupt.close();
+} finally {
+  await rm(tempRoot, { recursive: true, force: true });
+}
+
+console.log(`Task store test passed: ${count} assertions.`);

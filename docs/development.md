@@ -682,12 +682,64 @@ The pure suites need no repository, network, provider, or ripgrep. The e2e
 suites build temporary repositories (and, for `smoke:pr-publish`, a local mock
 GitHub API plus a bare remote) and never touch the Forge worktree.
 
+## Unit Tests And Coverage
+
+The runtime has a dependency-free Node test entrypoint that gathers the pure
+module tests plus focused model-provider configuration and SQLite task-store
+boundary tests:
+
+```bash
+cd runtime
+npm run test:unit
+npm run coverage:unit
+```
+
+`coverage:unit` uses Node's built-in test coverage. The small pure search,
+index, recovery, parser, and stuck-detection modules are expected to stay near
+complete coverage. `modelProvider.ts` and `server.ts` are primarily exercised
+by the end-to-end smoke fixtures, so the unit-only aggregate must not be
+misread as whole-runtime coverage.
+
+The SwiftPM package now has a `ForgeAppTests` target for native runtime-contract
+decoding, provider-settings request encoding, pull-request display state,
+appcast parsing, and runtime error messages. `RuntimeClient` accepts an injected
+`URLSession`, so mock-transport tests also cover representative GET and JSON
+POST requests, percent-encoded query paths, structured and plain-text HTTP
+errors, non-HTTP fail-closed behavior, pull-request token placement, and SSE
+frame parsing:
+
+```bash
+swift test --enable-code-coverage
+```
+
+This remains an early native unit-test baseline. The 20 current tests raise
+direct `RuntimeClient.swift` line coverage to 50.55%, including explicit review,
+validation, and agent-loop control parameters. `WorkspaceModel` now accepts an
+isolated runtime and preferences store for tests; mock-runtime tests cover
+successful and failed health refreshes, task creation/upsert/selection,
+selection persistence, runtime-process start eligibility, validation-preset
+approval success/loading state, and validation failure cleanup, bringing
+direct `WorkspaceModel.swift` line coverage to 15.46%. SwiftUI rendering, most
+model actions, CLI commands, widgets, and native system integrations still rely
+on builds, handoff screenshot verification, and runtime smoke tests rather than
+direct Swift unit or UI coverage.
+
+GitHub Actions runs this same SwiftPM command on the `macos-14` hosted runner
+for every pull request, every push to `main`, and manual dispatch. The workflow
+also prints the application-only LLVM coverage report:
+
+```text
+.github/workflows/swift-tests.yml
+```
+
 ## Build Checks
 
 ```bash
 swift build
+swift test --enable-code-coverage
 cd runtime && npm run check
 cd runtime && npm run build
+cd runtime && npm run test:unit
 cd runtime && npm run smoke:core
 cd runtime && npm run smoke:git-conflicts
 cd runtime && npm run smoke:git-remote

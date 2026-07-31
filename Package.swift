@@ -24,6 +24,11 @@ let package = Package(
         .executableTarget(
             name: "ForgeWidgets",
             path: "apps/widgets/Sources/ForgeWidgets"
+        ),
+        .testTarget(
+            name: "ForgeAppTests",
+            dependencies: ["ForgeApp"],
+            path: "Tests/ForgeAppTests"
         )
     ]
 )

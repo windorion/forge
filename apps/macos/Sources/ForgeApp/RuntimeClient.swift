@@ -1,18 +1,27 @@
 import Foundation
 
 struct RuntimeClient {
-    var baseURL = URL(string: "http://127.0.0.1:17373")!
+    var baseURL: URL
+    private let session: URLSession
+
+    init(
+        baseURL: URL = URL(string: "http://127.0.0.1:17373")!,
+        session: URLSession = .shared
+    ) {
+        self.baseURL = baseURL
+        self.session = session
+    }
 
     func health() async throws -> RuntimeHealth {
         let url = baseURL.appending(path: "health")
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await session.data(from: url)
         try validate(response, data: data)
         return try JSONDecoder().decode(RuntimeHealth.self, from: data)
     }
 
     func listTasks() async throws -> [ForgeTask] {
         let url = baseURL.appending(path: "tasks")
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await session.data(from: url)
         try validate(response, data: data)
         let envelope = try JSONDecoder().decode(TaskListEnvelope.self, from: data)
         return envelope.tasks
@@ -26,14 +35,14 @@ struct RuntimeClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = Data("{}".utf8)
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(RuntimeIndexInfo.self, from: data)
     }
 
     func taskQueue() async throws -> TaskQueueSnapshot {
         let url = baseURL.appending(path: "queue")
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await session.data(from: url)
         try validate(response, data: data)
         return try JSONDecoder().decode(TaskQueueSnapshot.self, from: data)
     }
@@ -44,7 +53,7 @@ struct RuntimeClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(TaskQueueSettingsRequest(concurrencyLimit: limit))
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(TaskQueueSnapshot.self, from: data)
     }
@@ -55,7 +64,7 @@ struct RuntimeClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(TaskQueueReorderRequest(orderedTaskIDs: taskIDs))
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(TaskQueueSnapshot.self, from: data)
     }
@@ -66,14 +75,14 @@ struct RuntimeClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = Data("{}".utf8)
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(TaskQueueSnapshot.self, from: data)
     }
 
     func listValidationPresets() async throws -> ValidationPresetListEnvelope {
         let url = baseURL.appending(path: "validation-presets")
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await session.data(from: url)
         try validate(response, data: data)
         return try JSONDecoder().decode(ValidationPresetListEnvelope.self, from: data)
     }
@@ -82,7 +91,7 @@ struct RuntimeClient {
         let url = baseURL
             .appending(path: "git")
             .appending(path: "status")
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await session.data(from: url)
         try validate(response, data: data)
         return try JSONDecoder().decode(GitStatusSnapshot.self, from: data)
     }
@@ -100,7 +109,7 @@ struct RuntimeClient {
             throw RuntimeClientError.invalidResponse
         }
 
-        let (data, response) = try await URLSession.shared.data(from: requestURL)
+        let (data, response) = try await session.data(from: requestURL)
         try validate(response, data: data)
         return try JSONDecoder().decode(GitFileDiff.self, from: data)
     }
@@ -109,7 +118,7 @@ struct RuntimeClient {
         let url = baseURL
             .appending(path: "git")
             .appending(path: "conflicts")
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await session.data(from: url)
         try validate(response, data: data)
         return try JSONDecoder().decode(GitConflictSnapshot.self, from: data)
     }
@@ -124,7 +133,7 @@ struct RuntimeClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(requestBody)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(GitConflictResolutionResult.self, from: data)
     }
@@ -144,7 +153,7 @@ struct RuntimeClient {
             throw RuntimeClientError.invalidResponse
         }
 
-        let (data, response) = try await URLSession.shared.data(from: requestURL)
+        let (data, response) = try await session.data(from: requestURL)
         try validate(response, data: data)
         return try JSONDecoder().decode(GitCommitPreview.self, from: data)
     }
@@ -158,7 +167,7 @@ struct RuntimeClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(requestBody)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(GitCreateCommitResult.self, from: data)
     }
@@ -183,7 +192,7 @@ struct RuntimeClient {
             throw RuntimeClientError.invalidResponse
         }
 
-        let (data, response) = try await URLSession.shared.data(from: requestURL)
+        let (data, response) = try await session.data(from: requestURL)
         try validate(response, data: data)
         return try JSONDecoder().decode(GitBranchPreview.self, from: data)
     }
@@ -197,7 +206,7 @@ struct RuntimeClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(requestBody)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(GitBranchResult.self, from: data)
     }
@@ -229,7 +238,7 @@ struct RuntimeClient {
             throw RuntimeClientError.invalidResponse
         }
 
-        let (data, response) = try await URLSession.shared.data(from: requestURL)
+        let (data, response) = try await session.data(from: requestURL)
         try validate(response, data: data)
         return try JSONDecoder().decode(GitBranchPublishPreview.self, from: data)
     }
@@ -243,7 +252,7 @@ struct RuntimeClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(requestBody)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(GitBranchPublishResult.self, from: data)
     }
@@ -263,7 +272,7 @@ struct RuntimeClient {
             throw RuntimeClientError.invalidResponse
         }
 
-        let (data, response) = try await URLSession.shared.data(from: requestURL)
+        let (data, response) = try await session.data(from: requestURL)
         try validate(response, data: data)
         return try JSONDecoder().decode(GitPushPreview.self, from: data)
     }
@@ -277,7 +286,7 @@ struct RuntimeClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(requestBody)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(GitPushResult.self, from: data)
     }
@@ -297,7 +306,7 @@ struct RuntimeClient {
             throw RuntimeClientError.invalidResponse
         }
 
-        let (data, response) = try await URLSession.shared.data(from: requestURL)
+        let (data, response) = try await session.data(from: requestURL)
         try validate(response, data: data)
         return try JSONDecoder().decode(GitPullRequestPreview.self, from: data)
     }
@@ -311,7 +320,7 @@ struct RuntimeClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(requestBody)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(GitPullRequestResult.self, from: data)
     }
@@ -325,7 +334,7 @@ struct RuntimeClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(requestBody)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(GitPullRequestStatusResult.self, from: data)
     }
@@ -334,7 +343,7 @@ struct RuntimeClient {
         let url = baseURL
             .appending(path: "settings")
             .appending(path: "model-provider")
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await session.data(from: url)
         try validate(response, data: data)
         return try JSONDecoder().decode(ModelProviderSettingsEnvelope.self, from: data)
     }
@@ -348,7 +357,7 @@ struct RuntimeClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(update)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(ModelProviderSettingsEnvelope.self, from: data)
     }
@@ -358,7 +367,7 @@ struct RuntimeClient {
             .appending(path: "tasks")
             .appending(path: taskID)
             .appending(path: "validation-permissions")
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await session.data(from: url)
         try validate(response, data: data)
         return try JSONDecoder().decode(ValidationPermissionEnvelope.self, from: data)
     }
@@ -370,7 +379,7 @@ struct RuntimeClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(CreateTaskRequest(title: title, objective: objective))
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
@@ -385,7 +394,7 @@ struct RuntimeClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(CreateTaskMessageRequest(content: content))
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
@@ -400,7 +409,7 @@ struct RuntimeClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = Data("{}".utf8)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
@@ -415,7 +424,7 @@ struct RuntimeClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(ApprovePlanRequest(note: note))
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
@@ -441,7 +450,7 @@ struct RuntimeClient {
             )
         )
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
@@ -456,7 +465,7 @@ struct RuntimeClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = Data("{}".utf8)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
@@ -471,7 +480,7 @@ struct RuntimeClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = Data("{}".utf8)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
@@ -486,7 +495,7 @@ struct RuntimeClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = Data("{}".utf8)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
@@ -501,7 +510,7 @@ struct RuntimeClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = Data("{}".utf8)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
@@ -523,7 +532,7 @@ struct RuntimeClient {
             EditProposalFileReviewRequest(fileChangeID: fileChangeID, decision: decision, note: note)
         )
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
@@ -538,7 +547,7 @@ struct RuntimeClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(EditProposalDecisionRequest(note: note))
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
@@ -553,7 +562,7 @@ struct RuntimeClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(EditProposalDecisionRequest(note: note))
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
@@ -568,7 +577,7 @@ struct RuntimeClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(EditProposalDecisionRequest(note: note))
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
@@ -587,7 +596,7 @@ struct RuntimeClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(ApproveValidationPresetRequest(presetID: presetID, note: note))
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
@@ -602,7 +611,7 @@ struct RuntimeClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(RunValidationRequest(presetID: presetID))
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
@@ -617,7 +626,7 @@ struct RuntimeClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(RunTaskCommandRequest(commandID: commandID))
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
@@ -632,7 +641,7 @@ struct RuntimeClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(RunAgentStepRequest(preferredCommandID: preferredCommandID))
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
@@ -649,7 +658,7 @@ struct RuntimeClient {
             RunAgentLoopRequest(preferredCommandID: preferredCommandID, maxSteps: maxSteps, resumeLoopID: nil)
         )
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
@@ -679,7 +688,7 @@ struct RuntimeClient {
             RunAgentLoopRequest(preferredCommandID: preferredCommandID, maxSteps: maxSteps, resumeLoopID: loopID)
         )
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
@@ -699,7 +708,7 @@ struct RuntimeClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(AgentRunLoopControlRequest(loopID: loopID, note: note))
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
@@ -719,7 +728,7 @@ struct RuntimeClient {
             RerunRepairCommandRequest(commandRerunEvidenceID: commandRerunEvidenceID)
         )
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
@@ -734,7 +743,7 @@ struct RuntimeClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(CancelTaskCommandRequest(taskCommandRunID: taskCommandRunID, note: note))
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         try validate(response, data: data)
         return try JSONDecoder().decode(ForgeTask.self, from: data)
     }
@@ -744,7 +753,7 @@ struct RuntimeClient {
             let streamTask = Task {
                 do {
                     let url = baseURL.appending(path: "events")
-                    let (bytes, response) = try await URLSession.shared.bytes(from: url)
+                    let (bytes, response) = try await session.bytes(from: url)
                     try validate(response)
                     continuation.yield(RuntimeStreamEvent(type: "stream.connected", data: ""))
 

@@ -39,5 +39,6 @@ assert(parseGitHubRemote("   ") === null, "blank → null");
 assert(parseGitHubRemote("not-a-url") === null, "garbage → null");
 assert(parseGitHubRemote("https://github.com/acme") === null, "owner only → null");
 assert(parseGitHubRemote("/local/path/repo.git") === null, "local path → null");
+assert(parseGitHubRemote("git@github.com:acme/.git") === null, "empty repo after .git cleanup → null");
 
 console.log(`GitHub remote test passed: ${count} assertions.`);

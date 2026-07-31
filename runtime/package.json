@@ -8,6 +8,8 @@
     "dev": "npm run build && npm run start",
     "start": "node --disable-warning=ExperimentalWarning dist/server.js",
     "check": "tsc -p tsconfig.json --noEmit",
+    "test:unit": "npm run build && node --test scripts/*-test.mjs",
+    "coverage:unit": "npm run build && node --test --experimental-test-coverage --test-coverage-include='dist/*.js' scripts/*-test.mjs",
     "smoke:core": "npm run build && node scripts/smoke-core.mjs",
     "smoke:queue": "npm run build && node scripts/task-queue-fixtures.mjs",
     "smoke:observer": "npm run build && node scripts/observer-runtime-fixtures.mjs",
