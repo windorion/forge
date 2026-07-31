@@ -5378,13 +5378,17 @@ Done:
   sessions.
 - Ran SwiftPM with code coverage and `strict-concurrency=complete`; all 20 tests
   passed with zero failures, and `git diff --check` passed.
+- Committed and pushed the compatibility changes as `281d6f9`.
+- Confirmed GitHub Actions run `30666733456` completed successfully on Swift
+  6.1.2: all 20 tests passed, the application coverage report completed, and
+  the full app target reported 3.05% line coverage on the CI toolchain.
 
 Not done:
 
-- These compatibility fixes still need to be committed, pushed to `main`, and
-  confirmed green in GitHub Actions.
+- Queue mutation, git handoff state, event-driven refresh behavior, and SwiftUI
+  interaction remain the next native test gaps.
 
 Next:
 
-- Push the compatibility fix, monitor the third `Swift Tests` run through the
-  coverage-reporting step, and inspect its job log if it does not pass.
+- Add deterministic queue mutation and git preview tests, then introduce a
+  macOS UI-test launch fixture.
