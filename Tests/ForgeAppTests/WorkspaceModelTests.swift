@@ -96,7 +96,11 @@ final class WorkspaceModelTests: XCTestCase {
         defer { session.invalidateAndCancel() }
         let model = WorkspaceModel(runtime: client, userDefaults: defaults)
 
-        model.createTask(title: "Coverage", objective: "Test WorkspaceModel")
+        model.createTask(
+            title: "Coverage",
+            objective: "Test WorkspaceModel",
+            connectEventStream: false
+        )
 
         let created = await eventually {
             model.selectedTaskID == "task-1" && recorder.paths.contains("GET /api/git/status")
@@ -137,7 +141,11 @@ final class WorkspaceModelTests: XCTestCase {
         model.tasks = [task]
         model.selectedTaskID = task.id
 
-        model.approveValidationPreset(for: task, presetID: "swift-tests")
+        model.approveValidationPreset(
+            for: task,
+            presetID: "swift-tests",
+            connectEventStream: false
+        )
 
         XCTAssertTrue(model.isApprovingValidationPreset(taskID: task.id, presetID: "swift-tests"))
         let completed = await eventually {

@@ -416,7 +416,7 @@ final class WorkspaceModel: ObservableObject {
         )
     }
 
-    func createTask(title: String, objective: String) {
+    func createTask(title: String, objective: String, connectEventStream: Bool = true) {
         Task {
             do {
                 let task = try await runtime.createTask(title: title, objective: objective)
@@ -425,7 +425,9 @@ final class WorkspaceModel: ObservableObject {
                 statusMessage = "Task created. Agent Loop v0 started."
                 await refreshGitStatusSnapshot()
                 await refreshValidationPermissionSnapshotIfPossible(for: task.id)
-                startEventStream()
+                if connectEventStream {
+                    startEventStream()
+                }
             } catch {
                 statusMessage = "Create task failed: \(error.localizedDescription)"
             }
@@ -742,7 +744,11 @@ final class WorkspaceModel: ObservableObject {
         reviewingEditProposalFileKeys.contains("\(taskID):\(fileChangeID)")
     }
 
-    func approveValidationPreset(for task: ForgeTask, presetID: ValidationPreset.ID) {
+    func approveValidationPreset(
+        for task: ForgeTask,
+        presetID: ValidationPreset.ID,
+        connectEventStream: Bool = true
+    ) {
         let key = validationPresetActionKey(taskID: task.id, presetID: presetID)
         approvingValidationPresetTaskIDs.insert(key)
 
@@ -753,7 +759,9 @@ final class WorkspaceModel: ObservableObject {
                 selectedTaskID = updatedTask.id
                 statusMessage = "Validation preset approved."
                 await refreshValidationPermissionSnapshotIfPossible(for: updatedTask.id)
-                startEventStream()
+                if connectEventStream {
+                    startEventStream()
+                }
             } catch {
                 statusMessage = "Approve validation preset failed: \(error.localizedDescription)"
             }

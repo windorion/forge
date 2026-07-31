@@ -5356,3 +5356,35 @@ Next:
 
 - Push the runner fix to `main`, monitor the new workflow run to completion,
   and inspect logs if any later step fails.
+
+## 2026-07-31 23:28:22 +0200 (CEST)
+
+Conversation summary:
+
+- Investigated the second GitHub Actions failure, fixed Swift 6 actor-isolation
+  compilation errors, and hardened asynchronous `WorkspaceModel` tests.
+
+Done:
+
+- Confirmed `macos-15` supplies a compatible Swift 6 toolchain and reaches the
+  application compilation stage.
+- Marked Dock-menu UI actions as main-actor isolated and moved notification
+  activation/deep-link delivery onto the main actor for compatibility with the
+  stricter Xcode 16.4 SDK annotations used by the runner.
+- Added opt-out parameters for post-mutation event-stream startup while keeping
+  production defaults unchanged.
+- Updated the task-creation and validation-approval tests to skip SSE reconnect
+  loops, preventing background requests from outliving invalidated mock URL
+  sessions.
+- Ran SwiftPM with code coverage and `strict-concurrency=complete`; all 20 tests
+  passed with zero failures, and `git diff --check` passed.
+
+Not done:
+
+- These compatibility fixes still need to be committed, pushed to `main`, and
+  confirmed green in GitHub Actions.
+
+Next:
+
+- Push the compatibility fix, monitor the third `Swift Tests` run through the
+  coverage-reporting step, and inspect its job log if it does not pass.

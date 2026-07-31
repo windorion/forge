@@ -81,17 +81,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         return menu
     }
 
+    @MainActor
     @objc private func openTaskMenuItem(_ sender: NSMenuItem) {
         guard let taskID = sender.representedObject as? String else { return }
         NSApp.activate(ignoringOtherApps: true)
         NotificationCenter.default.post(name: .forgeOpenTaskDeepLink, object: taskID)
     }
 
+    @MainActor
     @objc private func newTaskMenuItem() {
         NSApp.activate(ignoringOtherApps: true)
         NotificationCenter.default.post(name: .forgeNewTask, object: nil)
     }
 
+    @MainActor
     @objc private func missionControlMenuItem() {
         NSApp.activate(ignoringOtherApps: true)
         NotificationCenter.default.post(name: .forgeToggleMissionControl, object: nil)
@@ -151,8 +154,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         guard response.actionIdentifier != "forge.later",
               let taskID = response.notification.request.content.userInfo["taskID"] as? String
         else { return }
-        NSApp.activate(ignoringOtherApps: true)
-        NotificationCenter.default.post(name: .forgeOpenTaskDeepLink, object: taskID)
+        Task { @MainActor in
+            NSApp.activate(ignoringOtherApps: true)
+            NotificationCenter.default.post(name: .forgeOpenTaskDeepLink, object: taskID)
+        }
     }
 
     /// Show banners even while Forge is frontmost.
