@@ -5328,3 +5328,31 @@ Next:
   on GitHub.
 - Add mock-runtime queue mutation and git preview state tests, then introduce a
   deterministic macOS UI launch fixture.
+
+## 2026-07-31 23:13:56 +0200 (CEST)
+
+Conversation summary:
+
+- Published the test-coverage work to `main`, inspected the first GitHub
+  Actions run, and corrected its Swift toolchain mismatch.
+
+Done:
+
+- Committed and pushed the coverage and CI changes as `5cd2dff`.
+- Confirmed the `Swift Tests` workflow was triggered by the push to `main`.
+- Retrieved the failed job log and identified that `macos-14` provided Swift
+  5.10 while the package manifest requires Swift tools 6.0.
+- Updated the workflow runner to `macos-15`, whose default Xcode toolchain
+  supports Swift 6.
+- Revalidated the workflow YAML and ran the complete Swift suite locally with
+  code coverage: all 20 tests passed.
+
+Not done:
+
+- The runner update still needs to be committed, pushed, and confirmed green
+  in GitHub Actions.
+
+Next:
+
+- Push the runner fix to `main`, monitor the new workflow run to completion,
+  and inspect logs if any later step fails.
