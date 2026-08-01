@@ -3,7 +3,7 @@
 Document role: maintain the active backlog, priority order, and next concrete
 engineering tasks for Forge.
 
-Last updated: 2026-07-15
+Last updated: 2026-07-31
 
 ## Rule
 
@@ -150,6 +150,10 @@ the core runtime smoke. Preserve these completed boundaries:
 
 ## P4: Runtime And Permissions
 
+- [x] Execute the seven-phase, behavior-preserving `runtime/src/server.ts`
+  decomposition in `docs/runtime_server_refactor.md`. The packaged entry is now
+  a one-line bootstrap; 55-route contracts, direct unit/coverage gates, and all
+  17 smoke scripts pass without weakening approval or observer boundaries.
 - Add task cancellation. (Command-run cancellation and agent-loop pause/abort
   already exist; a single task-level cancel that composes them is still open.)
 - [x] Add timeout and stuck-task recovery. Per-command timeouts and startup

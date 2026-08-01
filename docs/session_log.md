@@ -5392,3 +5392,174 @@ Next:
 
 - Add deterministic queue mutation and git preview tests, then introduce a
   macOS UI-test launch fixture.
+
+## 2026-07-31 23:47:02 +0200 (CEST)
+
+Conversation summary:
+
+- Launched the local Forge macOS app for inspection and produced a concrete,
+  behavior-preserving plan to decompose the runtime server monolith.
+
+Done:
+
+- Reused the repository's standard `script/build_and_run.sh` entrypoint to
+  build Swift, build the bundled TypeScript runtime, stage `dist/Forge.app`,
+  and launch it as a native app bundle.
+- Re-launched after a later process check found no running app and confirmed
+  the new `ForgeApp` process remained alive.
+- Measured `runtime/src/server.ts`: 12,496 lines, 73.9% of runtime TypeScript
+  source, about 376 top-level functions, 55 route branches, and a 437-line
+  request handler.
+- Added `docs/runtime_server_refactor.md` with invariants, target modules,
+  dependency contracts, seven migration phases, review rules, verification
+  matrix, and completion criteria.
+- Linked the plan from the documentation map, runtime architecture, and P4
+  backlog, and corrected the development guide's Swift CI runner to
+  `macos-15`.
+- `git diff --check` passed.
+
+Not done:
+
+- No runtime production code has been moved yet; this conversation establishes
+  the reviewed extraction sequence and safety gates.
+- The documentation changes have not been committed or pushed.
+
+Next:
+
+- Start Phase 0 by adding a route manifest plus HTTP, observer-mode, error,
+  CORS, and SSE characterization tests before extracting production logic.
+
+## 2026-08-01 08:07:58 +0200 (CEST)
+
+Conversation summary:
+
+- Diagnosed why the current Forge launch does not show the expected sign-in
+  or primary task screen, and verified the actual rendered startup state.
+
+Done:
+
+- Traced the app entry point, workspace state router, onboarding gate,
+  persisted selection restoration, and sign-in presentation path.
+- Confirmed local preferences suppress onboarding and retain a demo repository
+  selection, while the runtime at `127.0.0.1:17373` is not running.
+- Launched the existing `dist/Forge.app` and captured the visible window,
+  confirming the app opens to the `OfflineWorkspaceState` with zero loaded
+  tasks and a `WAITING FOR NETWORK` message.
+- Confirmed `SignInView` is implemented as an optional floating GitHub panel,
+  not as the root launch/authentication gate.
+
+Not done:
+
+- No startup routing, authentication behavior, preferences, or UI code was
+  changed.
+
+Next:
+
+- Decide the intended startup state machine (sign-in, onboarding, repository
+  selection, main workspace, and offline fallback), then implement it as an
+  explicit root flow rather than relying on workspace state plus debug-era
+  persisted preferences.
+
+## 2026-08-01 08:12:31 +0200 (CEST)
+
+Conversation summary:
+
+- Audited whether the rendered Offline Workspace is functionally usable or
+  merely blocked by the missing runtime.
+
+Done:
+
+- Confirmed the offline task rows are non-interactive display stacks and the
+  advertised offline capabilities are static text without actions or routes.
+- Confirmed the only actionable offline control is `RETRY NOW`, which repeats
+  the health request but does not start the app-managed runtime.
+- Confirmed startup calls `refreshRuntimeHealth()` only; the implemented
+  `startRuntimeProcess()` path is reached after selecting a repository, not
+  when reopening an already persisted repository.
+- Identified the practical result: a cold launch with a saved repository and
+  stopped runtime enters a dead-end recovery screen even though the wider app
+  and runtime features exist.
+
+Not done:
+
+- No recovery controls, offline persistence, automatic runtime startup, or
+  startup routing were changed.
+
+Next:
+
+- Make the offline state honest and actionable: start/restart runtime from the
+  page, keep repository switching available, remove unsupported offline
+  claims or implement their storage/navigation, and route into the normal
+  workspace after a successful connection.
+
+## 2026-08-01 09:28:38 +0200 (CEST)
+
+Conversation summary:
+
+- Executed the complete seven-phase, behavior-preserving decomposition of the
+  12,496-line TypeScript runtime server and retained the packaged entrypoint,
+  routes, persisted task behavior, approvals, observer enforcement, recovery,
+  and audit contracts.
+
+Done:
+
+- Added a 55-route executable manifest, HTTP/CORS/error/observer/SSE contract
+  fixture, unified 17-script smoke runner, and focused tests for runtime config,
+  HTTP primitives, text operations, unified diffs, workspace paths, Git
+  parsers, and validation policy.
+- Extracted runtime config/lifecycle/errors, HTTP primitives and typed routes,
+  RuntimeEventBus, TaskState, task/conversation/plan services, queue and Agent
+  orchestration, legacy loop compatibility, repository index/search/context,
+  edit proposal/transaction/recovery, validation/catalog/commands, safe Git
+  adapters/workflows, and provider-settings ownership.
+- Reduced `runtime/src/server.ts` from 12,496 lines to a one-line bootstrap;
+  runtime assembly now lives in `runtime/createForgeRuntime.ts`, and domain
+  services no longer import the HTTP layer or `server.ts`.
+- Caught and fixed a relocated-composition path regression by preserving
+  `dist/server.js` as the runtime config anchor; the final core smoke then
+  resolved repository file references correctly.
+- Final gates passed: `npm run check`, `npm run build`, `npm run test:unit`,
+  `npm run coverage:unit`, the 55-route HTTP contract, and all 17 smoke scripts.
+- Updated the refactor plan, runtime architecture, project status, development
+  coverage guidance, and P4 backlog to record completion.
+
+Not done:
+
+- The refactor changes have not been committed or pushed.
+- No unrelated runtime feature or macOS UI behavior was added in this work.
+
+Next:
+
+- Review the large mechanical Git workflow relocation as a separate follow-up
+  if smaller branch/commit/push/PR files would improve ownership further, then
+  resume the next product backlog item without reopening the completed server
+  decomposition.
+
+## 2026-08-01 11:01:31 +0200 (CEST)
+
+Conversation summary:
+
+- Prepared the completed seven-phase runtime refactor for direct publication
+  to `main` at the user's request.
+
+Done:
+
+- Confirmed the entire dirty worktree belongs to the runtime refactor, tests,
+  and documentation update; no unrelated changes were found.
+- Confirmed the current branch is `main`, fetched `origin/main` through the
+  configured SSH remote, and verified local and remote were aligned before the
+  commit.
+- Retained the final validation evidence: TypeScript check/build, 17 direct
+  unit scripts, coverage gate, 55-route contract, and all 17 smoke scripts.
+- Committed the complete refactor as one intentional change and pushed the
+  fast-forward update directly to `origin/main`.
+
+Not done:
+
+- No pull request was opened because the user explicitly requested a direct
+  `main` commit.
+
+Next:
+
+- Observe the GitHub Actions checks for the new `main` commit and address any
+  environment-specific failure if one appears.

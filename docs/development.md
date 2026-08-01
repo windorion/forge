@@ -696,9 +696,9 @@ npm run coverage:unit
 
 `coverage:unit` uses Node's built-in test coverage. The small pure search,
 index, recovery, parser, and stuck-detection modules are expected to stay near
-complete coverage. `modelProvider.ts` and `server.ts` are primarily exercised
-by the end-to-end smoke fixtures, so the unit-only aggregate must not be
-misread as whole-runtime coverage.
+complete coverage. `modelProvider.ts` and the composed runtime services are
+primarily exercised by the end-to-end smoke fixtures, so the unit-only
+aggregate must not be misread as whole-runtime coverage.
 
 The SwiftPM package now has a `ForgeAppTests` target for native runtime-contract
 decoding, provider-settings request encoding, pull-request display state,
@@ -724,7 +724,7 @@ model actions, CLI commands, widgets, and native system integrations still rely
 on builds, handoff screenshot verification, and runtime smoke tests rather than
 direct Swift unit or UI coverage.
 
-GitHub Actions runs this same SwiftPM command on the `macos-14` hosted runner
+GitHub Actions runs this same SwiftPM command on the `macos-15` hosted runner
 for every pull request, every push to `main`, and manual dispatch. The workflow
 also prints the application-only LLVM coverage report:
 

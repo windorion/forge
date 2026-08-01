@@ -268,14 +268,16 @@ export function getModelProviderConfiguration(settings: ModelProviderRuntimeSett
   };
 }
 
-export function defaultModelProviderRuntimeSettings(): ModelProviderRuntimeSettings {
+export function defaultModelProviderRuntimeSettings(
+  environment: NodeJS.ProcessEnv = process.env
+): ModelProviderRuntimeSettings {
   return {
-    providerID: normalizeProviderID(process.env.FORGE_MODEL_PROVIDER?.trim() || "local"),
-    modelName: process.env.FORGE_MODEL_NAME?.trim() || undefined,
-    openAIBaseURL: process.env.FORGE_OPENAI_BASE_URL?.trim() || undefined,
-    openAITimeoutMs: numberFromEnv("FORGE_OPENAI_TIMEOUT_MS", undefined),
-    openAIMaxOutputTokens: numberFromEnv("FORGE_OPENAI_MAX_OUTPUT_TOKENS", undefined),
-    openAIAPIKey: process.env.OPENAI_API_KEY?.trim() || undefined
+    providerID: normalizeProviderID(environment.FORGE_MODEL_PROVIDER?.trim() || "local"),
+    modelName: environment.FORGE_MODEL_NAME?.trim() || undefined,
+    openAIBaseURL: environment.FORGE_OPENAI_BASE_URL?.trim() || undefined,
+    openAITimeoutMs: numberFromEnv("FORGE_OPENAI_TIMEOUT_MS", undefined, environment),
+    openAIMaxOutputTokens: numberFromEnv("FORGE_OPENAI_MAX_OUTPUT_TOKENS", undefined, environment),
+    openAIAPIKey: environment.OPENAI_API_KEY?.trim() || undefined
   };
 }
 
@@ -1793,8 +1795,14 @@ function compactTaskMessage(message: TaskMessage): Record<string, unknown> {
 
 function numberFromEnv(name: string, fallback: number): number;
 function numberFromEnv(name: string, fallback: undefined): number | undefined;
-function numberFromEnv(name: string, fallback: number | undefined): number | undefined {
-  const value = Number(process.env[name]);
+function numberFromEnv(name: string, fallback: number, environment: NodeJS.ProcessEnv): number;
+function numberFromEnv(name: string, fallback: undefined, environment: NodeJS.ProcessEnv): number | undefined;
+function numberFromEnv(
+  name: string,
+  fallback: number | undefined,
+  environment: NodeJS.ProcessEnv = process.env
+): number | undefined {
+  const value = Number(environment[name]);
   return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 

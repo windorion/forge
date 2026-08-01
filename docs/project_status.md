@@ -3,7 +3,7 @@
 Document role: record the current product state, objective completion estimate,
 major gaps, and what "finished" means at each product horizon.
 
-Last updated: 2026-07-31
+Last updated: 2026-08-01
 
 ## One-Line Status
 
@@ -85,6 +85,11 @@ Implemented:
   background loops. Full background task creation/detail/review routing and
   rendered comparison remain.
 - Local TypeScript runtime.
+- Completed seven-phase runtime decomposition: the former 12,496-line
+  `runtime/src/server.ts` is now a one-line packaged bootstrap over typed
+  configuration, TaskState/event, HTTP route, repository, Git, edit,
+  validation, task, queue, Agent Loop, recovery, and provider-settings
+  services. The 55-route executable contract and all 17 smoke scripts pass.
 - Task creation and task conversation.
 - Server-Sent Events from runtime to app.
 - SQLite task persistence.
