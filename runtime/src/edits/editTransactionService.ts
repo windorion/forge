@@ -1,17 +1,15 @@
 import { createHash, randomUUID } from "node:crypto";
-import { appendFile, mkdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { HttpError } from "../runtime/runtimeError.js";
 import type { AppliedFileChange, ProposedFileChange } from "../types.js";
-import {
-  countTextOccurrences,
-  EDIT_PROPOSAL_TEXT_OPERATION_MAX_CHARS,
-  validatePatchTextOperation
-} from "./textOperations.js";
-import { validateUnifiedDiffOperation } from "./unifiedDiff.js";
+import { applyCreateFileOperation } from "./createFileOperation.js";
+import { applyDeleteFileOperation } from "./deleteFileOperation.js";
+import type { EditableFileContext, EditOperationDependencies } from "./editOperationTypes.js";
+import { applyModifyTextOperation } from "./modifyTextOperation.js";
+import { applyPatchFileOperation } from "./patchFileOperation.js";
 
-const editProposalCreateFileMaxChars = 20_000;
 const editProposalEditableFileMaxBytes = 220_000;
 
 export type PreparedRollbackOperation = {
@@ -41,7 +39,6 @@ const {
   inspectPersistedEditFileState,
   restorePersistedFileToBeforeState
 } = options;
-const editProposalTextOperationMaxChars = EDIT_PROPOSAL_TEXT_OPERATION_MAX_CHARS;
 
 async function applyProposedFileChange(
   proposalID: string,
@@ -53,236 +50,62 @@ async function applyProposedFileChange(
     throw new HttpError(409, `No apply operation was provided: ${change.path}`);
   }
 
-  const appliedAt = new Date().toISOString();
+  const input = {
+    proposalID,
+    change,
+    operation,
+    appliedAt: new Date().toISOString(),
+    onPrepared,
+    dependencies: editOperationDependencies()
+  };
 
   if (change.changeType === "Create") {
     if (operation.kind !== "CreateFile") {
       throw new HttpError(409, `Create changes require a CreateFile operation in v0: ${change.path}`);
     }
-
-    const { absolutePath, relativePath } = resolveEditableWorkspacePath(change.path);
-
-    if (operation.content.length === 0) {
-      throw new HttpError(409, `CreateFile content is empty: ${relativePath}`);
-    }
-
-    if (operation.content.length > editProposalCreateFileMaxChars) {
-      throw new HttpError(409, `CreateFile content is too large for v0 apply: ${relativePath}`);
-    }
-
-    if (operation.content.includes("\0")) {
-      throw new HttpError(409, `CreateFile content contains a null byte: ${relativePath}`);
-    }
-
-    try {
-      const fileStat = await stat(absolutePath);
-      if (fileStat.isFile()) {
-        throw new HttpError(409, `CreateFile target already exists: ${relativePath}`);
-      }
-
-      throw new HttpError(409, `CreateFile target exists but is not a file: ${relativePath}`);
-    } catch (error) {
-      if (error instanceof HttpError) {
-        throw error;
-      }
-
-      if (!isNodeError(error) || error.code !== "ENOENT") {
-        throw error;
-      }
-    }
-
-    await mkdir(path.dirname(absolutePath), { recursive: true });
-    const appliedChange = buildAppliedFileChange({
-      relativePath,
-      proposalFileChangeID: change.id,
-      operationKind: operation.kind,
-      appliedAt,
-      afterContent: operation.content,
-      rollbackKind: "DeleteCreatedFile",
-      rollbackSummary: `Delete ${relativePath} to undo the created file.`
-    });
-    onPrepared(appliedChange);
-    await writeFile(absolutePath, operation.content, { encoding: "utf8", flag: "wx" });
-    return appliedChange;
+    return applyCreateFileOperation({ ...input, operation });
   }
 
   if (change.changeType === "Delete") {
     if (operation.kind !== "DeleteFile") {
       throw new HttpError(409, `Delete changes require a DeleteFile operation: ${change.path}`);
     }
-
-    const { absolutePath, relativePath } = resolveEditableWorkspacePath(change.path);
-    const fileStat = await stat(absolutePath);
-    if (!fileStat.isFile()) {
-      throw new HttpError(409, `Can only delete an existing regular file: ${relativePath}`);
-    }
-    if (fileStat.size > editProposalEditableFileMaxBytes) {
-      throw new HttpError(409, `Delete target is too large for restricted source apply: ${relativePath}`);
-    }
-    const currentContent = await readFile(absolutePath, "utf8");
-    if (currentContent.includes("\0")) {
-      throw new HttpError(409, `Delete target appears to be binary: ${relativePath}`);
-    }
-
-    const rollbackSnapshotPath = await writeRollbackSnapshot(proposalID, change.id, currentContent);
-    const appliedChange = buildAppliedFileChange({
-      relativePath,
-      proposalFileChangeID: change.id,
-      operationKind: operation.kind,
-      appliedAt,
-      beforeContent: currentContent,
-      rollbackSnapshotPath,
-      rollbackKind: "RestoreDeletedFile",
-      rollbackSummary: `Restore the deleted file ${relativePath}.`
-    });
-    onPrepared(appliedChange);
-    await unlink(absolutePath);
-    return appliedChange;
+    return applyDeleteFileOperation({ ...input, operation });
   }
 
   if (change.changeType !== "Modify") {
     throw new HttpError(409, `Unsupported change type: ${change.path}`);
   }
 
-  const { absolutePath, relativePath } = resolveEditableWorkspacePath(change.path);
-  const fileStat = await stat(absolutePath);
-  if (!fileStat.isFile()) {
-    throw new HttpError(409, `Can only modify existing files in v0: ${relativePath}`);
+  const context = await loadEditableFileContext(change.path);
+  if (operation.kind === "AppendText" || operation.kind === "ReplaceText") {
+    return applyModifyTextOperation({ ...input, operation, context });
   }
+  if (operation.kind === "PatchText" || operation.kind === "UnifiedDiff") {
+    return applyPatchFileOperation({ ...input, operation, context });
+  }
+  throw new HttpError(409, `Unsupported apply operation for ${context.relativePath}.`);
+}
 
+async function loadEditableFileContext(inputPath: string): Promise<EditableFileContext> {
+  const { absolutePath, relativePath } = resolveEditableWorkspacePath(inputPath);
+  const fileStat = await stat(absolutePath);
+  if (!fileStat.isFile()) throw new HttpError(409, `Can only modify existing files in v0: ${relativePath}`);
   if (fileStat.size > editProposalEditableFileMaxBytes) {
     throw new HttpError(409, `Target file is too large for restricted source apply: ${relativePath}`);
   }
-
   const currentContent = await readFile(absolutePath, "utf8");
-  if (currentContent.includes("\0")) {
-    throw new HttpError(409, `Target file appears to be binary: ${relativePath}`);
-  }
+  if (currentContent.includes("\0")) throw new HttpError(409, `Target file appears to be binary: ${relativePath}`);
+  return { absolutePath, relativePath, currentContent };
+}
 
-  if (operation.kind === "AppendText") {
-    if (!isEditableMarkdownWorkspacePath(relativePath)) {
-      throw new HttpError(409, `AppendText can only modify README.md or docs/*.md in v0: ${relativePath}`);
-    }
-
-    if (operation.text.length === 0) {
-      throw new HttpError(409, `Append text is empty: ${relativePath}`);
-    }
-
-    if (operation.text.length > editProposalTextOperationMaxChars) {
-      throw new HttpError(409, `Edit operation is too large for v0 apply: ${relativePath}`);
-    }
-
-    if (currentContent.endsWith(operation.text)) {
-      throw new HttpError(409, `Proposed append text is already present at the end of ${relativePath}.`);
-    }
-
-    const afterContent = `${currentContent}${operation.text}`;
-    const rollbackSnapshotPath = await writeRollbackSnapshot(proposalID, change.id, currentContent);
-    const appliedChange = buildAppliedFileChange({
-      relativePath,
-      proposalFileChangeID: change.id,
-      operationKind: operation.kind,
-      appliedAt,
-      beforeContent: currentContent,
-      afterContent,
-      rollbackSnapshotPath,
-      rollbackKind: "RestorePreviousContent",
-      rollbackSummary: `Restore the previous full contents of ${relativePath}.`
-    });
-    onPrepared(appliedChange);
-    await appendFile(absolutePath, operation.text, "utf8");
-    return appliedChange;
-  }
-
-  if (operation.kind === "ReplaceText") {
-    if (operation.findText.length === 0 || operation.replaceWith.length === 0) {
-      throw new HttpError(409, `Replace operation requires non-empty find and replacement text: ${relativePath}`);
-    }
-
-    if (
-      operation.findText.length > editProposalTextOperationMaxChars ||
-      operation.replaceWith.length > editProposalTextOperationMaxChars
-    ) {
-      throw new HttpError(409, `Replace operation is too large for v0 apply: ${relativePath}`);
-    }
-
-    if (operation.findText === operation.replaceWith) {
-      throw new HttpError(409, `Find text and replacement text are identical: ${relativePath}`);
-    }
-
-    const occurrenceCount = countTextOccurrences(currentContent, operation.findText);
-    if (occurrenceCount !== 1) {
-      throw new HttpError(
-        409,
-        `Replace operation requires exactly one match in ${relativePath}; found ${occurrenceCount}.`
-      );
-    }
-
-    const nextContent = currentContent.replace(operation.findText, operation.replaceWith);
-    const rollbackSnapshotPath = await writeRollbackSnapshot(proposalID, change.id, currentContent);
-    const appliedChange = buildAppliedFileChange({
-      relativePath,
-      proposalFileChangeID: change.id,
-      operationKind: operation.kind,
-      appliedAt,
-      beforeContent: currentContent,
-      afterContent: nextContent,
-      rollbackSnapshotPath,
-      rollbackKind: "RestorePreviousContent",
-      rollbackSummary: `Restore the previous full contents of ${relativePath}.`
-    });
-    onPrepared(appliedChange);
-    await writeFile(absolutePath, nextContent, "utf8");
-    return appliedChange;
-  }
-
-  if (operation.kind === "PatchText") {
-    const nextContent = validatePatchTextOperation(operation, currentContent, relativePath);
-    if (nextContent === currentContent) {
-      throw new HttpError(409, `Patch operation would not change ${relativePath}.`);
-    }
-
-    const rollbackSnapshotPath = await writeRollbackSnapshot(proposalID, change.id, currentContent);
-    const appliedChange = buildAppliedFileChange({
-      relativePath,
-      proposalFileChangeID: change.id,
-      operationKind: operation.kind,
-      appliedAt,
-      beforeContent: currentContent,
-      afterContent: nextContent,
-      rollbackSnapshotPath,
-      rollbackKind: "RestorePreviousContent",
-      rollbackSummary: `Restore the previous full contents of ${relativePath}.`
-    });
-    onPrepared(appliedChange);
-    await writeFile(absolutePath, nextContent, "utf8");
-    return appliedChange;
-  }
-
-  if (operation.kind === "UnifiedDiff") {
-    const nextContent = validateUnifiedDiffOperation(operation, currentContent, relativePath);
-    if (nextContent === currentContent) {
-      throw new HttpError(409, `Unified diff would not change ${relativePath}.`);
-    }
-
-    const rollbackSnapshotPath = await writeRollbackSnapshot(proposalID, change.id, currentContent);
-    const appliedChange = buildAppliedFileChange({
-      relativePath,
-      proposalFileChangeID: change.id,
-      operationKind: operation.kind,
-      appliedAt,
-      beforeContent: currentContent,
-      afterContent: nextContent,
-      rollbackSnapshotPath,
-      rollbackKind: "RestorePreviousContent",
-      rollbackSummary: `Restore the previous full contents of ${relativePath}.`
-    });
-    onPrepared(appliedChange);
-    await writeFile(absolutePath, nextContent, "utf8");
-    return appliedChange;
-  }
-
-  throw new HttpError(409, `Unsupported apply operation for ${relativePath}.`);
+function editOperationDependencies(): EditOperationDependencies {
+  return {
+    resolveEditableWorkspacePath,
+    isEditableMarkdownWorkspacePath,
+    writeRollbackSnapshot,
+    buildAppliedFileChange
+  };
 }
 
 async function verifyAppliedFileChange(appliedChange: AppliedFileChange): Promise<string> {

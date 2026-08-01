@@ -71,13 +71,15 @@ directory's parent as the repository root.
 
 ## Core Modules
 
-`runtime/src/server.ts` is now a one-line packaged bootstrap. Runtime assembly
-lives in `runtime/createForgeRuntime.ts`; HTTP adaptation, TaskState/event
-publication, repository context, Git, edits, validation, task planning, queue,
-Agent Loop, recovery, and provider settings are separate typed services. The
-completed behavior-preserving migration is recorded in
-`docs/runtime_server_refactor.md` and retains the HTTP, persistence, approval,
-audit, observer-mode, and packaging contracts described here.
+`runtime/src/server.ts` is now a one-line packaged bootstrap. The 476-line
+`runtime/createForgeRuntime.ts` composes explicit core and validation domain
+assemblies plus repository/task/agent services. HTTP adaptation is grouped by
+system, task, agent, edit, validation, Git, and settings; Git workflow, agent
+orchestration, edit operations, validation/process execution, TaskState/event
+publication, and provider settings are separate typed modules. The completed
+behavior-preserving migration and readability follow-up are recorded in
+`docs/runtime_server_refactor.md`. The result retains the HTTP, persistence,
+approval, audit, observer-mode, and packaging contracts described here.
 
 ### Task Queue
 

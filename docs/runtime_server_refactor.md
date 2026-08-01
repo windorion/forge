@@ -421,3 +421,29 @@ The intended outcome is not merely smaller files. A reviewer should be able to
 change one runtime domain, identify its trust boundary, run its focused tests,
 and know which integration fixtures prove that unrelated behavior did not
 move.
+
+## Readability Follow-Up Completed
+
+The second readability pass completed the remaining coarse service splits
+without changing the public runtime contract:
+
+- `gitWorkflowService.ts` is a 17-line facade over branch, branch-publish,
+  commit, push, and pull-request services.
+- `agentOrchestrationService.ts` is a 52-line facade over queue, loop, step,
+  repository-inspection, and recovery services with one explicit shared
+  runtime-state object.
+- edit transaction dispatch now delegates create, delete, text-modify, and
+  patch/unified-diff operations to dedicated handlers.
+- `validationService.ts` is a 21-line facade over `ProcessRunner`, task
+  commands, validation runs, and repair evidence.
+- `runtimeRoutes.ts` is a 107-line route composer over system, task, agent,
+  edit, validation, Git, and settings groups. The executable route-manifest
+  test scans those groups and still proves all 55 routes.
+- runtime composition now separates core and validation assembly from domain
+  defaults; `createForgeRuntime.ts` fell from 932 to 476 lines while the
+  packaged `server.ts` remains one line.
+
+The final compatibility gate passed TypeScript check/build, 17 unit scripts,
+unit coverage, all 17 runtime smoke scripts, and 20 Swift tests. The current
+unit coverage aggregate is 56.94% lines, 88.42% branches, and 67.29%
+functions.

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -80,7 +80,13 @@ try {
 }
 
 async function assertRouteManifestMatchesHandler() {
-  const source = await readFile(join(runtimeRoot, "src", "http", "runtimeRoutes.ts"), "utf8");
+  const routesDirectory = join(runtimeRoot, "src", "http", "routes");
+  const routeFiles = (await readdir(routesDirectory))
+    .filter((file) => file.endsWith("Routes.ts"))
+    .sort();
+  const source = (await Promise.all(
+    routeFiles.map((file) => readFile(join(routesDirectory, file), "utf8"))
+  )).join("\n");
   const staticRoutes = [...source.matchAll(
     /request\.method === "(GET|POST)" && url\.pathname === "([^"]+)"/g
   )].map((match) => `${match[1]} ${match[2]}`);

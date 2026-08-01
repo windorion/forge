@@ -5563,3 +5563,70 @@ Next:
 
 - Observe the GitHub Actions checks for the new `main` commit and address any
   environment-specific failure if one appears.
+
+## 2026-08-01 23:57:07 +0200 (CEST)
+
+Conversation summary:
+
+- Completed the six-step readability follow-up after the seven-phase runtime
+  server decomposition.
+
+Done:
+
+- Split Git workflow into branch, branch-publish, commit, push, and pull-request
+  services behind a 17-line facade.
+- Split agent orchestration into queue, loop, step, repository-inspection, and
+  recovery services behind a 52-line facade and explicit shared runtime state.
+- Split edit transaction execution into create, delete, text-modify, and patch
+  handlers.
+- Split validation into process runner, task command, validation run, and repair
+  evidence services behind a 21-line facade.
+- Split all 55 HTTP routes into seven domain route groups and updated the route
+  contract source scanner.
+- Extracted core and validation runtime assemblies plus repository, validation,
+  and task defaults; reduced `createForgeRuntime.ts` from 932 to 476 lines.
+- Passed `npm run check`, build, 17 unit scripts, unit coverage, all 17 runtime
+  smoke scripts, `git diff --check`, and 20 Swift tests.
+
+Not done:
+
+- The readability changes have not been committed, merged, or pushed.
+- No product behavior, HTTP contract, persisted schema, or approval boundary
+  was intentionally changed.
+
+Next:
+
+- Review the focused diff, then commit and publish the readability refactor when
+  requested; future work can further subdivide the pull-request domain if its
+  1,203-line cohesive service becomes a review bottleneck.
+
+## 2026-08-02 00:07:58 +0200 (CEST)
+
+Conversation summary:
+
+- Published the completed six-step runtime readability refactor directly to
+  `main` at the user's request.
+
+Done:
+
+- Confirmed the entire worktree belongs to the readability refactor and its
+  documentation; no unrelated changes were present.
+- Fetched `origin/main` over SSH and verified local `main`, the refactor branch,
+  and the remote base all started at the same commit.
+- Retained the completed validation evidence: TypeScript check/build, 17 unit
+  scripts, unit coverage, all 17 runtime smoke scripts, the 55-route contract,
+  and 20 Swift tests.
+- Committed the complete change, fast-forwarded local `main`, and pushed the
+  resulting commit to `origin/main`.
+
+Not done:
+
+- No pull request was opened because the user explicitly requested a direct
+  `main` publication.
+- GitHub CLI API authentication remains expired; publication used the
+  repository's working SSH remote instead.
+
+Next:
+
+- Verify the `main` GitHub Actions checks and address any environment-specific
+  regression if one appears.

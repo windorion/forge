@@ -154,6 +154,10 @@ the core runtime smoke. Preserve these completed boundaries:
   decomposition in `docs/runtime_server_refactor.md`. The packaged entry is now
   a one-line bootstrap; 55-route contracts, direct unit/coverage gates, and all
   17 smoke scripts pass without weakening approval or observer boundaries.
+- [x] Complete the post-refactor readability pass: split Git workflow into five
+  domain services, agent orchestration into queue/loop/step/inspection/recovery,
+  edit operations into four handlers, validation into four services, HTTP into
+  seven route groups, and composition into explicit domain assemblies.
 - Add task cancellation. (Command-run cancellation and agent-loop pause/abort
   already exist; a single task-level cancel that composes them is still open.)
 - [x] Add timeout and stuck-task recovery. Per-command timeouts and startup

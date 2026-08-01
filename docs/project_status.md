@@ -89,7 +89,11 @@ Implemented:
   `runtime/src/server.ts` is now a one-line packaged bootstrap over typed
   configuration, TaskState/event, HTTP route, repository, Git, edit,
   validation, task, queue, Agent Loop, recovery, and provider-settings
-  services. The 55-route executable contract and all 17 smoke scripts pass.
+  services. A second readability pass split Git workflow, agent orchestration,
+  edit operations, validation/process execution, route groups, and composition
+  into narrower modules; `createForgeRuntime.ts` is now 476 lines. The
+  55-route executable contract, all 17 smoke scripts, and all 20 Swift tests
+  pass.
 - Task creation and task conversation.
 - Server-Sent Events from runtime to app.
 - SQLite task persistence.
