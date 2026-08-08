@@ -55,6 +55,13 @@ try {
     objective: "Verify the runtime HTTP and SSE contract."
   }), { "Content-Type": "application/json" });
   assert.equal(created.status, 201);
+  const createdDetail = await rawRequest(primaryURL, "GET", `/tasks/${created.json.id}`);
+  assert.equal(createdDetail.status, 200);
+  assert.equal(createdDetail.json.id, created.json.id);
+  assert.equal(createdDetail.json.title, "HTTP contract task");
+  const missingDetail = await rawRequest(primaryURL, "GET", "/tasks/not-present");
+  assert.equal(missingDetail.status, 404);
+  assert.match(missingDetail.json.message, /Task not found/);
   const taskCreatedEvent = await eventStream.waitFor("task.created");
   assert.equal(taskCreatedEvent.taskID, created.json.id);
   eventStream.close();
@@ -93,10 +100,13 @@ async function assertRouteManifestMatchesHandler() {
   const actionRoutes = [...source.matchAll(
     /const (\w+) = taskIDFromActionPath\(url\.pathname, "([^"]+)"\);[\s\S]*?if \(request\.method === "(GET|POST)" && \1\)/g
   )].map((match) => `${match[3]} /tasks/:taskID/${match[2]}`);
-  const implemented = ["OPTIONS /*", ...staticRoutes, ...actionRoutes].sort();
+  const detailRoutes = source.includes("const taskDetailMatch = /^\\/tasks\\/([^/]+)$/")
+    ? ["GET /tasks/:taskID"]
+    : [];
+  const implemented = ["OPTIONS /*", ...staticRoutes, ...detailRoutes, ...actionRoutes].sort();
   const manifested = runtimeRouteManifest.map((route) => `${route.method} ${route.path}`).sort();
 
-  assert.equal(runtimeRouteManifest.length, 57, "Route count changed; update the explicit contract intentionally.");
+  assert.equal(runtimeRouteManifest.length, 58, "Route count changed; update the explicit contract intentionally.");
   assert.deepEqual(manifested, [...new Set(manifested)].sort(), "Route manifest contains duplicates.");
   assert.deepEqual(manifested, implemented, "Route manifest and request handler branches differ.");
   for (const route of runtimeRouteManifest) {

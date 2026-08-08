@@ -23,6 +23,14 @@ authorize one of those repositories as active for this app session. The
 transition shows its exact path/port/consequences, verifies a generated health
 authorization ID, displays shortened evidence in the footer, permits safe
 return to read-only, and extends Pause All across accepted active runtimes.
+Repository task cards now retain an explicit `(repository path, task ID)`
+selection and open fresh Overview/Review/Activity detail inside the root-owned
+Mission Control surface, without a modal sheet or primary-workspace restart.
+The new-task composer selects its target repository explicitly. Accepted
+active runtimes support scoped conversation, plan, file-review, Apply, and
+validation actions; observers expose the same evidence read-only. Loading,
+mutation, authorization, and routing errors live in the shared workspace model
+rather than view-local network state.
 
 ### Menu Bar Agent
 

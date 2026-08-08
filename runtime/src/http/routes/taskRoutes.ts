@@ -37,6 +37,16 @@ export function createTaskRoutes(options: RuntimeRouteOptions): RuntimeRouteGrou
           return true;
         }
 
+    const taskDetailMatch = /^\/tasks\/([^/]+)$/.exec(url.pathname);
+    if (request.method === "GET" && taskDetailMatch) {
+          reloadObserverTasks();
+          const taskID = decodeURIComponent(taskDetailMatch[1]);
+          const task = tasks.get(taskID);
+          if (!task) throw new HttpError(404, `Task not found: ${taskID}`);
+          writeJson(response, 200, task);
+          return true;
+        }
+
     const auditExportTaskID = taskIDFromActionPath(url.pathname, "audit-export");
     if (request.method === "GET" && auditExportTaskID) {
           reloadObserverTasks();

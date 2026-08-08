@@ -37,6 +37,7 @@ export const runtimeRouteManifest: readonly RuntimeRouteContract[] = [
   get("/"),
   get("/health"),
   get("/tasks"),
+  get("/tasks/:taskID"),
   get("/tasks/:taskID/audit-export"),
   get("/index"),
   post("/index/rebuild"),

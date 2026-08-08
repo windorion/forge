@@ -30,6 +30,7 @@ struct MissionControlRepositorySnapshot: Identifiable, Codable, Hashable {
 struct MissionControlView: View {
     @EnvironmentObject private var workspace: WorkspaceModel
     @State private var runtimePrompt: MissionControlRuntimePrompt?
+    @State private var showingTaskComposer = false
     let newTask: () -> Void
     let openTask: (ForgeTask.ID) -> Void
     let close: () -> Void
@@ -47,15 +48,39 @@ struct MissionControlView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            missionTitleBar
-            summaryStrip
-            repositoryColumns
-            bottomBar
+        Group {
+            if let route = workspace.missionControlTaskRoute {
+                MissionControlTaskDetailView(
+                    route: route,
+                    focusRepository: {
+                        workspace.closeMissionControlTask()
+                        workspace.activateMissionControlRepository(route.repositoryPath)
+                        close()
+                    },
+                    close: { workspace.closeMissionControlTask() }
+                )
+            } else if showingTaskComposer {
+                MissionControlTaskComposerView(
+                    repositories: repositories,
+                    currentPath: currentPath,
+                    close: { showingTaskComposer = false },
+                    closeSurface: close
+                )
+            } else {
+                VStack(spacing: 0) {
+                    missionTitleBar
+                    summaryStrip
+                    repositoryColumns
+                    bottomBar
+                }
+                .background(ForgeDesign.paper)
+                .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+            }
         }
-        .background(ForgeDesign.paper)
-        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
         .onAppear { workspace.refreshMissionControl() }
+        .onChange(of: workspace.missionControlTaskRoute) { _, route in
+            if route != nil { showingTaskComposer = false }
+        }
         .alert(item: $runtimePrompt) { prompt in
             runtimeAuthorizationAlert(prompt)
         }
@@ -99,7 +124,7 @@ struct MissionControlView: View {
             Button("⏸ PAUSE ALL") { workspace.pauseAllMissionControlLoops() }
                 .buttonStyle(MissionSecondaryButtonStyle())
                 .disabled(currentRunningCount == 0)
-            Button("+ NEW TASK", action: newTask)
+            Button("+ NEW TASK") { showingTaskComposer = true }
                 .buttonStyle(MissionPrimaryButtonStyle())
                 .keyboardShortcut("n", modifiers: [.command, .shift])
         }
@@ -177,7 +202,7 @@ struct MissionControlView: View {
     private func taskCard(_ task: MissionControlTaskSnapshot, repositoryPath: String, isCurrent: Bool, hasLiveData: Bool) -> some View {
         Button {
             if isCurrent { openTask(task.taskID) }
-            else { workspace.activateMissionControlRepositoryForTask(path: repositoryPath, taskID: task.taskID) }
+            else { workspace.openMissionControlTask(path: repositoryPath, taskID: task.taskID) }
         } label: {
             VStack(alignment: .leading, spacing: 7) {
                 HStack {

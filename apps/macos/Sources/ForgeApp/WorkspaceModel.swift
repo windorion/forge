@@ -49,6 +49,12 @@ final class WorkspaceModel: ObservableObject {
     @Published var runtimeProcessLaunchCommand: String?
     @Published var repositorySelectionMessage: String?
     @Published var missionControlRepositories: [MissionControlRepositorySnapshot] = []
+    @Published var missionControlTaskRoute: MissionControlTaskRoute?
+    @Published var missionControlRoutedTask: ForgeTask?
+    @Published var missionControlRouteIsLoading = false
+    @Published var missionControlRouteIsMutating = false
+    @Published var missionControlRouteError: String?
+    @Published var missionControlCreatingRepositoryPath: String?
     @Published private var validationPermissionSnapshots: [ForgeTask.ID: [ValidationPresetPermission]] = [:]
     @Published private var taskCommandPermissionSnapshots: [ForgeTask.ID: [TaskCommandPermission]] = [:]
     @Published private var sendingMessageTaskIDs = Set<ForgeTask.ID>()
@@ -1026,6 +1032,166 @@ final class WorkspaceModel: ObservableObject {
         }
         pendingMissionControlTaskID = taskID
         selectRepository(URL(fileURLWithPath: path, isDirectory: true))
+    }
+
+    func openMissionControlTask(path: String, taskID: ForgeTask.ID) {
+        if path == missionControlCurrentRepositoryPath {
+            selectedTaskID = taskID
+            return
+        }
+        missionControlTaskRoute = MissionControlTaskRoute(repositoryPath: path, taskID: taskID)
+        missionControlRoutedTask = nil
+        missionControlRouteError = nil
+        missionControlRouteIsLoading = true
+        Task {
+            do {
+                let task = try await missionControlSupervisor.task(path: path, taskID: taskID)
+                guard missionControlTaskRoute == MissionControlTaskRoute(repositoryPath: path, taskID: taskID) else {
+                    missionControlRouteIsLoading = false
+                    return
+                }
+                missionControlRoutedTask = task
+            } catch {
+                guard missionControlTaskRoute == MissionControlTaskRoute(repositoryPath: path, taskID: taskID) else {
+                    missionControlRouteIsLoading = false
+                    return
+                }
+                missionControlRouteError = error.localizedDescription
+            }
+            missionControlRouteIsLoading = false
+        }
+    }
+
+    func closeMissionControlTask() {
+        missionControlTaskRoute = nil
+        missionControlRoutedTask = nil
+        missionControlRouteError = nil
+        missionControlRouteIsLoading = false
+        missionControlRouteIsMutating = false
+    }
+
+    func refreshMissionControlTask() {
+        guard let route = missionControlTaskRoute else { return }
+        openMissionControlTask(path: route.repositoryPath, taskID: route.taskID)
+    }
+
+    func createMissionControlTask(path: String, title: String, objective: String) {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedObjective = objective.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty, !trimmedObjective.isEmpty else {
+            missionControlRouteError = "A title and objective are required."
+            return
+        }
+        if path == missionControlCurrentRepositoryPath {
+            createTask(title: trimmedTitle, objective: trimmedObjective)
+            statusMessage = "Creating task in the focused repository."
+            return
+        }
+        guard missionControlCreatingRepositoryPath == nil else { return }
+        missionControlCreatingRepositoryPath = path
+        missionControlRouteError = nil
+        Task {
+            do {
+                let task = try await missionControlSupervisor.createTask(
+                    path: path,
+                    title: trimmedTitle,
+                    objective: trimmedObjective
+                )
+                statusMessage = "Created a background task in \(missionControlRepositoryName(path: path))."
+                missionControlTaskRoute = MissionControlTaskRoute(repositoryPath: path, taskID: task.id)
+                missionControlRoutedTask = task
+            } catch {
+                missionControlRouteError = "Create background task failed: \(error.localizedDescription)"
+                statusMessage = missionControlRouteError ?? "Create background task failed."
+            }
+            missionControlCreatingRepositoryPath = nil
+        }
+    }
+
+    func sendMissionControlTaskMessage(_ content: String) {
+        performMissionControlMutation { route in
+            try await self.missionControlSupervisor.sendTaskMessage(
+                path: route.repositoryPath,
+                taskID: route.taskID,
+                content: content
+            )
+        }
+    }
+
+    func generateMissionControlPlanRevision() {
+        performMissionControlMutation { route in
+            try await self.missionControlSupervisor.generatePlanRevision(path: route.repositoryPath, taskID: route.taskID)
+        }
+    }
+
+    func approveMissionControlPlanAndRun(maxSteps: Int = 6) {
+        performMissionControlMutation { route in
+            try await self.missionControlSupervisor.approvePlanAndRun(
+                path: route.repositoryPath,
+                taskID: route.taskID,
+                maxSteps: maxSteps
+            )
+        }
+    }
+
+    func reviewMissionControlFile(fileChangeID: String, decision: String, note: String? = nil) {
+        performMissionControlMutation { route in
+            try await self.missionControlSupervisor.reviewEditProposalFile(
+                path: route.repositoryPath,
+                taskID: route.taskID,
+                fileChangeID: fileChangeID,
+                decision: decision,
+                note: note
+            )
+        }
+    }
+
+    func applyMissionControlEditProposal() {
+        performMissionControlMutation { route in
+            try await self.missionControlSupervisor.applyEditProposal(path: route.repositoryPath, taskID: route.taskID)
+        }
+    }
+
+    func runMissionControlValidation() {
+        performMissionControlMutation { route in
+            try await self.missionControlSupervisor.runValidation(path: route.repositoryPath, taskID: route.taskID)
+        }
+    }
+
+    func missionControlRepositoryIsAuthorized(_ path: String) -> Bool {
+        guard path != missionControlCurrentRepositoryPath,
+              let repository = missionControlRepositories.first(where: { $0.path == path })
+        else { return false }
+        return repository.runtimeState == "ACTIVE RUNTIME" &&
+            repository.observerReadOnly == false &&
+            repository.runtimeAuthorizationID?.isEmpty == false
+    }
+
+    private func performMissionControlMutation(
+        _ operation: @escaping (MissionControlTaskRoute) async throws -> ForgeTask
+    ) {
+        guard let route = missionControlTaskRoute, !missionControlRouteIsMutating else { return }
+        missionControlRouteIsMutating = true
+        missionControlRouteError = nil
+        Task {
+            do {
+                let task = try await operation(route)
+                guard missionControlTaskRoute == route else {
+                    missionControlRouteIsMutating = false
+                    return
+                }
+                missionControlRoutedTask = task
+                statusMessage = "Background task updated in \(missionControlRepositoryName(path: route.repositoryPath))."
+            } catch {
+                guard missionControlTaskRoute == route else {
+                    missionControlRouteIsMutating = false
+                    return
+                }
+                missionControlRouteError = error.localizedDescription
+                statusMessage = "Background task action failed: \(error.localizedDescription)"
+            }
+            missionControlRouteIsMutating = false
+        }
     }
 
     func updateTaskQueueConcurrency(_ limit: Int) {
@@ -2673,6 +2839,12 @@ final class WorkspaceModel: ObservableObject {
                 runtimeAuthorizationID: observation.health?.runtimeAuthorization?.id
             )
             missionControlRepositories[index] = snapshot
+            if let route = missionControlTaskRoute,
+               route.repositoryPath == observation.path,
+               let routedTask = observation.tasks.first(where: { $0.id == route.taskID }),
+               missionControlRoutedTask.map({ routedTask.updatedAt >= $0.updatedAt }) != false {
+                missionControlRoutedTask = routedTask
+            }
         }
         persistMissionControlRepositories()
     }

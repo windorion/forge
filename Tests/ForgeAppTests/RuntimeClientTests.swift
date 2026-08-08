@@ -46,6 +46,22 @@ final class RuntimeClientTests: XCTestCase {
         XCTAssertEqual(body["objective"] as? String, "Test the client")
     }
 
+    func testTaskDetailUsesRepositoryScopedReadContract() async throws {
+        let recorder = RequestRecorder()
+        let (client, session) = makeClient { request in
+            recorder.record(request)
+            return Self.response(request, status: 200, data: Self.taskResponseData())
+        }
+        defer { session.invalidateAndCancel() }
+
+        let task = try await client.task(taskID: "task-1")
+
+        XCTAssertEqual(task.id, "task-1")
+        XCTAssertEqual(recorder.lastRequest?.httpMethod, "GET")
+        XCTAssertEqual(recorder.lastRequest?.url?.path, "/api/tasks/task-1")
+        XCTAssertNil(recorder.lastBody)
+    }
+
     func testGitDiffPercentEncodesPathQuery() async throws {
         let recorder = RequestRecorder()
         let (client, session) = makeClient { request in

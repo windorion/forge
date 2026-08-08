@@ -108,16 +108,36 @@ provider-setting mutation is rejected. It can return to read-only after running 
 repository, `⌘⇧N` opens a new task, and Pause All covers primary plus every
 authorized active runtime.
 
+The Mission Control new-task flow now keeps explicit repository selection. A
+focused repository uses the primary client; an accepted background repository
+uses its own loopback client after the supervisor refreshes health and verifies
+the exact repository root, primary/read-write mode, `repository-active` scope,
+and current in-memory authorization ID. Background cards use the read-only
+`GET /tasks/:taskID` route for fresh detail and open a Mission Control-owned
+Overview/Review/Activity surface instead of replacing the primary workspace.
+When active, that surface can send conversation, regenerate/approve plans,
+review proposal files, Apply, and run validation. All writes share one
+per-repository in-flight gate; observer detail never issues a POST.
+
 Run the observer safety regression with:
 
 ```bash
 cd runtime
 npm run smoke:observer
+npm run smoke:mission-control
 ```
 
 That fixture now verifies observer → authorized active → observer mode on one
 port: writes are rejected before authorization, accepted and persisted while
 active, then rejected again after read-only restoration.
+
+`smoke:mission-control` starts two isolated temporary repositories/runtimes,
+creates six tasks concurrently in each authorized runtime, verifies exact task
+detail and a cross-repository 404 negative control, then returns both runtimes
+to observer mode for repeated health/tasks/queue/git/detail polling. The final
+oracle requires observer POST rejection and byte-identical SQLite files across
+the read-only soak. `FORGE_MISSION_CONTROL_SOAK_ITERATIONS` and
+`FORGE_MISSION_CONTROL_TASK_COUNT` can raise the local stress budget.
 
 The shell also includes a first usable `10a`-style full-screen diff review
 surface. It opens from the Diff tab or review state card, shows a file tree,
@@ -760,14 +780,14 @@ decoding, provider-settings request encoding, pull-request display state,
 appcast parsing, and runtime error messages. `RuntimeClient` accepts an injected
 `URLSession`, so mock-transport tests also cover representative GET and JSON
 POST requests, percent-encoded query paths, structured and plain-text HTTP
-errors, non-HTTP fail-closed behavior, pull-request token placement, and SSE
-frame parsing:
+errors, non-HTTP fail-closed behavior, pull-request token placement, task-detail
+routing, Mission Control access-policy negatives, and SSE frame parsing:
 
 ```bash
 swift test --enable-code-coverage
 ```
 
-This remains an early native unit-test baseline. The 30 current tests include
+This remains an early native unit-test baseline. The 36 current tests include
 three focused GitHub Device Flow tests covering local Client ID configuration,
 GitHub `slow_down` interval handling, user validation before token persistence,
 connected-state restoration, and actionable HTTP failures. The broader suite
@@ -811,7 +831,7 @@ cd runtime && npm run campaign:provider-reliability
 ```
 
 Before a release-shaped change, run every `smoke:*` script — the full suite is
-18 scripts and takes a few minutes. Both reliability campaigns are
+19 scripts and takes a few minutes. Both reliability campaigns are
 intentionally separate from `smoke:all`: each creates four isolated Git
 repositories and emits a staged scorecard. Use the corresponding `:baseline`
 variant only when intentionally refreshing durable evidence in

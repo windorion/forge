@@ -116,7 +116,8 @@ separate read-only capability boundary:
 - startup Agent Loop and edit-transaction recovery do not run
 - persisted queue requests do not dispatch
 - every non-GET HTTP request is rejected with `403 observer_read_only`
-- `GET /tasks` and `GET /queue` reload committed task payloads before returning
+- `GET /tasks`, `GET /tasks/:taskID`, and `GET /queue` reload committed task
+  payloads before returning
 - health reports `runtimeMode: observer` and `readOnly: true`
 
 The macOS supervisor validates mode, read-only status, and exact repository
@@ -134,6 +135,17 @@ root. A mismatch terminates the process. Active startup intentionally restores
 normal recovery and queue dispatch for that repository. Revocation terminates
 the active child and starts a fresh read-only observer on the same unique port;
 the authorization is not persisted across app launches.
+
+The native supervisor is also the repository-scoped task router. Read-only
+task-card navigation performs a fresh health check, then fetches the exact task
+through `GET /tasks/:taskID` without changing the primary workspace. Task
+creation, conversation, plan regeneration/approval, proposal-file review,
+Apply, and validation require an accepted active runtime. Immediately before
+each mutation, the supervisor rechecks exact repo root, primary/read-write
+mode, `repository-active` scope, and the current memory-only authorization ID.
+All mutations for one repository share one in-flight key; runtime revocation is
+blocked until that scoped request completes. Any identity or authorization
+mismatch terminates the child and clears its active authorization.
 
 ### Agent Orchestrator
 

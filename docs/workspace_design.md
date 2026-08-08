@@ -3,7 +3,7 @@
 Document role: record the product surface, information architecture, screen
 responsibilities, and interaction rules for the Forge workspace.
 
-Last updated: 2026-07-15
+Last updated: 2026-08-08
 
 ## Design Direction
 
@@ -73,7 +73,13 @@ primary workspace. Observer cards remain read-only by default. Their explicit
 active-runtime action must show repository, port, queue recovery/dispatch, and
 session consequences before transition; accepted active state displays scoped
 authorization evidence and joins Pause All. Background task creation and full
-review routing remain separate from authorization itself.
+review routing remain separate from authorization itself. Current
+implementation preserves that separation: repository cards open a fresh
+repository-scoped task detail/Review surface without changing the primary
+workspace, and the target-aware composer/actions stay disabled for observers.
+An accepted active runtime can create a task, continue conversation, approve a
+plan, review proposal files, Apply, and run validation only through the
+supervisor's fresh authorization gate.
 
 ### Center: Live Agent Session
 

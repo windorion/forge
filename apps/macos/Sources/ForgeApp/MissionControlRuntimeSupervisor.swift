@@ -1,5 +1,55 @@
 import Foundation
 
+enum MissionControlRuntimeAccessRequirement: Equatable {
+    case readOnlyOrAuthorized
+    case authorizedMutation
+}
+
+struct MissionControlRuntimeAccessExpectation: Equatable {
+    var repositoryPath: String
+    var runtimeMode: String
+    var authorizationID: String?
+    var requirement: MissionControlRuntimeAccessRequirement
+}
+
+enum MissionControlRuntimeAccessPolicy {
+    static func validate(
+        health: RuntimeHealth,
+        expectation: MissionControlRuntimeAccessExpectation
+    ) throws {
+        guard health.workspace?.repoRoot == expectation.repositoryPath else {
+            throw MissionControlSupervisorError.wrongRepository
+        }
+        guard health.runtimeMode == expectation.runtimeMode else {
+            throw MissionControlSupervisorError.wrongRuntimeMode(
+                expected: expectation.runtimeMode == "observer" ? "observer/read-only" : "primary/read-write"
+            )
+        }
+
+        switch expectation.runtimeMode {
+        case "observer":
+            guard health.readOnly == true else {
+                throw MissionControlSupervisorError.wrongRuntimeMode(expected: "observer/read-only")
+            }
+            guard expectation.requirement == .readOnlyOrAuthorized else {
+                throw MissionControlSupervisorError.activeAuthorizationRequired
+            }
+        case "primary":
+            guard health.readOnly == false else {
+                throw MissionControlSupervisorError.wrongRuntimeMode(expected: "primary/read-write")
+            }
+            guard let authorizationID = expectation.authorizationID,
+                  health.runtimeAuthorization?.id == authorizationID,
+                  health.runtimeAuthorization?.scope == "repository-active"
+            else {
+                throw MissionControlSupervisorError.wrongAuthorization
+            }
+        default:
+            throw MissionControlSupervisorError.wrongRuntimeMode(expected: expectation.runtimeMode)
+        }
+    }
+}
+
 struct MissionControlObservedRepository: Hashable {
     var path: String
     var port: Int
@@ -45,6 +95,8 @@ final class MissionControlRuntimeSupervisor {
     private var snapshots: [String: MissionControlObservedRepository] = [:]
     private var pendingRuntimes: [String: PendingRuntime] = [:]
     private var activeAuthorizations: [String: ActiveAuthorization] = [:]
+    private var inFlightRouteKeys = Set<String>()
+    private var refreshInProgress = false
     private var monitorTask: Task<Void, Never>?
 
     deinit {
@@ -118,6 +170,11 @@ final class MissionControlRuntimeSupervisor {
     }
 
     func setActiveAuthorization(path: String, isActive: Bool, runtimeDirectory: URL?) {
+        guard !inFlightRouteKeys.contains("mutation:\(path)") else {
+            snapshots[path]?.error = "Wait for the current scoped action to finish before changing runtime access."
+            publish()
+            return
+        }
         if isActive {
             if activeAuthorizations[path] == nil {
                 activeAuthorizations[path] = ActiveAuthorization(
@@ -166,25 +223,103 @@ final class MissionControlRuntimeSupervisor {
         let activeRuntimes = managed.filter { $0.value.mode == .active }
         var requested = 0
         var failed = 0
-        for (path, runtime) in activeRuntimes {
-            guard let baseURL = URL(string: "http://127.0.0.1:\(runtime.port)") else { continue }
-            let client = RuntimeClient(baseURL: baseURL)
+        for path in activeRuntimes.keys {
             let runningLoops = (snapshots[path]?.tasks ?? []).compactMap { task -> (ForgeTask.ID, AgentRunLoop.ID)? in
                 guard let loop = task.agentRunLoops.last(where: { $0.status == "Running" }) else { return nil }
                 return (task.id, loop.id)
             }
-            for (taskID, loopID) in runningLoops {
-                requested += 1
-                do {
-                    _ = try await client.pauseAgentLoop(taskID: taskID, loopID: loopID, note: "Pause All from Mission Control")
-                } catch {
-                    failed += 1
-                    snapshots[path]?.error = "Pause failed: \(error.localizedDescription)"
+            do {
+                let pathResult = try await withRouteRequest(key: "mutation:\(path)") {
+                    let client = try await validatedClient(path: path, requireActive: true)
+                    var pathFailures = 0
+                    for (taskID, loopID) in runningLoops {
+                        do {
+                            _ = try await client.pauseAgentLoop(
+                                taskID: taskID,
+                                loopID: loopID,
+                                note: "Pause All from Mission Control"
+                            )
+                        } catch {
+                            pathFailures += 1
+                            snapshots[path]?.error = "Pause failed: \(error.localizedDescription)"
+                        }
+                    }
+                    return pathFailures
                 }
+                requested += runningLoops.count
+                failed += pathResult
+            } catch {
+                requested += runningLoops.count
+                failed += runningLoops.count
+                snapshots[path]?.error = "Pause blocked: \(error.localizedDescription)"
             }
         }
         await refreshAll()
         return (requested, failed)
+    }
+
+    func task(path: String, taskID: ForgeTask.ID) async throws -> ForgeTask {
+        let key = "detail:\(path):\(taskID)"
+        return try await withRouteRequest(key: key) {
+            let client = try await validatedClient(path: path, requireActive: false)
+            let task = try await client.task(taskID: taskID)
+            upsert(task, for: path)
+            publish()
+            return task
+        }
+    }
+
+    func createTask(path: String, title: String, objective: String) async throws -> ForgeTask {
+        try await mutate(path: path) { client in
+            try await client.createTask(title: title, objective: objective)
+        }
+    }
+
+    func sendTaskMessage(path: String, taskID: ForgeTask.ID, content: String) async throws -> ForgeTask {
+        try await mutate(path: path) { client in
+            try await client.sendTaskMessage(taskID: taskID, content: content)
+        }
+    }
+
+    func generatePlanRevision(path: String, taskID: ForgeTask.ID) async throws -> ForgeTask {
+        try await mutate(path: path) { client in
+            try await client.generatePlanRevision(taskID: taskID)
+        }
+    }
+
+    func approvePlanAndRun(path: String, taskID: ForgeTask.ID, maxSteps: Int = 6) async throws -> ForgeTask {
+        try await mutate(path: path) { client in
+            try await client.approvePlanAndRun(taskID: taskID, note: "Approved from Mission Control", maxSteps: maxSteps)
+        }
+    }
+
+    func reviewEditProposalFile(
+        path: String,
+        taskID: ForgeTask.ID,
+        fileChangeID: String,
+        decision: String,
+        note: String? = nil
+    ) async throws -> ForgeTask {
+        try await mutate(path: path) { client in
+            try await client.reviewEditProposalFile(
+                taskID: taskID,
+                fileChangeID: fileChangeID,
+                decision: decision,
+                note: note
+            )
+        }
+    }
+
+    func applyEditProposal(path: String, taskID: ForgeTask.ID) async throws -> ForgeTask {
+        try await mutate(path: path) { client in
+            try await client.applyEditProposal(taskID: taskID, note: "Applied from Mission Control review")
+        }
+    }
+
+    func runValidation(path: String, taskID: ForgeTask.ID) async throws -> ForgeTask {
+        try await mutate(path: path) { client in
+            try await client.runValidation(taskID: taskID)
+        }
     }
 
     func stopAll() {
@@ -196,6 +331,7 @@ final class MissionControlRuntimeSupervisor {
         managed.removeAll()
         pendingRuntimes.removeAll()
         activeAuthorizations.removeAll()
+        inFlightRouteKeys.removeAll()
         snapshots.removeAll()
         publish()
     }
@@ -280,6 +416,9 @@ final class MissionControlRuntimeSupervisor {
     }
 
     private func refreshAll() async {
+        guard !refreshInProgress else { return }
+        refreshInProgress = true
+        defer { refreshInProgress = false }
         let runtimes = managed
         for (path, runtime) in runtimes {
             guard runtime.process.isRunning,
@@ -291,24 +430,11 @@ final class MissionControlRuntimeSupervisor {
                 async let queue = client.taskQueue()
                 async let gitStatus = client.gitStatus()
                 let values = try await (health, tasks, queue, gitStatus)
-                if runtime.mode == .observer {
-                    guard values.0.runtimeMode == "observer", values.0.readOnly == true else {
-                        throw MissionControlSupervisorError.wrongRuntimeMode(expected: "observer/read-only")
-                    }
-                } else {
-                    guard values.0.runtimeMode == "primary", values.0.readOnly == false else {
-                        throw MissionControlSupervisorError.wrongRuntimeMode(expected: "primary/read-write")
-                    }
-                    guard let expectedAuthorizationID = runtime.authorizationID,
-                          values.0.runtimeAuthorization?.id == expectedAuthorizationID,
-                          values.0.runtimeAuthorization?.scope == "repository-active"
-                    else {
-                        throw MissionControlSupervisorError.wrongAuthorization
-                    }
-                }
-                guard values.0.workspace?.repoRoot == path else {
-                    throw MissionControlSupervisorError.wrongRepository
-                }
+                try MissionControlRuntimeAccessPolicy.validate(
+                    health: values.0,
+                    expectation: accessExpectation(path: path, runtime: runtime, requireActive: false)
+                )
+                let mergedTasks = mergeTasks(values.1, preservingNewerFrom: snapshots[path]?.tasks ?? [])
                 snapshots[path] = MissionControlObservedRepository(
                     path: path,
                     port: runtime.port,
@@ -316,21 +442,14 @@ final class MissionControlRuntimeSupervisor {
                     status: runtime.mode == .observer ? "LIVE OBSERVER" : "ACTIVE RUNTIME",
                     error: nil,
                     health: values.0,
-                    tasks: values.1,
+                    tasks: mergedTasks,
                     queue: values.2,
                     gitStatus: values.3,
                     refreshedAt: Date()
                 )
             } catch {
-                if error is MissionControlSupervisorError {
-                    managed.removeValue(forKey: path)
-                    pendingRuntimes.removeValue(forKey: path)
-                    snapshots[path]?.processID = nil
-                    snapshots[path]?.status = "FAILED"
-                    snapshots[path]?.error = error.localizedDescription
-                    if runtime.process.isRunning {
-                        runtime.process.terminate()
-                    }
+                if let supervisorError = error as? MissionControlSupervisorError {
+                    invalidateRuntime(path: path, runtime: runtime, error: supervisorError)
                 } else {
                     snapshots[path]?.status = runtime.process.isRunning
                         ? (runtime.mode == .observer ? "CONNECTING" : "ACTIVATING")
@@ -340,6 +459,109 @@ final class MissionControlRuntimeSupervisor {
             }
         }
         publish()
+    }
+
+    private func mutate(
+        path: String,
+        operation: (RuntimeClient) async throws -> ForgeTask
+    ) async throws -> ForgeTask {
+        try await withRouteRequest(key: "mutation:\(path)") {
+            let client = try await validatedClient(path: path, requireActive: true)
+            let task = try await operation(client)
+            upsert(task, for: path)
+            publish()
+            return task
+        }
+    }
+
+    private func withRouteRequest<T>(key: String, operation: () async throws -> T) async throws -> T {
+        guard inFlightRouteKeys.insert(key).inserted else {
+            throw MissionControlSupervisorError.requestAlreadyInFlight
+        }
+        defer { inFlightRouteKeys.remove(key) }
+        return try await operation()
+    }
+
+    private func validatedClient(path: String, requireActive: Bool) async throws -> RuntimeClient {
+        guard let runtime = managed[path], runtime.process.isRunning,
+              let baseURL = URL(string: "http://127.0.0.1:\(runtime.port)")
+        else {
+            throw MissionControlSupervisorError.runtimeUnavailable
+        }
+        if requireActive && runtime.mode != .active {
+            throw MissionControlSupervisorError.activeAuthorizationRequired
+        }
+        if runtime.mode == .active {
+            guard let expected = activeAuthorizations[path], expected.id == runtime.authorizationID else {
+                let error = MissionControlSupervisorError.wrongAuthorization
+                invalidateRuntime(path: path, runtime: runtime, error: error)
+                throw error
+            }
+        }
+
+        let client = RuntimeClient(baseURL: baseURL)
+        let health = try await client.health()
+        do {
+            try MissionControlRuntimeAccessPolicy.validate(
+                health: health,
+                expectation: accessExpectation(path: path, runtime: runtime, requireActive: requireActive)
+            )
+        } catch let error as MissionControlSupervisorError {
+            invalidateRuntime(path: path, runtime: runtime, error: error)
+            throw error
+        }
+        return client
+    }
+
+    private func accessExpectation(
+        path: String,
+        runtime: ManagedRuntime,
+        requireActive: Bool
+    ) -> MissionControlRuntimeAccessExpectation {
+        MissionControlRuntimeAccessExpectation(
+            repositoryPath: path,
+            runtimeMode: runtime.mode == .observer ? "observer" : "primary",
+            authorizationID: runtime.authorizationID,
+            requirement: requireActive ? .authorizedMutation : .readOnlyOrAuthorized
+        )
+    }
+
+    private func invalidateRuntime(path: String, runtime: ManagedRuntime, error: MissionControlSupervisorError) {
+        managed.removeValue(forKey: path)
+        pendingRuntimes.removeValue(forKey: path)
+        activeAuthorizations.removeValue(forKey: path)
+        snapshots[path]?.processID = nil
+        snapshots[path]?.status = "FAILED"
+        snapshots[path]?.error = error.localizedDescription
+        if runtime.process.isRunning {
+            runtime.process.terminate()
+        }
+        publish()
+    }
+
+    private func upsert(_ task: ForgeTask, for path: String) {
+        guard var snapshot = snapshots[path] else { return }
+        if let index = snapshot.tasks.firstIndex(where: { $0.id == task.id }) {
+            snapshot.tasks[index] = task
+        } else {
+            snapshot.tasks.append(task)
+        }
+        snapshot.refreshedAt = Date()
+        snapshots[path] = snapshot
+    }
+
+    private func mergeTasks(_ incoming: [ForgeTask], preservingNewerFrom current: [ForgeTask]) -> [ForgeTask] {
+        var merged = Dictionary(uniqueKeysWithValues: incoming.map { ($0.id, $0) })
+        for task in current {
+            guard let candidate = merged[task.id] else {
+                merged[task.id] = task
+                continue
+            }
+            if task.updatedAt > candidate.updatedAt {
+                merged[task.id] = task
+            }
+        }
+        return Array(merged.values)
     }
 
     private func handleTermination(path: String, processID: Int32, status: Int32) {
@@ -361,10 +583,13 @@ final class MissionControlRuntimeSupervisor {
     }
 }
 
-private enum MissionControlSupervisorError: LocalizedError {
+enum MissionControlSupervisorError: LocalizedError {
     case wrongRuntimeMode(expected: String)
     case wrongAuthorization
     case wrongRepository
+    case activeAuthorizationRequired
+    case runtimeUnavailable
+    case requestAlreadyInFlight
 
     var errorDescription: String? {
         switch self {
@@ -374,6 +599,12 @@ private enum MissionControlSupervisorError: LocalizedError {
             return "Mission Control refused an active runtime without the current session authorization."
         case .wrongRepository:
             return "Mission Control refused a runtime attached to a different repository."
+        case .activeAuthorizationRequired:
+            return "This repository is read-only. Authorize its active runtime before taking this action."
+        case .runtimeUnavailable:
+            return "The repository runtime is unavailable or still connecting."
+        case .requestAlreadyInFlight:
+            return "The same repository action is already in progress."
         }
     }
 }

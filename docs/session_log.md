@@ -6125,3 +6125,76 @@ Next:
 - Separately, run the pinned live-model corpus only after explicit budget and
   external-provider permission, then reorder agent/retrieval work from measured
   failures.
+
+## 2026-08-08 23:34:52 +0200 (CEST)
+
+Conversation summary:
+
+- The founder asked Forge to continue with the next long task, prioritize
+  useful API-free work, keep product/status documentation synchronized, and
+  complete, commit, and push as much as safely possible.
+
+Done:
+
+- Completed repository-scoped Mission Control task routing. The target-aware
+  composer now creates tasks in the primary repository or an already accepted
+  background runtime. Background task cards open fresh detail without changing
+  or restarting the primary workspace.
+- Added a root-owned background task Overview/Review/Activity surface with
+  conversation, plan regeneration and Approve & Run, proposal diffs, per-file
+  Approve/Request Changes, explicit Apply, validation, events, and evidence.
+  Observer routes expose task/review detail but keep every mutation disabled.
+- Added a supervisor-owned fail-closed access policy. Every background task
+  read checks exact repository identity; every write additionally checks
+  primary/read-write mode, `repository-active` scope, and the current
+  memory-only authorization ID immediately before routing. All mutations for a
+  repository share one in-flight gate, access mode cannot change during a
+  mutation, and identity/authorization mismatch terminates the child and
+  clears its session authorization. Pause All now uses the same gate.
+- Added read-only `GET /tasks/:taskID`, raising the executable public contract
+  from 57 to 58 routes. The runtime and injected Swift client return an exact
+  durable task or an explicit 404; observer mode reloads committed state first.
+- Added `smoke:mission-control`, which starts two isolated loopback runtimes,
+  concurrently creates six tasks per repository, proves exact detail routing
+  and cross-repository 404 isolation, returns both to observer mode, performs
+  eight health/tasks/queue/git/detail soak iterations, then proves POST remains
+  blocked and both SQLite files remain byte-identical. Environment variables
+  can scale iterations and task counts for longer local stress runs.
+- Added five native authorization-policy negative/positive tests and one
+  task-detail client contract test. Updated README, TODO, project gap matrix,
+  roadmap, development guide, workspace/macOS design, runtime architecture,
+  security model, route architecture/refactor records, and documentation-truth
+  inventory. Multi-repository supervision is now estimated at 76-84% readiness
+  (16-24% gap); Alpha at 68-76%; polished v1 at 22-28%.
+- Verified TypeScript check/build, all 20 runtime unit-test files, all 19 smoke
+  scripts, the 58-route HTTP contract, all 36 Swift tests, documentation truth,
+  Swift build, and `git diff --check`. Both four-repository campaigns passed
+  again: each recorded three successes, one correctly guarded negative, and
+  zero failures; the mock-provider campaign made 37 loopback strict-schema
+  requests with 100% scored-stage pass rate.
+- Used only local deterministic providers, loopback mock servers, temporary
+  repositories, and temporary SQLite stores. No real GitHub/OpenAI API was
+  called, no repository data left the machine, and no external API cost was
+  incurred.
+
+Not done:
+
+- Native click-through UI automation and a multi-hour restart-heavy soak are
+  not yet implemented; the new routed SwiftUI surface is build/test covered and
+  its runtime path is end-to-end fixture covered.
+- Cross-runtime fairness is still a per-runtime queue policy rather than a
+  global Mission Control scheduler. Richer background command/Git actions also
+  remain outside this routed review slice.
+- Live-model public-repository evidence still requires explicit external
+  provider/token/cost authorization. Live `6a` OAuth, signed `35a` WidgetKit,
+  signed/notarized distribution, semantic retrieval, accounts, and commercial
+  validation remain separate milestones.
+
+Next:
+
+- For the next API-free long task, implement a Mission Control fairness policy,
+  restart/failure-aware scheduling evidence, native UI automation for
+  observer/active/task/review transitions, and a configurable multi-hour soak.
+- Separately, run the pinned live-model corpus only after explicit budget and
+  external-provider permission, then prioritize agent/retrieval improvements
+  from measured failures.

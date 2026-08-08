@@ -27,6 +27,13 @@ struct RuntimeClient {
         return envelope.tasks
     }
 
+    func task(taskID: ForgeTask.ID) async throws -> ForgeTask {
+        let url = baseURL.appending(path: "tasks").appending(path: taskID)
+        let (data, response) = try await session.data(from: url)
+        try validate(response, data: data)
+        return try JSONDecoder().decode(ForgeTask.self, from: data)
+    }
+
     func taskAuditExport(taskID: ForgeTask.ID, format: String) async throws -> TaskAuditExportEnvelope {
         let url = baseURL
             .appending(path: "tasks")

@@ -126,6 +126,13 @@ Implemented today:
   echo the generated authorization ID before Mission Control accepts it.
   Authorized runtimes may recover and dispatch that repository's persisted
   queue, while Pause All cooperatively covers every accepted active runtime.
+- Mission Control background task routing: the new-task composer can target the
+  focused repository or an already-authorized background runtime. Background
+  cards open fresh task detail, plan, conversation, proposal diff, validation,
+  and activity evidence without replacing the primary workspace. Plan/message,
+  per-file review, Apply, and validation actions reach the owning runtime only
+  after a fresh repository/mode/authorization check; observers stay read-only
+  and per-repository mutations are serialized.
 - Explicit human review gates for plans and edits.
 - Safe edit proposals with multi-file OpenAI proposal artifacts, including
   blocked preview-only operations. Apply supports Markdown `AppendText`,
@@ -241,7 +248,8 @@ Beyond V0:
   current bounded loop and reviewed Unified Diff path.
 - Semantic or hybrid retrieval beyond the existing durable file, symbol, and
   trigram text indexes.
-- Full background task/detail/review routing across authorized repositories.
+- Cross-runtime queue fairness, longer-duration supervision soak, and native UI
+  automation beyond the current routed task/review slice.
 - Packaged, signed, notarized, auto-updating Mac distribution.
 
 ## Completion Estimate
@@ -254,9 +262,9 @@ Product-readiness estimate:
 | Coding-agent demo V0 behavior | 100% | The documented functional acceptance path is implemented and smoke-covered. |
 | Primary V0 handoff UI | 100% | The five primary screens are `Verified` with rendered-comparison evidence in `docs/verification/`. |
 | Full handoff UI | 95-97% | 41 of 43 named screens/states are `Verified` (rendered comparison on real data, evidence in `docs/verification/`). The two remaining: `6a` GitHub is `Partial` (configuration UI, Device Flow, polling, Keychain persistence, and connected state are implemented and tested; live GitHub authorization still needs a founder-owned OAuth App Client ID with Device Flow enabled); `35a` Widget is a documented platform-blocked descope (hand-assembled ad-hoc-signed extension not discovered by pluginkit; unblocks with P6 signing). |
-| Useful developer alpha | 66-74% | Forge now repeats the reviewed lifecycle across both deterministic local-provider and mock-OpenAI adapter corpora, including Unified Diff, approved commands, safety guarding, reviewed repair/rerun, fork-aware PR publication, and bounded status supervision; it still needs broader autonomous tool use and live-model success on pinned public repositories. |
+| Useful developer alpha | 68-76% | Forge now repeats the reviewed lifecycle across deterministic local-provider and mock-OpenAI adapter corpora, including Unified Diff, approved commands, repair/rerun, fork-aware PR supervision, and repository-scoped background task/review routing; it still needs broader autonomous tool use and live-model success on pinned public repositories. |
 | Commercial beta | 20-25% | Needs signed installable packaging, production proof of the implemented onboarding and GitHub/provider setup, trust/operations polish, and repeated success on real repos. |
-| Polished v1 | 20-25% | Queueing, local indexes, and session-authorized active runtimes are real; full background task/review routing, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
+| Polished v1 | 22-28% | Queueing, local indexes, session-authorized runtimes, and background task/detail/review routing are real; fairness/soak, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
 
 Short version: V0 behavior is complete, but the entire 43-screen product design
 is not. Alpha is the next cumulative horizon, followed by beta and then v1;

@@ -207,8 +207,8 @@ the core runtime smoke. Preserve these completed boundaries:
 
 - [x] Execute the seven-phase, behavior-preserving `runtime/src/server.ts`
   decomposition in `docs/runtime_server_refactor.md`. The packaged entry is now
-  a one-line bootstrap; the current 57-route contracts, direct unit/coverage
-  gates, and all 18 smoke scripts pass without weakening approval or observer
+  a one-line bootstrap; the current 58-route contracts, direct unit/coverage
+  gates, and all 19 smoke scripts pass without weakening approval or observer
   boundaries.
 - [x] Complete the post-refactor readability pass: split Git workflow into five
   domain services, agent orchestration into queue/loop/step/inspection/recovery,
@@ -252,8 +252,14 @@ the core runtime smoke. Preserve these completed boundaries:
 
 ## P5: Native macOS Product
 
-- Finish background task creation/detail/review routing for authorized Mission
-  Control runtimes and cross-runtime click-through from repository cards.
+- [x] Finish background task creation/detail/review routing for authorized
+  Mission Control runtimes and cross-runtime click-through from repository
+  cards. The routed surface covers new task, fresh task detail, conversation,
+  plan approval/run, proposal diff, per-file review, Apply, validation, and
+  activity without replacing the primary workspace; every mutation revalidates
+  identity/session authorization and shares a per-repository concurrency gate.
+- Add cross-runtime queue fairness policy, restart-heavy multi-hour supervision
+  soak, and native UI automation for observer/active/task/review transitions.
 - Add Finder and broader "open in IDE" integrations beyond the current
   file/repository reveal actions.
 - Run final human-input verification for remappable shortcuts, native Dock/menu
