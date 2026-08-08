@@ -105,8 +105,9 @@ Remaining Alpha evidence:
 
 - pinned public-repository tasks run with a live model under explicit budgets;
 - broader provider tool/patch choices and repeated successful recovery;
-- cross-runtime queue fairness and restart-heavy long-duration supervision
-  beyond the implemented authorized task/detail/review routing.
+- archive a full-duration restart-heavy supervision run and add action-level
+  UI automation beyond the implemented fair authorized task/detail/review
+  routing and configurable soak harness.
 
 Proof point:
 
@@ -176,7 +177,8 @@ additive.
 3. Use those failures to widen provider tool/patch/recovery behavior without
    weakening runtime ownership or human review.
 4. Extend the completed background task/detail/review routing with
-   cross-runtime queue fairness, native UI automation, and long-duration soak.
+   routed background command/git reviews, action-level native UI automation,
+   and archived full-duration soak evidence.
 5. Complete signed/notarized packaging, appcast install/relaunch, production
    diagnostics, and commercial decisions.
 

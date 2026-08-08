@@ -6198,3 +6198,75 @@ Next:
 - Separately, run the pinned live-model corpus only after explicit budget and
   external-provider permission, then prioritize agent/retrieval improvements
   from measured failures.
+
+## 2026-08-09 00:16:50 +0200 (CEST)
+
+Conversation summary:
+
+- The founder asked Forge to continue the next long API-free task, complete as
+  much useful work as possible, keep the documentation truthful, and prepare
+  the result for commit and push.
+
+Done:
+
+- Added fail-closed supervised queue dispatch for authorized background
+  runtimes. `FORGE_QUEUE_DISPATCH_MODE=supervised` forces every approved Agent
+  Loop into the durable queue and blocks startup/loop-finally/settings dispatch.
+  The new `POST /queue/dispatch-next` accepts only the current runtime session
+  authorization ID and returns 202 grant/queue evidence; stale IDs fail 403 and
+  automatic runtimes fail 409.
+- Added Mission Control's shared fair scheduler and visible state. It persists
+  a 1-2 background slot preference, chooses the oldest eligible repository for
+  the first grant, rotates subsequent grants round-robin, skips observer/
+  offline/automatic/busy runtimes, preserves the one-writer-per-repository
+  boundary, and displays running/limit, queue, next repository, and grant count.
+- Added `smoke:mission-control-fairness` plus the configurable
+  `soak:mission-control` entry. The default fixture held six tasks before any
+  grant, alternated alpha/beta across all six grants, rejected a stale ID, and
+  restarted a runtime every two grants without startup auto-dispatch. A
+  20-second extension completed 79 restart cycles without identity drift, task
+  loss, unexpected dispatch, or queue resurrection.
+- Added deterministic DEBUG native UI states and
+  `script/verify_mission_control_surfaces.sh`. The running DEBUG app was driven
+  through observer, active, queued, and review states; the final pass produced
+  12 self-rendered native-window captures. Visual review fixed the focused-path
+  fixture and made `BG SLOTS` visibly discoverable. Evidence and the repair
+  trail are in `docs/verification/mission-control-fairness/`.
+- Expanded the public contract to 59 routes, the smoke inventory to 20 scripts,
+  and the Swift suite to 44 tests. New tests cover supervised health evidence,
+  grant-body authorization placement, oldest-first selection, round-robin,
+  eligibility filtering, global slot limits, and waiting explanations.
+- Updated README, project gap matrix, TODO, development, user flows, macOS/
+  workspace design, runtime/security architecture, route architecture/refactor,
+  roadmap, documentation truth, and verification evidence. Multi-repository
+  supervision is now estimated at 84-89% readiness (11-16% gap), Alpha at
+  70-78%, trust/runtime at 90-94%, and polished v1 at 24-30%.
+- Verified TypeScript check/build, documentation truth, all 20 runtime unit
+  files, all 20 smoke scripts, all 44 Swift tests, Swift build, DEBUG app bundle
+  launch, and native four-state capture automation. Both four-repository
+  reliability campaigns passed again with 3 successes, 1 correctly guarded
+  negative, and 0 failures; the provider campaign made 37 loopback requests.
+- Used only local deterministic providers, a loopback mock provider, temporary
+  Git repositories/SQLite stores, and native local app capture. No external
+  GitHub/OpenAI API was called and no API cost was incurred.
+
+Not done:
+
+- The six-hour soak entry is implemented but only a 20-second/79-restart run
+  was completed in this conversation; a durable full-duration result remains.
+- Native capture automation drives deterministic state transitions, not real
+  pointer/keyboard actions. Authorization confirmation, slot changes, card
+  navigation, and review gates still need action-level XCUITest.
+- Background command catalogs and Git review/actions are not yet routed through
+  Mission Control. Live-model corpus, OAuth live proof, signed WidgetKit,
+  signing/notarization, semantic retrieval, hosted collaboration, and pricing
+  remain separate milestones.
+
+Next:
+
+- Continue the API-free supervision milestone with authorized background
+  command/validation/Git review routing, action-level native automation, and an
+  archived full-duration soak with disconnect/backoff telemetry.
+- Run the pinned live-model corpus only after explicit provider, token, cost,
+  and external-network authorization; use measured failures to reorder agent
+  and retrieval work.

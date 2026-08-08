@@ -100,6 +100,19 @@ struct RuntimeClient {
         return try JSONDecoder().decode(TaskQueueSnapshot.self, from: data)
     }
 
+    func dispatchNextQueuedAgentRun(authorizationID: String) async throws -> SupervisedQueueDispatchResult {
+        let url = baseURL.appending(path: "queue").appending(path: "dispatch-next")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(
+            SupervisedQueueDispatchRequest(authorizationID: authorizationID)
+        )
+        let (data, response) = try await session.data(for: request)
+        try validate(response, data: data)
+        return try JSONDecoder().decode(SupervisedQueueDispatchResult.self, from: data)
+    }
+
     func listValidationPresets() async throws -> ValidationPresetListEnvelope {
         let url = baseURL.appending(path: "validation-presets")
         let (data, response) = try await session.data(from: url)

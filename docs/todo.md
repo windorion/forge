@@ -207,8 +207,8 @@ the core runtime smoke. Preserve these completed boundaries:
 
 - [x] Execute the seven-phase, behavior-preserving `runtime/src/server.ts`
   decomposition in `docs/runtime_server_refactor.md`. The packaged entry is now
-  a one-line bootstrap; the current 58-route contracts, direct unit/coverage
-  gates, and all 19 smoke scripts pass without weakening approval or observer
+  a one-line bootstrap; the current 59-route contracts, direct unit/coverage
+  gates, and all 20 smoke scripts pass without weakening approval or observer
   boundaries.
 - [x] Complete the post-refactor readability pass: split Git workflow into five
   domain services, agent orchestration into queue/loop/step/inspection/recovery,
@@ -258,8 +258,19 @@ the core runtime smoke. Preserve these completed boundaries:
   plan approval/run, proposal diff, per-file review, Apply, validation, and
   activity without replacing the primary workspace; every mutation revalidates
   identity/session authorization and shares a per-repository concurrency gate.
-- Add cross-runtime queue fairness policy, restart-heavy multi-hour supervision
-  soak, and native UI automation for observer/active/task/review transitions.
+- [x] Add cross-runtime queue fairness and restart-safe supervised dispatch.
+  Authorized background runtimes always enqueue, never startup-dispatch, and
+  accept `POST /queue/dispatch-next` only with the current memory-only
+  authorization ID. The shared scheduler persists a 1-2 slot preference,
+  chooses the oldest eligible queue first, then rotates round-robin. Pure Swift
+  tests cover eligibility/limits/starvation; a two-runtime fixture proves six
+  alternating grants, stale-ID rejection, and injected restart hold. A
+  configurable six-hour soak command and DEBUG native capture driver cover
+  observer/active/queued/review states.
+- Route approved background command/validation-catalog/git review actions
+  through the same repository authorization and in-flight gates.
+- Run and archive a full multi-hour Mission Control soak, then add action-level
+  XCUITest for authorization, slot changes, card navigation, and review gates.
 - Add Finder and broader "open in IDE" integrations beyond the current
   file/repository reveal actions.
 - Run final human-input verification for remappable shortcuts, native Dock/menu
@@ -281,6 +292,17 @@ the core runtime smoke. Preserve these completed boundaries:
 
 ## Done Recently
 
+- Added fail-closed Mission Control fair queue supervision. Active background
+  children advertise `queueDispatch.mode=supervised`, hold persisted queue
+  entries across startup, and require an authorization-bound supervisor grant.
+  The native shared model owns a visible/persisted 1-2 background limit,
+  initial oldest-first choice, round-robin continuation, grant count, and next
+  repository evidence. `smoke:mission-control-fairness` exercises two isolated
+  repos, six tasks, alternating grants, stale authorization, and restart
+  injection. `soak:mission-control` extends the same local fixture to six
+  hours; `script/verify_mission_control_surfaces.sh` drives four deterministic
+  native states in a running DEBUG app.
+
 - Removed every SwiftUI Sheet from the macOS product hierarchy. Mission
   Control, Queue, History, Batch Questions, Full Plan, Full Diff, and Audit Log
   now open through one root-owned opaque exclusive surface coordinator. The
@@ -290,7 +312,7 @@ the core runtime smoke. Preserve these completed boundaries:
 
 - Added explicit, session-scoped active-runtime authorization to `4a` Mission
   Control. Each background repository still starts read-only; its visible
-  `AUTHORIZE ACTIVE` action confirms exact path, port, queue recovery/dispatch,
+  `AUTHORIZE ACTIVE` action confirms exact path, port, recovery/supervised queue,
   local-provider, and session consequences before replacing the observer with
   a read-write process. Health echoes a generated scoped authorization ID, and
   the supervisor validates that ID, mode, read-write state, and exact repo root

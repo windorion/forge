@@ -21,6 +21,7 @@ export interface RuntimeConfig {
   githubApiBase: string;
   enableSmokeCommands: boolean;
   taskQueueSmokeDelayMs: number;
+  supervisedQueueDispatch: boolean;
   stuckThresholds: StuckThresholds;
   stuckSweepIntervalMs: number;
   environment: NodeJS.ProcessEnv;
@@ -37,6 +38,7 @@ export function loadRuntimeConfig(
   const observerMode = environment.FORGE_RUNTIME_MODE === "observer";
   const enableSmokeCommands = environment.FORGE_ENABLE_SMOKE_COMMANDS === "1";
   const configuredQueueDelay = Number.parseInt(environment.FORGE_QUEUE_SMOKE_DELAY_MS ?? "0", 10) || 0;
+  const supervisedQueueDispatch = environment.FORGE_QUEUE_DISPATCH_MODE === "supervised";
 
   return {
     startedAt: Date.now(),
@@ -68,6 +70,7 @@ export function loadRuntimeConfig(
     githubApiBase: (environment.FORGE_GITHUB_API_BASE ?? "https://api.github.com").replace(/\/+$/, ""),
     enableSmokeCommands,
     taskQueueSmokeDelayMs: enableSmokeCommands ? Math.min(Math.max(configuredQueueDelay, 0), 5_000) : 0,
+    supervisedQueueDispatch,
     stuckThresholds: thresholdsFromEnv(environment),
     stuckSweepIntervalMs: Number(environment.FORGE_STUCK_SWEEP_INTERVAL_MS ?? 60_000),
     environment

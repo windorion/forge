@@ -110,7 +110,7 @@ Implemented:
   background runtimes. They default to read-only observer mode. Explicit
   per-repository confirmation can authorize an active runtime for the current
   app session; activation replaces the observer, forces the local provider,
-  may recover/dispatch the repository's persisted queue, and returns a scoped
+  may recover interrupted state, returns a scoped
   authorization ID in health. The supervisor accepts active data only after
   mode, read-write state, authorization ID, and exact repo root all match, and
   terminates a mismatched process. Pause All covers primary and authorized
@@ -120,8 +120,17 @@ Implemented:
   plan approval/run, proposal diff, per-file review, Apply, validation, and
   activity evidence. Every background mutation performs a fresh identity and
   authorization check and shares a per-repository in-flight gate. Observer
-  detail remains read-only. Queue fairness, native UI automation, and longer
-  supervision soak remain.
+  detail remains read-only. Authorized background children now use supervised
+  queue dispatch: startup and loop completion cannot start queued work without
+  a fresh app grant carrying the current authorization ID. Mission Control
+  persists a 1-2 background slot limit, selects the oldest first, then rotates
+  grants round-robin. Its fixture proves six alternating grants across two
+  repositories, stale-ID rejection, restart hold, and no starvation. A
+  configurable six-hour soak command and deterministic DEBUG native-surface
+  driver cover observer/active/queued/review states; a completed multi-hour
+  run and action-level XCUITest remain.
+  A bounded 20-second local extension completed 79 restart cycles without
+  unexpected dispatch, identity drift, task loss, or queue resurrection.
 - Local TypeScript runtime.
 - Completed seven-phase runtime decomposition: the former 12,496-line
   `runtime/src/server.ts` is now a one-line packaged bootstrap over typed
@@ -130,7 +139,7 @@ Implemented:
   services. A second readability pass split Git workflow, agent orchestration,
   edit operations, validation/process execution, route groups, and composition
   into narrower modules; `createForgeRuntime.ts` is now 476 lines. The
-  58-route executable contract, all 19 smoke scripts, and all 36 Swift tests
+  59-route executable contract, all 20 smoke scripts, and all 44 Swift tests
   pass.
 - Task creation and task conversation.
 - Server-Sent Events from runtime to app.
@@ -401,13 +410,13 @@ use different denominators and must not be added together.
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| Trust/runtime foundation | 89-93% | Local runtime, task state, review gates, restricted edits, validation, composed cancellation, redacted audit export, guarded git/PR actions, bounded refresh audit, explicit multi-runtime authorization, diagnostics, and separate local/provider protocol reliability baselines are real. |
+| Trust/runtime foundation | 90-94% | Local runtime, task state, review gates, restricted edits, validation, composed cancellation, redacted audit export, guarded git/PR actions, bounded refresh audit, fail-closed supervised queue grants, diagnostics, and separate local/provider protocol reliability baselines are real. |
 | Coding-agent demo V0 behavior | 100% | All documented functional acceptance criteria are implemented and smoke-covered. |
 | Primary V0 handoff UI | 100% | All five primary screens are `Verified` with rendered-comparison evidence in `docs/verification/`. |
 | Full 43-screen handoff UI | 95-97% | 41 of 43 screens Verified with rendered-comparison evidence (docs/verification/). Remaining: 6a Partial (OAuth configuration, Device Flow, standards-compliant polling, Keychain persistence, and connected UI are implemented and unit-tested; a live grant still needs the founder GitHub OAuth Client ID with Device Flow enabled); 35a a documented platform-blocked widget-signing descope (P6). |
-| Useful developer alpha | 68-76% | Forge now repeats the reviewed lifecycle across deterministic local-provider and mock-OpenAI adapter corpora, including Unified Diff, approved commands, repair/rerun, fork-aware PR supervision, and repository-scoped background task/review routing; it still needs broader autonomous tool use and repeated live-model success on pinned public repositories. |
+| Useful developer alpha | 70-78% | Forge repeats the reviewed lifecycle across deterministic local-provider and mock-OpenAI adapter corpora, including Unified Diff, approved commands, repair/rerun, fork-aware PR supervision, routed background review, and fair restart-safe dispatch; it still needs broader autonomous tool use and repeated live-model success on pinned public repositories. |
 | Commercial beta | 20-25% | Needs signed installable packaging, production proof of the implemented onboarding and GitHub/provider setup, trust/operations polish, and repeated success on real repos. |
-| Polished v1 product | 22-28% | The real queue, local indexes, session-authorized runtimes, and background task/detail/review routing exist; fairness/soak, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
+| Polished v1 product | 24-30% | The real queue, local indexes, session-authorized runtimes, background task/detail/review routing, and fair supervised grants exist; full soak/UI-action proof, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
 
 ## Component Gap Matrix
 
@@ -419,16 +428,16 @@ finish line.
 | Component | Readiness | Gap | Strongest evidence today | Largest remaining gap |
 | --- | ---: | ---: | --- | --- |
 | Product direction and task-first UX | 90-95% | 5-10% | Durable product principles, complete V0 flow, 41 rendered-verified handoff states. | Resolve the account/team boundary and validate the narrow daily-use task with external users. |
-| Runtime, task state, recovery | 90-94% | 6-10% | 58-route contract, SQLite persistence, task detail, queueing, cancellation, watchdog recovery, transaction journals. | Normalize long-term run/tool history, retention, migration, soak, and production telemetry. |
+| Runtime, task state, recovery | 91-95% | 5-9% | 59-route contract, SQLite persistence, task detail, supervised/automatic queue modes, cancellation, watchdog recovery, transaction journals. | Normalize long-term run/tool history, retention, migration, full-duration soak, and production telemetry. |
 | Security, permissions, and audit | 87-93% | 7-13% | Explicit plan/edit/command/git/PR gates, observer runtimes, redacted portable audit export, bounded PR refresh attempts. | Approval expiry/revocation, audit retention/purge, broader secret detection, and signed-build threat review. |
 | Handoff UI fidelity | 95-97% | 3-5% | Five primary screens and 41 of 43 total states are Verified. | Live `6a` OAuth evidence and signed `35a` WidgetKit packaging. |
-| Native macOS behavior and integrations | 76-84% | 16-24% | SwiftUI app, menus, shortcuts, notifications, Spotlight, CLI, onboarding, settings, managed runtime, shared default-off PR scheduler. | Final human-input checks, deeper Finder/IDE handoff, WidgetKit, UI automation, and signed-package proof. |
+| Native macOS behavior and integrations | 78-86% | 14-22% | SwiftUI app, menus, shortcuts, notifications, Spotlight, CLI, onboarding, settings, managed runtimes, fair-queue state, and four-state DEBUG capture automation. | Final human-input checks, action-level XCUITest, deeper Finder/IDE handoff, WidgetKit, and signed-package proof. |
 | Agent and live-model coding quality | 58-68% | 32-42% | Bounded plan/context/step loop, strict structured-output recovery, mock-OpenAI protocol campaign. | Pinned public-repository live-model evidence, broader tool choice, patch recovery, and measured quality/cost. |
 | Edit, command, validation, and repair | 80-88% | 12-20% | Reviewed multi-file create/modify/delete, Unified Diff, rollback, approved commands, repair/rerun. | Broader source transformations, command catalogs, revocable approval memory, and post-rollback validation. |
 | Repository understanding | 68-78% | 22-32% | Durable file metadata, lightweight symbols, trigram text index, bounded live verification. | Semantic/hybrid retrieval, dependency relationships, higher-fidelity parsing, ranking evaluation, and large-repo budgets. |
 | Git and GitHub workflow | 86-91% | 9-14% | Status/diff, guarded commit/branch/push, fork-aware PR publication, reviews/checks/mergeability evidence, bounded background refresh. | Live OAuth proof, hosted auth/network/branch-protection fixtures, richer provider portability, and merge/update policy decisions. |
-| Multi-task and multi-repository supervision | 76-84% | 16-24% | Persisted queue, observers, session authorization, task creation/detail/review routes, serialized mutations, Pause All, two-repo soak. | Cross-runtime queue fairness, richer routed command/git actions, native UI automation, and long-duration supervision. |
-| Reliability, evaluation, and test evidence | 74-84% | 16-26% | 20 runtime unit files, 19 smoke scripts, 36 Swift tests, fork/mock-GitHub E2E, two passing four-case campaigns, multi-runtime routing soak. | Live-model corpus, wider real repositories, hosted-network cases, UI automation, performance, and multi-hour soak. |
+| Multi-task and multi-repository supervision | 84-89% | 11-16% | Persisted queues, observers, session authorization, routed task/review, serialized mutations, fair 1-2-slot grants, restart injection, and configurable soak. | Richer routed command/git actions, action-level UI automation, full multi-hour evidence, disconnect backoff, and telemetry. |
+| Reliability, evaluation, and test evidence | 78-86% | 14-22% | 20 runtime unit files, 20 smoke scripts, 44 Swift tests, fork/mock-GitHub E2E, two passing campaigns, fair two-runtime restart fixture, and DEBUG state captures. | Live-model corpus, wider real repositories, hosted-network cases, action-level UI/performance evidence, and a completed multi-hour soak. |
 | Distribution, updates, and operations | 25-35% | 65-75% | App-managed/bundled-runtime path, update UI/appcast client, diagnostics surfaces. | Developer ID, hardened runtime, notarization, DMG, signed appcast install/relaunch, crash reporting, release rehearsal. |
 | Account, sync, and collaboration services | 10-20% | 80-90% | Honest local-only continuation and GitHub/provider credentials in Keychain. | Decide whether accounts exist; if yes, build verified email identity, sync, sharing, tenancy, and deletion/privacy APIs. |
 | Pricing, packaging, and go-to-market | 20-30% | 70-80% | Product category, personas, positioning, and business-model hypotheses are documented. | Choose solo/team wedge, open-core boundary, packaging, price, entitlement/billing, support, and launch evidence. |
@@ -439,12 +448,13 @@ and produces failure evidence that can rationally reorder agent, retrieval,
 edit, command, and reliability work instead of expanding those systems by
 intuition.
 
-The completed API-free Mission Control milestone closed the largest navigation
-gap with repository-targeted task creation, fresh detail reads, routed review
-actions, fail-closed authorization checks, and a two-repository loopback soak.
-The next API-free long milestone is cross-runtime queue fairness plus native UI
-automation and a restart-heavy multi-hour observer/active soak. It attacks the
-remaining 16-24% supervision gap without provider or hosting credentials.
+The completed API-free Mission Control fairness milestone closes autonomous
+background dispatch, starvation, and restart-hold gaps with a fail-closed
+supervisor-grant protocol, visible 1-2 slot state, deterministic policy tests,
+two-runtime restart injection, a configurable soak, and native DEBUG state
+captures. The next API-free long milestone is routed background command/git
+review plus action-level native automation and a completed multi-hour soak. It
+attacks the remaining 11-16% supervision gap without provider credentials.
 
 ## Distance To "Finished"
 
@@ -490,7 +500,7 @@ Alpha still requires:
 
 - repeated live-model success on a pinned public-repository task corpus
 - broader provider tool/patch choices without weakening review boundaries
-- cross-runtime queue fairness and longer-duration active/observer supervision
+- a completed multi-hour active/observer soak and action-level native UI proof
 - founder completion of live GitHub OAuth verification
 
 ## Commercial Beta Finish Line

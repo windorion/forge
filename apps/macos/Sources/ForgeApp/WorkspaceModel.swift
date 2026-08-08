@@ -9,6 +9,7 @@ final class WorkspaceModel: ObservableObject {
     nonisolated private static let repositoryPreferenceKey = "forge.selectedRepositoryRoot"
     nonisolated private static let reopenLastWorkspacePreferenceKey = "forge.reopenLastWorkspace"
     nonisolated private static let missionControlRepositoriesKey = "forge.missionControlRepositories"
+    nonisolated private static let missionControlFairQueueLimitKey = "forge.missionControlFairQueueLimit"
 
     @Published var tasks: [ForgeTask] = []
     @Published var selectedTaskID: ForgeTask.ID? {
@@ -55,6 +56,7 @@ final class WorkspaceModel: ObservableObject {
     @Published var missionControlRouteIsMutating = false
     @Published var missionControlRouteError: String?
     @Published var missionControlCreatingRepositoryPath: String?
+    @Published var missionControlFairQueueState = MissionControlFairQueueState()
     @Published private var validationPermissionSnapshots: [ForgeTask.ID: [ValidationPresetPermission]] = [:]
     @Published private var taskCommandPermissionSnapshots: [ForgeTask.ID: [TaskCommandPermission]] = [:]
     @Published private var sendingMessageTaskIDs = Set<ForgeTask.ID>()
@@ -119,6 +121,9 @@ final class WorkspaceModel: ObservableObject {
     private var runtimeProcess: Process?
     private var preferredRepositoryRoot: URL?
     private var pendingMissionControlTaskID: ForgeTask.ID?
+    #if DEBUG
+    private var missionControlDebugFixtureActive = false
+    #endif
 
     init(
         runtime: RuntimeClient = RuntimeClient(),
@@ -130,6 +135,11 @@ final class WorkspaceModel: ObservableObject {
         self.runtime = runtime
         self.userDefaults = userDefaults
         self.githubTokenLoader = githubTokenLoader
+
+        let storedFairQueueLimit = userDefaults.integer(forKey: Self.missionControlFairQueueLimitKey)
+        missionControlFairQueueState.concurrencyLimit = [1, 2].contains(storedFairQueueLimit)
+            ? storedFairQueueLimit
+            : 1
 
         if let data = userDefaults.data(forKey: Self.missionControlRepositoriesKey),
            let decoded = try? JSONDecoder().decode([MissionControlRepositorySnapshot].self, from: data) {
@@ -153,6 +163,10 @@ final class WorkspaceModel: ObservableObject {
         missionControlSupervisor.onUpdate = { [weak self] observations in
             self?.applyMissionControlObservations(observations)
         }
+        missionControlSupervisor.onFairQueueUpdate = { [weak self] state in
+            self?.missionControlFairQueueState = state
+        }
+        missionControlSupervisor.setFairQueueConcurrencyLimit(missionControlFairQueueState.concurrencyLimit)
     }
 
     var selectedTask: ForgeTask? {
@@ -952,6 +966,9 @@ final class WorkspaceModel: ObservableObject {
     }
 
     func refreshMissionControl() {
+        #if DEBUG
+        if missionControlDebugFixtureActive { return }
+        #endif
         Task {
             do {
                 try await refreshTasks()
@@ -965,6 +982,139 @@ final class WorkspaceModel: ObservableObject {
             synchronizeMissionControlObservers()
         }
     }
+
+    #if DEBUG
+    func clearMissionControlDebugFixture() {
+        missionControlDebugFixtureActive = false
+    }
+
+    func installMissionControlDebugFixture(_ requestedState: String) {
+        let primaryPath = runtimeHealth?.workspace?.repoRoot
+            ?? runtimeRepositoryRoot
+            ?? preferredRepositoryRoot?.path(percentEncoded: false)
+            ?? "/tmp/forge-ui-primary"
+        let state = ["observer", "active", "queued", "review"].contains(requestedState)
+            ? requestedState
+            : "observer"
+        missionControlDebugFixtureActive = true
+        runtimeRepositoryRoot = primaryPath
+        let now = Date()
+        let primaryTask = MissionControlTaskSnapshot(
+            taskID: "ui-primary-task",
+            title: "Refine runtime diagnostics",
+            tag: "COMPLETE",
+            phase: "Completed",
+            meta: "3 checks passed · ready to ship",
+            progress: 1,
+            rank: 4
+        )
+        let queuedAlpha = MissionControlTaskSnapshot(
+            taskID: "ui-alpha-queued",
+            title: "Add queue recovery regression",
+            tag: "QUEUED",
+            phase: "Agent Loop Queued",
+            meta: "waiting for Mission Control slot",
+            progress: nil,
+            rank: 3
+        )
+        let queuedBeta = MissionControlTaskSnapshot(
+            taskID: "ui-beta-queued",
+            title: "Audit provider timeout handling",
+            tag: "QUEUED",
+            phase: "Agent Loop Queued",
+            meta: "round-robin after alpha",
+            progress: nil,
+            rank: 3
+        )
+        let reviewTask = MissionControlTaskSnapshot(
+            taskID: "ui-alpha-review",
+            title: "Review guarded SQLite migration",
+            tag: "WAITING",
+            phase: "Human Review",
+            meta: "2 files · explicit apply required",
+            progress: 0.82,
+            rank: 1
+        )
+        let runningTask = MissionControlTaskSnapshot(
+            taskID: "ui-beta-running",
+            title: "Exercise restart checkpoint",
+            tag: "RUNNING",
+            phase: "Testing",
+            meta: "Tester · 1m elapsed",
+            progress: 0.63,
+            rank: 2
+        )
+
+        func background(
+            path: String,
+            name: String,
+            active: Bool,
+            tasks: [MissionControlTaskSnapshot],
+            repositoryState: String
+        ) -> MissionControlRepositorySnapshot {
+            MissionControlRepositorySnapshot(
+                path: path,
+                name: name,
+                state: repositoryState,
+                footer: "main · 0 changed · :\(path.hasSuffix("alpha") ? 17374 : 17375) · debug fixture",
+                capturedAt: now,
+                tasks: tasks,
+                runtimeState: active ? "ACTIVE RUNTIME" : "LIVE OBSERVER",
+                runtimePort: path.hasSuffix("alpha") ? 17_374 : 17_375,
+                runtimeProcessID: active ? 42_001 : 42_002,
+                observerReadOnly: !active,
+                runtimeAuthorizationID: active ? "debug-\(name.lowercased())-authorization" : nil
+            )
+        }
+
+        let alphaActive = state != "observer"
+        let betaActive = state == "queued" || state == "review"
+        let alphaTasks: [MissionControlTaskSnapshot] = state == "queued"
+            ? [queuedAlpha]
+            : (state == "review" ? [reviewTask] : [])
+        let betaTasks: [MissionControlTaskSnapshot] = state == "queued"
+            ? [queuedBeta]
+            : (state == "review" ? [runningTask] : [])
+        missionControlRepositories = [
+            MissionControlRepositorySnapshot(
+                path: primaryPath,
+                name: "windorion/forge",
+                state: "READY",
+                footer: "main · 0 changed · primary runtime",
+                capturedAt: now,
+                tasks: [primaryTask]
+            ),
+            background(
+                path: "/tmp/forge-ui-alpha",
+                name: "fixtures/alpha",
+                active: alphaActive,
+                tasks: alphaTasks,
+                repositoryState: state == "review" ? "NEEDS YOU" : (state == "queued" ? "QUEUED" : "IDLE")
+            ),
+            background(
+                path: "/tmp/forge-ui-beta",
+                name: "fixtures/beta",
+                active: betaActive,
+                tasks: betaTasks,
+                repositoryState: state == "review" ? "RUNNING" : (state == "queued" ? "QUEUED" : "IDLE")
+            )
+        ]
+        missionControlFairQueueState = MissionControlFairQueueState(
+            concurrencyLimit: state == "review" ? 1 : 2,
+            runningCount: state == "review" ? 1 : 0,
+            queuedCount: state == "queued" ? 2 : 0,
+            nextRepositoryPath: state == "queued" ? "/tmp/forge-ui-alpha" : nil,
+            lastGrantedPath: state == "review" ? "/tmp/forge-ui-beta" : nil,
+            grantCount: state == "observer" ? 0 : (state == "active" ? 1 : 6),
+            isDispatching: false,
+            status: state == "queued"
+                ? "Next fair grant: forge-ui-alpha."
+                : (state == "review"
+                    ? "Background concurrency limit reached; queued repositories remain ordered fairly."
+                    : "No authorized background work is queued.")
+        )
+    }
+    #endif
 
     func pauseAllMissionControlLoops() {
         let running = tasks.compactMap { task -> (ForgeTask, AgentRunLoop)? in
@@ -1014,6 +1164,13 @@ final class WorkspaceModel: ObservableObject {
         statusMessage = isActive
             ? "Authorized an active local runtime for \(missionControlRepositoryName(path: path)) this session."
             : "Returning \(missionControlRepositoryName(path: path)) to read-only observation."
+    }
+
+    func setMissionControlFairQueueConcurrencyLimit(_ limit: Int) {
+        let normalized = min(max(limit, 1), 2)
+        userDefaults.set(normalized, forKey: Self.missionControlFairQueueLimitKey)
+        missionControlSupervisor.setFairQueueConcurrencyLimit(normalized)
+        statusMessage = "Mission Control background concurrency set to \(normalized). Repository writes remain serialized."
     }
 
     func activateMissionControlRepository(_ path: String) {

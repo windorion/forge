@@ -210,6 +210,31 @@ Required surfaces later:
 - `27a` CLI companion
 - `36a` task templates
 
+## Flow 10: Fair Background Repository Dispatch
+
+Goal: keep multiple approved repositories progressing without hidden overlap or
+starvation.
+
+Steps:
+
+1. User authorizes each background repository for the current app session.
+2. Approved Agent Loops enter their owning repository's durable queue and stay
+   held across runtime restart.
+3. User chooses one or two visible background slots in Mission Control.
+4. Forge grants the oldest eligible repository first, then rotates grants by
+   repository while respecting the global background limit.
+5. Each repository still runs only one mutating Agent Loop, and human
+   plan/edit/command/Git approvals remain unchanged.
+6. Offline, observer, stale-authorization, or automatic-dispatch runtimes are
+   skipped or rejected; queued work remains visible and durable.
+
+Required evidence:
+
+- running/limit, queued count, next repository, and grant count
+- exact session authorization and supervised-dispatch health
+- restart hold and stale-ID rejection
+- Pause All across accepted active runtimes
+
 ## Flow Quality Bar
 
 Every core flow should answer:

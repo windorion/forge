@@ -411,6 +411,21 @@ final class WorkspaceModelTests: XCTestCase {
         XCTAssertTrue(model.pullRequestBackgroundRefreshState.message.contains("rejected"))
     }
 
+    func testMissionControlFairQueueLimitPersistsAndNormalizes() {
+        let defaults = makeUserDefaults()
+        defer { clear(defaults) }
+        let model = WorkspaceModel(userDefaults: defaults, githubTokenLoader: { nil })
+
+        model.setMissionControlFairQueueConcurrencyLimit(2)
+
+        XCTAssertEqual(model.missionControlFairQueueState.concurrencyLimit, 2)
+        let restored = WorkspaceModel(userDefaults: defaults, githubTokenLoader: { nil })
+        XCTAssertEqual(restored.missionControlFairQueueState.concurrencyLimit, 2)
+
+        restored.setMissionControlFairQueueConcurrencyLimit(99)
+        XCTAssertEqual(restored.missionControlFairQueueState.concurrencyLimit, 2)
+    }
+
     private func makeClient(
         handler: @escaping WorkspaceMockURLProtocol.Handler
     ) -> (RuntimeClient, URLSession) {

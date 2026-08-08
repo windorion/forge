@@ -98,12 +98,24 @@ an execution-ready human-review state.
 This runtime instance owns one repository, so its effective repository limit
 is always one even when the future global ceiling is two or three. Approved
 Agent Loops are serialized rather than allowed to overlap workspace mutation.
-When an active loop reaches a terminal checkpoint, the next ordered request is
-removed from the queue and started. Persisted requests dispatch on startup;
-an interrupted active loop is recovered separately under the existing
-`RuntimeRestarted` checkpoint rule. Direct one-step execution is rejected while
-another task's loop owns the repository slot. Queueing changes scheduling only:
-it does not approve commands, apply edits, or grant provider permissions.
+In normal `automatic` mode, when an active loop reaches a terminal checkpoint,
+the next ordered request is removed from the queue and started. Persisted
+requests dispatch on startup; an interrupted active loop is recovered
+separately under the existing `RuntimeRestarted` checkpoint rule. Direct
+one-step execution is rejected while another task's loop owns the repository
+slot. Queueing changes scheduling only: it does not approve commands, apply
+edits, or grant provider permissions.
+
+Mission Control active background children instead set
+`FORGE_QUEUE_DISPATCH_MODE=supervised`. Every approved Agent Loop is persisted
+as queued even when the repository is idle; startup, loop-finally, and settings
+callbacks cannot dispatch it. Health and `GET /queue` report the mode.
+`POST /queue/dispatch-next` is the only grant path. It requires the exact
+runtime authorization ID, chooses only the repository-local queue head, returns
+`202` with accepted/task/queue evidence, and still respects the one-repository
+active-loop limit. A stale ID returns 403; the route on an automatic runtime
+returns 409. The grant changes scheduling only and does not approve a plan,
+command, proposal, file mutation, or Git action.
 
 ### Observer Runtime Mode
 
@@ -131,8 +143,10 @@ authorization ID and timestamp, passes them only to that child, forces the
 local deterministic provider with a runtime lock that ignores persisted remote
 provider selection and rejects provider-setting changes, and expects health to return `primary`,
 `readOnly: false`, the scoped authorization evidence, and the exact repository
-root. A mismatch terminates the process. Active startup intentionally restores
-normal recovery and queue dispatch for that repository. Revocation terminates
+root. The child must also report `queueDispatch.mode: supervised` and grant
+acceptance; a mismatch terminates the process. Active startup intentionally
+restores interrupted-state recovery but not autonomous queue dispatch for that
+repository. Revocation terminates
 the active child and starts a fresh read-only observer on the same unique port;
 the authorization is not persisted across app launches.
 
@@ -146,6 +160,16 @@ mode, `repository-active` scope, and the current memory-only authorization ID.
 All mutations for one repository share one in-flight key; runtime revocation is
 blocked until that scoped request completes. Any identity or authorization
 mismatch terminates the child and clears its active authorization.
+
+The native supervisor aggregates only authorized background queue snapshots.
+Its persisted limit is 1-2 simultaneous background repositories; each runtime
+still serializes its own writes to one Agent Loop. With capacity, the scheduler
+selects the oldest eligible queue initially, then walks eligible repositories
+round-robin from the last successful grant. Offline, observer, automatic-mode,
+busy, and empty repositories are skipped. The cursor and authorization are
+session state; queued requests remain durable in their owning SQLite store, so
+a runtime restart fails closed to waiting rather than dispatching outside
+supervision.
 
 ### Agent Orchestrator
 

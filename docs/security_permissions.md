@@ -223,14 +223,29 @@ edit, validation, git action, or queued Agent Loop.
 
 Promoting an observer is a separate medium-risk approval. Mission Control must
 show the exact repository path, loopback port, session duration, forced-local
-provider, and the consequence that recovery and persisted queue dispatch will
-resume. Approval creates a per-session authorization ID. The child must echo
+provider, and the consequence that recovery resumes while persisted queued
+work becomes eligible for supervisor grants. Approval creates a per-session
+authorization ID. The child must echo
 that ID with `repository-active` scope plus primary/read-write mode and the
 exact repo root before its data is trusted; a mismatch terminates the process.
+It must also advertise `queueDispatch.mode: supervised` and accept grants; an
+automatic-dispatch child is rejected even if its repository and authorization
+otherwise match.
 The child locks provider selection to local, strips inherited remote-provider
 configuration/secrets, and rejects provider-setting mutation for its lifetime.
 Authorization is memory-only, does not persist across app launches, and can be
 revoked back to observer mode only after visible running work is paused.
+
+Queue authorization and queue dispatch are separate capabilities. Plan
+approval creates durable repository-local queued work. A background active
+runtime cannot start it on startup, after settings changes, or when a prior
+loop ends. Mission Control grants a slot only through
+`POST /queue/dispatch-next`, placing the current authorization ID in the JSON
+body (never the URL) and revalidating health first. The runtime compares that
+ID with its environment-scoped session evidence; stale or cross-runtime IDs
+fail with 403. The grant selects only the existing queue head and cannot name a
+different task or add plan/edit/command/Git authority. Per-repository
+serialization remains enforced underneath the cross-runtime 1-2 slot limit.
 
 Background task routing does not convert cached visibility into authority.
 Task detail uses the observer-safe `GET /tasks/:taskID` route after fresh health

@@ -10,6 +10,7 @@ struct MissionControlRuntimeAccessExpectation: Equatable {
     var runtimeMode: String
     var authorizationID: String?
     var requirement: MissionControlRuntimeAccessRequirement
+    var requiresSupervisedQueueDispatch = false
 }
 
 enum MissionControlRuntimeAccessPolicy {
@@ -47,6 +48,13 @@ enum MissionControlRuntimeAccessPolicy {
         default:
             throw MissionControlSupervisorError.wrongRuntimeMode(expected: expectation.runtimeMode)
         }
+        if expectation.requiresSupervisedQueueDispatch {
+            guard health.queueDispatch?.mode == "supervised",
+                  health.queueDispatch?.acceptsSupervisorGrants == true
+            else {
+                throw MissionControlSupervisorError.unsupervisedQueueDispatch
+            }
+        }
     }
 }
 
@@ -66,6 +74,7 @@ struct MissionControlObservedRepository: Hashable {
 @MainActor
 final class MissionControlRuntimeSupervisor {
     var onUpdate: (([String: MissionControlObservedRepository]) -> Void)?
+    var onFairQueueUpdate: ((MissionControlFairQueueState) -> Void)?
 
     private struct ManagedRuntime {
         var process: Process
@@ -97,6 +106,10 @@ final class MissionControlRuntimeSupervisor {
     private var activeAuthorizations: [String: ActiveAuthorization] = [:]
     private var inFlightRouteKeys = Set<String>()
     private var refreshInProgress = false
+    private var fairQueueConcurrencyLimit = 1
+    private var lastGrantedRepositoryPath: String?
+    private var fairQueueGrantCount = 0
+    private var fairQueueDispatchInProgress = false
     private var monitorTask: Task<Void, Never>?
 
     deinit {
@@ -217,6 +230,14 @@ final class MissionControlRuntimeSupervisor {
             runtimeDirectory: runtimeDirectory,
             authorization: activeAuthorizations[path]
         ))
+    }
+
+    func setFairQueueConcurrencyLimit(_ limit: Int) {
+        fairQueueConcurrencyLimit = min(max(limit, 1), 2)
+        publish()
+        Task { [weak self] in
+            await self?.reconcileFairQueue()
+        }
     }
 
     func pauseAllActiveLoops() async -> (requested: Int, failed: Int) {
@@ -374,6 +395,11 @@ final class MissionControlRuntimeSupervisor {
         environment["FORGE_REPO_ROOT"] = path
         environment["FORGE_MODEL_PROVIDER"] = "local"
         environment["FORGE_MODEL_PROVIDER_LOCK"] = "local"
+        if target.mode == .active {
+            environment["FORGE_QUEUE_DISPATCH_MODE"] = "supervised"
+        } else {
+            environment.removeValue(forKey: "FORGE_QUEUE_DISPATCH_MODE")
+        }
         environment.removeValue(forKey: "OPENAI_API_KEY")
         environment.removeValue(forKey: "FORGE_MODEL_NAME")
         environment.removeValue(forKey: "FORGE_OPENAI_BASE_URL")
@@ -458,7 +484,71 @@ final class MissionControlRuntimeSupervisor {
                 }
             }
         }
+        await reconcileFairQueue()
         publish()
+    }
+
+    private func reconcileFairQueue() async {
+        guard !fairQueueDispatchInProgress else { return }
+        fairQueueDispatchInProgress = true
+        publish()
+        defer {
+            fairQueueDispatchInProgress = false
+            publish()
+        }
+
+        for _ in 0..<2 {
+            let repositories = fairQueueRepositories()
+            guard let path = MissionControlFairQueueScheduler.nextRepository(
+                from: repositories,
+                concurrencyLimit: fairQueueConcurrencyLimit,
+                lastGrantedPath: lastGrantedRepositoryPath
+            ),
+                  let runtime = managed[path],
+                  runtime.mode == .active,
+                  let authorizationID = runtime.authorizationID
+            else { return }
+
+            do {
+                let client = try await validatedClient(path: path, requireActive: true)
+                let result = try await client.dispatchNextQueuedAgentRun(authorizationID: authorizationID)
+                snapshots[path]?.queue = result.queue
+                guard result.accepted else { return }
+                lastGrantedRepositoryPath = path
+                fairQueueGrantCount += 1
+            } catch {
+                snapshots[path]?.error = "Fair queue grant failed: \(error.localizedDescription)"
+                if let supervisorError = error as? MissionControlSupervisorError {
+                    invalidateRuntime(path: path, runtime: runtime, error: supervisorError)
+                }
+                return
+            }
+        }
+    }
+
+    private func fairQueueRepositories() -> [MissionControlFairQueueRepository] {
+        managed.map { path, runtime in
+            let snapshot = snapshots[path]
+            return MissionControlFairQueueRepository(
+                path: path,
+                isAuthorized: runtime.mode == .active && activeAuthorizations[path]?.id == runtime.authorizationID,
+                isLive: runtime.process.isRunning && snapshot?.status == "ACTIVE RUNTIME",
+                dispatchMode: snapshot?.queue?.dispatchMode ?? snapshot?.health?.queueDispatch?.mode,
+                runningCount: snapshot?.queue?.running.count ?? 0,
+                queuedCount: snapshot?.queue?.queued.count ?? 0,
+                oldestEnqueuedAt: snapshot?.queue?.queued.compactMap(\.enqueuedAt).sorted().first
+            )
+        }
+    }
+
+    private func fairQueueState() -> MissionControlFairQueueState {
+        MissionControlFairQueueScheduler.state(
+            repositories: fairQueueRepositories(),
+            concurrencyLimit: fairQueueConcurrencyLimit,
+            lastGrantedPath: lastGrantedRepositoryPath,
+            grantCount: fairQueueGrantCount,
+            isDispatching: fairQueueDispatchInProgress
+        )
     }
 
     private func mutate(
@@ -522,7 +612,8 @@ final class MissionControlRuntimeSupervisor {
             repositoryPath: path,
             runtimeMode: runtime.mode == .observer ? "observer" : "primary",
             authorizationID: runtime.authorizationID,
-            requirement: requireActive ? .authorizedMutation : .readOnlyOrAuthorized
+            requirement: requireActive ? .authorizedMutation : .readOnlyOrAuthorized,
+            requiresSupervisedQueueDispatch: runtime.mode == .active
         )
     }
 
@@ -580,12 +671,14 @@ final class MissionControlRuntimeSupervisor {
 
     private func publish() {
         onUpdate?(snapshots)
+        onFairQueueUpdate?(fairQueueState())
     }
 }
 
 enum MissionControlSupervisorError: LocalizedError {
     case wrongRuntimeMode(expected: String)
     case wrongAuthorization
+    case unsupervisedQueueDispatch
     case wrongRepository
     case activeAuthorizationRequired
     case runtimeUnavailable
@@ -597,6 +690,8 @@ enum MissionControlSupervisorError: LocalizedError {
             return "Mission Control refused a runtime that did not report \(expected) mode."
         case .wrongAuthorization:
             return "Mission Control refused an active runtime without the current session authorization."
+        case .unsupervisedQueueDispatch:
+            return "Mission Control refused an active runtime that can dispatch queued work without supervisor grants."
         case .wrongRepository:
             return "Mission Control refused a runtime attached to a different repository."
         case .activeAuthorizationRequired:

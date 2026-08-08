@@ -121,6 +121,21 @@ struct MissionControlView: View {
             Text("\(currentNeedsYouCount) waiting for you · \(currentQueuedCount) queued · \(readyCount) ready")
                 .font(ForgeDesign.mono(10.5)).foregroundStyle(ForgeDesign.muted)
             Spacer()
+            Menu {
+                Button("1 — safest") { workspace.setMissionControlFairQueueConcurrencyLimit(1) }
+                Button("2 — two repositories") { workspace.setMissionControlFairQueueConcurrencyLimit(2) }
+            } label: {
+                Text("BG SLOTS \(workspace.missionControlFairQueueState.concurrencyLimit) ▾")
+                    .font(ForgeDesign.mono(9.5, weight: .bold))
+                    .foregroundStyle(ForgeDesign.ink)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(Color.white)
+                    .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("Limit concurrently running Agent Loops across authorized background repositories.")
             Button("⏸ PAUSE ALL") { workspace.pauseAllMissionControlLoops() }
                 .buttonStyle(MissionSecondaryButtonStyle())
                 .disabled(currentRunningCount == 0)
@@ -244,9 +259,10 @@ struct MissionControlView: View {
 
     private var bottomBar: some View {
         HStack {
-            Text("\(activeRuntimeCount) active runtime\(activeRuntimeCount == 1 ? "" : "s") · other repos read-only · authorization lasts this app session")
+            Text("\(activeRuntimeCount) active runtime\(activeRuntimeCount == 1 ? "" : "s") · background \(workspace.missionControlFairQueueState.runningCount)/\(workspace.missionControlFairQueueState.concurrencyLimit) running · \(workspace.missionControlFairQueueState.grantCount) fair grants")
             Spacer()
-            Text("Pause All covers authorized runtimes · ⌘1–3 focus repo")
+            Text(workspace.missionControlFairQueueState.status)
+                .lineLimit(1)
         }
         .font(ForgeDesign.mono(10)).foregroundStyle(ForgeDesign.muted)
         .padding(.horizontal, 22).frame(height: 42)
@@ -299,7 +315,7 @@ struct MissionControlView: View {
         if isCurrent { return repository.footer }
         if isActiveRuntime(repository) {
             let authorization = repository.runtimeAuthorizationID.map { "auth \($0.prefix(8))" } ?? "authorization pending"
-            return "active · \(authorization) · \(repository.footer)"
+            return "active · supervised queue · \(authorization) · \(repository.footer)"
         }
         if isLiveObserver(repository) { return "live read-only · \(repository.footer)" }
         if let error = repository.runtimeState, ["FAILED", "UNAVAILABLE", "STOPPED"].contains(error) {
@@ -331,7 +347,7 @@ struct MissionControlView: View {
         case .authorize:
             return Alert(
                 title: Text("Authorize active runtime?"),
-                message: Text("Repository: \(prompt.repository.path)\nPort: \(port)\n\nForge will replace the read-only observer with a writable local runtime for this app session. It may recover interrupted work and dispatch persisted queued Agent Loops. Background runtimes use the local deterministic provider and remain isolated to this repository."),
+                message: Text("Repository: \(prompt.repository.path)\nPort: \(port)\n\nForge will replace the read-only observer with a writable local runtime for this app session. Interrupted work may be recovered, but persisted queued Agent Loops remain held until Mission Control grants a fair background slot. Background runtimes use the local deterministic provider and remain isolated to this repository."),
                 primaryButton: .default(Text("Authorize Active Runtime")) {
                     workspace.setMissionControlRuntimeActive(path: prompt.repository.path, isActive: true)
                 },

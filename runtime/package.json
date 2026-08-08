@@ -16,6 +16,8 @@
     "smoke:queue": "npm run build && node scripts/task-queue-fixtures.mjs",
     "smoke:observer": "npm run build && node scripts/observer-runtime-fixtures.mjs",
     "smoke:mission-control": "npm run build && node scripts/mission-control-routing-fixtures.mjs",
+    "smoke:mission-control-fairness": "npm run build && node scripts/mission-control-fairness-fixtures.mjs",
+    "soak:mission-control": "npm run build && FORGE_FAIR_QUEUE_SOAK_SECONDS=21600 node scripts/mission-control-fairness-fixtures.mjs",
     "smoke:http-contract": "npm run build && node scripts/runtime-http-contract-fixtures.mjs",
     "smoke:git-conflicts": "npm run build && node scripts/git-conflict-fixtures.mjs",
     "smoke:git-remote": "npm run build && node scripts/git-remote-fixtures.mjs",

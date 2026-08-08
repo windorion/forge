@@ -72,6 +72,7 @@ export type RuntimeRouteOptions =
     observerMode: boolean;
     runtimeAuthorizationID?: string;
     runtimeAuthorizedAt?: string;
+    supervisedQueueDispatch: boolean;
     startedAt: number;
     runtimeDir: string;
     repoRoot: string;

@@ -17,6 +17,8 @@ export interface AgentOrchestrationOptions {
   modelProvider: () => ModelProvider;
   taskQueueSettingsPath: string;
   taskQueueSmokeDelayMs: number;
+  supervisedQueueDispatch: boolean;
+  runtimeAuthorizationID?: string;
   stuckThresholds: StuckThresholds;
   repositoryScanMaxFiles: number;
   repositorySearchMaxFiles: number;

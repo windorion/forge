@@ -251,10 +251,18 @@ struct TaskQueueSnapshot: Codable, Hashable {
     var completed: [TaskQueueEntry]
     var summary: String
     var operationBoundary: String
+    var dispatchMode: String?
 }
 
 struct TaskQueueSettingsRequest: Encodable { var concurrencyLimit: Int }
 struct TaskQueueReorderRequest: Encodable { var orderedTaskIDs: [String] }
+struct SupervisedQueueDispatchRequest: Encodable { var authorizationID: String }
+struct SupervisedQueueDispatchResult: Codable, Hashable {
+    var accepted: Bool
+    var taskID: String?
+    var reason: String
+    var queue: TaskQueueSnapshot
+}
 
 struct ValidationCommandResult: Identifiable, Codable, Hashable {
     var id: String
@@ -1170,11 +1178,17 @@ struct RuntimeHealth: Codable, Hashable {
     var runtimeMode: String?
     var readOnly: Bool?
     var runtimeAuthorization: RuntimeAuthorizationInfo?
+    var queueDispatch: RuntimeQueueDispatchInfo?
     var modelProvider: ModelProviderInfo?
     var modelProviderConfiguration: ModelProviderConfiguration?
     var workspace: RuntimeWorkspaceInfo?
     var persistence: RuntimePersistenceInfo?
     var index: RuntimeIndexInfo?
+}
+
+struct RuntimeQueueDispatchInfo: Codable, Hashable {
+    var mode: String
+    var acceptsSupervisorGrants: Bool
 }
 
 struct RuntimeIndexInfo: Codable, Hashable {

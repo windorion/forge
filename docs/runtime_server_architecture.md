@@ -107,7 +107,7 @@ runtime/src/
     createRequestHandler.ts         CORS, OPTIONS, observer guard, error envelope
     runtimeRoutes.ts                seven-group route composer
     routes/                         system/task/agent/edit/validation/git/settings
-    routeManifest.ts                explicit 58-route public contract
+    routeManifest.ts                explicit 59-route public contract
     request.ts, response.ts         JSON transport primitives
   tasks/
     taskState.ts                    persistence + event publication owner
@@ -413,8 +413,10 @@ sequenceDiagram
 
     Life->>HTTP: listen(port, 127.0.0.1)
     HTTP-->>Life: listening
-    alt primary or authorized active runtime
+    alt automatic primary runtime
         Life->>Queue: dispatch persisted queued work
+    else supervised authorized background runtime
+        Note over Life,Queue: queue remains held until authorization-bound supervisor grant
     end
 
     alt SIGINT or SIGTERM
@@ -487,14 +489,14 @@ error envelope.
 
 ## Route Groups
 
-The route manifest contains 55 entries, including `OPTIONS /*`. The 54
+The route manifest contains 59 entries, including `OPTIONS /*`. The 58
 GET/POST routes are owned by seven groups:
 
 | Group | Count | Responsibilities | Representative paths |
 | --- | ---: | --- | --- |
 | System | 6 | home, health, index status/rebuild/search, SSE | `/`, `/health`, `/index`, `/index/rebuild`, `/index/symbols`, `/events` |
-| Task | 5 | task list/create, messages, plan generation and approval | `/tasks`, `/tasks/:taskID/messages`, `/generate-plan-revision`, `/approve-plan` |
-| Agent | 11 | queue, approve-and-run, step/loop controls, stuck recovery | `/queue`, `/approve-plan-and-run`, `/run-agent-step`, `/run-agent-loop`, `/pause-agent-loop`, `/abort-agent-loop`, `/resume-agent-loop` |
+| Task | 8 | task list/detail/create, audit export, messages, plan generation/approval, cancellation | `/tasks`, `/tasks/:taskID`, `/audit-export`, `/generate-plan-revision`, `/approve-plan`, `/cancel` |
+| Agent | 12 | queue settings/order/supervisor grant, approve-and-run, step/loop controls, stuck recovery | `/queue`, `/queue/dispatch-next`, `/approve-plan-and-run`, `/run-agent-step`, `/run-agent-loop`, `/pause-agent-loop`, `/abort-agent-loop`, `/resume-agent-loop` |
 | Edit | 8 | proposal generation/revision/review/apply/rollback/reject | `/generate-edit-proposal`, `/review-edit-proposal-file`, `/apply-edit-proposal`, `/rollback-edit-proposal` |
 | Validation | 7 | presets, permissions, validation, task command/rerun/cancel | `/validation-presets`, `/validation-permissions`, `/run-validation`, `/run-task-command`, `/rerun-repair-command`, `/cancel-task-command` |
 | Git | 15 | status, diff, conflict, branch, commit, push and PR | `/git/status`, `/git/diff`, `/git/conflicts`, `/git/branch`, `/git/commit`, `/git/push`, `/git/pr-publish` |
@@ -614,7 +616,11 @@ sequenceDiagram
     end
 
     Loop->>State: remove active control
-    Loop->>Queue: dispatch next queued task
+    alt automatic mode
+        Loop->>Queue: dispatch next queued task
+    else supervised mode
+        Note over Loop,Queue: retain queue until POST /queue/dispatch-next
+    end
 ```
 
 The loop is bounded and cooperative. Pause/abort does not interrupt a
@@ -864,6 +870,12 @@ sequenceDiagram
 Observer runtimes do not run mutation recovery, queue dispatch, or the stuck
 work sweep. This prevents a read-only observer from rewriting task or working
 tree state while the primary runtime is active.
+
+Authorized Mission Control background runtimes do run recovery and the stuck
+work sweep, but their queue service is configured `supervised`. Startup and
+loop-finally calls become no-ops; only an exact session-authorization grant can
+start the existing queue head. Thus recovery authority and scheduling
+authority remain explicit and independently testable.
 
 ## Trust Boundaries And Invariants
 

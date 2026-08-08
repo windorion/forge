@@ -40,6 +40,36 @@ final class MissionControlRuntimeAccessTests: XCTestCase {
         }
     }
 
+    func testAuthorizedBackgroundRuntimeRequiresSupervisedDispatchEvidence() throws {
+        var expected = expectation(
+            mode: "primary",
+            authorizationID: "session-a",
+            requirement: .authorizedMutation
+        )
+        expected.requiresSupervisedQueueDispatch = true
+
+        XCTAssertNoThrow(try MissionControlRuntimeAccessPolicy.validate(
+            health: health(
+                mode: "primary",
+                readOnly: false,
+                authorizationID: "session-a",
+                queueDispatch: RuntimeQueueDispatchInfo(mode: "supervised", acceptsSupervisorGrants: true)
+            ),
+            expectation: expected
+        ))
+        XCTAssertThrowsError(try MissionControlRuntimeAccessPolicy.validate(
+            health: health(
+                mode: "primary",
+                readOnly: false,
+                authorizationID: "session-a",
+                queueDispatch: RuntimeQueueDispatchInfo(mode: "automatic", acceptsSupervisorGrants: false)
+            ),
+            expectation: expected
+        )) { error in
+            XCTAssertTrue(error.localizedDescription.contains("supervisor grants"))
+        }
+    }
+
     func testRepositoryIdentityMismatchFailsClosedForReadsAndWrites() throws {
         let mismatched = health(
             mode: "primary",
@@ -90,7 +120,8 @@ final class MissionControlRuntimeAccessTests: XCTestCase {
         mode: String,
         readOnly: Bool,
         authorizationID: String? = nil,
-        repositoryPath: String = "/tmp/expected"
+        repositoryPath: String = "/tmp/expected",
+        queueDispatch: RuntimeQueueDispatchInfo? = nil
     ) -> RuntimeHealth {
         RuntimeHealth(
             ok: true,
@@ -102,6 +133,7 @@ final class MissionControlRuntimeAccessTests: XCTestCase {
             runtimeAuthorization: authorizationID.map {
                 RuntimeAuthorizationInfo(id: $0, authorizedAt: "2026-08-08T12:00:00Z", scope: "repository-active")
             },
+            queueDispatch: queueDispatch,
             modelProvider: nil,
             modelProviderConfiguration: nil,
             workspace: RuntimeWorkspaceInfo(

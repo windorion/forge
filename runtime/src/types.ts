@@ -283,10 +283,18 @@ export interface TaskQueueSnapshot {
   completed: TaskQueueEntry[];
   summary: string;
   operationBoundary: string;
+  dispatchMode: "automatic" | "supervised";
 }
 
 export interface TaskQueueSettingsRequest { concurrencyLimit: number; }
 export interface TaskQueueReorderRequest { orderedTaskIDs: string[]; }
+export interface SupervisedQueueDispatchRequest { authorizationID: string; }
+export interface SupervisedQueueDispatchResult {
+  accepted: boolean;
+  taskID?: string;
+  reason: "dispatched" | "queue_empty" | "repository_busy";
+  queue: TaskQueueSnapshot;
+}
 
 export interface ProposedFileChange {
   id: string;

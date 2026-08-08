@@ -62,6 +62,40 @@ final class RuntimeClientTests: XCTestCase {
         XCTAssertNil(recorder.lastBody)
     }
 
+    func testSupervisedQueueDispatchKeepsAuthorizationInPostBody() async throws {
+        let recorder = RequestRecorder()
+        let (client, session) = makeClient { request in
+            recorder.record(request)
+            return Self.response(
+                request,
+                status: 202,
+                body: """
+                {
+                  "accepted":true,"taskID":"task-1","reason":"dispatched",
+                  "queue":{
+                    "generatedAt":"2026-08-09T12:00:00Z","concurrencyLimit":2,
+                    "effectiveRepositoryLimit":1,"running":[],"queued":[],
+                    "needsAttention":[],"completed":[],"summary":"0 running",
+                    "operationBoundary":"Supervisor grants only.","dispatchMode":"supervised"
+                  }
+                }
+                """
+            )
+        }
+        defer { session.invalidateAndCancel() }
+
+        let result = try await client.dispatchNextQueuedAgentRun(authorizationID: "session-secret")
+
+        XCTAssertTrue(result.accepted)
+        XCTAssertEqual(result.taskID, "task-1")
+        XCTAssertEqual(result.queue.dispatchMode, "supervised")
+        XCTAssertEqual(recorder.lastRequest?.httpMethod, "POST")
+        XCTAssertEqual(recorder.lastRequest?.url?.path, "/api/queue/dispatch-next")
+        XCTAssertNil(recorder.lastRequest?.url?.query)
+        let body = try jsonObject(try XCTUnwrap(recorder.lastBody))
+        XCTAssertEqual(body["authorizationID"] as? String, "session-secret")
+    }
+
     func testGitDiffPercentEncodesPathQuery() async throws {
         let recorder = RequestRecorder()
         let (client, session) = makeClient { request in

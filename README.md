@@ -124,8 +124,9 @@ Implemented today:
   observers. A repository can become an active read-write runtime only after a
   path/port/consequence confirmation for the current app session; health must
   echo the generated authorization ID before Mission Control accepts it.
-  Authorized runtimes may recover and dispatch that repository's persisted
-  queue, while Pause All cooperatively covers every accepted active runtime.
+  Authorized runtimes recover interrupted state but start persisted queued
+  work only after a Mission Control supervisor grant, while Pause All
+  cooperatively covers every accepted active runtime.
 - Mission Control background task routing: the new-task composer can target the
   focused repository or an already-authorized background runtime. Background
   cards open fresh task detail, plan, conversation, proposal diff, validation,
@@ -133,6 +134,16 @@ Implemented today:
   per-file review, Apply, and validation actions reach the owning runtime only
   after a fresh repository/mode/authorization check; observers stay read-only
   and per-repository mutations are serialized.
+- Cross-runtime fair queue dispatch for authorized background repositories.
+  Active children run in a fail-closed `supervised` mode: approval always
+  persists the Agent Loop in that repository's queue, startup never dispatches
+  it autonomously, and `POST /queue/dispatch-next` requires the current
+  memory-only authorization ID. Mission Control enforces a persisted 1-2
+  background slot limit, chooses the oldest eligible queue initially, rotates
+  later grants round-robin, and shows running/queued/next/grant evidence. A
+  two-runtime fixture proves six alternating grants, stale-ID rejection,
+  restart hold, and no starvation; a configurable six-hour local soak entry
+  and four-state DEBUG native capture driver are available without APIs.
 - Explicit human review gates for plans and edits.
 - Safe edit proposals with multi-file OpenAI proposal artifacts, including
   blocked preview-only operations. Apply supports Markdown `AppendText`,
@@ -248,8 +259,8 @@ Beyond V0:
   current bounded loop and reviewed Unified Diff path.
 - Semantic or hybrid retrieval beyond the existing durable file, symbol, and
   trigram text indexes.
-- Cross-runtime queue fairness, longer-duration supervision soak, and native UI
-  automation beyond the current routed task/review slice.
+- Full-duration supervision soak evidence, action-level XCUITest coverage, and
+  routed background command/git actions beyond the current task/review slice.
 - Packaged, signed, notarized, auto-updating Mac distribution.
 
 ## Completion Estimate
@@ -258,13 +269,13 @@ Product-readiness estimate:
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| Trust/runtime foundation | 89-93% | Local runtime, task state, review gates, restricted edits, validation, composed cancellation, redacted audit export, guarded git/PR actions, bounded refresh audit, explicit multi-runtime authorization, diagnostics, and separate local/provider protocol reliability baselines are real. |
+| Trust/runtime foundation | 90-94% | Local runtime, task state, review gates, restricted edits, validation, composed cancellation, redacted audit export, guarded git/PR actions, bounded refresh audit, fail-closed supervised queue grants, diagnostics, and separate local/provider protocol reliability baselines are real. |
 | Coding-agent demo V0 behavior | 100% | The documented functional acceptance path is implemented and smoke-covered. |
 | Primary V0 handoff UI | 100% | The five primary screens are `Verified` with rendered-comparison evidence in `docs/verification/`. |
 | Full handoff UI | 95-97% | 41 of 43 named screens/states are `Verified` (rendered comparison on real data, evidence in `docs/verification/`). The two remaining: `6a` GitHub is `Partial` (configuration UI, Device Flow, polling, Keychain persistence, and connected state are implemented and tested; live GitHub authorization still needs a founder-owned OAuth App Client ID with Device Flow enabled); `35a` Widget is a documented platform-blocked descope (hand-assembled ad-hoc-signed extension not discovered by pluginkit; unblocks with P6 signing). |
-| Useful developer alpha | 68-76% | Forge now repeats the reviewed lifecycle across deterministic local-provider and mock-OpenAI adapter corpora, including Unified Diff, approved commands, repair/rerun, fork-aware PR supervision, and repository-scoped background task/review routing; it still needs broader autonomous tool use and live-model success on pinned public repositories. |
+| Useful developer alpha | 70-78% | Forge repeats the reviewed lifecycle across deterministic local-provider and mock-OpenAI adapter corpora, including Unified Diff, approved commands, repair/rerun, fork-aware PR supervision, routed background review, and fair restart-safe background dispatch; it still needs broader autonomous tool use and live-model success on pinned public repositories. |
 | Commercial beta | 20-25% | Needs signed installable packaging, production proof of the implemented onboarding and GitHub/provider setup, trust/operations polish, and repeated success on real repos. |
-| Polished v1 | 22-28% | Queueing, local indexes, session-authorized runtimes, and background task/detail/review routing are real; fairness/soak, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
+| Polished v1 | 24-30% | Queueing, local indexes, session-authorized runtimes, background task/detail/review routing, and fair supervised background grants are real; full soak/UI-action proof, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
 
 Short version: V0 behavior is complete, but the entire 43-screen product design
 is not. Alpha is the next cumulative horizon, followed by beta and then v1;
@@ -276,7 +287,8 @@ Top priorities are tracked in `docs/todo.md`. Current post-V0 themes:
 
 - run a budgeted live-model corpus on pinned public repositories
 - use classified failures to widen safe provider tool/patch/recovery behavior
-- finish cross-repository task/review routing and signed Mac distribution
+- widen routed background actions, run full-duration supervision soak, and
+  prepare signed Mac distribution
 
 The subsystem-by-subsystem readiness and remaining-gap matrix lives in
 `docs/project_status.md` under **Component Gap Matrix**.

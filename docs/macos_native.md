@@ -31,6 +31,17 @@ active runtimes support scoped conversation, plan, file-review, Apply, and
 validation actions; observers expose the same evidence read-only. Loading,
 mutation, authorization, and routing errors live in the shared workspace model
 rather than view-local network state.
+Active background runtimes now report a supervised queue mode. The same shared
+model owns a persisted 1-2 background slot preference, oldest-first then
+round-robin grant cursor, running/queued counts, next repository, and grant
+history count. These appear in the main Mission Control chrome rather than a
+modal. DEBUG builds expose deterministic `missionControlFixture:observer`,
+`:active`, `:queued`, and `:review` states through the existing native surface
+driver; `script/verify_mission_control_surfaces.sh` captures all four view
+hierarchies without Screen Recording permission. Action-level XCUITest and a
+signed-build automation pass remain future work.
+The final observer/active/queued/review capture set and repair notes live in
+`docs/verification/mission-control-fairness/`.
 
 ### Menu Bar Agent
 

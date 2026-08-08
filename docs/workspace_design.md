@@ -81,6 +81,14 @@ An accepted active runtime can create a task, continue conversation, approve a
 plan, review proposal files, Apply, and run validation only through the
 supervisor's fresh authorization gate.
 
+Authorized background columns also participate in one shared fair queue. A
+visible `BG SLOTS 1/2` control is a durable user preference; the authorization
+itself remains session-only. Each background runtime is supervised and cannot
+dispatch queued work at startup. The bottom bar exposes running/limit, grant
+count, and next/waiting status. Initial choice is oldest eligible work, then
+grants rotate by repository so one busy queue cannot starve another. This
+cross-repository policy never weakens the per-repository one-writer boundary.
+
 ### Center: Live Agent Session
 
 Responsibilities:

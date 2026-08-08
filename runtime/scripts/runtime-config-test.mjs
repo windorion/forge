@@ -23,6 +23,7 @@ const environment = {
   FORGE_GITHUB_API_BASE: "https://github.example/api///",
   FORGE_ENABLE_SMOKE_COMMANDS: "1",
   FORGE_QUEUE_SMOKE_DELAY_MS: "9999",
+  FORGE_QUEUE_DISPATCH_MODE: "supervised",
   FORGE_STUCK_SWEEP_INTERVAL_MS: "1234",
   FORGE_MODEL_PROVIDER: "openai",
   FORGE_MODEL_NAME: "gpt-fixture",
@@ -46,6 +47,7 @@ assert.equal(config.validationPresetConfigPath, resolve(configuredRepo, "state/v
 assert.equal(config.taskQueueSettingsPath, resolve(configuredRepo, "state/queue.json"));
 assert.equal(config.githubApiBase, "https://github.example/api");
 assert.equal(config.taskQueueSmokeDelayMs, 5_000);
+assert.equal(config.supervisedQueueDispatch, true);
 assert.equal(config.stuckSweepIntervalMs, 1234);
 assert.notEqual(config.environment, environment);
 
@@ -61,5 +63,6 @@ assert.equal(fallback.repoRoot, resolve(runtimeRoot, ".."));
 assert.equal(fallback.databasePath, resolve(runtimeRoot, "..", ".forge/forge.sqlite"));
 assert.equal(fallback.observerMode, false);
 assert.equal(fallback.taskQueueSmokeDelayMs, 0);
+assert.equal(fallback.supervisedQueueDispatch, false);
 
-console.log("Runtime config test passed: 24 assertions.");
+console.log("Runtime config test passed: 26 assertions.");

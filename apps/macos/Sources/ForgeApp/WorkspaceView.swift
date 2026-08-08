@@ -306,13 +306,18 @@ struct WorkspaceView: View {
 
     #if DEBUG
     /// Resolve a verification-script surface spec. Formats:
-    /// `missionControl` `history` `answerQueue` `taskQueue` `palette`
+    /// `missionControl` `missionControlFixture:<observer|active|queued|review>`
+    /// `history` `answerQueue` `taskQueue` `palette`
     /// `dismiss` `diff:<taskID>` `audit:<taskID>` `fullPlan:<taskID>:<revisionID>`
     private func presentDebugSurface(_ spec: String?) {
         guard let spec, !spec.isEmpty else { return }
         let parts = spec.split(separator: ":").map(String.init)
         switch parts[0] {
+        case "missionControlFixture" where parts.count >= 2:
+            workspace.installMissionControlDebugFixture(parts[1])
+            surfaceCoordinator.present(.missionControl)
         case "missionControl":
+            workspace.clearMissionControlDebugFixture()
             surfaceCoordinator.present(.missionControl)
             workspace.refreshMissionControl()
         case "history":

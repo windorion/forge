@@ -7,7 +7,7 @@ import type { RuntimeRouteGroup, RuntimeRouteOptions } from "../runtimeRoutes.js
 
 export function createSystemRoutes(options: RuntimeRouteOptions): RuntimeRouteGroup {
   const {
-  observerMode, runtimeAuthorizationID, runtimeAuthorizedAt, startedAt,
+  observerMode, runtimeAuthorizationID, runtimeAuthorizedAt, startedAt, supervisedQueueDispatch,
   runtimeDir, repoRoot, repoRootSource, taskStore, tasks, eventBus,
   currentModelProvider, currentModelProviderSettings,
   renderRuntimeHome, getModelProviderConfiguration, readRepositoryIndexStatus,
@@ -45,6 +45,10 @@ export function createSystemRoutes(options: RuntimeRouteOptions): RuntimeRouteGr
             runtimeAuthorization: runtimeAuthorizationID && runtimeAuthorizedAt
               ? { id: runtimeAuthorizationID, authorizedAt: runtimeAuthorizedAt, scope: "repository-active" }
               : undefined,
+            queueDispatch: {
+              mode: supervisedQueueDispatch ? "supervised" : "automatic",
+              acceptsSupervisorGrants: supervisedQueueDispatch && Boolean(runtimeAuthorizationID)
+            },
             uptimeSeconds: (Date.now() - startedAt) / 1000,
             modelProvider: currentModelProvider().info,
             modelProviderConfiguration: getModelProviderConfiguration(currentModelProviderSettings()),

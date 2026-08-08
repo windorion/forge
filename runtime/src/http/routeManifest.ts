@@ -45,6 +45,7 @@ export const runtimeRouteManifest: readonly RuntimeRouteContract[] = [
   get("/queue"),
   post("/queue/settings"),
   post("/queue/reorder"),
+  post("/queue/dispatch-next", 202),
   post("/tasks/:taskID/remove-from-queue"),
   get("/git/status"),
   get("/git/diff"),

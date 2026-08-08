@@ -99,7 +99,7 @@ the main runtime; up to two additional repositories receive app-supervised
 observer runtimes on ports 17374 and 17375. Observers are verified read-only,
 poll tasks/queue/git/health every two seconds, and display live/offline PID and
 port evidence. Each observer exposes `AUTHORIZE ACTIVE`; confirming the exact
-repository, port, queue-dispatch consequence, and session boundary restarts it
+repository, port, recovery/supervised-queue consequence, and session boundary restarts it
 as a local-provider read-write runtime. Health must return the generated
 `repository-active` authorization ID before the app accepts it. Mismatched
 mode, ID, or repo root terminates the child. Active access is session-only and
@@ -107,6 +107,16 @@ its provider is locked local even if that repository saved a remote choice;
 provider-setting mutation is rejected. It can return to read-only after running work is paused. `⌘1–3` focuses a
 repository, `⌘⇧N` opens a new task, and Pause All covers primary plus every
 authorized active runtime.
+
+Authorized background runtimes use `FORGE_QUEUE_DISPATCH_MODE=supervised`.
+Plan approval persists queue state even when that repository is idle; startup
+and loop completion do not dispatch it. Mission Control carries the current
+session authorization ID in `POST /queue/dispatch-next`, applies a persisted
+1-2 background concurrency limit, grants the oldest eligible repository first,
+then rotates later grants round-robin. The bottom bar shows running/limit,
+grant count, and next/waiting status. The primary focused runtime retains its
+normal automatic one-repository queue; the Mission Control limit is explicitly
+for authorized background repositories.
 
 The Mission Control new-task flow now keeps explicit repository selection. A
 focused repository uses the primary client; an accepted background repository
@@ -125,6 +135,7 @@ Run the observer safety regression with:
 cd runtime
 npm run smoke:observer
 npm run smoke:mission-control
+npm run smoke:mission-control-fairness
 ```
 
 That fixture now verifies observer → authorized active → observer mode on one
@@ -138,6 +149,36 @@ to observer mode for repeated health/tasks/queue/git/detail polling. The final
 oracle requires observer POST rejection and byte-identical SQLite files across
 the read-only soak. `FORGE_MISSION_CONTROL_SOAK_ITERATIONS` and
 `FORGE_MISSION_CONTROL_TASK_COUNT` can raise the local stress budget.
+
+`smoke:mission-control-fairness` starts two authorized supervised runtimes,
+queues three local-provider tasks per repository, proves they remain held
+before a grant, rejects a stale authorization ID, alternates all six grants,
+injects runtime restarts every two grants, and asserts no startup auto-dispatch
+or starvation. Increase the fixture without APIs through
+`FORGE_FAIR_QUEUE_TASKS_PER_REPOSITORY`,
+`FORGE_FAIR_QUEUE_RESTART_EVERY_GRANTS`, and
+`FORGE_FAIR_QUEUE_SOAK_SECONDS`. The convenience command below runs the same
+oracles for six hours:
+
+```bash
+cd runtime
+npm run soak:mission-control
+```
+
+For native visual automation, run a DEBUG ForgeApp and use:
+
+```bash
+script/drive_surface.sh missionControlFixture:observer
+script/drive_surface.sh missionControlFixture:active
+script/drive_surface.sh missionControlFixture:queued
+script/drive_surface.sh missionControlFixture:review
+script/verify_mission_control_surfaces.sh
+```
+
+The fixture state lives in the shared `WorkspaceModel`, not view-local state,
+and the verification script captures the app's native view hierarchy without
+Screen Recording permission. This is deterministic surface/transition
+automation, not yet action-level XCUITest.
 
 The shell also includes a first usable `10a`-style full-screen diff review
 surface. It opens from the Diff tab or review state card, shows a file tree,
@@ -787,13 +828,15 @@ routing, Mission Control access-policy negatives, and SSE frame parsing:
 swift test --enable-code-coverage
 ```
 
-This remains an early native unit-test baseline. The 36 current tests include
+This remains an early native unit-test baseline. The 44 current tests include
 three focused GitHub Device Flow tests covering local Client ID configuration,
 GitHub `slow_down` interval handling, user validation before token persistence,
 connected-state restoration, and actionable HTTP failures. The broader suite
 raises direct `RuntimeClient.swift` line coverage to 53.37%, including explicit
 review, validation, agent-loop control, and PR refresh source parameters.
-`WorkspaceModel` now accepts an
+The suite also covers Mission Control supervised-runtime evidence, fair queue
+oldest-first/round-robin/eligibility/global-limit policy, and authorization
+placement for supervisor grants. `WorkspaceModel` now accepts an
 isolated runtime and preferences store for tests; mock-runtime tests cover
 successful and failed health refreshes, task creation/upsert/selection,
 selection persistence, runtime-process start eligibility, validation-preset
@@ -826,12 +869,13 @@ cd runtime && npm run test:unit
 cd runtime && npm run smoke:core
 cd runtime && npm run smoke:git-conflicts
 cd runtime && npm run smoke:git-remote
+cd runtime && npm run smoke:mission-control-fairness
 cd runtime && npm run campaign:reliability
 cd runtime && npm run campaign:provider-reliability
 ```
 
 Before a release-shaped change, run every `smoke:*` script — the full suite is
-19 scripts and takes a few minutes. Both reliability campaigns are
+20 scripts and takes a few minutes. Both reliability campaigns are
 intentionally separate from `smoke:all`: each creates four isolated Git
 repositories and emits a staged scorecard. Use the corresponding `:baseline`
 variant only when intentionally refreshing durable evidence in
