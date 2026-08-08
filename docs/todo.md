@@ -66,10 +66,23 @@ the core runtime smoke. Preserve these completed boundaries:
   brief even when there is no previous proposal or ordinary validation
   feedback. A fetch-mocked OpenAI regression asserts the brief ID and full
   follow-up prompt are present.
-- Next reliability expansion: pin a curated public-repository/task corpus and
-  run budgeted live OpenAI trials with recorded model/version, request count,
-  token/cost ceilings, Unified Diff and approved-command recovery cases. Keep
-  live-model evidence separate from deterministic fixture/protocol baselines.
+- **Next long task — live-model public-repository corpus:**
+  - Pin repository URL, license, exact commit, task prompt, expected behavior,
+    allowed commands, and external oracle for each case. Start with docs,
+    TypeScript, Python, and Swift bugfix/refactor tasks rather than benchmarks
+    that reward repository memorization.
+  - Add enforced per-case and campaign request, token, estimated-cost, wall
+    time, command, changed-file, and mutation ceilings. Budget exhaustion must
+    become a scored safe stop, never an unbounded retry.
+  - Record provider/model/version, request lineage, context/tool evidence,
+    proposal/repair attempts, review decisions, Git diff, validation, audit
+    redaction, outcome, and failure class in a separate versioned report.
+  - Keep live-model reports separate from deterministic fixture/protocol
+    baselines; never refresh a durable quality baseline implicitly.
+  - Initial exit criterion: at least eight pinned tasks across four language or
+    task families, every run budget-accounted, no unauthorized side effect,
+    deterministic external oracles, and a reviewed failure taxonomy that
+    selects the next runtime change.
 
 - [x] Safe query-variation handling beyond the exact-fingerprint repeat guard:
   a subset-aware, order-insensitive, case-folded redundancy guard now blocks

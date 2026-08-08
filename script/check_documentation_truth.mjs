@@ -21,6 +21,7 @@ const [
   ciWorkflow,
   taskTypes,
   swiftModels,
+  swiftTestSources,
   runtimePackageSource,
   routeManifest,
   repositoryBaselineSource,
@@ -38,6 +39,7 @@ const [
   read(".github/workflows/swift-tests.yml"),
   read("runtime/src/types.ts"),
   read("apps/macos/Sources/ForgeApp/Models.swift"),
+  readSwiftTestSources(),
   read("runtime/package.json"),
   read("runtime/src/http/routeManifest.ts"),
   read("docs/reliability/alpha-repository-baseline.json"),
@@ -119,12 +121,20 @@ check("route manifest count remains explicit", () => {
 
 const unitTestCount = (await readdir(resolve(repoRoot, "runtime", "scripts")))
   .filter((name) => name.endsWith("-test.mjs")).length;
+const swiftTestCount = [...swiftTestSources.matchAll(/^\s*func test[A-Z]\w*\s*\(/gm)].length;
+
+check("documented Swift test count matches the native test sources", () => {
+  assert.match(development, new RegExp(`\\b${swiftTestCount} current tests\\b`));
+  assert.match(projectStatus, new RegExp(`all ${swiftTestCount} Swift tests`));
+});
 
 check("known completed capabilities are not listed as future README work", () => {
   const beyondV0 = range(readme, "Beyond V0:", "## Completion Estimate");
   assert.doesNotMatch(beyondV0, /Actual PR creation\/publication/);
   assert.doesNotMatch(beyondV0, /Durable repository index/);
   assert.doesNotMatch(beyondV0, /Pull-request review\/check visibility/);
+  const nextTodo = range(readme, "## Next TODO", "## Core Principles");
+  assert.doesNotMatch(nextTodo, /return to PR\/GitHub publication/i);
 });
 
 check("P0 TODO does not reopen verified handoff work", () => {
@@ -166,7 +176,14 @@ if (failures.length > 0) {
 
 console.log(`- Handoff: ${handoffCounts.Verified} Verified, ${handoffCounts.Partial} Partial, ${handoffCounts.Missing} Missing`);
 console.log(`- Reliability: ${repositoryBaseline.passedCount} local + ${providerBaseline.passedCount} provider cases passed; ${repositoryBaseline.guardedCount + providerBaseline.guardedCount} guarded`);
-console.log(`- Runtime: ${routeCount} routes, ${smokeCount} smoke scripts, ${unitTestCount} unit-test files`);
+console.log(`- Runtime: ${routeCount} routes, ${smokeCount} smoke scripts, ${unitTestCount} unit-test files, ${swiftTestCount} Swift tests`);
+
+async function readSwiftTestSources() {
+  const directory = "Tests/ForgeAppTests";
+  const names = (await readdir(resolve(repoRoot, directory)))
+    .filter((name) => name.endsWith("Tests.swift"));
+  return (await Promise.all(names.map((name) => read(`${directory}/${name}`)))).join("\n");
+}
 
 function check(label, action) {
   try {

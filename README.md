@@ -253,8 +253,8 @@ Product-readiness estimate:
 | Primary V0 handoff UI | 100% | The five primary screens are `Verified` with rendered-comparison evidence in `docs/verification/`. |
 | Full handoff UI | 95-97% | 41 of 43 named screens/states are `Verified` (rendered comparison on real data, evidence in `docs/verification/`). The two remaining: `6a` GitHub is `Partial` (configuration UI, Device Flow, polling, Keychain persistence, and connected state are implemented and tested; live GitHub authorization still needs a founder-owned OAuth App Client ID with Device Flow enabled); `35a` Widget is a documented platform-blocked descope (hand-assembled ad-hoc-signed extension not discovered by pluginkit; unblocks with P6 signing). |
 | Useful developer alpha | 64-72% | Forge now repeats the reviewed lifecycle across both deterministic local-provider and mock-OpenAI adapter corpora, including Unified Diff, approved commands, safety guarding, and reviewed repair/rerun; it still needs broader autonomous tool use and live-model success on pinned public repositories. |
-| Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
-| Polished v1 | 20-25% | Queueing and explicitly authorized active runtimes across repositories are real; full background task/review routing, native distribution, indexing, memory, MCP/GitHub, and product polish remain. |
+| Commercial beta | 20-25% | Needs signed installable packaging, production proof of the implemented onboarding and GitHub/provider setup, trust/operations polish, and repeated success on real repos. |
+| Polished v1 | 20-25% | Queueing, local indexes, and session-authorized active runtimes are real; full background task/review routing, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
 
 Short version: V0 behavior is complete, but the entire 43-screen product design
 is not. Alpha is the next cumulative horizon, followed by beta and then v1;
@@ -264,9 +264,13 @@ v1 includes the completed requirements from every earlier milestone.
 
 Top priorities are tracked in `docs/todo.md`. Current post-V0 themes:
 
-- harden the completed V0 on varied real repositories
-- widen safe provider tool use and planning/patch output recovery
-- return to PR/GitHub publication after the agent coding loop feels real
+- run a budgeted live-model corpus on pinned public repositories
+- use classified failures to widen safe provider tool/patch/recovery behavior
+- add automatic fork-owner discovery and optional background PR refresh
+- finish cross-repository task/review routing and signed Mac distribution
+
+The subsystem-by-subsystem readiness and remaining-gap matrix lives in
+`docs/project_status.md` under **Component Gap Matrix**.
 
 ## Core Principles
 

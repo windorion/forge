@@ -5998,3 +5998,60 @@ Next:
   from classified failures.
 - Add automatic fork-owner discovery and a conservative opt-in background PR
   refresh policy with quota, credential, lifecycle, and audit boundaries.
+
+## 2026-08-08 22:34:59 +0200 (CEST)
+
+Conversation summary:
+
+- The founder explicitly authorized integrating all current Alpha work into
+  `main`, updating the documentation again, and producing a quantified
+  subsystem-by-subsystem gap assessment plus the next long task.
+
+Done:
+
+- Fetched `origin`, confirmed the worktree was clean, verified `origin/main`
+  at `56388dd` was a direct ancestor of `codex/alpha-runtime-controls`, and
+  fast-forwarded local `main` through all five branch commits to `f457709`
+  without a merge commit, conflict, force operation, or history rewrite.
+- Added a 13-area Component Gap Matrix to `docs/project_status.md`, with
+  independent readiness and remaining-gap ranges for product direction,
+  runtime, security, handoff UI, native macOS, agent quality, edits/commands,
+  repository understanding, GitHub, multi-repository supervision,
+  reliability/testing, distribution, accounts, and commercial work.
+- Selected the budgeted live-model public-repository corpus as the next long
+  engineering milestone and expanded `docs/todo.md` with pinned-repository,
+  budget, evidence, safety-stop, report-separation, and eight-case exit
+  criteria.
+- Removed the stale README instruction to return to PR publication, corrected
+  commercial/v1 wording that treated implemented onboarding/indexes as
+  missing, and corrected the native test count from 25 to 26.
+- Extended the documentation-truth check to derive Swift XCTest count from the
+  sources, require the documented 26-test count, reject reintroduced PR
+  publication work in README Next TODO, and report all measured inventories.
+- Verified documentation truth, TypeScript check/build, all 20 runtime unit
+  suites, all 26 Swift tests, and `git diff --check` after the fast-forward and
+  documentation update. The previously run 18-script smoke suite and both
+  four-case reliability campaigns cover the exact merged code commits.
+- Committed and pushed the integrated `main` history so GitHub's default branch
+  now contains the Alpha runtime controls, both reliability campaigns,
+  documentation truth enforcement, and PR review/check evidence.
+
+Not done:
+
+- The merged task branch has not been deleted; it remains as a recoverable
+  remote pointer unless the founder later requests branch cleanup.
+- The live-model corpus still needs explicit permission to spend external API
+  tokens and access pinned public repositories. No live OpenAI request or cost
+  was incurred in this conversation.
+- Live `6a` OAuth, signed `35a` WidgetKit packaging, automatic fork discovery,
+  background PR refresh, semantic retrieval, complete cross-runtime routing,
+  signed distribution, accounts, and pricing remain as quantified in the gap
+  matrix.
+
+Next:
+
+- Implement the live-model corpus harness and budget ledger first, then run at
+  least eight pinned tasks only after external model/network use is approved.
+- Use the reviewed failure taxonomy—not intuition—to choose whether the next
+  runtime change should target context retrieval, tool selection, patch
+  recovery, command repair, or cost control.

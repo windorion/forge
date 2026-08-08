@@ -37,11 +37,11 @@ npm run check:docs
 
 The check currently verifies:
 
-- shared update dates for the four critical status documents;
+- shared update dates for the five critical status documents;
 - matching readiness estimates between README and project status;
 - the 43-screen handoff status distribution and five verified primary screens;
 - both versioned reliability baselines and their headline scorecards;
-- runtime route, smoke-script, and unit-test-file counts; and
+- runtime route, smoke-script, runtime unit-test-file, and Swift test counts;
 - removal of known completed work from README future claims and active P0 TODOs.
 
 GitHub Actions runs the same check. Add a new assertion when a repeatedly

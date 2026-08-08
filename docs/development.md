@@ -755,7 +755,7 @@ frame parsing:
 swift test --enable-code-coverage
 ```
 
-This remains an early native unit-test baseline. The 25 current tests include
+This remains an early native unit-test baseline. The 26 current tests include
 three focused GitHub Device Flow tests covering local Client ID configuration,
 GitHub `slow_down` interval handling, user validation before token persistence,
 connected-state restoration, and actionable HTTP failures. The broader suite raises

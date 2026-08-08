@@ -395,8 +395,38 @@ use different denominators and must not be added together.
 | Primary V0 handoff UI | 100% | All five primary screens are `Verified` with rendered-comparison evidence in `docs/verification/`. |
 | Full 43-screen handoff UI | 95-97% | 41 of 43 screens Verified with rendered-comparison evidence (docs/verification/). Remaining: 6a Partial (OAuth configuration, Device Flow, standards-compliant polling, Keychain persistence, and connected UI are implemented and unit-tested; a live grant still needs the founder GitHub OAuth Client ID with Device Flow enabled); 35a a documented platform-blocked widget-signing descope (P6). |
 | Useful developer alpha | 64-72% | Forge now repeats the reviewed lifecycle across deterministic local-provider and mock-OpenAI adapter corpora, including Unified Diff, approved commands, safety guarding, and repair/rerun; it still needs broader autonomous tool use and repeated live-model success on pinned public repositories. |
-| Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
-| Polished v1 product | 20-25% | The real queue and session-authorized active multi-repository runtimes exist; full background task/review routing, indexing, packaging, updates, onboarding, billing, and integrations remain. |
+| Commercial beta | 20-25% | Needs signed installable packaging, production proof of the implemented onboarding and GitHub/provider setup, trust/operations polish, and repeated success on real repos. |
+| Polished v1 product | 20-25% | The real queue, local indexes, and session-authorized active multi-repository runtimes exist; full background task/review routing, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
+
+## Component Gap Matrix
+
+These are directional subsystem estimates, not schedule promises. Each row has
+its own denominator, so the rows must not be averaged into a product score.
+The gap column is simply the remaining range to reach that subsystem's stated
+finish line.
+
+| Component | Readiness | Gap | Strongest evidence today | Largest remaining gap |
+| --- | ---: | ---: | --- | --- |
+| Product direction and task-first UX | 90-95% | 5-10% | Durable product principles, complete V0 flow, 41 rendered-verified handoff states. | Resolve the account/team boundary and validate the narrow daily-use task with external users. |
+| Runtime, task state, recovery | 90-94% | 6-10% | 57-route contract, SQLite persistence, queueing, cancellation, watchdog recovery, transaction journals. | Normalize long-term run/tool history, retention, migration, soak, and production telemetry. |
+| Security, permissions, and audit | 86-92% | 8-14% | Explicit plan/edit/command/git/PR gates, observer runtimes, redacted portable audit export. | Approval expiry/revocation, audit retention/purge, broader secret detection, and signed-build threat review. |
+| Handoff UI fidelity | 95-97% | 3-5% | Five primary screens and 41 of 43 total states are Verified. | Live `6a` OAuth evidence and signed `35a` WidgetKit packaging. |
+| Native macOS behavior and integrations | 74-82% | 18-26% | SwiftUI app, menus, shortcuts, notifications, Spotlight, CLI, onboarding, settings, managed runtime. | Final human-input checks, deeper Finder/IDE handoff, WidgetKit, UI automation, and signed-package proof. |
+| Agent and live-model coding quality | 58-68% | 32-42% | Bounded plan/context/step loop, strict structured-output recovery, mock-OpenAI protocol campaign. | Pinned public-repository live-model evidence, broader tool choice, patch recovery, and measured quality/cost. |
+| Edit, command, validation, and repair | 80-88% | 12-20% | Reviewed multi-file create/modify/delete, Unified Diff, rollback, approved commands, repair/rerun. | Broader source transformations, command catalogs, revocable approval memory, and post-rollback validation. |
+| Repository understanding | 68-78% | 22-32% | Durable file metadata, lightweight symbols, trigram text index, bounded live verification. | Semantic/hybrid retrieval, dependency relationships, higher-fidelity parsing, ranking evaluation, and large-repo budgets. |
+| Git and GitHub workflow | 78-86% | 14-22% | Status/diff, guarded commit/branch/push, PR publication, reviews/checks/mergeability evidence. | Automatic fork-owner discovery, optional background refresh, live OAuth proof, and hosted failure fixtures. |
+| Multi-task and multi-repository supervision | 58-68% | 32-42% | Persisted queue, same-repo serialization, observers, session-authorized active runtimes, Pause All. | Background task creation/detail/review routing, cross-runtime navigation, fairness, and long-running supervision. |
+| Reliability, evaluation, and test evidence | 70-80% | 20-30% | 20 runtime unit files, 18 smoke scripts, 26 Swift tests, two passing four-case campaigns. | Live-model corpus, wider real repositories, hosted-network cases, UI automation, performance, and long-duration soak. |
+| Distribution, updates, and operations | 25-35% | 65-75% | App-managed/bundled-runtime path, update UI/appcast client, diagnostics surfaces. | Developer ID, hardened runtime, notarization, DMG, signed appcast install/relaunch, crash reporting, release rehearsal. |
+| Account, sync, and collaboration services | 10-20% | 80-90% | Honest local-only continuation and GitHub/provider credentials in Keychain. | Decide whether accounts exist; if yes, build verified email identity, sync, sharing, tenancy, and deletion/privacy APIs. |
+| Pricing, packaging, and go-to-market | 20-30% | 70-80% | Product category, personas, positioning, and business-model hypotheses are documented. | Choose solo/team wedge, open-core boundary, packaging, price, entitlement/billing, support, and launch evidence. |
+
+The highest-leverage next engineering milestone is the live-model
+public-repository corpus. It attacks the largest Alpha uncertainty (32-42%)
+and produces failure evidence that can rationally reorder agent, retrieval,
+edit, command, and reliability work instead of expanding those systems by
+intuition.
 
 ## Distance To "Finished"
 
