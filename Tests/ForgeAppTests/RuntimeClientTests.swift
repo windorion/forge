@@ -179,6 +179,28 @@ final class RuntimeClientTests: XCTestCase {
         XCTAssertEqual(body["githubToken"] as? String, "github-secret-token")
         XCTAssertEqual(body["headOwner"] as? String, "fork-owner")
         XCTAssertEqual(body["confirmation"] as? String, "PublishPullRequest")
+
+        do {
+            _ = try await client.pullRequestStatus(
+                GitPullRequestStatusRequest(
+                    taskID: "task-1",
+                    githubToken: "github-refresh-token",
+                    source: "Background"
+                )
+            )
+            XCTFail("Expected the mock authentication failure.")
+        } catch let error as RuntimeClientError {
+            guard case .httpStatus(401, _) = error else {
+                return XCTFail("Expected HTTP 401, got \(error).")
+            }
+        }
+        let refreshRequest = try XCTUnwrap(recorder.lastRequest)
+        XCTAssertEqual(refreshRequest.url?.path, "/api/git/pr-status")
+        XCTAssertNil(refreshRequest.url?.query)
+        XCTAssertFalse(refreshRequest.url?.absoluteString.contains("github-refresh-token") ?? true)
+        let refreshBody = try jsonObject(try XCTUnwrap(recorder.lastBody))
+        XCTAssertEqual(refreshBody["githubToken"] as? String, "github-refresh-token")
+        XCTAssertEqual(refreshBody["source"] as? String, "Background")
     }
 
     func testReviewAndValidationActionsPreserveExplicitApprovalParameters() async throws {

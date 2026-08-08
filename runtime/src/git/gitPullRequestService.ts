@@ -50,6 +50,7 @@ export function createGitPullRequestService(options: {
 }) {
 const { runGitCommand, getGitStatusSnapshot, tasks, emit, githubApiBase } = options;
 const taskStore = { saveTask: options.saveTask };
+const activePullRequestRefreshTaskIDs = new Set<string>();
 
 interface CreatedGitHubPullRequest {
   number: number;
@@ -86,6 +87,15 @@ interface PullRequestCheckEvidence {
 type GitRemoteSummary = {
   name: string;
   urlKind: "HTTPS" | "SSH" | "Local" | "Other" | "Unknown";
+  github?: { owner: string; repo: string };
+};
+
+type PullRequestRemoteTopology = {
+  baseRemote?: GitRemoteSummary;
+  headRemote?: GitRemoteSummary;
+  forkDetected: boolean;
+  headOwner?: string;
+  summary: string;
 };
 
 async function collectGitCommitsInRange(gitRoot: string, range: string): Promise<GitCommitToPush[]> {
@@ -151,7 +161,9 @@ async function getGitPullRequestPreview(rawTaskID: string | null): Promise<GitPu
 
   const upstreamParts = parseGitUpstream(status.upstream);
   const remoteSummaries = await listGitRemoteSummaries(status.root);
-  const remote = upstreamParts?.remote ?? remoteSummaries[0]?.name ?? await getFirstGitRemote(status.root);
+  const remoteTopology = resolvePullRequestRemoteTopology(remoteSummaries, upstreamParts?.remote);
+  const remote = remoteTopology.baseRemote?.name ?? upstreamParts?.remote ?? remoteSummaries[0]?.name ?? await getFirstGitRemote(status.root);
+  const headRemote = remoteTopology.headRemote?.name ?? upstreamParts?.remote ?? remote;
   const baseBranch = await getGitDefaultBaseBranch(status.root, remote ?? "origin");
   const baseRef = remote
     ? await resolveGitBaseRef(status.root, remote, baseBranch)
@@ -189,8 +201,14 @@ async function getGitPullRequestPreview(rawTaskID: string | null): Promise<GitPu
     headBranch: status.branch,
     head: status.head,
     upstream: status.upstream,
-    remote: upstreamParts?.remote ?? remote,
+    remote,
+    headRemote,
     remoteBranch: upstreamParts?.remoteBranch,
+    baseOwner: remoteTopology.baseRemote?.github?.owner,
+    baseRepository: remoteTopology.baseRemote?.github?.repo,
+    headOwner: remoteTopology.headOwner,
+    forkDetected: remoteTopology.forkDetected,
+    forkSummary: remoteTopology.summary,
     suggestedBranchName,
     title,
     body: buildPullRequestBody(status, baseBranch, title, task, commits, changedFiles, blockers, riskNotes, preflight),
@@ -271,6 +289,7 @@ async function publishGitPullRequest(input: GitPullRequestPublishRequest): Promi
   if (!remote) {
     throw new HttpError(409, "Publishing a pull request requires a configured git remote.");
   }
+  const headRemote = preview.headRemote ?? remote;
   const remoteUrlResult = await runGitCommand(["remote", "get-url", remote], status.root, 8_000);
   if (remoteUrlResult.exitCode !== 0) {
     throw new HttpError(409, `Could not resolve URL for remote "${remote}".`);
@@ -280,9 +299,14 @@ async function publishGitPullRequest(input: GitPullRequestPublishRequest): Promi
     throw new HttpError(409, `Remote "${remote}" is not a recognizable GitHub repository URL.`);
   }
 
+  if (request.headOwner && preview.headOwner && request.headOwner !== preview.headOwner) {
+    throw new HttpError(409, `Fork head owner changed since PR review. Expected ${request.headOwner}, current ${preview.headOwner}.`);
+  }
+  const headOwner = preview.headOwner ?? request.headOwner;
+
   // Push the head branch so the PR has a remote head to open against.
   const pushResult = await runGitCommand(
-    ["push", remote, `HEAD:refs/heads/${request.headBranch}`],
+    ["push", headRemote, `HEAD:refs/heads/${request.headBranch}`],
     status.root,
     96_000
   );
@@ -290,9 +314,14 @@ async function publishGitPullRequest(input: GitPullRequestPublishRequest): Promi
     throw new HttpError(409, gitPushFailureMessage(pushResult.output, "Push before PR failed"));
   }
 
-  const created = await createGitHubPullRequest(githubRemote, request);
+  const created = await createGitHubPullRequest(githubRemote, request, headOwner);
 
-  const relatedTask = recordGitPullRequestOnTask(request.taskID, created, request, githubRemote);
+  const relatedTask = recordGitPullRequestOnTask(request.taskID, created, request, githubRemote, {
+    baseRemote: remote,
+    headRemote,
+    headOwner,
+    forkDetected: preview.forkDetected === true
+  });
 
   return {
     generatedAt,
@@ -304,6 +333,9 @@ async function publishGitPullRequest(input: GitPullRequestPublishRequest): Promi
     headBranch: request.headBranch,
     title: request.title,
     remote,
+    headRemote,
+    headOwner,
+    forkDetected: preview.forkDetected === true,
     owner: githubRemote.owner,
     repo: githubRemote.repo,
     pushedCommits: preview.commits,
@@ -317,7 +349,8 @@ async function publishGitPullRequest(input: GitPullRequestPublishRequest): Promi
 
 async function createGitHubPullRequest(
   remote: { owner: string; repo: string },
-  request: GitPullRequestPublishRequest
+  request: GitPullRequestPublishRequest,
+  headOwner?: string
 ): Promise<CreatedGitHubPullRequest> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30_000);
@@ -335,7 +368,7 @@ async function createGitHubPullRequest(
       body: JSON.stringify({
         title: request.title,
         // Fork heads are addressed as `owner:branch`; same-repo heads are bare.
-        head: request.headOwner ? `${request.headOwner}:${request.headBranch}` : request.headBranch,
+        head: headOwner ? `${headOwner}:${request.headBranch}` : request.headBranch,
         base: request.baseBranch,
         body: request.body,
         draft: request.draft === true
@@ -394,7 +427,8 @@ function gitHubApiErrorMessage(statusCode: number, body: string): string {
     : statusCode === 422
       ? "GitHub could not create the pull request"
       : `GitHub responded with status ${statusCode}`;
-  return detail ? `${base}: ${detail}` : `${base}.`;
+  const boundedDetail = detail.replace(/\s+/g, " ").trim().slice(0, 1_000);
+  return boundedDetail ? `${base}: ${boundedDetail}` : `${base}.`;
 }
 
 
@@ -402,7 +436,8 @@ function recordGitPullRequestOnTask(
   taskID: string | undefined,
   created: CreatedGitHubPullRequest,
   request: GitPullRequestPublishRequest,
-  remote: { owner: string; repo: string }
+  remote: { owner: string; repo: string },
+  topology: { baseRemote: string; headRemote: string; headOwner?: string; forkDetected: boolean }
 ): GitPullRequestResult["relatedTask"] {
   if (!taskID) {
     return undefined;
@@ -426,6 +461,10 @@ function recordGitPullRequestOnTask(
       repo: remote.repo,
       baseBranch: request.baseBranch,
       headBranch: request.headBranch,
+      headOwner: topology.headOwner,
+      baseRemote: topology.baseRemote,
+      headRemote: topology.headRemote,
+      forkDetected: topology.forkDetected,
       openedAt: now,
       lastCheckedAt: now
     },
@@ -461,9 +500,33 @@ function recordGitPullRequestOnTask(
  * Refresh the persisted PR's state, review decision, and check runs from
  * GitHub. Read-only against GitHub; the token is per-request and never stored.
  */
-async function refreshGitPullRequestStatus(
+async function refreshGitPullRequestStatus(input: GitPullRequestStatusRequest) {
+  const taskID = isRecord(input) && typeof input.taskID === "string" ? input.taskID.trim() : "";
+  if (!taskID) {
+    return executeGitPullRequestStatusRefresh(input);
+  }
+  if (activePullRequestRefreshTaskIDs.has(taskID)) {
+    throw new HttpError(409, `Pull request status refresh is already active for task ${taskID}.`);
+  }
+  activePullRequestRefreshTaskIDs.add(taskID);
+  try {
+    return await executeGitPullRequestStatusRefresh(input);
+  } finally {
+    activePullRequestRefreshTaskIDs.delete(taskID);
+  }
+}
+
+async function executeGitPullRequestStatusRefresh(
   input: GitPullRequestStatusRequest
-): Promise<{ generatedAt: string; pullRequest: TaskPullRequest; summary: string; relatedTask?: GitPullRequestResult["relatedTask"] }> {
+): Promise<{
+  generatedAt: string;
+  pullRequest: TaskPullRequest;
+  summary: string;
+  source: "Manual" | "Background";
+  requestCount: number;
+  changed: boolean;
+  relatedTask?: GitPullRequestResult["relatedTask"];
+}> {
   if (!isRecord(input)) {
     throw new HttpError(400, "Pull request status request must be an object.");
   }
@@ -484,17 +547,28 @@ async function refreshGitPullRequestStatus(
     throw new HttpError(409, "This task has no published pull request to refresh.");
   }
 
+  const source = input.source === "Background" ? "Background" : "Manual";
+  const startedAt = new Date().toISOString();
+  let requestCount = 0;
+  const trackedRead = async (path: string, label: string) => {
+    requestCount += 1;
+    return readGitHubJSON(path, githubToken, label);
+  };
   const repoPath = `/repos/${encodeURIComponent(existing.owner)}/${encodeURIComponent(existing.repo)}`;
-  const pullResult = await readGitHubJSON(`${repoPath}/pulls/${existing.number}`, githubToken, "pull request status");
+  const pullResult = await trackedRead(`${repoPath}/pulls/${existing.number}`, "pull request status");
   if (!pullResult.ok) {
-    throw new HttpError(
+    const error = new HttpError(
       pullResult.status === 401 || pullResult.status === 403 ? 401 : pullResult.status === 0 ? 502 : 409,
       pullResult.error ?? "GitHub pull request status request failed."
     );
+    recordPullRequestRefreshFailure(task, existing, source, startedAt, requestCount, error.message);
+    throw error;
   }
   const parsed = pullResult.value;
   if (!isRecord(parsed)) {
-    throw new HttpError(502, "GitHub pull request status response was not an object.");
+    const error = new HttpError(502, "GitHub pull request status response was not an object.");
+    recordPullRequestRefreshFailure(task, existing, source, startedAt, requestCount, error.message);
+    throw error;
   }
 
   const head = isRecord(parsed.head) ? parsed.head : undefined;
@@ -503,14 +577,16 @@ async function refreshGitPullRequestStatus(
     (Array.isArray(parsed.requested_reviewers) ? parsed.requested_reviewers.length : 0)
     + (Array.isArray(parsed.requested_teams) ? parsed.requested_teams.length : 0);
   const [reviewsResult, checksResult] = await Promise.all([
-    readGitHubJSON(`${repoPath}/pulls/${existing.number}/reviews?per_page=100`, githubToken, "pull request reviews"),
+    trackedRead(`${repoPath}/pulls/${existing.number}/reviews?per_page=100`, "pull request reviews"),
     headSha
-      ? readGitHubJSON(`${repoPath}/commits/${encodeURIComponent(headSha)}/check-runs?per_page=100`, githubToken, "pull request checks")
+      ? trackedRead(`${repoPath}/commits/${encodeURIComponent(headSha)}/check-runs?per_page=100`, "pull request checks")
       : Promise.resolve<GitHubReadResult>({ ok: false, status: 0, error: "GitHub did not return the PR head SHA." })
   ]);
   for (const auxiliary of [reviewsResult, checksResult]) {
     if (!auxiliary.ok && (auxiliary.status === 401 || auxiliary.status === 403)) {
-      throw new HttpError(401, auxiliary.error ?? "GitHub rejected access to pull request evidence.");
+      const error = new HttpError(401, auxiliary.error ?? "GitHub rejected access to pull request evidence.");
+      recordPullRequestRefreshFailure(task, existing, source, startedAt, requestCount, error.message);
+      throw error;
     }
   }
   const reviewEvidence = reviewsResult.ok
@@ -522,7 +598,7 @@ async function refreshGitPullRequestStatus(
 
   const now = new Date().toISOString();
   const merged = parsed.merged === true || typeof parsed.merged_at === "string";
-  const refreshed: TaskPullRequest = {
+  const refreshedEvidence: TaskPullRequest = {
     ...existing,
     state: typeof parsed.state === "string" ? parsed.state : existing.state,
     merged,
@@ -545,14 +621,28 @@ async function refreshGitPullRequestStatus(
     checksSummary: checkEvidence.summary
   };
 
-  const stateChanged = refreshed.state !== existing.state || refreshed.merged !== existing.merged || refreshed.draft !== existing.draft;
-  const evidenceChanged = pullRequestEvidenceFingerprint(refreshed) !== pullRequestEvidenceFingerprint(existing);
+  const stateChanged = refreshedEvidence.state !== existing.state || refreshedEvidence.merged !== existing.merged || refreshedEvidence.draft !== existing.draft;
+  const evidenceChanged = pullRequestEvidenceFingerprint(refreshedEvidence) !== pullRequestEvidenceFingerprint(existing);
+  const changed = stateChanged || evidenceChanged;
   const stateSummary = merged
-    ? `Pull request #${refreshed.number} is merged.`
-    : refreshed.state === "closed"
-      ? `Pull request #${refreshed.number} was closed without merging.`
-      : `Pull request #${refreshed.number} is ${refreshed.draft ? "an open draft" : "open"}.`;
+    ? `Pull request #${refreshedEvidence.number} is merged.`
+    : refreshedEvidence.state === "closed"
+      ? `Pull request #${refreshedEvidence.number} was closed without merging.`
+      : `Pull request #${refreshedEvidence.number} is ${refreshedEvidence.draft ? "an open draft" : "open"}.`;
   const summary = `${stateSummary} ${reviewEvidence.summary} ${checkEvidence.summary}`;
+  const refreshed: TaskPullRequest = {
+    ...refreshedEvidence,
+    refreshAttempts: appendPullRequestRefreshAttempt(existing.refreshAttempts, {
+      id: randomUUID(),
+      source,
+      status: "Succeeded",
+      startedAt,
+      completedAt: now,
+      requestCount,
+      changed,
+      summary
+    })
+  };
 
   const nextEvents = [...task.events];
   if (stateChanged) nextEvents.push(event("git.pull_request.state_changed", stateSummary));
@@ -560,7 +650,7 @@ async function refreshGitPullRequestStatus(
 
   const updatedTask: ForgeTask = {
     ...task,
-    updatedAt: stateChanged || evidenceChanged ? now : task.updatedAt,
+    updatedAt: now,
     pullRequest: refreshed,
     events: nextEvents
   };
@@ -571,6 +661,9 @@ async function refreshGitPullRequestStatus(
     generatedAt: now,
     pullRequest: refreshed,
     summary,
+    source,
+    requestCount,
+    changed,
     relatedTask: {
       id: task.id,
       title: task.title,
@@ -579,6 +672,45 @@ async function refreshGitPullRequestStatus(
       summary
     }
   };
+}
+
+function recordPullRequestRefreshFailure(
+  task: ForgeTask,
+  existing: TaskPullRequest,
+  source: "Manual" | "Background",
+  startedAt: string,
+  requestCount: number,
+  summary: string
+): void {
+  const completedAt = new Date().toISOString();
+  const refreshed: TaskPullRequest = {
+    ...existing,
+    refreshAttempts: appendPullRequestRefreshAttempt(existing.refreshAttempts, {
+      id: randomUUID(),
+      source,
+      status: "Failed",
+      startedAt,
+      completedAt,
+      requestCount,
+      changed: false,
+      summary
+    })
+  };
+  const updatedTask: ForgeTask = {
+    ...task,
+    updatedAt: completedAt,
+    pullRequest: refreshed,
+    events: [...task.events, event("git.pull_request.refresh_failed", `${source} PR refresh failed after ${requestCount} GitHub request(s): ${summary}`)]
+  };
+  tasks.set(updatedTask.id, updatedTask);
+  taskStore.saveTask(updatedTask);
+}
+
+function appendPullRequestRefreshAttempt(
+  attempts: TaskPullRequest["refreshAttempts"],
+  attempt: NonNullable<TaskPullRequest["refreshAttempts"]>[number]
+): NonNullable<TaskPullRequest["refreshAttempts"]> {
+  return [...(attempts ?? []), attempt].slice(-20);
 }
 
 async function readGitHubJSON(path: string, githubToken: string, label: string): Promise<GitHubReadResult> {
@@ -758,11 +890,34 @@ async function listGitRemoteSummaries(gitRoot: string): Promise<GitRemoteSummary
 
   return Promise.all(remotes.map(async (name) => {
     const urlResult = await runGitCommand(["remote", "get-url", name], gitRoot, 8_000);
+    const url = urlResult.exitCode === 0 ? urlResult.output.trim() : undefined;
+    const github = url ? parseGitHubRemote(url) ?? undefined : undefined;
     return {
       name,
-      urlKind: summarizeRemoteURLKind(urlResult.exitCode === 0 ? urlResult.output.trim() : undefined)
+      urlKind: summarizeRemoteURLKind(url),
+      github: github ? { owner: github.owner, repo: github.repo } : undefined
     };
   }));
+}
+
+function resolvePullRequestRemoteTopology(
+  remotes: GitRemoteSummary[],
+  upstreamRemote: string | undefined
+): PullRequestRemoteTopology {
+  const headRemote = remotes.find((remote) => remote.name === upstreamRemote) ?? remotes[0];
+  const namedUpstream = remotes.find((remote) => remote.name === "upstream" && remote.github);
+  const baseRemote = namedUpstream && namedUpstream.name !== headRemote?.name ? namedUpstream : headRemote;
+  const forkDetected = Boolean(
+    baseRemote?.github && headRemote?.github &&
+    (baseRemote.github.owner !== headRemote.github.owner || baseRemote.github.repo !== headRemote.github.repo)
+  );
+  const headOwner = forkDetected ? headRemote?.github?.owner : undefined;
+  const summary = !baseRemote
+    ? "No GitHub remote topology could be resolved."
+    : forkDetected
+      ? `Detected fork topology: push ${headRemote?.name ?? "head remote"} (${headRemote?.github?.owner}/${headRemote?.github?.repo}) and open against ${baseRemote.name} (${baseRemote.github?.owner}/${baseRemote.github?.repo}).`
+      : `Same-repository topology uses ${baseRemote.name}${baseRemote.github ? ` (${baseRemote.github.owner}/${baseRemote.github.repo})` : ""}.`;
+  return { baseRemote, headRemote, forkDetected, headOwner, summary };
 }
 
 

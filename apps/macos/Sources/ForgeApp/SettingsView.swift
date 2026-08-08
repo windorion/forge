@@ -82,7 +82,7 @@ struct SettingsView: View {
         case .account:
             AccountUsageSettingsPage(tasks: workspace.tasks, repoRoot: workspace.runtimeHealth?.workspace?.repoRoot)
         case .github:
-            GitHubSettingsPage(gitStatus: workspace.gitStatus, repoRoot: workspace.runtimeHealth?.workspace?.repoRoot)
+            GitHubSettingsPage(workspace: workspace)
         case .shortcuts:
             ShortcutsSettingsPage()
         }
@@ -1041,11 +1041,13 @@ private struct AccountUsageSettingsPage: View {
 }
 
 private struct GitHubSettingsPage: View {
-    var gitStatus: GitStatusSnapshot?
-    var repoRoot: String?
+    @ObservedObject var workspace: WorkspaceModel
 
     @ObservedObject private var githubAuth = GitHubAuth.shared
     @AppStorage("forge.githubRepoEnabled") private var repoEnabled = false
+    @AppStorage(PullRequestBackgroundRefreshConfiguration.enabledKey) private var backgroundRefreshEnabled = false
+    @AppStorage(PullRequestBackgroundRefreshConfiguration.intervalMinutesKey) private var backgroundRefreshInterval = 30
+    @AppStorage(PullRequestBackgroundRefreshConfiguration.maxPullRequestsPerCycleKey) private var backgroundRefreshLimit = 3
     @State private var clientIDInput = ""
     @State private var oauthStatus = ""
     @State private var tokenInput = ""
@@ -1082,6 +1084,65 @@ private struct GitHubSettingsPage: View {
                 }
                 .padding(.horizontal, 26)
                 .frame(height: 88)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(SettingsDesign.ink).frame(height: 1.5)
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("PR STATUS REFRESH")
+                                .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
+                                .tracking(1)
+                                .foregroundStyle(SettingsDesign.muted)
+                            Text("Opt-in, bounded background checks for open pull requests")
+                                .font(.custom("JetBrains Mono", fixedSize: 10.5))
+                                .foregroundStyle(SettingsDesign.muted)
+                        }
+                        Spacer()
+                        Text(workspace.pullRequestBackgroundRefreshState.phase.rawValue.uppercased())
+                            .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(backgroundRefreshEnabled ? SettingsDesign.accent : SettingsDesign.paper)
+                            .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
+                        SettingsToggle(isOn: $backgroundRefreshEnabled)
+                    }
+
+                    HStack(spacing: 18) {
+                        VStack(alignment: .leading, spacing: 5) {
+                            settingsCaption("INTERVAL")
+                            Picker("Interval", selection: $backgroundRefreshInterval) {
+                                ForEach(PullRequestBackgroundRefreshConfiguration.allowedIntervalMinutes, id: \.self) {
+                                    Text("\($0) MIN").tag($0)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.segmented)
+                        }
+                        VStack(alignment: .leading, spacing: 5) {
+                            settingsCaption("MAX PRS / CYCLE")
+                            Picker("Cycle limit", selection: $backgroundRefreshLimit) {
+                                ForEach(PullRequestBackgroundRefreshConfiguration.allowedCycleLimits, id: \.self) {
+                                    Text("\($0)").tag($0)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.segmented)
+                        }
+                    }
+                    .disabled(!backgroundRefreshEnabled)
+
+                    Text(workspace.pullRequestBackgroundRefreshState.message)
+                        .font(.custom("JetBrains Mono", fixedSize: 10))
+                        .foregroundStyle(SettingsDesign.muted)
+                    Text("▸ Off by default. Each cycle checks only open, unmerged PRs, oldest first, up to the selected cap. A PR check uses at most three GitHub reads; credentials are loaded from Keychain per cycle, failures are audited, auth failure stops the cycle, and quitting Forge cancels scheduling.")
+                        .font(.custom("JetBrains Mono", fixedSize: 9.5))
+                        .foregroundStyle(SettingsDesign.faint)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 26)
+                .padding(.vertical, 18)
                 .overlay(alignment: .bottom) {
                     Rectangle().fill(SettingsDesign.ink).frame(height: 1.5)
                 }
@@ -1241,7 +1302,29 @@ private struct GitHubSettingsPage: View {
         .onAppear {
             clientIDInput = githubAuth.clientID ?? ""
             refreshTokenState()
+            reconcileBackgroundRefresh()
         }
+        .onChange(of: backgroundRefreshEnabled) { _, _ in reconcileBackgroundRefresh() }
+        .onChange(of: backgroundRefreshInterval) { _, _ in reconcileBackgroundRefresh() }
+        .onChange(of: backgroundRefreshLimit) { _, _ in reconcileBackgroundRefresh() }
+    }
+
+    private var gitStatus: GitStatusSnapshot? { workspace.gitStatus }
+    private var repoRoot: String? { workspace.runtimeHealth?.workspace?.repoRoot }
+
+    private func settingsCaption(_ value: String) -> some View {
+        Text(value)
+            .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
+            .tracking(0.8)
+            .foregroundStyle(SettingsDesign.faint)
+    }
+
+    private func reconcileBackgroundRefresh() {
+        workspace.configurePullRequestBackgroundRefresh(
+            enabled: backgroundRefreshEnabled,
+            intervalMinutes: backgroundRefreshInterval,
+            maxPullRequestsPerCycle: backgroundRefreshLimit
+        )
     }
 
     private var connectionTitle: String {
@@ -1276,6 +1359,7 @@ private struct GitHubSettingsPage: View {
             tokenInput = ""
             tokenStatus = "Token saved to the macOS Keychain."
             refreshTokenState()
+            reconcileBackgroundRefresh()
         } catch {
             tokenStatus = "Could not save token: \(error.localizedDescription)"
         }
@@ -1285,6 +1369,7 @@ private struct GitHubSettingsPage: View {
         githubAuth.disconnect()
         tokenStatus = "GitHub credential removed from the Keychain."
         refreshTokenState()
+        reconcileBackgroundRefresh()
     }
 
     private var isRemoteKnown: Bool { gitStatus?.upstream != nil }

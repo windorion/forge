@@ -323,12 +323,19 @@ multi-remote or fork-like review risk, validation state, test evidence, and
 publish readiness. That preview does not create, publish, update, close, or
 comment on any pull request. After explicit confirmation, `POST
 /git/pr-publish` rechecks the reviewed HEAD/branches, pushes without force,
-opens the PR through GitHub, and persists its task lineage. `POST
+opens the PR through GitHub, and persists its task lineage. Common fork
+layouts are derived from local remotes: `origin` is pushed as the contributor
+head while GitHub `upstream` is targeted as the base, with an automatically
+qualified owner/branch and no discovery request. `POST
 /git/pr-status` is read-only against GitHub and uses a token supplied only in
 that request to refresh open/closed/merged state, latest decisive reviews,
 requested reviewers/teams, head-SHA check runs, and mergeability. The macOS
-completion surface shows normalized review/check evidence; Forge does not
-approve, merge, close, rerun checks, or comment on the PR.
+completion surface shows normalized review/check evidence and bounded attempt
+audit. Manual refresh remains, while Git settings offer an off-by-default
+15/30/60-minute scheduler capped at 1/3/5 oldest open PRs per cycle. It reloads
+Keychain credentials per cycle, stops on auth failure, and is cancelled when
+the app exits. Forge does not approve, merge, close, rerun checks, or comment
+on the PR.
 
 Use the sidebar composer to create a custom task. The app connects to
 `GET /events` and refreshes tasks as runtime events arrive.
@@ -690,7 +697,8 @@ pointing at each fixture repo, and verifies:
 - branch-publish remote policy rejection through a pre-receive hook
 
 It does not require GitHub credentials or network access. Hosted-provider auth,
-fork, and branch-protection fixtures are still future work.
+network, branch-protection, and hosted fork-failure fixtures are still future
+work; local fork topology is covered by the PR mock suite below.
 
 ## Git Conflict Fixtures
 
@@ -723,7 +731,11 @@ npm run smoke:provider-recovery  # bounded malformed-output recovery (pure)
 
 The pure suites need no repository, network, provider, or ripgrep. The e2e
 suites build temporary repositories (and, for `smoke:pr-publish`, a local mock
-GitHub API plus a bare remote) and never touch the Forge worktree.
+GitHub API plus a bare remote) and never touch the Forge worktree. The PR suite
+sets separate fetch and local file push URLs to prove automatic contributor
+`origin` / base `upstream` detection without contacting GitHub, then covers
+qualified payloads, stale-owner rejection, and durable manual/background
+refresh-attempt evidence.
 
 ## Unit Tests And Coverage
 
@@ -755,17 +767,21 @@ frame parsing:
 swift test --enable-code-coverage
 ```
 
-This remains an early native unit-test baseline. The 26 current tests include
+This remains an early native unit-test baseline. The 30 current tests include
 three focused GitHub Device Flow tests covering local Client ID configuration,
 GitHub `slow_down` interval handling, user validation before token persistence,
-connected-state restoration, and actionable HTTP failures. The broader suite raises
-direct `RuntimeClient.swift` line coverage to 50.55%, including explicit review,
-validation, and agent-loop control parameters. `WorkspaceModel` now accepts an
+connected-state restoration, and actionable HTTP failures. The broader suite
+raises direct `RuntimeClient.swift` line coverage to 53.37%, including explicit
+review, validation, agent-loop control, and PR refresh source parameters.
+`WorkspaceModel` now accepts an
 isolated runtime and preferences store for tests; mock-runtime tests cover
 successful and failed health refreshes, task creation/upsert/selection,
 selection persistence, runtime-process start eligibility, validation-preset
-approval success/loading state, and validation failure cleanup, bringing
-direct `WorkspaceModel.swift` line coverage to 15.46%. SwiftUI rendering, most
+approval success/loading state, validation failure cleanup, PR refresh
+eligibility/order/caps, Background request labeling, and the zero-request
+missing-credential boundary. The focused `PullRequestRefreshPolicy.swift` line
+coverage is 85.45%, and the expanded `WorkspaceModel.swift` line coverage is
+16.69%. SwiftUI rendering, most
 model actions, CLI commands, widgets, and native system integrations still rely
 on builds, handoff screenshot verification, and runtime smoke tests rather than
 direct Swift unit or UI coverage.

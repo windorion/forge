@@ -259,6 +259,158 @@ final class WorkspaceModelTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: "forge.selectedRepositoryRoot"), repository.path)
     }
 
+    func testPullRequestRefreshPolicySelectsOldestOpenUnmergedTasksWithinLimit() throws {
+        var older = try decode(ForgeTask.self, from: Self.taskJSON)
+        older.id = "task-older"
+        older.pullRequest = try pullRequest(lastCheckedAt: "2026-07-31T19:00:00Z")
+        var newer = older
+        newer.id = "task-newer"
+        newer.pullRequest?.lastCheckedAt = "2026-07-31T20:00:00Z"
+        var closed = older
+        closed.id = "task-closed"
+        closed.pullRequest?.state = "closed"
+        var merged = older
+        merged.id = "task-merged"
+        merged.pullRequest?.merged = true
+
+        let eligible = PullRequestRefreshPolicy.eligibleTasks(
+            [newer, merged, closed, older],
+            limit: 1
+        )
+
+        XCTAssertEqual(eligible.map(\.id), ["task-older"])
+    }
+
+    func testBackgroundPullRequestCycleIsBoundedAndMarksRequestSource() async throws {
+        let defaults = makeUserDefaults()
+        defer { clear(defaults) }
+        defaults.set(true, forKey: PullRequestBackgroundRefreshConfiguration.enabledKey)
+        defaults.set(30, forKey: PullRequestBackgroundRefreshConfiguration.intervalMinutesKey)
+        defaults.set(1, forKey: PullRequestBackgroundRefreshConfiguration.maxPullRequestsPerCycleKey)
+
+        var older = try decode(ForgeTask.self, from: Self.taskJSON)
+        older.id = "task-older"
+        older.pullRequest = try pullRequest(lastCheckedAt: "2026-07-31T19:00:00Z")
+        var newer = older
+        newer.id = "task-newer"
+        newer.pullRequest?.lastCheckedAt = "2026-07-31T20:00:00Z"
+        let tasks = [newer, older]
+        let taskEnvelope = String(data: try JSONEncoder().encode(TaskListEnvelopeForTest(tasks: tasks)), encoding: .utf8)!
+        let refreshedPR = older.pullRequest!
+        let result = GitPullRequestStatusResult(
+            generatedAt: "2026-08-08T18:00:00Z",
+            pullRequest: refreshedPR,
+            summary: "Open and passing.",
+            relatedTask: nil,
+            source: "Background",
+            requestCount: 3,
+            changed: false
+        )
+        let resultJSON = String(data: try JSONEncoder().encode(result), encoding: .utf8)!
+        let recorder = WorkspaceRequestRecorder()
+        let (client, session) = makeClient { request in
+            recorder.record(request)
+            switch (request.httpMethod, request.url?.path) {
+            case ("POST", "/api/git/pr-status"):
+                return Self.response(request, status: 200, body: resultJSON)
+            case ("GET", "/api/tasks"):
+                return Self.response(request, status: 200, body: taskEnvelope)
+            default:
+                return Self.response(request, status: 404, body: #"{"error":"unexpected test route"}"#)
+            }
+        }
+        defer { session.invalidateAndCancel() }
+        let model = WorkspaceModel(
+            runtime: client,
+            userDefaults: defaults,
+            githubTokenLoader: { "local-test-token" }
+        )
+        model.tasks = tasks
+
+        await model.runPullRequestBackgroundRefreshCycle()
+
+        XCTAssertEqual(recorder.paths.filter { $0 == "POST /api/git/pr-status" }.count, 1)
+        let request = try XCTUnwrap(recorder.bodies.first)
+        let decoded = try JSONDecoder().decode(GitPullRequestStatusRequest.self, from: Data(request.utf8))
+        XCTAssertEqual(decoded.taskID, "task-older")
+        XCTAssertEqual(decoded.source, "Background")
+        XCTAssertEqual(decoded.githubToken, "local-test-token")
+        XCTAssertEqual(model.pullRequestBackgroundRefreshState.phase, .waiting)
+        XCTAssertEqual(model.pullRequestBackgroundRefreshState.attemptedCount, 1)
+        XCTAssertEqual(model.pullRequestBackgroundRefreshState.succeededCount, 1)
+        XCTAssertEqual(model.pullRequestBackgroundRefreshState.failedCount, 0)
+    }
+
+    func testBackgroundPullRequestCycleWithoutCredentialPerformsNoHTTPRequests() async throws {
+        let defaults = makeUserDefaults()
+        defer { clear(defaults) }
+        defaults.set(true, forKey: PullRequestBackgroundRefreshConfiguration.enabledKey)
+        defaults.set(30, forKey: PullRequestBackgroundRefreshConfiguration.intervalMinutesKey)
+        defaults.set(3, forKey: PullRequestBackgroundRefreshConfiguration.maxPullRequestsPerCycleKey)
+        let recorder = WorkspaceRequestRecorder()
+        let (client, session) = makeClient { request in
+            recorder.record(request)
+            return Self.response(request, status: 500, body: #"{"error":"must not be called"}"#)
+        }
+        defer { session.invalidateAndCancel() }
+        let model = WorkspaceModel(
+            runtime: client,
+            userDefaults: defaults,
+            githubTokenLoader: { nil }
+        )
+        var task = try decode(ForgeTask.self, from: Self.taskJSON)
+        task.pullRequest = try pullRequest(lastCheckedAt: "2026-07-31T19:00:00Z")
+        model.tasks = [task]
+
+        await model.runPullRequestBackgroundRefreshCycle()
+
+        XCTAssertTrue(recorder.paths.isEmpty)
+        XCTAssertEqual(model.pullRequestBackgroundRefreshState.phase, .blocked)
+        XCTAssertEqual(model.pullRequestBackgroundRefreshState.attemptedCount, 0)
+        XCTAssertTrue(model.pullRequestBackgroundRefreshState.message.contains("Keychain"))
+    }
+
+    func testBackgroundPullRequestCycleStopsAndBlocksOnAuthenticationFailure() async throws {
+        let defaults = makeUserDefaults()
+        defer { clear(defaults) }
+        defaults.set(true, forKey: PullRequestBackgroundRefreshConfiguration.enabledKey)
+        defaults.set(15, forKey: PullRequestBackgroundRefreshConfiguration.intervalMinutesKey)
+        defaults.set(3, forKey: PullRequestBackgroundRefreshConfiguration.maxPullRequestsPerCycleKey)
+        var first = try decode(ForgeTask.self, from: Self.taskJSON)
+        first.id = "task-first"
+        first.pullRequest = try pullRequest(lastCheckedAt: "2026-07-31T18:00:00Z")
+        var second = first
+        second.id = "task-second"
+        second.pullRequest?.lastCheckedAt = "2026-07-31T19:00:00Z"
+        let recorder = WorkspaceRequestRecorder()
+        let taskEnvelope = String(
+            data: try JSONEncoder().encode(TaskListEnvelopeForTest(tasks: [first, second])),
+            encoding: .utf8
+        )!
+        let (client, session) = makeClient { request in
+            recorder.record(request)
+            if request.httpMethod == "GET" {
+                return Self.response(request, status: 200, body: taskEnvelope)
+            }
+            return Self.response(request, status: 401, body: #"{"error":"bad credential"}"#)
+        }
+        defer { session.invalidateAndCancel() }
+        let model = WorkspaceModel(
+            runtime: client,
+            userDefaults: defaults,
+            githubTokenLoader: { "expired-token" }
+        )
+        model.tasks = [second, first]
+
+        await model.runPullRequestBackgroundRefreshCycle()
+
+        XCTAssertEqual(recorder.paths.filter { $0 == "POST /api/git/pr-status" }.count, 1)
+        XCTAssertEqual(model.pullRequestBackgroundRefreshState.phase, .blocked)
+        XCTAssertEqual(model.pullRequestBackgroundRefreshState.attemptedCount, 1)
+        XCTAssertEqual(model.pullRequestBackgroundRefreshState.failedCount, 1)
+        XCTAssertTrue(model.pullRequestBackgroundRefreshState.message.contains("rejected"))
+    }
+
     private func makeClient(
         handler: @escaping WorkspaceMockURLProtocol.Handler
     ) -> (RuntimeClient, URLSession) {
@@ -311,6 +463,12 @@ final class WorkspaceModelTests: XCTestCase {
 
     private func decode<T: Decodable>(_ type: T.Type, from json: String) throws -> T {
         try JSONDecoder().decode(type, from: Data(json.utf8))
+    }
+
+    private func pullRequest(lastCheckedAt: String) throws -> TaskPullRequest {
+        var pullRequest = try decode(TaskPullRequest.self, from: Self.pullRequestJSON)
+        pullRequest.lastCheckedAt = lastCheckedAt
+        return pullRequest
     }
 
     nonisolated private static func response(
@@ -398,19 +556,57 @@ final class WorkspaceModelTests: XCTestCase {
       "queueRequest":null,"pullRequest":null
     }
     """
+
+    nonisolated private static let pullRequestJSON = """
+    {
+      "number":42,"url":"https://github.com/acme/forge/pull/42","state":"open",
+      "merged":false,"draft":false,"owner":"acme","repo":"forge",
+      "baseBranch":"main","headBranch":"codex/tests","headOwner":"contributor",
+      "baseRemote":"upstream","headRemote":"origin","forkDetected":true,
+      "openedAt":"2026-07-31T18:00:00Z","lastCheckedAt":"2026-07-31T19:00:00Z"
+    }
+    """
+}
+
+private struct TaskListEnvelopeForTest: Encodable {
+    var tasks: [ForgeTask]
 }
 
 private final class WorkspaceRequestRecorder: @unchecked Sendable {
     private let lock = NSLock()
     private var values: [String] = []
+    private var bodyValues: [String] = []
 
     var paths: [String] {
         lock.withLock { values }
     }
 
+    var bodies: [String] {
+        lock.withLock { bodyValues }
+    }
+
     func record(_ request: URLRequest) {
+        let capturedBody = request.httpBody ?? readBody(from: request.httpBodyStream)
         lock.withLock {
             values.append("\(request.httpMethod ?? "GET") \(request.url?.path ?? "")")
+            if let body = capturedBody, let value = String(data: body, encoding: .utf8) {
+                bodyValues.append(value)
+            }
+        }
+    }
+
+    private func readBody(from stream: InputStream?) -> Data? {
+        guard let stream else { return nil }
+        stream.open()
+        defer { stream.close() }
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: 4_096)
+        defer { buffer.deallocate() }
+        var data = Data()
+        while true {
+            let count = stream.read(buffer, maxLength: 4_096)
+            if count < 0 { return nil }
+            if count == 0 { return data }
+            data.append(buffer, count: count)
         }
     }
 }

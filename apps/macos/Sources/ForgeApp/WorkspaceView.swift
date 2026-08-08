@@ -2277,14 +2277,15 @@ private struct RunCompleteState: View {
                         .padding(.vertical, 2)
                         .background(pr.merged ? ForgeDesign.accent : Color.clear)
                         .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
-                    Text("\(pr.headBranch) → \(pr.baseBranch)")
+                    Text("\(pr.headOwner.map { "\($0):" } ?? "")\(pr.headBranch) → \(pr.owner)/\(pr.repo):\(pr.baseBranch)")
                         .font(.custom("JetBrains Mono", fixedSize: 10.5))
                         .foregroundStyle(ForgeDesign.muted)
                     Spacer()
-                    Button("CHECK STATUS") {
+                    Button(workspace.isRefreshingPullRequest(taskID: task.id) ? "CHECKING…" : "CHECK STATUS") {
                         workspace.refreshPullRequestStatus(for: task)
                     }
                     .buttonStyle(ForgeSecondaryButtonStyle())
+                    .disabled(workspace.isRefreshingPullRequest(taskID: task.id))
                     if let url = URL(string: pr.url) {
                         Link("VIEW ON GITHUB →", destination: url)
                             .font(.custom("JetBrains Mono", fixedSize: 10.5).weight(.bold))
@@ -2320,6 +2321,11 @@ private struct RunCompleteState: View {
                         .foregroundStyle(pr.checksStatus == "Failing" ? ForgeDesign.danger : ForgeDesign.muted)
                         .lineLimit(2)
                 }
+                if let attempt = pr.refreshAttempts?.last {
+                    Text("\(attempt.source.uppercased()) REFRESH · \(attempt.status.uppercased()) · \(attempt.requestCount) GITHUB READ\(attempt.requestCount == 1 ? "" : "S")\(attempt.changed ? " · STATE CHANGED" : "")")
+                        .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
+                        .foregroundStyle(attempt.status == "Failed" ? ForgeDesign.danger : ForgeDesign.muted)
+                }
             } else {
                 HStack(spacing: 8) {
                     Text(preview.readiness.uppercased())
@@ -2351,6 +2357,12 @@ private struct RunCompleteState: View {
                     Text(blocker)
                         .font(.custom("JetBrains Mono", fixedSize: 10))
                         .foregroundStyle(ForgeDesign.danger)
+                        .lineLimit(2)
+                }
+                if let forkSummary = preview.forkSummary {
+                    Text(forkSummary)
+                        .font(.custom("JetBrains Mono", fixedSize: 9.5))
+                        .foregroundStyle(preview.forkDetected == true ? ForgeDesign.ink : ForgeDesign.muted)
                         .lineLimit(2)
                 }
             }

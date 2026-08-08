@@ -98,23 +98,32 @@ final class WorkspaceModel: ObservableObject {
     @Published private var gitPullRequestPreviews: [ForgeTask.ID: GitPullRequestPreview] = [:]
     @Published private var gitPullRequestResults: [ForgeTask.ID: GitPullRequestResult] = [:]
     @Published private var publishingPullRequestTaskIDs = Set<ForgeTask.ID>()
+    @Published private var refreshingPullRequestTaskIDs = Set<ForgeTask.ID>()
     @Published private var pullRequestPublishErrors: [ForgeTask.ID: String] = [:]
+    @Published var pullRequestBackgroundRefreshState = PullRequestBackgroundRefreshState()
     @Published private var updatingModelProviderSettings = false
 
     private let runtime: RuntimeClient
     private let userDefaults: UserDefaults
+    private let githubTokenLoader: () throws -> String?
     private let missionControlSupervisor = MissionControlRuntimeSupervisor()
     private var eventStreamTask: Task<Void, Never>?
+    private var pullRequestBackgroundRefreshTask: Task<Void, Never>?
+    private var isPullRequestBackgroundRefreshCycleRunning = false
     private var runtimeProcess: Process?
     private var preferredRepositoryRoot: URL?
     private var pendingMissionControlTaskID: ForgeTask.ID?
 
     init(
         runtime: RuntimeClient = RuntimeClient(),
-        userDefaults: UserDefaults = .standard
+        userDefaults: UserDefaults = .standard,
+        githubTokenLoader: @escaping () throws -> String? = {
+            try KeychainStore.read(account: KeychainStore.githubTokenAccount)
+        }
     ) {
         self.runtime = runtime
         self.userDefaults = userDefaults
+        self.githubTokenLoader = githubTokenLoader
 
         if let data = userDefaults.data(forKey: Self.missionControlRepositoriesKey),
            let decoded = try? JSONDecoder().decode([MissionControlRepositorySnapshot].self, from: data) {
@@ -217,6 +226,7 @@ final class WorkspaceModel: ObservableObject {
 
     deinit {
         eventStreamTask?.cancel()
+        pullRequestBackgroundRefreshTask?.cancel()
         if runtimeProcess?.isRunning == true {
             runtimeProcess?.terminate()
         }
@@ -348,6 +358,7 @@ final class WorkspaceModel: ObservableObject {
                 try await refreshModelProviderSettingsSnapshot()
                 statusMessage = statusMessage(for: runtimeState)
                 try await refreshTasks()
+                reconcilePullRequestBackgroundRefresh()
                 await refreshTaskQueueSnapshot()
                 try await refreshValidationPresets()
                 await refreshGitStatusSnapshot()
@@ -368,6 +379,8 @@ final class WorkspaceModel: ObservableObject {
                 eventStreamState = .disconnected
                 eventStreamStatus = "Event stream disconnected"
                 eventStreamTask?.cancel()
+                pullRequestBackgroundRefreshTask?.cancel()
+                pullRequestBackgroundRefreshTask = nil
 
                 if startManagedRuntimeIfUnavailable,
                    shouldStartManagedRuntimeAfterConnectionFailure {
@@ -1651,7 +1664,7 @@ final class WorkspaceModel: ObservableObject {
     /// Whether a GitHub token is stored (a pasted PAT or an OAuth token). Used
     /// to gate the publish action and prompt the user toward Settings.
     var hasGitHubToken: Bool {
-        (try? KeychainStore.read(account: KeychainStore.githubTokenAccount))?.isEmpty == false
+        (try? githubTokenLoader())?.isEmpty == false
     }
 
     func gitPullRequestResult(for taskID: ForgeTask.ID) -> GitPullRequestResult? {
@@ -1662,6 +1675,10 @@ final class WorkspaceModel: ObservableObject {
         publishingPullRequestTaskIDs.contains(taskID)
     }
 
+    func isRefreshingPullRequest(taskID: ForgeTask.ID) -> Bool {
+        refreshingPullRequestTaskIDs.contains(taskID)
+    }
+
     func pullRequestPublishError(for taskID: ForgeTask.ID) -> String? {
         pullRequestPublishErrors[taskID]
     }
@@ -1669,16 +1686,17 @@ final class WorkspaceModel: ObservableObject {
     /// Refresh state, review decision, check runs, and mergeability for the
     /// task's published PR. Read-only; Keychain token is loaded per call.
     func refreshPullRequestStatus(for task: ForgeTask) {
-        guard task.pullRequest != nil else { return }
-        guard let token = try? KeychainStore.read(account: KeychainStore.githubTokenAccount), !token.isEmpty else {
+        guard task.pullRequest != nil, !refreshingPullRequestTaskIDs.contains(task.id) else { return }
+        guard let token = try? githubTokenLoader(), !token.isEmpty else {
             pullRequestPublishErrors[task.id] = "Add a GitHub token in Settings → Git to check PR status."
             return
         }
 
+        refreshingPullRequestTaskIDs.insert(task.id)
         Task {
             do {
                 _ = try await runtime.pullRequestStatus(
-                    GitPullRequestStatusRequest(taskID: task.id, githubToken: token)
+                    GitPullRequestStatusRequest(taskID: task.id, githubToken: token, source: "Manual")
                 )
                 // The runtime persists the refreshed state on the task; reload
                 // so every surface (including 1d) reflects it.
@@ -1687,7 +1705,138 @@ final class WorkspaceModel: ObservableObject {
             } catch {
                 pullRequestPublishErrors[task.id] = "PR status check failed: \(error.localizedDescription)"
             }
+            refreshingPullRequestTaskIDs.remove(task.id)
         }
+    }
+
+    /// Persist and immediately reconcile the opt-in app-side scheduler. The
+    /// runtime remains a one-shot executor; the app owns timing because the
+    /// GitHub credential must be loaded from Keychain for each bounded cycle.
+    func configurePullRequestBackgroundRefresh(
+        enabled: Bool,
+        intervalMinutes: Int,
+        maxPullRequestsPerCycle: Int
+    ) {
+        let configuration = PullRequestBackgroundRefreshConfiguration(
+            enabled: enabled,
+            intervalMinutes: intervalMinutes,
+            maxPullRequestsPerCycle: maxPullRequestsPerCycle
+        )
+        configuration.save(to: userDefaults)
+        reconcilePullRequestBackgroundRefresh()
+    }
+
+    func reconcilePullRequestBackgroundRefresh() {
+        pullRequestBackgroundRefreshTask?.cancel()
+        pullRequestBackgroundRefreshTask = nil
+        let configuration = PullRequestBackgroundRefreshConfiguration.load(from: userDefaults)
+        guard configuration.enabled else {
+            pullRequestBackgroundRefreshState = PullRequestBackgroundRefreshState()
+            return
+        }
+
+        let interval = TimeInterval(configuration.intervalMinutes * 60)
+        pullRequestBackgroundRefreshState.phase = .waiting
+        pullRequestBackgroundRefreshState.nextCycleAt = Date()
+        pullRequestBackgroundRefreshState.message = "Automatic refresh is enabled; the next bounded cycle is ready."
+        pullRequestBackgroundRefreshTask = Task { [weak self] in
+            guard let self else { return }
+            await self.runPullRequestBackgroundRefreshCycle()
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .seconds(interval))
+                } catch {
+                    return
+                }
+                guard !Task.isCancelled else { return }
+                await self.runPullRequestBackgroundRefreshCycle()
+            }
+        }
+    }
+
+    /// Exposed internally for deterministic policy tests. One cycle is
+    /// sequential, bounded, open-PR-only, and stops early on an auth failure.
+    func runPullRequestBackgroundRefreshCycle() async {
+        guard !isPullRequestBackgroundRefreshCycleRunning else { return }
+        isPullRequestBackgroundRefreshCycleRunning = true
+        defer { isPullRequestBackgroundRefreshCycleRunning = false }
+        let configuration = PullRequestBackgroundRefreshConfiguration.load(from: userDefaults)
+        guard configuration.enabled else {
+            pullRequestBackgroundRefreshState = PullRequestBackgroundRefreshState()
+            return
+        }
+
+        let startedAt = Date()
+        let nextCycleAt = startedAt.addingTimeInterval(TimeInterval(configuration.intervalMinutes * 60))
+        guard let token = try? githubTokenLoader(), !token.isEmpty else {
+            pullRequestBackgroundRefreshState = PullRequestBackgroundRefreshState(
+                phase: .blocked,
+                lastCycleAt: startedAt,
+                nextCycleAt: nextCycleAt,
+                attemptedCount: 0,
+                succeededCount: 0,
+                failedCount: 0,
+                message: "Automatic refresh is blocked until a GitHub credential is stored in Keychain."
+            )
+            return
+        }
+
+        let eligible = PullRequestRefreshPolicy.eligibleTasks(
+            tasks.filter { !refreshingPullRequestTaskIDs.contains($0.id) },
+            limit: configuration.maxPullRequestsPerCycle
+        )
+        pullRequestBackgroundRefreshState = PullRequestBackgroundRefreshState(
+            phase: .refreshing,
+            lastCycleAt: pullRequestBackgroundRefreshState.lastCycleAt,
+            nextCycleAt: nextCycleAt,
+            message: eligible.isEmpty ? "No open pull requests need a status refresh." : "Refreshing up to \(eligible.count) open pull request(s)."
+        )
+
+        var succeeded = 0
+        var failed = 0
+        var attempted = 0
+        var authenticationBlocked = false
+        for task in eligible {
+            guard !Task.isCancelled else { return }
+            attempted += 1
+            refreshingPullRequestTaskIDs.insert(task.id)
+            do {
+                _ = try await runtime.pullRequestStatus(
+                    GitPullRequestStatusRequest(taskID: task.id, githubToken: token, source: "Background")
+                )
+                succeeded += 1
+                pullRequestPublishErrors.removeValue(forKey: task.id)
+            } catch {
+                failed += 1
+                pullRequestPublishErrors[task.id] = "Background PR status check failed: \(error.localizedDescription)"
+                refreshingPullRequestTaskIDs.remove(task.id)
+                if case RuntimeClientError.httpStatus(let status, _) = error,
+                   status == 401 || status == 403 {
+                    authenticationBlocked = true
+                    break
+                }
+                continue
+            }
+            refreshingPullRequestTaskIDs.remove(task.id)
+        }
+
+        if attempted > 0 {
+            try? await refreshTasks()
+        }
+        let phase: PullRequestBackgroundRefreshState.Phase = authenticationBlocked ? .blocked : .waiting
+        pullRequestBackgroundRefreshState = PullRequestBackgroundRefreshState(
+            phase: phase,
+            lastCycleAt: Date(),
+            nextCycleAt: nextCycleAt,
+            attemptedCount: attempted,
+            succeededCount: succeeded,
+            failedCount: failed,
+            message: authenticationBlocked
+                ? "Background refresh stopped after GitHub rejected the credential; update it in Settings."
+                : attempted == 0
+                    ? "No open pull requests were eligible for this cycle."
+                    : "Background refresh checked \(attempted) PR(s): \(succeeded) succeeded, \(failed) failed."
+        )
     }
 
     /// Publish a real GitHub PR from the reviewed preview. The token is read
@@ -1698,7 +1847,7 @@ final class WorkspaceModel: ObservableObject {
             pullRequestPublishErrors[task.id] = "PR preview is missing the branch/HEAD needed to publish."
             return
         }
-        guard let token = try? KeychainStore.read(account: KeychainStore.githubTokenAccount), !token.isEmpty else {
+        guard let token = try? githubTokenLoader(), !token.isEmpty else {
             pullRequestPublishErrors[task.id] = "Add a GitHub token in Settings → Git before publishing."
             return
         }
@@ -1718,7 +1867,7 @@ final class WorkspaceModel: ObservableObject {
                     title: preview.title,
                     body: preview.body.joined(separator: "\n"),
                     draft: draft,
-                    headOwner: nil,
+                    headOwner: preview.headOwner,
                     githubToken: token,
                     confirmation: "PublishPullRequest"
                 )

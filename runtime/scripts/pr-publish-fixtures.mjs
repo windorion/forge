@@ -28,11 +28,13 @@ const statusRequests = [];
 let prMerged = false;
 let prBlocking = false;
 let denyMetadata = false;
+let delayPullStatus = false;
 const mock = createServer((req, res) => {
   let body = "";
   req.on("data", (chunk) => { body += chunk; });
-  req.on("end", () => {
+  req.on("end", async () => {
     if (req.method === "GET" && req.url === "/repos/acme/widgets/pulls/42") {
+      if (delayPullStatus) await sleep(150);
       statusRequests.push({ url: req.url, authorization: req.headers.authorization, apiVersion: req.headers["x-github-api-version"] });
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify(
@@ -195,9 +197,31 @@ try {
     assert(openStatus.pullRequest.checksStatus === "Pending", `Expected pending checks, got ${openStatus.pullRequest.checksStatus}.`);
     assert(openStatus.pullRequest.passedCheckCount === 1 && openStatus.pullRequest.pendingCheckCount === 1, "Open check counts are wrong.");
     assert(openStatus.pullRequest.headSha === "head-sha-42", "PR head SHA was not persisted.");
+    assert(openStatus.source === "Manual" && openStatus.requestCount === 3, "Manual refresh did not report its source/request budget.");
     assert(statusRequests.length === 3, `Expected three GitHub read requests, got ${statusRequests.length}.`);
     assert(statusRequests.every((request) => request.authorization === "Bearer test-token-123"), "Status evidence refresh did not send Bearer auth on every request.");
     assert(statusRequests.every((request) => request.apiVersion === "2022-11-28"), "Status evidence refresh omitted the API version header.");
+
+    // The runtime owns a per-task in-flight gate as a second line of defense
+    // behind app-side coordination. A duplicate refresh must fail before it
+    // issues another GitHub read or races the persisted attempt history.
+    delayPullStatus = true;
+    const acceptedConcurrentRefresh = post(port, "/git/pr-status", {
+      taskID: task.id,
+      githubToken: "test-token-123",
+      source: "Background"
+    });
+    await sleep(30);
+    const overlappingRefresh = await postRaw(port, "/git/pr-status", {
+      taskID: task.id,
+      githubToken: "test-token-123",
+      source: "Background"
+    });
+    assert(overlappingRefresh.status === 409, `Expected overlapping refresh 409, got ${overlappingRefresh.status}.`);
+    const completedConcurrentRefresh = await acceptedConcurrentRefresh;
+    assert(completedConcurrentRefresh.source === "Background", "Accepted concurrent fixture refresh lost its Background source.");
+    assert(statusRequests.length === 6, `Overlapping refresh leaked duplicate GitHub reads: ${statusRequests.length}.`);
+    delayPullStatus = false;
 
     // A token that can read the PR but not its review metadata fails closed;
     // Forge must not persist Unknown as if the refresh succeeded.
@@ -230,6 +254,8 @@ try {
     assert(merged.pullRequest.merged === true, "Merged state was not persisted on the task.");
     assert(merged.events.some((e) => e.type === "git.pull_request.state_changed"), "State change was not recorded as an event.");
     assert(merged.events.some((e) => e.type === "git.pull_request.review_checks_changed"), "Review/check evidence change was not recorded as an event.");
+    assert(merged.pullRequest.refreshAttempts.length === 5, `Expected five bounded refresh attempts, got ${merged.pullRequest.refreshAttempts.length}.`);
+    assert(merged.pullRequest.refreshAttempts.some((attempt) => attempt.status === "Failed" && attempt.requestCount === 3), "Denied metadata refresh was not durably audited.");
 
     // Status guards.
     const noPRTask = await post(port, "/tasks", { title: "No PR", objective: "Task without a published PR." });
@@ -238,7 +264,14 @@ try {
     const noTokenStatus = await postRaw(port, "/git/pr-status", { taskID: task.id, githubToken: "" });
     assert(noTokenStatus.status === 400, `Expected 400 without a token, got ${noTokenStatus.status}`);
 
-    // Fork head: the PR head is sent as owner:branch.
+    // Fork head: infer origin=contributor fork and upstream=base repository
+    // entirely from local git metadata. No GitHub discovery request is used.
+    await git(["remote", "add", "upstream", `file://${bare}`], worktree);
+    await git(["fetch", "upstream", "main"], worktree);
+    await git(["remote", "set-url", "upstream", "https://github.com/acme/widgets.git"], worktree);
+    await git(["remote", "set-url", "--push", "upstream", `file://${bare}`], worktree);
+    await git(["remote", "set-url", "origin", "https://github.com/contributor/widgets.git"], worktree);
+    await git(["remote", "set-url", "--push", "origin", `file://${bare}`], worktree);
     await git(["checkout", "-b", "feature/fork"], worktree);
     await writeFile(join(worktree, "fork.txt"), "fork work\n", "utf8");
     await git(["add", "fork.txt"], worktree);
@@ -247,7 +280,12 @@ try {
     const forkTask = await post(port, "/tasks", { title: "Fork PR", objective: "Open a PR from a fork head." });
     const forkPreview = await get(port, `/git/pr-preview?taskID=${forkTask.id}`);
     assert(forkPreview.blockers.length === 0, `Fork preview blocked: ${JSON.stringify(forkPreview.blockers)}`);
-    await post(port, "/git/pr-publish", {
+    assert(forkPreview.forkDetected === true, "Fork topology was not auto-detected.");
+    assert(forkPreview.remote === "upstream" && forkPreview.headRemote === "origin", `Unexpected base/head remotes: ${forkPreview.remote}/${forkPreview.headRemote}`);
+    assert(forkPreview.baseOwner === "acme" && forkPreview.headOwner === "contributor", `Unexpected owners: ${forkPreview.baseOwner}/${forkPreview.headOwner}`);
+    assert(forkPreview.forkSummary.includes("Detected fork topology"), `Missing fork summary: ${forkPreview.forkSummary}`);
+
+    const mismatchedOwner = await postRaw(port, "/git/pr-publish", {
       taskID: forkTask.id,
       confirmation: "PublishPullRequest",
       expectedHead: forkPreview.head,
@@ -256,19 +294,38 @@ try {
       baseBranch: "main",
       title: "Fork work",
       body: "From a fork.",
-      headOwner: "contributor",
+      headOwner: "attacker",
+      draft: true,
+      githubToken: "test-token-123"
+    });
+    assert(mismatchedOwner.status === 409, `Expected stale fork owner to fail with 409, got ${mismatchedOwner.status}.`);
+
+    const forkResult = await post(port, "/git/pr-publish", {
+      taskID: forkTask.id,
+      confirmation: "PublishPullRequest",
+      expectedHead: forkPreview.head,
+      expectedHeadBranch: "feature/fork",
+      headBranch: "feature/fork",
+      baseBranch: "main",
+      title: "Fork work",
+      body: "From a fork.",
       draft: true,
       githubToken: "test-token-123"
     });
     assert(captured.body.head === "contributor:feature/fork", `Fork head not owner-qualified: ${captured.body.head}`);
     assert(captured.body.draft === true, "Draft flag was not forwarded.");
+    assert(forkResult.owner === "acme" && forkResult.repo === "widgets", "Fork PR did not target the base repository.");
+    assert(forkResult.headOwner === "contributor" && forkResult.headRemote === "origin" && forkResult.forkDetected === true, "Fork result lost detected topology.");
+    const forkPersisted = (await get(port, "/tasks")).tasks.find((t) => t.id === forkTask.id).pullRequest;
+    assert(forkPersisted.headOwner === "contributor" && forkPersisted.baseRemote === "upstream" && forkPersisted.headRemote === "origin", "Persisted fork topology is incomplete.");
 
     console.log("PR publish fixtures passed.");
     console.log("- Preview readiness, 400 (confirmation/token), 409 (stale HEAD, no API call)");
     console.log("- Real PR creation: payload, Bearer auth, owner/repo parsed from remote");
     console.log("- Head branch pushed to remote; task approval + event recorded");
     console.log("- PR persisted on the task; status refresh reports state, reviews, checks, and mergeability");
-    console.log("- Status guards (no PR, no token); fork head owner:branch; draft flag");
+    console.log("- Status guards + bounded refresh audit; overlapping refresh rejected before duplicate reads");
+    console.log("- Automatic fork owner/base detection; stale owner rejection; draft flag");
   } finally {
     await stopRuntime(runtime);
   }

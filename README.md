@@ -203,8 +203,12 @@ Implemented today:
   boundary.
 - Reviewed PR handoff and explicit publication with base/head awareness,
   optimistic-concurrency checks, no-force branch push, per-request Keychain
-  token use, persisted PR lineage, and on-demand open/closed/merged, review,
-  check-run, and mergeability evidence in the completion surface.
+  token use, persisted PR lineage, automatic local `origin` fork / `upstream`
+  base-owner detection, and open/closed/merged, review, check-run, and
+  mergeability evidence in the completion surface. Status checks can remain
+  manual or use the default-off native scheduler: 15/30/60-minute intervals,
+  a 1/3/5-open-PR cycle cap, per-cycle Keychain loading, auth-stop behavior,
+  and durable bounded refresh audit evidence.
 - SQLite task persistence.
 - Validation presets and runtime-derived command permission state.
 - Local deterministic model provider and optional OpenAI Responses provider.
@@ -235,8 +239,6 @@ Beyond V0:
   request/token/cost budgets and failure classification.
 - Richer autonomous model-backed read/search/patch/run/repair beyond the
   current bounded loop and reviewed Unified Diff path.
-- Automatic fork-head detection and optional background PR refresh after the
-  existing approved publication and on-demand review/check flow.
 - Semantic or hybrid retrieval beyond the existing durable file, symbol, and
   trigram text indexes.
 - Full background task/detail/review routing across authorized repositories.
@@ -248,11 +250,11 @@ Product-readiness estimate:
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| Trust/runtime foundation | 88-92% | Local runtime, task state, review gates, restricted edits, validation, composed cancellation, redacted audit export, guarded git actions, explicit multi-runtime authorization, diagnostics, and separate local/provider protocol reliability baselines are real. |
+| Trust/runtime foundation | 89-93% | Local runtime, task state, review gates, restricted edits, validation, composed cancellation, redacted audit export, guarded git/PR actions, bounded refresh audit, explicit multi-runtime authorization, diagnostics, and separate local/provider protocol reliability baselines are real. |
 | Coding-agent demo V0 behavior | 100% | The documented functional acceptance path is implemented and smoke-covered. |
 | Primary V0 handoff UI | 100% | The five primary screens are `Verified` with rendered-comparison evidence in `docs/verification/`. |
 | Full handoff UI | 95-97% | 41 of 43 named screens/states are `Verified` (rendered comparison on real data, evidence in `docs/verification/`). The two remaining: `6a` GitHub is `Partial` (configuration UI, Device Flow, polling, Keychain persistence, and connected state are implemented and tested; live GitHub authorization still needs a founder-owned OAuth App Client ID with Device Flow enabled); `35a` Widget is a documented platform-blocked descope (hand-assembled ad-hoc-signed extension not discovered by pluginkit; unblocks with P6 signing). |
-| Useful developer alpha | 64-72% | Forge now repeats the reviewed lifecycle across both deterministic local-provider and mock-OpenAI adapter corpora, including Unified Diff, approved commands, safety guarding, and reviewed repair/rerun; it still needs broader autonomous tool use and live-model success on pinned public repositories. |
+| Useful developer alpha | 66-74% | Forge now repeats the reviewed lifecycle across both deterministic local-provider and mock-OpenAI adapter corpora, including Unified Diff, approved commands, safety guarding, reviewed repair/rerun, fork-aware PR publication, and bounded status supervision; it still needs broader autonomous tool use and live-model success on pinned public repositories. |
 | Commercial beta | 20-25% | Needs signed installable packaging, production proof of the implemented onboarding and GitHub/provider setup, trust/operations polish, and repeated success on real repos. |
 | Polished v1 | 20-25% | Queueing, local indexes, and session-authorized active runtimes are real; full background task/review routing, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
 
@@ -266,7 +268,6 @@ Top priorities are tracked in `docs/todo.md`. Current post-V0 themes:
 
 - run a budgeted live-model corpus on pinned public repositories
 - use classified failures to widen safe provider tool/patch/recovery behavior
-- add automatic fork-owner discovery and optional background PR refresh
 - finish cross-repository task/review routing and signed Mac distribution
 
 The subsystem-by-subsystem readiness and remaining-gap matrix lives in

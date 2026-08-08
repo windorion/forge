@@ -304,12 +304,28 @@ without force, creates the PR, and records task approval/event/lineage. It does
 not merge, close, approve, comment, force push, reset, or delete branches.
 
 PR status refresh is read-only against GitHub and does not require a publishing
-approval, but it remains user-triggered because it spends external API quota
-and sends a credential. `POST /git/pr-status` keeps the token out of URLs and
-persistence, reads only PR/review/check metadata, normalizes the latest
-decisive review per reviewer, and fails closed on GitHub authentication or
-authorization errors. Missing non-auth auxiliary metadata is displayed as
-Unknown rather than treated as approval or passing CI.
+approval. It can be user-triggered or explicitly enabled as a conservative
+app-side schedule because it spends external API quota and sends a credential.
+Scheduling is off by default; permitted intervals are 15/30/60 minutes and a
+cycle may touch only 1/3/5 oldest open, unmerged PRs, sequentially. The app
+loads the token from Keychain once per cycle, makes no request without it,
+prevents overlapping work, stops after an authentication/authorization
+failure, and cancels its in-memory schedule on exit. `POST /git/pr-status`
+keeps the token out of URLs and persistence, reads only PR/review/check
+metadata, normalizes the latest decisive review per reviewer, and fails closed
+on GitHub authentication or authorization errors. Missing non-auth auxiliary
+metadata is displayed as Unknown rather than treated as approval or passing
+CI. A per-task runtime in-flight gate rejects overlapping refreshes before a
+second read begins. The runtime retains at most 20 credential-free attempt records per PR with
+source, timestamps, success/failure, request count, change flag, and bounded
+summary so automated reads remain auditable.
+
+Fork topology is inferred only from local remote URLs and branch upstream
+metadata. A detected contributor `origin` plus base `upstream` separates the
+push target from the GitHub PR target and derives the qualified head owner. A
+caller-supplied owner that conflicts with current local topology is rejected
+before push or publication; Forge does not call a repository-discovery API to
+guess missing ownership.
 
 ## Approval Dialogs
 

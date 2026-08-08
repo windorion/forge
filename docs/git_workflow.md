@@ -266,8 +266,10 @@ Current implementation:
   branch name, PR title, draft body, test plan, commits, changed files,
   structured preflight metadata, blockers, and risk notes.
 - The preflight summarizes base ref resolution, head branch readiness,
-  upstream push/sync state, multi-remote or fork-like review risk, latest
-  validation state, test evidence, and a publish-readiness summary.
+  upstream push/sync state, resolved base/head remotes, fork ownership, latest
+  validation state, test evidence, and a publish-readiness summary. For the
+  common fork layout, Forge detects `origin` as the contributor head and the
+  GitHub `upstream` remote as the base using local git configuration only.
 - The preview blocks when the user is still on the default base branch, has no
   upstream, has unpushed commits, is behind upstream, is detached, has
   unmerged files, or has no commits between base and HEAD.
@@ -275,17 +277,31 @@ Current implementation:
   token, and the reviewed HEAD/base/head branches. It re-derives preflight,
   rejects stale state, pushes the head without force, opens the PR, records the
   approval/event, and persists number, URL, state, owner/repo, and branches on
-  the linked task.
-- `POST /git/pr-status` is a user-triggered read-only refresh. It reads PR
+  the linked task. It pushes the resolved head remote but creates the PR in the
+  resolved base repository, automatically using `headOwner:headBranch` for a
+  fork. A conflicting supplied `headOwner` is treated as stale topology and
+  rejected before push or API publication.
+- `POST /git/pr-status` is a one-shot read-only refresh. It reads PR
   open/draft/closed/merged and mergeability state, the latest decisive review
   from each reviewer plus requested reviewers/teams, and check runs for the
   current head SHA. Normalized approvals/change requests and passing/pending/
-  failing/skipped counts are persisted with summaries and change events.
+  failing/skipped counts are persisted with summaries and change events. Each
+  call is labeled Manual or Background and persists a bounded attempt record
+  with start/completion time, result, GitHub read count, change flag, and
+  summary; only the latest 20 attempts are retained. A per-task runtime gate
+  rejects overlapping refreshes before duplicate GitHub reads begin.
 - The token is loaded from Keychain by the app and supplied only in each POST
   body. It is never placed in a URL, task snapshot, event, or runtime settings.
+- Manual CHECK STATUS remains available. A default-off native scheduler can
+  check the stalest open/unmerged PRs every 15, 30, or 60 minutes with a hard
+  cap of 1, 3, or 5 PRs per sequential cycle. It loads the credential once per
+  cycle, performs no request if absent, prevents overlap, stops on auth failure,
+  and exists only while the app runs. Settings and the completion surface show
+  current/last-cycle and per-PR attempt state.
 - Forge does not approve reviews, rerun checks, merge, close, comment, force
-  push, reset, or delete branches. Fork PRs currently require an explicit
-  `headOwner`; automatic fork-owner discovery and background refresh remain.
+  push, reset, or delete branches. Unusual multi-remote layouts that cannot be
+  inferred safely stay explicit review risks rather than triggering network
+  discovery.
 
 ## Safety Rules
 

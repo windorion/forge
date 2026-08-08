@@ -59,6 +59,9 @@ final class ForgeAppTests: XCTestCase {
             headBranch: "codex/tests",
             title: "Add tests",
             remote: "origin",
+            headRemote: "origin",
+            headOwner: "contributor",
+            forkDetected: true,
             owner: "acme",
             repo: "forge",
             pushedCommits: [],
@@ -73,6 +76,9 @@ final class ForgeAppTests: XCTestCase {
         XCTAssertEqual(bridged.openedAt, result.generatedAt)
         XCTAssertEqual(bridged.lastCheckedAt, result.generatedAt)
         XCTAssertFalse(bridged.merged)
+        XCTAssertEqual(bridged.headOwner, "contributor")
+        XCTAssertEqual(bridged.headRemote, "origin")
+        XCTAssertEqual(bridged.forkDetected, true)
         XCTAssertEqual(bridged.reviewLabel, "REVIEW UNKNOWN")
         XCTAssertEqual(bridged.checksLabel, "CHECKS UNKNOWN")
 
@@ -87,7 +93,12 @@ final class ForgeAppTests: XCTestCase {
           "checksStatus":"Passing","checkRunCount":3,"passedCheckCount":3,
           "failedCheckCount":0,"pendingCheckCount":0,"skippedCheckCount":0,
           "headSha":"abc123","reviewSummary":"Review: approved by 2 reviewers.",
-          "checksSummary":"Checks: 3 passed."
+          "checksSummary":"Checks: 3 passed.",
+          "refreshAttempts":[{
+            "id":"refresh-1","source":"Background","status":"Succeeded",
+            "startedAt":"2026-07-31T12:01:00Z","completedAt":"2026-07-31T12:01:01Z",
+            "requestCount":3,"changed":true,"summary":"Review and checks changed."
+          }]
         }
         """
         let evidence = try JSONDecoder().decode(TaskPullRequest.self, from: Data(evidenceJSON.utf8))
@@ -96,6 +107,9 @@ final class ForgeAppTests: XCTestCase {
         XCTAssertEqual(evidence.approvalCount, 2)
         XCTAssertEqual(evidence.passedCheckCount, 3)
         XCTAssertEqual(evidence.mergeableState, "clean")
+        XCTAssertEqual(evidence.refreshAttempts?.last?.source, "Background")
+        XCTAssertEqual(evidence.refreshAttempts?.last?.requestCount, 3)
+        XCTAssertEqual(evidence.refreshAttempts?.last?.changed, true)
     }
 
     func testModelProviderSettingsEncodingDistinguishesClearFromNoUpdate() throws {

@@ -773,6 +773,12 @@ struct GitPullRequestPreview: Codable, Hashable {
     var head: String?
     var upstream: String?
     var remote: String?
+    var headRemote: String?
+    var baseOwner: String?
+    var baseRepository: String?
+    var headOwner: String?
+    var forkDetected: Bool?
+    var forkSummary: String?
     var remoteBranch: String?
     var suggestedBranchName: String
     var title: String
@@ -827,6 +833,10 @@ struct TaskPullRequest: Codable, Hashable {
     var repo: String
     var baseBranch: String
     var headBranch: String
+    var headOwner: String?
+    var baseRemote: String?
+    var headRemote: String?
+    var forkDetected: Bool?
     var openedAt: String
     var lastCheckedAt: String
     var mergeable: Bool?
@@ -844,6 +854,7 @@ struct TaskPullRequest: Codable, Hashable {
     var headSha: String?
     var reviewSummary: String?
     var checksSummary: String?
+    var refreshAttempts: [PullRequestRefreshAttempt]?
 
     /// Handoff wording for the completion header.
     var stateLabel: String {
@@ -883,6 +894,10 @@ struct TaskPullRequest: Codable, Hashable {
         repo = result.repo
         baseBranch = result.baseBranch
         headBranch = result.headBranch
+        headOwner = result.headOwner
+        baseRemote = result.remote
+        headRemote = result.headRemote
+        forkDetected = result.forkDetected
         openedAt = result.generatedAt
         lastCheckedAt = result.generatedAt
         mergeable = nil
@@ -900,12 +915,25 @@ struct TaskPullRequest: Codable, Hashable {
         headSha = nil
         reviewSummary = nil
         checksSummary = nil
+        refreshAttempts = nil
     }
+}
+
+struct PullRequestRefreshAttempt: Codable, Hashable, Identifiable {
+    var id: String
+    var source: String
+    var status: String
+    var startedAt: String
+    var completedAt: String
+    var requestCount: Int
+    var changed: Bool
+    var summary: String
 }
 
 struct GitPullRequestStatusRequest: Codable, Hashable {
     var taskID: String
     var githubToken: String
+    var source: String?
 }
 
 struct GitPullRequestStatusResult: Codable, Hashable {
@@ -913,6 +941,9 @@ struct GitPullRequestStatusResult: Codable, Hashable {
     var pullRequest: TaskPullRequest
     var summary: String
     var relatedTask: GitCommitRelatedTask?
+    var source: String?
+    var requestCount: Int?
+    var changed: Bool?
 }
 
 struct GitPullRequestResult: Codable, Hashable {
@@ -925,6 +956,9 @@ struct GitPullRequestResult: Codable, Hashable {
     var headBranch: String
     var title: String
     var remote: String
+    var headRemote: String?
+    var headOwner: String?
+    var forkDetected: Bool?
     var owner: String
     var repo: String
     var pushedCommits: [GitCommitToPush]

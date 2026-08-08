@@ -150,11 +150,25 @@ the core runtime smoke. Preserve these completed boundaries:
   events. The completion surface renders this evidence, and the local mock
   GitHub fixture covers pending, blocked/failing, approved/passing, and merged
   transitions.
-- Follow-on: detect the fork owner automatically (today `headOwner` must be
-  supplied) and optionally poll PR status in the background rather than only
-  after the explicit CHECK STATUS action.
+- [x] Detect common fork topology automatically and add conservative optional
+  background PR status refresh. The runtime derives `origin=contributor fork`
+  plus `upstream=base repository` entirely from local GitHub remote metadata,
+  pushes the head remote, targets the base repository, qualifies
+  `owner:branch`, and rejects a conflicting manual owner. No discovery API is
+  used. The macOS scheduler is default-off, offers only 15/30/60-minute
+  intervals and 1/3/5-open-PR cycle caps, refreshes oldest evidence first,
+  reads the Keychain token once per cycle, prevents overlap, stops the cycle on
+  auth failure, and cancels when Forge exits. Runtime task state keeps the
+  latest 20 manual/background attempts with success/failure, request count,
+  change flag, and summary; a runtime in-flight gate rejects overlapping reads;
+  the completion panel and Git settings expose live
+  state. `smoke:pr-publish` covers automatic fork/base detection, stale owner
+  rejection, qualified PR payload, and refresh audit against only a loopback
+  mock GitHub API; Swift policy/model/client tests cover caps, ordering, source,
+  and zero HTTP calls without a credential.
 - Add hosted-remote fixtures for push/branch-publish auth failures,
-  disconnected networks, hosting-provider branch protection, and fork remotes.
+  disconnected networks, and hosting-provider branch protection. Local fork
+  topology is now covered; a hosted-provider fork failure case remains.
 
 ## P3: Repository Understanding
 

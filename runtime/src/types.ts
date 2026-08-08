@@ -953,7 +953,14 @@ export interface GitPullRequestPreview {
   head?: string;
   upstream?: string;
   remote?: string;
+  /** Remote that owns the pushed head branch; differs from `remote` for forks. */
+  headRemote?: string;
   remoteBranch?: string;
+  baseOwner?: string;
+  baseRepository?: string;
+  headOwner?: string;
+  forkDetected?: boolean;
+  forkSummary?: string;
   suggestedBranchName: string;
   title: string;
   body: string[];
@@ -1011,6 +1018,9 @@ export interface GitPullRequestResult {
   headBranch: string;
   title: string;
   remote: string;
+  headRemote?: string;
+  headOwner?: string;
+  forkDetected?: boolean;
   owner: string;
   repo: string;
   pushedCommits: GitCommitToPush[];
@@ -1086,6 +1096,10 @@ export interface TaskPullRequest {
   repo: string;
   baseBranch: string;
   headBranch: string;
+  headOwner?: string;
+  baseRemote?: string;
+  headRemote?: string;
+  forkDetected?: boolean;
   openedAt: string;
   lastCheckedAt: string;
   /** GitHub's current mergeability snapshot; null while GitHub is computing it. */
@@ -1104,11 +1118,24 @@ export interface TaskPullRequest {
   headSha?: string;
   reviewSummary?: string;
   checksSummary?: string;
+  refreshAttempts?: PullRequestRefreshAttempt[];
 }
 
 export interface GitPullRequestStatusRequest {
   taskID: string;
   githubToken: string;
+  source?: "Manual" | "Background";
+}
+
+export interface PullRequestRefreshAttempt {
+  id: string;
+  source: "Manual" | "Background";
+  status: "Succeeded" | "Failed";
+  startedAt: string;
+  completedAt: string;
+  requestCount: number;
+  changed: boolean;
+  summary: string;
 }
 
 export interface CreateTaskRequest {

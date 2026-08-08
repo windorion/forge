@@ -390,14 +390,25 @@ temporary local bare remotes through the real runtime HTTP API. It covers stale
 remote/non-fast-forward push rejection, branch-publish remote branch collision,
 and pre-receive remote policy rejection.
 
-The PR handoff slice is still read-only. `GET /git/pr-preview` derives a
-review artifact from branch state, default-base detection, optional task
-context, commit summaries, changed files, latest validation state, blockers,
-structured preflight metadata, and risk notes. It can suggest a branch name,
-PR title, draft body, and test plan, while the preflight summarizes base ref
-resolution, head/upstream readiness, multi-remote or fork-like review risk,
-validation evidence, and publish readiness. It does not call GitHub, publish a
-PR, change branches, push, or mutate repository state.
+The PR preview remains read-only. `GET /git/pr-preview` derives a review
+artifact from branch state, default-base detection, optional task context,
+commit summaries, changed files, latest validation state, blockers, structured
+preflight metadata, and risk notes. It also resolves base/head remote topology
+from local git metadata. In the common contributor layout, `origin` is the fork
+head and GitHub `upstream` is the base; owner/repository parsing does not call a
+discovery API. The explicitly confirmed `POST /git/pr-publish` re-derives that
+topology, rejects stale HEAD/branch/base or a conflicting supplied owner,
+pushes the head remote without force, creates the PR in the base repository,
+and persists task lineage.
+
+`POST /git/pr-status` is the runtime's one-shot, read-only metadata executor.
+It accepts a per-request token and Manual/Background source, reads PR, review,
+check-run, and mergeability evidence, and persists at most 20 credential-free
+attempt records including timestamps, request count, changed flag, status, and
+summary. Timing and quota policy intentionally stay outside the runtime in the
+macOS app, where Keychain can be read once per bounded cycle. The runtime does
+not retain the token, schedule network work, merge, close, approve, comment,
+rerun checks, or mutate branches during refresh.
 
 ### Validation Runner
 

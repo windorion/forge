@@ -21,6 +21,8 @@ const [
   ciWorkflow,
   taskTypes,
   swiftModels,
+  swiftWorkspaceModel,
+  pullRequestRefreshPolicy,
   swiftTestSources,
   runtimePackageSource,
   routeManifest,
@@ -39,6 +41,8 @@ const [
   read(".github/workflows/swift-tests.yml"),
   read("runtime/src/types.ts"),
   read("apps/macos/Sources/ForgeApp/Models.swift"),
+  read("apps/macos/Sources/ForgeApp/WorkspaceModel.swift"),
+  read("apps/macos/Sources/ForgeApp/PullRequestRefreshPolicy.swift"),
   readSwiftTestSources(),
   read("runtime/package.json"),
   read("runtime/src/http/routeManifest.ts"),
@@ -133,8 +137,28 @@ check("known completed capabilities are not listed as future README work", () =>
   assert.doesNotMatch(beyondV0, /Actual PR creation\/publication/);
   assert.doesNotMatch(beyondV0, /Durable repository index/);
   assert.doesNotMatch(beyondV0, /Pull-request review\/check visibility/);
+  assert.doesNotMatch(beyondV0, /Automatic fork-head detection/);
   const nextTodo = range(readme, "## Next TODO", "## Core Principles");
   assert.doesNotMatch(nextTodo, /return to PR\/GitHub publication/i);
+});
+
+check("fork detection and bounded PR refresh are synchronized as completed", () => {
+  for (const source of [readme, projectStatus, todo, gitWorkflow]) {
+    assert.match(source, /fork/i);
+    assert.match(source, /background|scheduler|schedule/i);
+    assert.match(source, /refresh/i);
+  }
+  for (const source of [taskTypes, swiftModels]) {
+    assert.match(source, /forkDetected/);
+    assert.match(source, /refreshAttempts/);
+  }
+  assert.match(swiftWorkspaceModel, /source: "Background"/);
+  assert.match(swiftWorkspaceModel, /githubTokenLoader/);
+  assert.match(pullRequestRefreshPolicy, /allowedIntervalMinutes = \[15, 30, 60\]/);
+  assert.match(pullRequestRefreshPolicy, /allowedCycleLimits = \[1, 3, 5\]/);
+  assert.doesNotMatch(roadmap, /Add automatic fork-owner discovery/);
+  assert.doesNotMatch(projectStatus, /automatic fork-head discovery and optional background PR refresh/);
+  assert.doesNotMatch(todo, /today `headOwner` must be supplied/);
 });
 
 check("P0 TODO does not reopen verified handoff work", () => {

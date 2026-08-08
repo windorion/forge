@@ -169,6 +169,20 @@ Purpose:
 - start tasks from system automations
 - integrate with personal workflows
 
+### Pull Request Status Supervision
+
+The Git settings page owns durable user preferences for an optional PR status
+schedule while the shared `WorkspaceModel` owns the live timer and cycle state.
+It is disabled by default. Native controls restrict the interval to 15, 30, or
+60 minutes and the sequential cycle cap to 1, 3, or 5 oldest open/unmerged PRs.
+The model loads the GitHub credential from Keychain per cycle, performs no HTTP
+request when it is absent, prevents overlap with manual checks, stops a cycle
+on auth failure, and cancels the timer when Forge exits or the runtime
+disconnects. Settings shows Disabled/Waiting/Refreshing/Blocked plus the last
+cycle summary; the completion surface shows per-task progress and the latest
+credential-free audited attempt. This is foreground app supervision and does
+not claim a persistent macOS background daemon or login-item entitlement.
+
 ## Permissions
 
 Forge may need:

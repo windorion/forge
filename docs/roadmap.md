@@ -96,6 +96,8 @@ Implemented toward Alpha:
 - Multi-file apply/rollback/recovery and strict Unified Diff support.
 - Durable file, symbol, and trigram text indexes.
 - Hosted GitHub PR publication after explicit approval.
+- Local-metadata fork-owner/base detection plus default-off bounded PR status
+  supervision with durable refresh attempts.
 - Task cancellation, pause/resume, stuck detection, and crash recovery.
 - Repository selection, provider settings, and first-run onboarding.
 
@@ -103,7 +105,6 @@ Remaining Alpha evidence:
 
 - pinned public-repository tasks run with a live model under explicit budgets;
 - broader provider tool/patch choices and repeated successful recovery;
-- automatic fork-owner discovery and optional background PR refresh; and
 - full background task/detail/review routing across authorized repositories.
 
 Proof point:
@@ -173,10 +174,8 @@ additive.
    token, cost, command, and mutation budgets.
 3. Use those failures to widen provider tool/patch/recovery behavior without
    weakening runtime ownership or human review.
-4. Add automatic fork-owner discovery and optional background refresh after
-   the existing publication and on-demand review/check flow.
-5. Finish background task/detail/review routing across authorized repositories.
-6. Complete signed/notarized packaging, appcast install/relaunch, production
+4. Finish background task/detail/review routing across authorized repositories.
+5. Complete signed/notarized packaging, appcast install/relaunch, production
    diagnostics, and commercial decisions.
 
 ## What Not To Optimize Next

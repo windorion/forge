@@ -6055,3 +6055,73 @@ Next:
 - Use the reviewed failure taxonomy—not intuition—to choose whether the next
   runtime change should target context retrieval, tool selection, patch
   recovery, command repair, or cost control.
+
+## 2026-08-08 23:05:40 +0200 (CEST)
+
+Conversation summary:
+
+- The founder asked Forge to immediately run a long, API-free engineering task,
+  complete as much useful work as possible, keep the repository documentation
+  synchronized, quantify remaining gaps, and commit/push the result.
+
+Done:
+
+- Implemented automatic fork topology detection using local git metadata only.
+  The common contributor layout now separates `origin` as the pushed head from
+  GitHub `upstream` as the base repository, derives the qualified head owner,
+  and rejects a conflicting reviewed owner before push or API publication.
+- Added durable PR refresh audit evidence: Manual/Background source,
+  start/completion time, success/failure, GitHub read count, changed flag, and
+  bounded summary, retaining the latest 20 attempts. A per-task runtime gate
+  rejects overlapping refreshes before duplicate reads or lost attempt state.
+- Added an opt-in native macOS scheduler owned by the shared `WorkspaceModel`.
+  It is off by default, permits only 15/30/60-minute intervals and 1/3/5 oldest
+  open PRs per cycle, loads the Keychain token per cycle, performs zero HTTP
+  calls without a credential, avoids manual/background overlap, stops a cycle
+  on auth failure, and cancels on disable, disconnect, or app exit.
+- Added Git settings controls and shared Disabled/Waiting/Refreshing/Blocked
+  state, completion-panel progress, fork route evidence, and latest audited
+  attempt visibility. Model changes remain backward-compatible through
+  optional persisted fields.
+- Expanded the loopback mock-GitHub fixture to cover automatic base/head owner
+  detection, local-only push URLs, qualified fork payloads, stale-owner
+  rejection, bounded success/failure attempts, and concurrent-refresh 409
+  behavior. Added Swift policy, model, client, WorkspaceModel, missing-token,
+  auth-stop, ordering, and quota tests.
+- Updated README, project status, TODO, roadmap, Git workflow, runtime
+  architecture, security, macOS-native design, development/coverage truth, and
+  the documentation-truth checker. The component matrix now records Git/GitHub
+  at 86-91% readiness (9-14% gap), native macOS at 76-84%, security/audit at
+  87-93%, reliability at 72-82%, Trust/runtime at 89-93%, and Alpha at 66-74%.
+- Verified TypeScript check/build, all 20 runtime unit-test files, the complete
+  18-script smoke suite, all 30 Swift tests, documentation truth, and
+  `git diff --check`. Both four-repository campaigns passed again: each had
+  three successful cases, one correctly guarded case, and zero failures; the
+  mock-provider campaign used 37 local strict-schema requests. Measured native
+  line coverage is 53.37% for RuntimeClient, 16.69% for WorkspaceModel, and
+  85.45% for the focused refresh policy.
+- No real GitHub/OpenAI API was called, no repository content was sent to an
+  external provider, and no external model/API cost was incurred. All hosted
+  interactions were loopback mocks; all git fixtures used temporary local
+  repositories and explicit local push URLs.
+
+Not done:
+
+- Live `6a` OAuth proof still needs the founder-owned GitHub OAuth Client ID;
+  signed `35a` WidgetKit packaging still needs the P6 signing/distribution
+  path. Hosted auth/network/branch-protection failure fixtures also remain.
+- The live-model public-repository corpus remains the highest-leverage Alpha
+  evidence but requires explicit external API/token/cost authorization.
+- Full background task creation/detail/navigation/review routing across
+  authorized Mission Control runtimes, semantic/hybrid retrieval, signed
+  distribution, accounts, pricing, and commercial validation remain.
+
+Next:
+
+- For another API-free long task, implement cross-repository task creation,
+  detail, navigation, and review routing across already authorized loopback
+  Mission Control runtimes, followed by native UI automation and queue/observer
+  soak tests.
+- Separately, run the pinned live-model corpus only after explicit budget and
+  external-provider permission, then reorder agent/retrieval work from measured
+  failures.
