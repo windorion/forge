@@ -171,7 +171,7 @@ containing only the services needed by that route group.
 
 | Phase | State | Evidence |
 | --- | --- | --- |
-| 0. Freeze observable behavior | Complete | 55-route executable manifest; HTTP/SSE contract; build, unit, coverage, and 17 smoke scripts pass |
+| 0. Freeze observable behavior | Complete | The frozen refactor baseline had 55 routes; the current manifest has 57 after task cancellation/audit export, with HTTP/SSE, build, unit, coverage, and 18 smoke scripts passing |
 | 1. Bootstrap and HTTP primitives | Complete | Runtime config, HTTP handler/primitives, event bus, and lifecycle extracted; full gate passes |
 | 2. Pure policy and parsing | Complete | Unified diff, text patch, edit paths, Git parsers/failure classes, validation normalization/ranking extracted and directly tested |
 | 3. Git vertical slice | Complete | No-shell command adapter plus status, diff, conflict, branch, commit, push, and PR workflow services extracted; Git smokes pass |
@@ -193,10 +193,10 @@ layer, and no module imports `server.ts`.
 Final verification on 2026-08-01:
 
 - `runtime/src/server.ts`: 1 line (target: below 300)
-- executable manifest: 55 routes, including observer availability
+- executable manifest: 57 current routes, including observer availability
 - direct Node unit suite: 17 scripts, all passing
 - TypeScript check, build, and Node coverage gate: passing
-- compatibility suite: 17 smoke scripts, all passing
+- compatibility suite: 18 smoke scripts, all passing
 
 ### Phase 0: Freeze Observable Behavior
 
@@ -422,6 +422,9 @@ change one runtime domain, identify its trust boundary, run its focused tests,
 and know which integration fixtures prove that unrelated behavior did not
 move.
 
+The final implemented graph and runtime sequences are documented in
+`docs/runtime_server_architecture.md`.
+
 ## Readability Follow-Up Completed
 
 The second readability pass completed the remaining coarse service splits
@@ -438,12 +441,12 @@ without changing the public runtime contract:
   commands, validation runs, and repair evidence.
 - `runtimeRoutes.ts` is a 107-line route composer over system, task, agent,
   edit, validation, Git, and settings groups. The executable route-manifest
-  test scans those groups and still proves all 55 routes.
+  test scans those groups and currently proves all 57 routes.
 - runtime composition now separates core and validation assembly from domain
   defaults; `createForgeRuntime.ts` fell from 932 to 476 lines while the
   packaged `server.ts` remains one line.
 
 The final compatibility gate passed TypeScript check/build, 17 unit scripts,
-unit coverage, all 17 runtime smoke scripts, and 20 Swift tests. The current
+unit coverage, all 18 runtime smoke scripts, and 26 Swift tests. The current
 unit coverage aggregate is 56.94% lines, 88.42% branches, and 67.29%
 functions.

@@ -13,6 +13,7 @@ export function createValidationService(options: ValidationServiceOptions) {
   return {
     ...taskCommands,
     cancelTaskCommand: processRunner.cancelTaskCommand,
+    requestValidationCancellation: processRunner.requestValidationCancellation,
     ...validationRuns,
     ...repairEvidence
   };

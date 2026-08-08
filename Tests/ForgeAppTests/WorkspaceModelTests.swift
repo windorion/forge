@@ -215,6 +215,50 @@ final class WorkspaceModelTests: XCTestCase {
         XCTAssertNil(defaults.string(forKey: "forge.selectedTaskID"))
     }
 
+    func testSavedRepositoryRestoresRuntimeRecoveryEligibilityByDefault() throws {
+        let defaults = makeUserDefaults()
+        defer { clear(defaults) }
+        let repository = try makeTemporaryRepository()
+        defaults.set(repository.path, forKey: "forge.selectedRepositoryRoot")
+        let (client, session) = makeClient { request in
+            Self.response(request, status: 503, body: #"{"error":"unused"}"#)
+        }
+        defer { session.invalidateAndCancel() }
+
+        let model = WorkspaceModel(runtime: client, userDefaults: defaults)
+
+        XCTAssertTrue(model.hasSelectedRepository)
+        XCTAssertEqual(
+            model.missionControlCurrentRepositoryPath?.trimmingCharacters(in: CharacterSet(charactersIn: "/")),
+            repository.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        )
+        XCTAssertTrue(model.shouldStartManagedRuntimeAfterConnectionFailure)
+
+        model.runtimeProcessState = .starting
+        XCTAssertFalse(model.shouldStartManagedRuntimeAfterConnectionFailure)
+        model.runtimeProcessState = .failed
+        XCTAssertTrue(model.shouldStartManagedRuntimeAfterConnectionFailure)
+    }
+
+    func testDisabledReopenLastWorkspaceDoesNotRestoreSavedRepository() throws {
+        let defaults = makeUserDefaults()
+        defer { clear(defaults) }
+        let repository = try makeTemporaryRepository()
+        defaults.set(repository.path, forKey: "forge.selectedRepositoryRoot")
+        defaults.set(false, forKey: "forge.reopenLastWorkspace")
+        let (client, session) = makeClient { request in
+            Self.response(request, status: 503, body: #"{"error":"unused"}"#)
+        }
+        defer { session.invalidateAndCancel() }
+
+        let model = WorkspaceModel(runtime: client, userDefaults: defaults)
+
+        XCTAssertFalse(model.hasSelectedRepository)
+        XCTAssertNil(model.missionControlCurrentRepositoryPath)
+        XCTAssertFalse(model.shouldStartManagedRuntimeAfterConnectionFailure)
+        XCTAssertEqual(defaults.string(forKey: "forge.selectedRepositoryRoot"), repository.path)
+    }
+
     private func makeClient(
         handler: @escaping WorkspaceMockURLProtocol.Handler
     ) -> (RuntimeClient, URLSession) {
@@ -233,6 +277,18 @@ final class WorkspaceModelTests: XCTestCase {
         let defaults = UserDefaults(suiteName: name)!
         defaults.set(name, forKey: "WorkspaceModelTests.suiteName")
         return defaults
+    }
+
+    private func makeTemporaryRepository() throws -> URL {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ForgeWorkspaceModelTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data("# Test repository\n".utf8)
+            .write(to: root.appendingPathComponent("README.md"), options: .atomic)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: root)
+        }
+        return root.standardizedFileURL
     }
 
     private func clear(_ defaults: UserDefaults) {

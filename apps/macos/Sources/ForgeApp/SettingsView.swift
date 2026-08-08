@@ -36,7 +36,7 @@ struct SettingsView: View {
     private var settingsContent: some View {
         switch selection {
         case .general:
-            GeneralSettingsPage(refresh: workspace.refreshRuntimeHealth)
+            GeneralSettingsPage()
         case .guardrails:
             GuardrailsSettingsPage(
                 validationPresetCount: workspace.validationPresets.count,
@@ -255,7 +255,7 @@ private struct SettingsSectionHeader: View {
 }
 
 private struct GeneralSettingsPage: View {
-    var refresh: () -> Void
+    @EnvironmentObject private var workspace: WorkspaceModel
 
     @AppStorage("forge.launchAtLogin") private var launchAtLogin = false
     @AppStorage("forge.reopenLastWorkspace") private var reopenLastWorkspace = true
@@ -276,6 +276,30 @@ private struct GeneralSettingsPage: View {
                 }
                 SettingsRow(title: "Keep local runtime running", subtitle: "continue queued local work after closing the window") {
                     SettingsToggle(isOn: $keepRuntimeRunning)
+                }
+
+                SettingsSectionHeader(title: "LOCAL RUNTIME")
+                SettingsRow(
+                    title: "\(workspace.runtimeState.rawValue) · \(workspace.runtimeProcessState.rawValue)",
+                    subtitle: "\(workspace.runtimeEndpoint) · \(runtimeRepositoryLabel)"
+                ) {
+                    HStack(spacing: 8) {
+                        if workspace.canStopRuntimeProcess {
+                            Button("STOP", action: workspace.stopRuntimeProcess)
+                                .buttonStyle(SettingsOutlineButtonStyle())
+                        }
+                        Button(runtimeActionTitle, action: workspace.recoverRuntimeConnection)
+                            .buttonStyle(SettingsOutlineButtonStyle())
+                            .disabled(runtimeActionDisabled)
+                    }
+                }
+                SettingsRow(title: "Runtime recovery", subtitle: workspace.runtimeProcessMessage) {
+                    HStack(spacing: 8) {
+                        Button("SWITCH REPO", action: workspace.connectRepository)
+                            .buttonStyle(SettingsOutlineButtonStyle())
+                        Button("COPY DIAGNOSTICS", action: workspace.copyRuntimeDiagnostics)
+                            .buttonStyle(SettingsOutlineButtonStyle())
+                    }
                 }
 
                 SettingsSectionHeader(title: "APPEARANCE")
@@ -308,6 +332,30 @@ private struct GeneralSettingsPage: View {
         .onChange(of: launchAtLogin) { _, enabled in
             applyLoginItem(enabled)
         }
+    }
+
+    private var runtimeRepositoryLabel: String {
+        guard let path = workspace.missionControlCurrentRepositoryPath else {
+            return "no repository selected"
+        }
+        return URL(fileURLWithPath: path).lastPathComponent
+    }
+
+    private var runtimeActionTitle: String {
+        switch workspace.runtimeProcessState {
+        case .starting:
+            return "STARTING…"
+        case .running, .stopping:
+            return "CHECK"
+        case .external:
+            return "RECONNECT"
+        case .notStarted, .stopped, .failed:
+            return workspace.shouldStartManagedRuntimeAfterConnectionFailure ? "START" : "RETRY"
+        }
+    }
+
+    private var runtimeActionDisabled: Bool {
+        workspace.runtimeProcessState == .starting || workspace.runtimeProcessState == .stopping
     }
 
     /// Register/unregister the real macOS login item; revert the toggle if
@@ -996,7 +1044,10 @@ private struct GitHubSettingsPage: View {
     var gitStatus: GitStatusSnapshot?
     var repoRoot: String?
 
+    @ObservedObject private var githubAuth = GitHubAuth.shared
     @AppStorage("forge.githubRepoEnabled") private var repoEnabled = false
+    @State private var clientIDInput = ""
+    @State private var oauthStatus = ""
     @State private var tokenInput = ""
     @State private var tokenStatus = ""
     @State private var hasToken = false
@@ -1012,25 +1063,22 @@ private struct GitHubSettingsPage: View {
                         .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 10) {
-                            Text(isRemoteKnown ? (gitStatus?.upstream ?? "Git remote detected") : "GitHub not connected")
+                            Text(connectionTitle)
                                 .font(.custom("JetBrains Mono", fixedSize: 14).weight(.bold))
-                            Text(isRemoteKnown ? "REMOTE FOUND" : "DISCONNECTED")
+                            Text(hasToken ? "AUTHORIZED" : (isRemoteKnown ? "REMOTE FOUND" : "DISCONNECTED"))
                                 .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
                                 .padding(.horizontal, 7)
                                 .padding(.vertical, 3)
-                                .background(isRemoteKnown ? SettingsDesign.accent : SettingsDesign.paper)
+                                .background(hasToken ? SettingsDesign.accent : SettingsDesign.paper)
                                 .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
                         }
-                        Text("OAuth/device-flow authorization is required before hosted publication")
+                        Text(hasToken ? "GitHub credentials are stored in the macOS Keychain" : "Authorize with OAuth Device Flow or add a personal access token")
                             .font(.custom("JetBrains Mono", fixedSize: 10.5))
                             .foregroundStyle(SettingsDesign.muted)
                     }
                     Spacer()
-                    Button("CONNECT GITHUB") {
-                        NotificationCenter.default.post(name: .forgeShowSignIn, object: nil)
-                    }
+                    Button(hasToken ? "MANAGE CONNECTION" : "CONNECT GITHUB", action: connectGitHub)
                         .buttonStyle(SettingsOutlineButtonStyle())
-                        .disabled(true)
                 }
                 .padding(.horizontal, 26)
                 .frame(height: 88)
@@ -1039,7 +1087,52 @@ private struct GitHubSettingsPage: View {
                 }
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("TOKEN SCOPES — EXACTLY THREE, NOTHING MORE")
+                    HStack {
+                        Text("OAUTH DEVICE FLOW")
+                            .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
+                            .tracking(1)
+                            .foregroundStyle(SettingsDesign.muted)
+                        Spacer()
+                        Text(githubAuth.clientID == nil ? "CLIENT ID REQUIRED" : "CONFIGURED")
+                            .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(githubAuth.clientID == nil ? SettingsDesign.paper : SettingsDesign.accent)
+                            .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
+                    }
+                    Text("Paste the public Client ID for the Forge OAuth App. Device Flow must also be enabled in that app's GitHub settings; no client secret belongs in Forge.")
+                        .font(.custom("JetBrains Mono", fixedSize: 10.5))
+                        .foregroundStyle(SettingsDesign.muted)
+                    HStack(spacing: 10) {
+                        TextField("GitHub OAuth Client ID", text: $clientIDInput)
+                            .textFieldStyle(.plain)
+                            .font(.custom("JetBrains Mono", fixedSize: 12))
+                            .padding(.horizontal, 12)
+                            .frame(height: 34)
+                            .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
+                            .onSubmit(saveClientID)
+                        Button("SAVE", action: saveClientID)
+                            .buttonStyle(SettingsOutlineButtonStyle())
+                            .disabled(clientIDInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        Button("GITHUB SETTINGS") {
+                            NSWorkspace.shared.open(URL(string: "https://github.com/settings/developers")!)
+                        }
+                        .buttonStyle(SettingsOutlineButtonStyle())
+                    }
+                    if !oauthStatus.isEmpty {
+                        Text(oauthStatus)
+                            .font(.custom("JetBrains Mono", fixedSize: 10))
+                            .foregroundStyle(SettingsDesign.muted)
+                    }
+                }
+                .padding(.horizontal, 26)
+                .padding(.vertical, 18)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(SettingsDesign.ink).frame(height: 1.5)
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("FORGE ACTION BOUNDARY")
                         .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
                         .tracking(1)
                         .foregroundStyle(SettingsDesign.muted)
@@ -1048,7 +1141,7 @@ private struct GitHubSettingsPage: View {
                         scopeCard("branch:write", "push to forge/* branches only")
                         scopeCard("pr:open", "open & update its own PRs")
                     }
-                    Text("▸ no merge scope, no delete scope, no admin scope — revoke anytime at github.com/settings")
+                    Text("▸ OAuth requests GitHub's repo scope; these are Forge's enforced actions, not three GitHub OAuth scopes. Revoke anytime at github.com/settings.")
                         .font(.custom("JetBrains Mono", fixedSize: 10.5))
                         .foregroundStyle(Color(red: 201 / 255, green: 201 / 255, blue: 196 / 255))
                         .padding(.horizontal, 14)
@@ -1075,7 +1168,7 @@ private struct GitHubSettingsPage: View {
                             .background(hasToken ? SettingsDesign.accent : SettingsDesign.paper)
                             .overlay(Rectangle().stroke(SettingsDesign.ink, lineWidth: 1.5))
                     }
-                    Text("Paste a GitHub token (a fine-grained PAT with Pull requests: read/write, or a classic token with the repo scope). Used to open pull requests until OAuth sign-in is available.")
+                    Text("Alternatively, paste a fine-grained PAT with Pull requests: read/write, or a classic token with the repo scope. Forge uses the same Keychain slot for PAT and OAuth tokens.")
                         .font(.custom("JetBrains Mono", fixedSize: 10.5))
                         .foregroundStyle(SettingsDesign.muted)
                     HStack(spacing: 10) {
@@ -1145,7 +1238,30 @@ private struct GitHubSettingsPage: View {
                 .padding(.vertical, 18)
             }
         }
-        .onAppear { refreshTokenState() }
+        .onAppear {
+            clientIDInput = githubAuth.clientID ?? ""
+            refreshTokenState()
+        }
+    }
+
+    private var connectionTitle: String {
+        if let login = githubAuth.storedLogin, hasToken { return "Connected as @\(login)" }
+        if isRemoteKnown { return gitStatus?.upstream ?? "Git remote detected" }
+        return "GitHub not connected"
+    }
+
+    private func saveClientID() {
+        let saved = githubAuth.configure(clientID: clientIDInput)
+        clientIDInput = githubAuth.clientID ?? ""
+        oauthStatus = saved ? "OAuth Client ID saved locally." : "Enter a GitHub OAuth Client ID."
+    }
+
+    private func connectGitHub() {
+        let input = clientIDInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !input.isEmpty, input != githubAuth.clientID {
+            _ = githubAuth.configure(clientID: input)
+        }
+        NotificationCenter.default.post(name: .forgeShowSignIn, object: nil)
     }
 
     private func refreshTokenState() {
@@ -1166,13 +1282,9 @@ private struct GitHubSettingsPage: View {
     }
 
     private func removeToken() {
-        do {
-            try KeychainStore.delete(account: KeychainStore.githubTokenAccount)
-            tokenStatus = "Token removed from the Keychain."
-            refreshTokenState()
-        } catch {
-            tokenStatus = "Could not remove token: \(error.localizedDescription)"
-        }
+        githubAuth.disconnect()
+        tokenStatus = "GitHub credential removed from the Keychain."
+        refreshTokenState()
     }
 
     private var isRemoteKnown: Bool { gitStatus?.upstream != nil }

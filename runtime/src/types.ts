@@ -6,7 +6,8 @@ export type TaskStatus =
   | "Testing"
   | "Human Review"
   | "Completed"
-  | "Failed";
+  | "Failed"
+  | "Cancelled";
 
 export interface AgentState {
   role: "Manager" | "Planner" | "Coder" | "Tester" | "Reviewer";
@@ -30,6 +31,7 @@ export interface ApprovalRecord {
     | "Review Edit Proposal File"
     | "Approve Validation Preset"
     | "Cancel Task Command"
+    | "Cancel Task"
     | "Pause Agent Loop"
     | "Abort Agent Loop"
     | "Create Git Commit"
@@ -449,7 +451,7 @@ export interface ValidationCommandResult {
   kind: "BuiltIn" | "ProjectCommand";
   riskLevel: "Low" | "Medium" | "High";
   cwd?: string;
-  status: "Running" | "Passed" | "Failed";
+  status: "Running" | "Passed" | "Failed" | "Cancelled";
   outputSummary: string;
   exitCode?: number;
   startedAt: string;
@@ -503,7 +505,7 @@ export interface ValidationRun {
   presetName: string;
   presetSource: "BuiltIn" | "Workspace";
   riskLevel: "Low" | "Medium" | "High";
-  status: "Running" | "Passed" | "Failed";
+  status: "Running" | "Passed" | "Failed" | "Cancelled";
   summary: string;
   startedAt: string;
   endedAt?: string;
@@ -1055,7 +1057,21 @@ export interface ForgeTask {
   changedFiles: string[];
   reviewSummary?: string;
   queueRequest?: AgentRunQueueRequest;
+  cancellation?: TaskCancellation;
   pullRequest?: TaskPullRequest;
+}
+
+export interface TaskCancellation {
+  id: string;
+  status: "Requested" | "Completed";
+  requestedAt: string;
+  completedAt?: string;
+  note?: string;
+  queueDisposition: "NotQueued" | "Removed";
+  agentLoopDisposition: "NotRunning" | "AbortRequested";
+  taskCommandDisposition: "NotRunning" | "CancelRequested";
+  validationDisposition: "NotRunning" | "CancelRequested";
+  summary: string;
 }
 
 /** The pull request opened for this task, persisted so it survives restarts. */
@@ -1123,6 +1139,10 @@ export interface AgentRunLoopControlRequest {
 
 export interface CancelTaskCommandRequest {
   taskCommandRunID?: string;
+  note?: string;
+}
+
+export interface CancelTaskRequest {
   note?: string;
 }
 

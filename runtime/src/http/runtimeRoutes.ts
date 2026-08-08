@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { URL } from "node:url";
 
 import { createRequestHandler } from "./createRequestHandler.js";
+import { HttpError } from "./httpError.js";
 import { writeJson } from "./response.js";
 import { createAgentRoutes } from "./routes/agentRoutes.js";
 import { createEditRoutes } from "./routes/editRoutes.js";
@@ -23,6 +24,7 @@ import type { createRepositoryContextService } from "../repository/repositoryCon
 import type { createModelProviderSettingsService } from "../runtime/modelProviderSettingsService.js";
 import type { SqliteTaskStore } from "../taskStore.js";
 import type { createTaskService } from "../tasks/taskService.js";
+import type { createTaskCancellationService } from "../tasks/taskCancellationService.js";
 import type { createTaskState } from "../tasks/taskState.js";
 import type { createValidationCatalogService } from "../validation/validationCatalogService.js";
 import type { createValidationService } from "../validation/validationService.js";
@@ -58,6 +60,7 @@ export type RuntimeRouteOptions =
   ReturnType<typeof createGitConflictService> &
   ReturnType<typeof createGitWorkflowService> &
   ReturnType<typeof createTaskService> &
+  ReturnType<typeof createTaskCancellationService> &
   ReturnType<typeof createAgentOrchestrationService> &
   ReturnType<typeof createLegacyAgentLoopService> &
   ReturnType<typeof createEditProposalService> &
@@ -98,10 +101,31 @@ export function createRuntimeRoutes(options: RuntimeRouteOptions) {
   return createRequestHandler({
     observerMode: options.observerMode,
     handle: async (request, response, url) => {
+      rejectMutationOfCancelledTask(request.method, url.pathname, options.tasks);
       for (const routeGroup of routeGroups) {
         if (await routeGroup(request, response, url)) return;
       }
       writeJson(response, 404, { error: "not_found" });
     }
   });
+}
+
+function rejectMutationOfCancelledTask(
+  method: string | undefined,
+  pathname: string,
+  tasks: Map<string, import("../types.js").ForgeTask>
+): void {
+  if (method !== "POST") return;
+  const match = /^\/tasks\/([^/]+)\/([^/]+)$/.exec(pathname);
+  if (!match || match[2] === "cancel") return;
+  let taskID: string;
+  try {
+    taskID = decodeURIComponent(match[1]);
+  } catch {
+    return;
+  }
+  const task = tasks.get(taskID);
+  if (task?.status === "Cancelled" || task?.cancellation?.status === "Requested") {
+    throw new HttpError(409, "Cancelling and cancelled tasks are immutable. Create a new task to continue the retained work.");
+  }
 }

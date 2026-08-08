@@ -39,7 +39,7 @@ should no longer feel like a generic workflow dashboard.
 
 ## Current Status
 
-Last updated: 2026-07-15
+Last updated: 2026-08-08
 
 The trust/runtime foundation is strong and the Coding-Agent Demo V0 functional
 acceptance path is complete. Strict visual closeout is still in progress: the
@@ -156,6 +156,14 @@ Implemented today:
   /tasks/:taskID/cancel-task-command`; cancellation is scoped to runtime-owned
   active runs, records an audit entry, streams a system output chunk, and
   surfaces a Cancel Command action in the macOS session UI.
+- Composed task-level cancellation and portable audit export. One confirmed
+  `POST /tasks/:taskID/cancel` request removes queued work, aborts an active
+  Agent Loop at a safe checkpoint, stops runtime-owned task-command and
+  validation children, survives restart, and reaches immutable `Cancelled`
+  only after all in-flight evidence is terminal. Plans, diffs, output, and
+  audit remain reviewable. Audit Log now saves recursively redacted Markdown
+  or JSON through a native macOS panel instead of copying event lines while
+  claiming to export.
 - Validation failure repair briefs that turn failed command output into a
   reviewable next-step diagnosis.
 - Follow-up repair edit proposals generated from validation repair briefs,
@@ -187,10 +195,11 @@ Implemented today:
 - Validation presets and runtime-derived command permission state.
 - Local deterministic model provider and optional OpenAI Responses provider.
 - Editable model-provider settings in macOS Settings with Keychain-backed OpenAI API key sync.
-- First-pass app-managed runtime start/stop from the macOS toolbar, sidebar
-  runtime badge, and Settings window, including external-runtime detection,
-  runtime directory candidate diagnostics, launch command/output capture, and
-  stop timeout messaging.
+- App-managed runtime recovery on launch: Forge probes for an external runtime,
+  automatically starts its bundled/local runtime for a restored repository
+  when needed, and exposes start/reconnect, stop, repository switching, and
+  diagnostics controls from the Offline workspace and Settings. The
+  `Reopen last workspace` preference now controls repository restoration.
 - App-managed runtime launch separates the runtime installation directory from
   the repository root through `FORGE_REPO_ROOT`, can launch a prebuilt bundled
   runtime resource, and reports both paths in health/settings diagnostics.
@@ -222,11 +231,11 @@ Product-readiness estimate:
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| Trust/runtime foundation | 81-86% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, explicit multi-runtime authorization, diagnostics, and smoke coverage are real. |
+| Trust/runtime foundation | 84-88% | Local runtime, task state, review gates, restricted edits, validation, composed cancellation, redacted audit export, guarded git actions, explicit multi-runtime authorization, diagnostics, and smoke coverage are real. |
 | Coding-agent demo V0 behavior | 100% | The documented functional acceptance path is implemented and smoke-covered. |
 | Primary V0 handoff UI | 100% | The five primary screens are `Verified` with rendered-comparison evidence in `docs/verification/`. |
-| Full handoff UI | 95-97% | 41 of 43 named screens/states are `Verified` (rendered comparison on real data, evidence in `docs/verification/`). The two remaining: `6a` GitHub is `Partial` (only the OAuth device-flow connection remains, blocked on the founder registering a GitHub OAuth App Client ID); `35a` Widget is a documented platform-blocked descope (hand-assembled ad-hoc-signed extension not discovered by pluginkit; unblocks with P6 signing). |
-| Useful developer alpha | 50-60% | Forge can recover interrupted loops/transactions and apply guarded source create/modify/delete changes, but still needs broader autonomous tool use and repeated success on real repositories. |
+| Full handoff UI | 95-97% | 41 of 43 named screens/states are `Verified` (rendered comparison on real data, evidence in `docs/verification/`). The two remaining: `6a` GitHub is `Partial` (configuration UI, Device Flow, polling, Keychain persistence, and connected state are implemented and tested; live GitHub authorization still needs a founder-owned OAuth App Client ID with Device Flow enabled); `35a` Widget is a documented platform-blocked descope (hand-assembled ad-hoc-signed extension not discovered by pluginkit; unblocks with P6 signing). |
+| Useful developer alpha | 55-65% | Forge can cancel/recover interrupted loops, commands, validations, and edit transactions, export review evidence, and apply guarded source create/modify/delete changes; it still needs broader autonomous tool use and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 | 20-25% | Queueing and explicitly authorized active runtimes across repositories are real; full background task/review routing, native distribution, indexing, memory, MCP/GitHub, and product polish remain. |
 

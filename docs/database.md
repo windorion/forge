@@ -29,6 +29,18 @@ tests. Edit proposal snapshots retain changeset
 transaction phase, per-file hashes/snapshots, verification timestamps,
 recovery phase, summary, and errors.
 
+Task snapshots also retain an optional task-level cancellation record with a
+stable ID, `Requested`/`Completed` status, request/completion timestamps, user
+note, queue/Agent Loop/task-command/validation dispositions, and summary. A
+persisted request is completed after startup recovery has made every
+interrupted item terminal. `Cancelled` is a durable task terminal state;
+retained plan, edit, command, validation, and event evidence is not deleted.
+
+Audit exports do not create a second persistence authority. The runtime builds
+versioned Markdown or JSON on demand from the current task snapshot, selects
+auditable metadata, omits proposal diff bodies/provider configuration, and
+redacts known credential patterns before returning the file envelope.
+
 This is intentionally smaller than the full conceptual schema below. Future
 migrations should split runs, messages, tool calls, commands, file changes,
 and approvals into dedicated auditable tables.

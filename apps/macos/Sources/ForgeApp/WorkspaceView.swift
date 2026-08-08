@@ -114,7 +114,7 @@ private enum WorkspaceSurface: Equatable {
     case cost(taskID: ForgeTask.ID)
     case templates
     case update
-    case onboarding
+    case onboarding(initialStep: Int?)
 
     var windowMode: WorkspaceWindowMode {
         switch self {
@@ -179,12 +179,9 @@ struct WorkspaceView: View {
             AppDelegate.shared?.workspace = workspace
             MenuBarController.shared.activate(workspace: workspace)
             QuickCaptureController.shared.activate(workspace: workspace)
-            if workspace.runtimeState == .unchecked {
-                workspace.refreshRuntimeHealth()
-            }
-            if !UserDefaults.standard.bool(forKey: "forge.hasCompletedOnboarding")
-                && !UserDefaults.standard.bool(forKey: "forge.suppressOnboarding") {
-                surfaceCoordinator.present(.onboarding)
+            workspace.restoreWorkspaceOnLaunch()
+            if !UserDefaults.standard.bool(forKey: "forge.hasCompletedOnboarding") {
+                surfaceCoordinator.present(.onboarding(initialStep: nil))
             }
         }
         .onChange(of: workspace.tasks) { _, tasks in
@@ -369,14 +366,12 @@ struct WorkspaceView: View {
                 SharePanelController.shared.show(task: task)
             }
         case "onboarding":
-            UserDefaults.standard.removeObject(forKey: "forge.debug.onboardingStep")
-            surfaceCoordinator.present(.onboarding)
+            surfaceCoordinator.present(.onboarding(initialStep: nil))
         case "onboardingStep" where parts.count >= 2:
-            UserDefaults.standard.set(Int(parts[1]) ?? 1, forKey: "forge.debug.onboardingStep")
             surfaceCoordinator.dismiss()
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(120))
-                surfaceCoordinator.present(.onboarding)
+                surfaceCoordinator.present(.onboarding(initialStep: Int(parts[1]) ?? 1))
             }
         case "updateDownloading":
             Task { @MainActor in
@@ -441,7 +436,7 @@ struct WorkspaceView: View {
             } else if shouldShowNoRepository {
                 NoRepositoryState()
             } else if shouldShowOffline {
-                OfflineWorkspaceState(tasks: workspace.tasks, retry: workspace.refreshRuntimeHealth)
+                OfflineWorkspaceState()
             } else if let conflicts = workspace.gitConflictSnapshot, !conflicts.files.isEmpty {
                 MergeConflictState(snapshot: conflicts)
             } else if let task = workspace.selectedTask {
@@ -542,10 +537,10 @@ struct WorkspaceView: View {
                 UpdateDialogView(close: surfaceCoordinator.dismiss)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .onboarding:
+        case let .onboarding(initialStep):
             ZStack {
                 ForgeDesign.paper
-                OnboardingView(close: surfaceCoordinator.dismiss)
+                OnboardingView(initialStep: initialStep, close: surfaceCoordinator.dismiss)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .templates:
@@ -1624,6 +1619,7 @@ private struct TaskHistoryView: View {
 }
 
 private struct TaskAuditLogView: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
     var task: ForgeTask
 
     var body: some View {
@@ -1638,8 +1634,12 @@ private struct TaskAuditLogView: View {
                 Text(shortTimestamp(task.updatedAt))
                     .font(.custom("JetBrains Mono", fixedSize: 10))
                     .foregroundStyle(ForgeDesign.muted)
-                Button("⤓ EXPORT LOG", action: exportLog)
-                    .buttonStyle(ForgeSecondaryButtonStyle())
+                Menu(workspace.isExportingAudit(taskID: task.id) ? "EXPORTING…" : "⤓ EXPORT") {
+                    Button("Markdown audit (.md)") { workspace.exportAuditLog(for: task, format: "markdown") }
+                    Button("JSON audit (.json)") { workspace.exportAuditLog(for: task, format: "json") }
+                }
+                .menuStyle(.borderlessButton)
+                .disabled(workspace.isExportingAudit(taskID: task.id))
             }
             .padding(.horizontal, 24)
             .frame(height: 58)
@@ -1713,11 +1713,6 @@ private struct TaskAuditLogView: View {
         if type.contains("context") || type.contains("inspection") { return "read" }
         if type.contains("plan") { return "plan" }
         return "agent"
-    }
-    private func exportLog() {
-        let lines = task.events.map { "\($0.createdAt) [\(eventCategory($0.type))] \($0.message)" }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(lines.joined(separator: "\n"), forType: .string)
     }
 }
 
@@ -3978,8 +3973,9 @@ private struct NoRepositoryPattern: View {
 }
 
 private struct OfflineWorkspaceState: View {
-    var tasks: [ForgeTask]
-    var retry: () -> Void
+    @EnvironmentObject private var workspace: WorkspaceModel
+    @EnvironmentObject private var surfaceCoordinator: WorkspaceSurfaceCoordinator
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         VStack(spacing: 0) {
@@ -3991,17 +3987,33 @@ private struct OfflineWorkspaceState: View {
                         .tracking(0.5)
                         .foregroundStyle(ForgeDesign.warning)
                 }
-                Text("no runtime connection — local state is preserved · nothing was lost")
+                Text("local runtime unavailable — reconnect to load workspace data")
                     .font(.custom("JetBrains Mono", fixedSize: 11))
                     .foregroundStyle(Color(red: 201 / 255, green: 201 / 255, blue: 196 / 255))
                 Spacer()
-                Button("RETRY NOW", action: retry)
+                Button("SWITCH REPO", action: workspace.connectRepository)
                     .font(.custom("JetBrains Mono", fixedSize: 9.5).weight(.bold))
                     .foregroundStyle(ForgeDesign.paper)
                     .padding(.horizontal, 12)
                     .frame(height: 30)
                     .overlay(Rectangle().stroke(ForgeDesign.paper, lineWidth: 1.5))
                     .buttonStyle(.plain)
+                Button("SETTINGS") { openSettings() }
+                    .font(.custom("JetBrains Mono", fixedSize: 9.5).weight(.bold))
+                    .foregroundStyle(ForgeDesign.paper)
+                    .padding(.horizontal, 12)
+                    .frame(height: 30)
+                    .overlay(Rectangle().stroke(ForgeDesign.paper, lineWidth: 1.5))
+                    .buttonStyle(.plain)
+                Button(runtimeActionTitle, action: workspace.recoverRuntimeConnection)
+                    .font(.custom("JetBrains Mono", fixedSize: 9.5).weight(.bold))
+                    .foregroundStyle(ForgeDesign.ink)
+                    .padding(.horizontal, 12)
+                    .frame(height: 30)
+                    .background(ForgeDesign.warning)
+                    .overlay(Rectangle().stroke(ForgeDesign.paper, lineWidth: 1.5))
+                    .buttonStyle(.plain)
+                    .disabled(runtimeActionDisabled)
             }
             .padding(.horizontal, 24)
             .frame(height: 46)
@@ -4009,40 +4021,48 @@ private struct OfflineWorkspaceState: View {
 
             HStack(spacing: 0) {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("TASKS — \(tasks.count)")
+                    Text("LAST LOADED TASKS — \(workspace.tasks.count)")
                         .font(.custom("JetBrains Mono", fixedSize: 9).weight(.bold))
                         .tracking(1.5)
                         .foregroundStyle(ForgeDesign.muted)
                         .padding(.horizontal, 16)
                         .frame(height: 38)
-                    ForEach(tasks.prefix(5)) { task in
-                        VStack(alignment: .leading, spacing: 5) {
-                            HStack {
-                                StatusPill(label: offlineStatus(task), color: offlineColor(task))
-                                Spacer()
-                                Text("#\(task.id.prefix(6))")
-                                    .font(.custom("JetBrains Mono", fixedSize: 9))
-                                    .foregroundStyle(Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255))
+                    ForEach(workspace.tasks.prefix(5)) { task in
+                        Button {
+                            surfaceCoordinator.present(.audit(taskID: task.id))
+                        } label: {
+                            VStack(alignment: .leading, spacing: 5) {
+                                HStack {
+                                    StatusPill(label: offlineStatus(task), color: offlineColor(task))
+                                    Spacer()
+                                    Text("#\(task.id.prefix(6))")
+                                        .font(.custom("JetBrains Mono", fixedSize: 9))
+                                        .foregroundStyle(Color(red: 154 / 255, green: 154 / 255, blue: 146 / 255))
+                                }
+                                Text(task.title)
+                                    .font(.system(size: 12.5, weight: .bold))
+                                    .lineLimit(2)
+                                Text("open cached audit →")
+                                    .font(.custom("JetBrains Mono", fixedSize: 9.5))
+                                    .foregroundStyle(ForgeDesign.muted)
                             }
-                            Text(task.title)
-                                .font(.system(size: 12.5, weight: .bold))
-                                .lineLimit(2)
-                            Text(task.status == "Completed" ? "diff cached — readable offline" : "checkpoint persisted · resumes after reconnect")
-                                .font(.custom("JetBrains Mono", fixedSize: 9.5))
-                                .foregroundStyle(ForgeDesign.muted)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 11)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(task.id == activeTask?.id ? Color.white : Color.clear)
+                            .overlay(alignment: .leading) {
+                                if task.id == activeTask?.id { Rectangle().fill(ForgeDesign.warning).frame(width: 3) }
+                            }
+                            .overlay(alignment: .bottom) {
+                                Rectangle().fill(ForgeDesign.divider).frame(height: 1.5)
+                            }
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 11)
-                        .background(task.id == activeTask?.id ? Color.white : Color.clear)
-                        .overlay(alignment: .leading) {
-                            if task.id == activeTask?.id { Rectangle().fill(ForgeDesign.warning).frame(width: 3) }
-                        }
-                        .overlay(alignment: .bottom) {
-                            Rectangle().fill(ForgeDesign.divider).frame(height: 1.5)
-                        }
+                        .buttonStyle(.plain)
                     }
                     Spacer()
-                    Text("agent state checkpointed\nevery step — safe to lose power too")
+                    Text(workspace.tasks.isEmpty
+                        ? "no task cache is loaded in this app session"
+                        : "cached task audit remains readable until reconnect")
                         .font(.custom("JetBrains Mono", fixedSize: 9.5))
                         .foregroundStyle(ForgeDesign.muted)
                         .lineSpacing(3)
@@ -4061,12 +4081,12 @@ private struct OfflineWorkspaceState: View {
 
                 VStack(spacing: 0) {
                     HStack(spacing: 12) {
-                        StatusPill(label: "⏸ WAITING FOR NETWORK", color: ForgeDesign.warning)
+                        StatusPill(label: runtimeStatusLabel, color: ForgeDesign.warning)
                         Text(activeTask?.title ?? "Local workspace")
                             .font(.system(size: 15, weight: .heavy))
                             .lineLimit(1)
                         Spacer()
-                        Text("checkpoint saved locally")
+                        Text(workspace.runtimeProcessState.rawValue.lowercased())
                             .font(.custom("JetBrains Mono", fixedSize: 10))
                             .foregroundStyle(ForgeDesign.muted)
                     }
@@ -4078,16 +4098,16 @@ private struct OfflineWorkspaceState: View {
 
                     HStack(spacing: 0) {
                         offlineCapability(
-                            title: "STILL WORKS OFFLINE",
+                            title: "RECOVERY AVAILABLE",
                             marker: "✓",
                             color: ForgeDesign.success,
-                            values: ["read cached diffs & task history", "draft new tasks locally", "browse audit logs"]
+                            values: ["start or reconnect local runtime", "switch the selected repository", "open settings and diagnostics"]
                         )
                         offlineCapability(
-                            title: "WAITING ON RECONNECT",
+                            title: "PAUSED UNTIL CONNECTED",
                             marker: "⏸",
                             color: ForgeDesign.warning,
-                            values: ["remote model calls", "GitHub push / PR sync", "hosted notifications"]
+                            values: ["load persisted task history", "run agents and validation", "Git status, push, and PR sync"]
                         )
                     }
                     .frame(height: 146)
@@ -4102,7 +4122,7 @@ private struct OfflineWorkspaceState: View {
                             ForEach(activeTask?.events.suffix(8) ?? []) { event in
                                 Text("\(Self.clockTime(event.createdAt))  \(event.message)")
                             }
-                            Text("⏸ runtime unavailable — retry only on explicit refresh")
+                            Text("⏸ \(workspace.runtimeProcessMessage)")
                                 .foregroundStyle(ForgeDesign.warning)
                         }
                         .font(.custom("JetBrains Mono", fixedSize: 11.5))
@@ -4119,7 +4139,28 @@ private struct OfflineWorkspaceState: View {
     }
 
     private var activeTask: ForgeTask? {
-        tasks.first(where: { ["Running", "Testing", "Human Review"].contains($0.status) }) ?? tasks.first
+        workspace.tasks.first(where: { ["Running", "Testing", "Human Review"].contains($0.status) }) ?? workspace.tasks.first
+    }
+
+    private var runtimeActionTitle: String {
+        switch workspace.runtimeProcessState {
+        case .starting:
+            return "STARTING…"
+        case .running, .stopping:
+            return "CHECK AGAIN"
+        case .external:
+            return "RECONNECT"
+        case .notStarted, .stopped, .failed:
+            return workspace.shouldStartManagedRuntimeAfterConnectionFailure ? "START RUNTIME" : "RETRY NOW"
+        }
+    }
+
+    private var runtimeActionDisabled: Bool {
+        workspace.runtimeProcessState == .starting || workspace.runtimeProcessState == .stopping
+    }
+
+    private var runtimeStatusLabel: String {
+        workspace.runtimeProcessState == .starting ? "▸ STARTING RUNTIME" : "⏸ WAITING FOR RUNTIME"
     }
 
     static func clockTime(_ iso: String) -> String {
@@ -4168,6 +4209,7 @@ private struct RunningTaskHeader: View {
 
     var task: ForgeTask
     var openDiffReview: () -> Void
+    @State private var confirmTaskCancellation = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -4202,6 +4244,14 @@ private struct RunningTaskHeader: View {
                     .buttonStyle(ForgeSecondaryButtonStyle())
                     .foregroundStyle(ForgeDesign.danger)
             }
+            if canCancelTask {
+                Button(task.cancellation?.status == "Requested" || workspace.isCancellingTask(taskID: task.id) ? "CANCELLING…" : "CANCEL TASK") {
+                    confirmTaskCancellation = true
+                }
+                .buttonStyle(ForgeSecondaryButtonStyle())
+                .foregroundStyle(ForgeDesign.danger)
+                .disabled(task.cancellation?.status == "Requested" || workspace.isCancellingTask(taskID: task.id))
+            }
         }
         .padding(.horizontal, 22)
         .frame(height: 58)
@@ -4209,24 +4259,39 @@ private struct RunningTaskHeader: View {
         .overlay(alignment: .bottom) {
             Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
         }
+        .alert("Cancel this task?", isPresented: $confirmTaskCancellation) {
+            Button("Keep Running", role: .cancel) {}
+            Button("Cancel Task", role: .destructive) { workspace.cancelTask(task) }
+        } message: {
+            Text("Forge will remove queued work, abort the Agent Loop at a safe checkpoint, and stop active task or validation commands. Existing plans, diffs, output, and audit evidence are retained.")
+        }
     }
 
     private var latestLoop: AgentRunLoop? { task.agentRunLoops.last }
     private var diffCount: Int { max(task.changedFiles.count, task.editProposal?.fileChanges.count ?? 0) }
     private var canStartLoop: Bool {
-        task.executionProposal != nil && task.editProposal?.status != "Proposed" && latestLoop?.status != "Running" && !workspace.isRunningAgentLoop(taskID: task.id)
+        task.status != "Cancelled" &&
+            task.cancellation?.status != "Requested" &&
+            task.executionProposal != nil &&
+            task.editProposal?.status != "Proposed" &&
+            latestLoop?.status != "Running" &&
+            !workspace.isRunningAgentLoop(taskID: task.id)
     }
     private var canPauseLoop: Bool { latestLoop?.status == "Running" && latestLoop?.controlState == nil }
     private var canAbortLoop: Bool { latestLoop?.status == "Running" && latestLoop?.controlState != "AbortRequested" }
     private var canResumeLoop: Bool {
+        guard task.status != "Cancelled", task.cancellation?.status != "Requested" else { return false }
         guard let status = latestLoop?.status else { return false }
         return ["Paused", "Aborted", "Failed"].contains(status) && !workspace.isRunningAgentLoop(taskID: task.id)
+    }
+    private var canCancelTask: Bool {
+        !["Completed", "Failed", "Cancelled"].contains(task.status)
     }
     private var statusLabel: String { task.status == "Running" ? "▸ RUNNING" : task.status }
     private var statusColor: Color {
         switch task.status {
         case "Completed": return ForgeDesign.success
-        case "Failed": return ForgeDesign.danger
+        case "Failed", "Cancelled": return ForgeDesign.danger
         case "Human Review": return ForgeDesign.warning
         case "Running", "Testing": return ForgeDesign.accent
         default: return Color.white
@@ -4324,7 +4389,9 @@ private struct LiveRunControlBar: View {
     private var latestLoop: AgentRunLoop? { task.agentRunLoops.last }
 
     private var canStartLoop: Bool {
-        task.executionProposal != nil &&
+        task.status != "Cancelled" &&
+            task.cancellation?.status != "Requested" &&
+            task.executionProposal != nil &&
             task.editProposal?.status != "Proposed" &&
             latestLoop?.status != "Running" &&
             !workspace.isRunningAgentLoop(taskID: task.id)
@@ -4339,6 +4406,7 @@ private struct LiveRunControlBar: View {
     }
 
     private var canResumeLoop: Bool {
+        guard task.status != "Cancelled", task.cancellation?.status != "Requested" else { return false }
         guard let status = latestLoop?.status else { return false }
         return ["Paused", "Aborted", "Failed"].contains(status) && !workspace.isRunningAgentLoop(taskID: task.id)
     }

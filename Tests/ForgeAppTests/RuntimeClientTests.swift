@@ -71,6 +71,36 @@ final class RuntimeClientTests: XCTestCase {
         XCTAssertEqual(components.queryItems, [URLQueryItem(name: "path", value: "Sources/Feature A.swift")])
     }
 
+    func testAuditExportUsesReadOnlyFormatQueryAndDecodesFileEnvelope() async throws {
+        let recorder = RequestRecorder()
+        let (client, session) = makeClient { request in
+            recorder.record(request)
+            return Self.response(
+                request,
+                status: 200,
+                body: """
+                {
+                  "filename":"forge-task-task-1-audit.md",
+                  "contentType":"text/markdown",
+                  "content":"# Forge Task Audit",
+                  "generatedAt":"2026-08-08T12:00:00Z",
+                  "redactionSummary":"Known credential patterns are redacted."
+                }
+                """
+            )
+        }
+        defer { session.invalidateAndCancel() }
+
+        let export = try await client.taskAuditExport(taskID: "task-1", format: "markdown")
+
+        XCTAssertEqual(export.filename, "forge-task-task-1-audit.md")
+        XCTAssertEqual(export.content, "# Forge Task Audit")
+        let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(recorder.lastRequest?.url), resolvingAgainstBaseURL: false))
+        XCTAssertEqual(components.path, "/api/tasks/task-1/audit-export")
+        XCTAssertEqual(components.queryItems, [URLQueryItem(name: "format", value: "markdown")])
+        XCTAssertEqual(recorder.lastRequest?.httpMethod, "GET")
+    }
+
     func testHTTPFailuresPreferJSONErrorThenPlainText() async throws {
         let (jsonClient, jsonSession) = makeClient { request in
             Self.response(request, status: 409, body: #"{"error":"  stale review  "}"#)
@@ -261,6 +291,11 @@ final class RuntimeClientTests: XCTestCase {
         body = try jsonObject(try XCTUnwrap(recorder.lastBody))
         XCTAssertEqual(body["taskCommandRunID"] as? String, "run-6")
         XCTAssertEqual(body["note"] as? String, "User cancelled")
+
+        _ = try await client.cancelTask(taskID: "task-1", note: "Stop all task work")
+        XCTAssertEqual(recorder.lastRequest?.url?.path, "/api/tasks/task-1/cancel")
+        body = try jsonObject(try XCTUnwrap(recorder.lastBody))
+        XCTAssertEqual(body["note"] as? String, "Stop all task work")
     }
 
     func testEventsUsesInjectedSessionAndParsesSSEFrames() async throws {

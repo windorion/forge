@@ -3,7 +3,7 @@
 Document role: record the current product state, objective completion estimate,
 major gaps, and what "finished" means at each product horizon.
 
-Last updated: 2026-08-01
+Last updated: 2026-08-08
 
 ## One-Line Status
 
@@ -18,13 +18,16 @@ reviewed source files, validate work, expose guarded git actions, run approved
 task-scoped commands with streamed output,
 record rerun evidence after reviewed self-fixes, let a model provider choose
 safe next agent steps inside a bounded multi-step loop, and persist task state
-locally. The loop now has cooperative controls and a provider-selected,
+locally. A composed task-level control can now dequeue work, abort the loop,
+terminate runtime-owned command/validation children, recover across restart,
+and retain a redacted Markdown/JSON audit package in an immutable Cancelled
+task. The loop also has cooperative controls and a provider-selected,
 runtime-executed read-only repository inspection step. Malformed provider outputs (agent steps, intent briefs, plan-context requests,
 plan revisions, and edit proposals) now get one bounded, side-effect-free
 correction attempt; near-duplicate repository inspections are blocked by a
 unified subset-aware guard across both the InspectRepository step and the
-plan-context loop. The next milestone is broader search/symbol choices, patch
-breadth, and approved PR publication.
+plan-context loop. The next milestone is broader autonomous tool/patch breadth
+and repeated success on representative real repositories.
 
 ## Current Implementation
 
@@ -73,6 +76,15 @@ Implemented:
   automatically dispatches the first persisted request. A dedicated smoke
   fixture verifies ordering, removal, settings persistence, restart recovery,
   and complete queue drain.
+- Composed task-level cancellation and portable audit export. A single
+  idempotent request now removes queued work, aborts an active Agent Loop at a
+  safe checkpoint, terminates runtime-owned task-command/validation children,
+  survives restart, and completes only when every in-flight record is
+  terminal. `Cancelled` tasks retain review evidence but reject later
+  mutations. The macOS task header confirms the consequences, and Audit Log
+  writes recursively redacted Markdown or JSON through a native save panel.
+  The focused smoke covers idle, queue, loop, command, validation,
+  immutability, idempotency, restart, and export paths.
 - Partial but functional `4a` Mission Control. The handoff-aligned 1240px
   surface supervises the primary repository plus up to two unique-port
   background runtimes. They default to read-only observer mode. Explicit
@@ -92,7 +104,7 @@ Implemented:
   services. A second readability pass split Git workflow, agent orchestration,
   edit operations, validation/process execution, route groups, and composition
   into narrower modules; `createForgeRuntime.ts` is now 476 lines. The
-  55-route executable contract, all 17 smoke scripts, and all 20 Swift tests
+  57-route executable contract, all 18 smoke scripts, and all 26 Swift tests
   pass.
 - Task creation and task conversation.
 - Server-Sent Events from runtime to app.
@@ -321,21 +333,23 @@ Implemented:
   `RuntimeClient` direct mock-transport coverage for representative GET/POST,
   query encoding, HTTP and transport failures, secret placement, and SSE frame
   parsing, plus review, validation, and agent-loop control parameters. Direct
-  `RuntimeClient.swift` line coverage is now 50.55%. Four mock-runtime
+  `RuntimeClient.swift` has direct contract coverage. Eight mock-runtime
   `WorkspaceModel` tests cover connected/disconnected refreshes, task creation
-  and selection persistence, runtime-process eligibility, validation-preset
-  approval success/loading state, and validation failure cleanup; direct
-  `WorkspaceModel.swift` line coverage is now 15.46%. GitHub Actions now runs
-  all 20 Swift tests with coverage on macOS for pull requests and pushes to
-  `main`. SwiftUI rendering, most model actions, and native integrations remain
-  the largest direct-test gaps.
+  and selection persistence, runtime-process eligibility, saved-repository
+  recovery eligibility, the `Reopen last workspace` boundary,
+  validation-preset approval success/loading state, and validation failure
+  cleanup. GitHub Actions runs the Swift suite with coverage on macOS for pull
+  requests and pushes to `main`. SwiftUI rendering, most model actions, and
+  native integrations remain the largest direct-test gaps.
 - A local foundation walkthrough in `docs/development.md`.
 - App-visible runtime state and diagnostics for unchecked/checking/running,
   disconnected, wrong version, provider configuration issues, SSE stream state,
   expected endpoint, database/task count, and copy/open diagnostics actions.
-- App-managed runtime start/stop from the Settings window, with compact runtime
-  health in the task-queue footer. The app builds the runtime and launches
-  the local Node process directly, then can stop only the process it started.
+- App-managed runtime recovery from startup, the Offline workspace, and
+  Settings, with compact runtime health in the task-queue footer. On launch the
+  app first accepts a reachable external runtime; otherwise it automatically
+  starts the bundled/local Node runtime for a restored repository. It can stop
+  only the process it started.
 - Runtime lifecycle diagnostics now distinguish external runtimes from
   app-managed processes, capture bounded build/launch output, list runtime
   directory candidates, expose launch commands in Settings/diagnostics, and
@@ -354,11 +368,11 @@ use different denominators and must not be added together.
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| Trust/runtime foundation | 81-86% | Local runtime, task state, review gates, restricted edits, validation, guarded git actions, explicit multi-runtime authorization, diagnostics, and smoke coverage are real. |
+| Trust/runtime foundation | 84-88% | Local runtime, task state, review gates, restricted edits, validation, composed cancellation, redacted audit export, guarded git actions, explicit multi-runtime authorization, diagnostics, and smoke coverage are real. |
 | Coding-agent demo V0 behavior | 100% | All documented functional acceptance criteria are implemented and smoke-covered. |
 | Primary V0 handoff UI | 95-98% | Five primary screens are substantially implemented; exact typography and rendered comparison remain. |
-| Full 43-screen handoff UI | 95-97% | 41 of 43 screens Verified with rendered-comparison evidence (docs/verification/). Remaining: 6a Partial (OAuth device-flow connection, blocked on the founder GitHub OAuth Client ID); 35a a documented platform-blocked widget-signing descope (P6). |
-| Useful developer alpha | 50-60% | Forge can recover interrupted loops/transactions and apply guarded source create/modify/delete changes, but still needs broader autonomous tool use and repeated success on real repositories. |
+| Full 43-screen handoff UI | 95-97% | 41 of 43 screens Verified with rendered-comparison evidence (docs/verification/). Remaining: 6a Partial (OAuth configuration, Device Flow, standards-compliant polling, Keychain persistence, and connected UI are implemented and unit-tested; a live grant still needs the founder GitHub OAuth Client ID with Device Flow enabled); 35a a documented platform-blocked widget-signing descope (P6). |
+| Useful developer alpha | 55-65% | Forge can cancel/recover interrupted loops, commands, validations, and edit transactions, export review evidence, and apply guarded source create/modify/delete changes; it still needs broader autonomous tool use and repeated success on real repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 product | 20-25% | The real queue and session-authorized active multi-repository runtimes exist; full background task/review routing, indexing, packaging, updates, onboarding, billing, and integrations remain. |
 

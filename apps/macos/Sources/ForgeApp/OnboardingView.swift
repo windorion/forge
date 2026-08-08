@@ -5,20 +5,19 @@ import SwiftUI
 /// preview (real settings), and the first task (real 1a compose flow).
 struct OnboardingView: View {
     @EnvironmentObject private var workspace: WorkspaceModel
+    @ObservedObject private var githubAuth = GitHubAuth.shared
     var close: () -> Void
 
     @AppStorage("forge.monthlyBudgetCap") private var monthlyBudgetCap = 40
-    @State private var step = {
-        #if DEBUG
-        let override = UserDefaults.standard.integer(forKey: "forge.debug.onboardingStep")
-        return override >= 1 && override <= 4 ? override : 1
-        #else
-        return 1
-        #endif
-    }()
+    @State private var step: Int
     @State private var firstTask = ""
 
     private let steps = ["CONNECT GITHUB", "PICK A REPO", "SET THE LEASH", "FIRST TASK"]
+
+    init(initialStep: Int? = nil, close: @escaping () -> Void) {
+        self.close = close
+        _step = State(initialValue: min(max(initialStep ?? 1, 1), 4))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -122,6 +121,10 @@ struct OnboardingView: View {
     private var stepConnect: some View {
         VStack(alignment: .leading, spacing: 16) {
             heading("STEP 1 — CONNECT GITHUB", "Your code stays yours.")
+            Text("Forge limits its own actions to the boundary below. OAuth Device Flow currently requests GitHub's repo scope; a fine-grained PAT is available in Settings for narrower GitHub permissions.")
+                .font(ForgeDesign.mono(9.5))
+                .foregroundStyle(ForgeDesign.muted)
+                .fixedSize(horizontal: false, vertical: true)
             VStack(spacing: 0) {
                 scopeRow("repo:read", "plan against real code")
                 scopeRow("branch:write", "forge/* only")
@@ -131,7 +134,7 @@ struct OnboardingView: View {
             Button {
                 NotificationCenter.default.post(name: .forgeShowSignIn, object: nil)
             } label: {
-                Text("⌥ CONNECT WITH GITHUB")
+                Text(githubAuth.storedLogin.map { "✓ CONNECTED AS @\($0)" } ?? "⌥ CONNECT WITH GITHUB")
                     .font(ForgeDesign.mono(11, weight: .bold))
                     .tracking(0.5)
                     .foregroundStyle(ForgeDesign.accent)

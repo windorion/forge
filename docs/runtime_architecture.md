@@ -81,6 +81,10 @@ behavior-preserving migration and readability follow-up are recorded in
 `docs/runtime_server_refactor.md`. The result retains the HTTP, persistence,
 approval, audit, observer-mode, and packaging contracts described here.
 
+For the current code-level object graph, dependency wiring, UML component
+model, startup/request pipeline, and task/Agent/edit/validation/Git sequence
+diagrams, see `docs/runtime_server_architecture.md`.
+
 ### Task Queue
 
 Stores pending, running, completed, and failed tasks. The current scheduler
@@ -480,6 +484,37 @@ it started for that run, records a `Cancel Task Command` audit entry, appends a
 system output chunk, emits `task.command.cancel.requested` and
 `task.command.cancelled`, and marks the run `Cancelled` instead of `Failed`.
 Cancelled commands return to human review and do not generate repair briefs.
+
+### Task Cancellation And Audit Export
+
+`POST /tasks/:taskID/cancel` is the composed task-level emergency control. It
+persists one idempotent cancellation record before stopping work, then removes
+a queued Agent Loop request, requests an active loop abort at its next safe
+checkpoint, cancels a runtime-owned task-command child, and/or cancels the
+active validation child while preventing later validation commands from
+starting. Spawned children receive SIGTERM and a bounded SIGKILL fallback; the
+API never accepts a PID or raw command. A task reaches the durable `Cancelled`
+terminal status only when its loops, steps, commands, validation runs, and
+tool calls are all terminal. Plans, proposals, diffs, command output, and
+review evidence remain available, while every later task-scoped POST is
+rejected; continuing requires a new task rather than silently resurrecting a
+cancelled one.
+
+Cancellation survives process failure. Startup first converts persisted
+running work into the existing fail-closed restart checkpoints, then completes
+any persisted `Requested` cancellation whose in-flight evidence is terminal.
+The dedicated `smoke:task-cancel` fixture covers idle/idempotent cancellation,
+queue removal, Agent Loop abort, task-command and validation process
+termination, cancelled-task immutability, and restart completion.
+
+`GET /tasks/:taskID/audit-export?format=markdown|json` is a read-only endpoint
+available to primary and observer runtimes. It produces a versioned export of
+task/cancellation state, approvals, events, Agent Loop and tool evidence,
+bounded command output, validation results, context-file metadata, file-change
+metadata, and edit transaction evidence. It intentionally omits proposal diff
+content and provider configuration, then recursively redacts known Bearer,
+GitHub/OpenAI token, API-key, password, and secret assignment patterns. The
+macOS Audit surface writes either format through a native save panel.
 
 ### Agent Run Step
 

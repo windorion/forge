@@ -2,8 +2,9 @@ import { HttpError } from "../httpError.js";
 import { readJson } from "../request.js";
 import { writeHtml, writeJson } from "../response.js";
 import { taskIDFromActionPath } from "../taskPath.js";
-import type { AgentRunLoopControlRequest, ApprovePlanAndRunRequest, ApprovePlanRequest, ApproveValidationPresetRequest, CancelTaskCommandRequest, CreateTaskMessageRequest, CreateTaskRequest, EditProposalDecisionRequest, EditProposalFileReviewRequest, GitBranchPublishRequest, GitBranchRequest, GitConflictResolutionRequest, GitCreateCommitRequest, GitPullRequestPublishRequest, GitPullRequestStatusRequest, GitPushRequest, ModelProviderSettingsUpdateRequest, RerunRepairCommandRequest, RunAgentLoopRequest, RunAgentStepRequest, RunTaskCommandRequest, RunValidationRequest, TaskQueueReorderRequest, TaskQueueSettingsRequest } from "../../types.js";
+import type { AgentRunLoopControlRequest, ApprovePlanAndRunRequest, ApprovePlanRequest, ApproveValidationPresetRequest, CancelTaskCommandRequest, CancelTaskRequest, CreateTaskMessageRequest, CreateTaskRequest, EditProposalDecisionRequest, EditProposalFileReviewRequest, GitBranchPublishRequest, GitBranchRequest, GitConflictResolutionRequest, GitCreateCommitRequest, GitPullRequestPublishRequest, GitPullRequestStatusRequest, GitPushRequest, ModelProviderSettingsUpdateRequest, RerunRepairCommandRequest, RunAgentLoopRequest, RunAgentStepRequest, RunTaskCommandRequest, RunValidationRequest, TaskQueueReorderRequest, TaskQueueSettingsRequest } from "../../types.js";
 import type { RuntimeRouteGroup, RuntimeRouteOptions } from "../runtimeRoutes.js";
+import { buildTaskAuditExport, type TaskAuditExportFormat } from "../../tasks/taskAuditExport.js";
 
 export function createTaskRoutes(options: RuntimeRouteOptions): RuntimeRouteGroup {
   const {
@@ -26,13 +27,26 @@ export function createTaskRoutes(options: RuntimeRouteOptions): RuntimeRouteGrou
   generateEditProposal, reviseEditProposal, generateValidationRepairProposal,
   validateEditProposal, applyEditProposal, rollbackEditProposal,
   reviewEditProposalFile, rejectEditProposal, approveValidationPreset,
-  runValidation, runTaskCommand, rerunRepairCommand, cancelTaskCommand,
+  runValidation, runTaskCommand, rerunRepairCommand, cancelTaskCommand, cancelTask,
   emit
 } = options;
   return async (request, response, url) => {
     if (request.method === "GET" && url.pathname === "/tasks") {
           reloadObserverTasks();
           writeJson(response, 200, { tasks: listTasks() });
+          return true;
+        }
+
+    const auditExportTaskID = taskIDFromActionPath(url.pathname, "audit-export");
+    if (request.method === "GET" && auditExportTaskID) {
+          reloadObserverTasks();
+          const task = tasks.get(auditExportTaskID);
+          if (!task) throw new HttpError(404, `Task not found: ${auditExportTaskID}`);
+          const rawFormat = url.searchParams.get("format") ?? "markdown";
+          if (rawFormat !== "json" && rawFormat !== "markdown") {
+            throw new HttpError(400, "Audit export format must be json or markdown.");
+          }
+          writeJson(response, 200, buildTaskAuditExport(task, rawFormat as TaskAuditExportFormat));
           return true;
         }
 
@@ -66,6 +80,14 @@ export function createTaskRoutes(options: RuntimeRouteOptions): RuntimeRouteGrou
     if (request.method === "POST" && approvePlanTaskID) {
           const input = await readJson<ApprovePlanRequest>(request);
           const task = await approvePlan(approvePlanTaskID, input);
+          writeJson(response, 200, task);
+          return true;
+        }
+
+    const cancelTaskID = taskIDFromActionPath(url.pathname, "cancel");
+    if (request.method === "POST" && cancelTaskID) {
+          const input = await readJson<CancelTaskRequest>(request);
+          const task = await cancelTask(cancelTaskID, input);
           writeJson(response, 200, task);
           return true;
         }

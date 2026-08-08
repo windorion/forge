@@ -27,6 +27,19 @@ struct RuntimeClient {
         return envelope.tasks
     }
 
+    func taskAuditExport(taskID: ForgeTask.ID, format: String) async throws -> TaskAuditExportEnvelope {
+        let url = baseURL
+            .appending(path: "tasks")
+            .appending(path: taskID)
+            .appending(path: "audit-export")
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        components?.queryItems = [URLQueryItem(name: "format", value: format)]
+        guard let requestURL = components?.url else { throw RuntimeClientError.invalidResponse }
+        let (data, response) = try await session.data(from: requestURL)
+        try validate(response, data: data)
+        return try JSONDecoder().decode(TaskAuditExportEnvelope.self, from: data)
+    }
+
     /// Trigger a durable repository re-index (incremental) and return status.
     @discardableResult
     func rebuildIndex() async throws -> RuntimeIndexInfo {
@@ -742,6 +755,21 @@ struct RuntimeClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(CancelTaskCommandRequest(taskCommandRunID: taskCommandRunID, note: note))
+
+        let (data, response) = try await session.data(for: request)
+        try validate(response, data: data)
+        return try JSONDecoder().decode(ForgeTask.self, from: data)
+    }
+
+    func cancelTask(taskID: ForgeTask.ID, note: String? = nil) async throws -> ForgeTask {
+        let url = baseURL
+            .appending(path: "tasks")
+            .appending(path: taskID)
+            .appending(path: "cancel")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(CancelTaskRequest(note: note))
 
         let (data, response) = try await session.data(for: request)
         try validate(response, data: data)

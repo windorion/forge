@@ -27,7 +27,8 @@
     "smoke:github-remote": "npm run build && node scripts/github-remote-test.mjs",
     "smoke:pr-publish": "npm run build && node scripts/pr-publish-fixtures.mjs",
     "smoke:stuck-detection": "npm run build && node scripts/stuck-detection-test.mjs",
-    "smoke:stuck-recovery": "npm run build && node scripts/stuck-recovery-fixtures.mjs"
+    "smoke:stuck-recovery": "npm run build && node scripts/stuck-recovery-fixtures.mjs",
+    "smoke:task-cancel": "npm run build && node scripts/task-cancellation-fixtures.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

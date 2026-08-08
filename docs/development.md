@@ -53,6 +53,16 @@ The former Planner, Review, action-rail, duplicate-log, toolbar-demo, and
 Git-workbench view trees were removed to avoid rendering old and new product
 concepts together.
 
+Startup recovery is explicit. When `Reopen last workspace` is enabled (the
+default), the app restores the saved repository, probes the configured runtime
+endpoint, and starts the app-managed bundled/local runtime if the probe fails.
+The Offline workspace exposes Start/Reconnect, Switch Repository, and Settings
+instead of claiming unavailable cold-launch cache features. Any tasks still in
+the current app session can open their cached audit, while persisted history,
+agent execution, validation, and Git actions wait for the runtime. General
+Settings exposes the same runtime recovery, stop, repository-switch, and copy
+diagnostics controls.
+
 Full-page secondary handoff destinations also use one root-owned presentation
 coordinator rather than SwiftUI Sheets. Mission Control, Queue, History, Batch
 Questions, Full Plan, Full Diff, and Audit Log are opaque window-filling
@@ -67,6 +77,21 @@ task/loop state. The runtime persists queue priority and its 1-3 global ceiling,
 but deliberately enforces one active Agent Loop for this single repository.
 Priority arrows call the exact-order reorder endpoint; remove returns an
 approved task to `Execution Ready`; pause reuses the cooperative loop gate.
+
+The live task header also exposes a composed `Cancel Task` emergency action
+behind a native consequence-confirmation alert. It calls
+`POST /tasks/:taskID/cancel`, which removes queued work, aborts an active Agent
+Loop at a safe checkpoint, and stops runtime-owned task-command/validation
+children before the task becomes immutable `Cancelled`. The app continues to
+show retained plan, diff, output, and audit evidence while cancellation is
+settling.
+
+The full-page Audit Log's export control now fetches the runtime's read-only
+`audit-export` envelope and presents a native macOS save panel for Markdown or
+JSON. The exported record includes approvals, timeline, loop/tool/command/
+validation evidence, edit transaction metadata, and task cancellation
+dispositions; known credential patterns are redacted and the save panel asks
+the user to review the local file before sharing it.
 
 Mission Control (`⌘⇧M`) opens the exclusive handoff `4a` 1240px three-column
 surface while preserving the main task workspace state underneath. The primary column uses
@@ -141,6 +166,17 @@ npm run smoke:queue
 It uses an isolated SQLite database and settings files, occupies one repository
 slot, queues and reorders three tasks, removes one, restarts the runtime, and
 verifies automatic ordered drain.
+
+Run the composed cancellation/audit regression with:
+
+```bash
+cd runtime
+npm run smoke:task-cancel
+```
+
+It covers idle/idempotent cancellation, cancelled-task immutability, queue
+removal, Agent Loop safe-checkpoint abort, task-command and validation process
+termination, restart completion, and JSON/Markdown audit export.
 
 Opening that URL in a browser shows a small runtime status page. The full app
 UI still runs through the SwiftUI app.
@@ -712,7 +748,10 @@ frame parsing:
 swift test --enable-code-coverage
 ```
 
-This remains an early native unit-test baseline. The 20 current tests raise
+This remains an early native unit-test baseline. The 25 current tests include
+three focused GitHub Device Flow tests covering local Client ID configuration,
+GitHub `slow_down` interval handling, user validation before token persistence,
+connected-state restoration, and actionable HTTP failures. The broader suite raises
 direct `RuntimeClient.swift` line coverage to 50.55%, including explicit review,
 validation, and agent-loop control parameters. `WorkspaceModel` now accepts an
 isolated runtime and preferences store for tests; mock-runtime tests cover
@@ -750,6 +789,16 @@ Before a release-shaped change, run every `smoke:*` script — the full suite is
 
 ## Current Limitations
 
+- GitHub Device Flow is implemented but a live authorization requires a
+  founder-owned GitHub OAuth App Client ID with Device Flow enabled. The public
+  Client ID can be saved in Sign In or Settings; access tokens are validated
+  against GitHub `/user` and stored in Keychain. Forge requests GitHub's
+  classic `repo` OAuth scope, while the read/branch/PR cards describe Forge's
+  own action boundary rather than three distinct GitHub OAuth scopes.
+- Hosted Windorion Email sign-in is not implemented because the repository has
+  no account backend, verification-email service, or sync API. The sign-in UI
+  states this explicitly and allows local continuation. Product direction must
+  choose hosted accounts or remove Email sign-in before implementation resumes.
 - The OpenAI provider path is now editable in the macOS Settings UI, including
   provider id, model name, base URL, timeout, max output tokens, and Keychain
   API key sync.
@@ -792,8 +841,10 @@ Before a release-shaped change, run every `smoke:*` script — the full suite is
 - App-managed runtime start/stop is a lifecycle convenience. During
   development it can build `runtime`; in an app bundle it can launch a
   prebuilt bundled runtime resource and pass the resolved repository root via
-  `FORGE_REPO_ROOT`. External terminal-launched runtime processes are detected
-  through health checks but are not terminated by the app.
+  `FORGE_REPO_ROOT`. A cold launch with a restored repository probes for an
+  external runtime first and starts the managed runtime only after that probe
+  fails. External terminal-launched runtime processes are detected through
+  health checks but are not terminated by the app.
 - Post-apply validation defaults to built-in `forge:` checks. Medium-risk
   project validation commands are allowlisted runtime presets, run without a
   shell, and require explicit task-level approval before execution.

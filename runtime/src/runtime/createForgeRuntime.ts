@@ -14,6 +14,7 @@ import { renderRuntimeHome } from "../http/runtimeHome.js";
 import { getModelProviderConfiguration } from "../modelProvider.js";
 import { createRepositoryContextService } from "../repository/repositoryContextService.js";
 import { createTaskService } from "../tasks/taskService.js";
+import { createTaskCancellationService } from "../tasks/taskCancellationService.js";
 import type { ForgeTask } from "../types.js";
 import { createValidationCatalogService } from "../validation/validationCatalogService.js";
 import { createValidationService } from "../validation/validationService.js";
@@ -366,6 +367,19 @@ const {
   runAgentStep
 } = agentOrchestrationService;
 
+const taskCancellationService = createTaskCancellationService({
+  tasks,
+  saveAndBroadcast,
+  event,
+  setAgent,
+  upsertPlanStep,
+  removeTaskFromQueue,
+  requestAgentRunLoopControl,
+  cancelTaskCommand,
+  requestValidationCancellation: validationService.requestValidationCancellation
+});
+const { cancelTask, recoverRequestedTaskCancellationsOnStartup } = taskCancellationService;
+
 const { runAgentLoopV0 } = createLegacyAgentLoopService({
   tasks,
   modelProvider: currentModelProvider,
@@ -392,6 +406,7 @@ const server = createServer(createRuntimeRoutes({
   ...validationService,
   ...validationCatalogService,
   ...taskService,
+  ...taskCancellationService,
   ...repositoryContextService,
   ...agentOrchestrationService,
   ...modelProviderSettingsService,
@@ -415,7 +430,7 @@ const server = createServer(createRuntimeRoutes({
   reviseEditProposal, generateValidationRepairProposal, validateEditProposal,
   applyEditProposal, rollbackEditProposal, reviewEditProposalFile, rejectEditProposal,
   approveValidationPreset, runValidation, runTaskCommand, rerunRepairCommand,
-  cancelTaskCommand, saveTask, emit
+  cancelTaskCommand, cancelTask, saveTask, emit
 }));
 
 startRuntimeLifecycle({
@@ -425,6 +440,7 @@ startRuntimeLifecycle({
   stuckSweepIntervalMs,
   beforeListenPrimary() {
     recoverInterruptedAgentRunLoopsOnStartup();
+    recoverRequestedTaskCancellationsOnStartup();
     recoverInterruptedEditProposalTransactionsOnStartup();
   },
   onListening() {

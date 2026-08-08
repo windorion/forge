@@ -84,7 +84,7 @@ async function runValidation(
   saveAndBroadcast(task, started);
 
   for (const command of preset.commands) {
-    const result = await processRunner.runValidationCommand(command, task);
+    const result = await processRunner.runValidationCommand(command, task, validationRun.id);
     validationRun.commands.push(result);
     task.updatedAt = result.endedAt ?? new Date().toISOString();
     saveTask(task);
@@ -94,32 +94,44 @@ async function runValidation(
       command: result,
       task
     });
+    if (result.status === "Cancelled" || processRunner.validationCancellationWasRequested(validationRun.id)) {
+      break;
+    }
   }
 
   const failedCommands = validationRun.commands.filter((command) => command.status === "Failed");
+  const cancelled = validationRun.commands.some((command) => command.status === "Cancelled") ||
+    processRunner.validationCancellationWasRequested(validationRun.id);
   const endedAt = new Date().toISOString();
   validationRun.endedAt = endedAt;
-  validationRun.status = failedCommands.length === 0 ? "Passed" : "Failed";
-  validationRun.summary =
-    failedCommands.length === 0
+  validationRun.status = cancelled ? "Cancelled" : failedCommands.length === 0 ? "Passed" : "Failed";
+  validationRun.summary = cancelled
+    ? `Validation cancelled after ${validationRun.commands.length} command(s); remaining commands were not started.`
+    : failedCommands.length === 0
       ? `Validation passed with ${validationRun.commands.length} command(s).`
       : `Validation failed: ${failedCommands.length} of ${validationRun.commands.length} command(s) failed.`;
 
-  task.status = validationRun.status === "Passed" ? "Completed" : "Failed";
-  task.currentPhase = validationRun.status === "Passed" ? "Validation Passed" : "Validation Failed";
+  task.status = validationRun.status === "Passed" ? "Completed" : validationRun.status === "Cancelled" ? "Human Review" : "Failed";
+  task.currentPhase = validationRun.status === "Passed"
+    ? "Validation Passed"
+    : validationRun.status === "Cancelled"
+      ? "Validation Cancelled"
+      : "Validation Failed";
   task.reviewSummary = validationRun.summary;
   setAgent(
     task,
     "Tester",
-    validationRun.status === "Passed" ? "Done" : "Blocked",
+    validationRun.status === "Passed" ? "Done" : validationRun.status === "Cancelled" ? "Idle" : "Blocked",
     validationRun.summary
   );
   setAgent(
     task,
     "Reviewer",
-    validationRun.status === "Passed" ? "Active" : "Blocked",
+    validationRun.status === "Passed" ? "Active" : validationRun.status === "Cancelled" ? "Active" : "Blocked",
     validationRun.status === "Passed"
       ? "Validation passed; ready to review final changed files."
+      : validationRun.status === "Cancelled"
+        ? "Validation stopped at the task cancellation boundary."
       : "Validation failed; review failed commands before continuing."
   );
   upsertPlanStep(task, {
@@ -130,10 +142,15 @@ async function runValidation(
   });
 
   const finished = event(
-    validationRun.status === "Passed" ? "validation.passed" : "validation.failed",
+    validationRun.status === "Passed"
+      ? "validation.passed"
+      : validationRun.status === "Cancelled"
+        ? "validation.cancelled"
+        : "validation.failed",
     validationRun.summary
   );
   finished.createdAt = endedAt;
+  processRunner.clearValidationCancellationRequest(validationRun.id);
   saveAndBroadcast(task, finished);
   if (validationRun.status === "Failed") {
     await repairEvidence.createValidationRepairBriefForRun(task, validationRun);

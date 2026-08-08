@@ -28,6 +28,7 @@ struct ForgeTask: Identifiable, Codable, Hashable {
     var changedFiles: [String]
     var reviewSummary: String?
     var queueRequest: AgentRunQueueRequest?
+    var cancellation: TaskCancellation?
     var pullRequest: TaskPullRequest?
 
     static let sample = ForgeTask(
@@ -205,6 +206,27 @@ struct AgentRunQueueRequest: Identifiable, Codable, Hashable {
     var resumeLoopID: String?
     var previousStatus: String
     var previousPhase: String
+}
+
+struct TaskCancellation: Identifiable, Codable, Hashable {
+    var id: String
+    var status: String
+    var requestedAt: String
+    var completedAt: String?
+    var note: String?
+    var queueDisposition: String
+    var agentLoopDisposition: String
+    var taskCommandDisposition: String
+    var validationDisposition: String
+    var summary: String
+}
+
+struct TaskAuditExportEnvelope: Codable, Hashable {
+    var filename: String
+    var contentType: String
+    var content: String
+    var generatedAt: String
+    var redactionSummary: String
 }
 
 struct TaskQueueEntry: Identifiable, Codable, Hashable {
@@ -1175,6 +1197,10 @@ struct AgentRunLoopControlRequest: Encodable {
 
 struct CancelTaskCommandRequest: Encodable {
     var taskCommandRunID: String?
+    var note: String?
+}
+
+struct CancelTaskRequest: Encodable {
     var note: String?
 }
 

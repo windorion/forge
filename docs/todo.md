@@ -3,7 +3,7 @@
 Document role: maintain the active backlog, priority order, and next concrete
 engineering tasks for Forge.
 
-Last updated: 2026-07-31
+Last updated: 2026-08-02
 
 ## Rule
 
@@ -19,8 +19,12 @@ of truth and the delivered HTML/CSS as the exact visual/content specification.
 - Finish exact line-by-line verification of `1a`, `1b`, `10a`, `14a`, and
   `32a`.
 - Render-verify the implemented compact task states `1c`, `1d`, and `1e`.
-- Finish GitHub OAuth/device flow and runtime shortcut remapping; Account/Usage,
-  General, Guardrails, Model, and API Key settings structures are implemented.
+- Live-verify GitHub OAuth after the founder creates the Forge OAuth App and
+  enables Device Flow. Client ID configuration, device-code request, browser
+  opening, interval/slow-down polling, user validation, Keychain persistence,
+  connected/disconnect UI, and focused tests are implemented. Finish runtime
+  shortcut remapping; Account/Usage, General, Guardrails, Model, and API Key
+  settings structures are implemented.
 - Finish background task creation/detail/review routing for authorized Mission
   Control runtimes, then continue through quick entry and native integrations,
   onboarding, updates, sharing, cost, and templates until all 43 named HTML
@@ -30,8 +34,9 @@ of truth and the delivered HTML/CSS as the exact visual/content specification.
 - Render-verify the implemented full Plan Approval expansion, including its
   real six-step and one-step runtime modes and selected-step revision request.
 - Render-verify the implemented History, Audit, Failure/Rollback, and Crash
-  Recovery surfaces. Offline, No Repository, and Merge Conflict are
-  implemented. First Success now has its real one-time Completed-task receipt;
+  Recovery surfaces. Offline now has real start/reconnect, repository-switch,
+  Settings, and in-session cached-audit actions; No Repository and Merge
+  Conflict are implemented. First Success now has its real one-time Completed-task receipt;
   connect its final merged-PR wording/link after hosted PR publication exists.
 - Render-verify the full Agent Question state; the context-backed answer flow
   now records a decision and resumes the paused loop instead of stopping at a
@@ -108,7 +113,14 @@ the core runtime smoke. Preserve these completed boundaries:
   reviewed preview, a publish action gated on token presence and preview
   blockers, and the real PR number/URL/state once opened (`1d`/`24a`). Evidence:
   docs/verification/github-pat-settings/. The OAuth device flow (`6a`/`15a`)
-  stays blocked on a founder-registered Client ID.
+  is implemented and configurable in both Sign In and Settings. Its remaining
+  external verification blocker is a founder-registered Client ID with Device
+  Flow enabled; no client secret is stored in Forge.
+- Decide the account product boundary before implementing Email sign-in:
+  either provision a hosted Windorion account backend with email verification
+  and sync APIs, or remove Email sign-in and keep Forge local-only. The current
+  UI no longer presents a fake successful flow: it explains the missing service
+  and offers Continue Locally.
 - Follow-on: detect the fork owner automatically (today `headOwner` must be
   supplied), surface PR review/check status (approvals, CI) alongside the
   merge state, and poll status in the background rather than on demand.
@@ -152,14 +164,23 @@ the core runtime smoke. Preserve these completed boundaries:
 
 - [x] Execute the seven-phase, behavior-preserving `runtime/src/server.ts`
   decomposition in `docs/runtime_server_refactor.md`. The packaged entry is now
-  a one-line bootstrap; 55-route contracts, direct unit/coverage gates, and all
-  17 smoke scripts pass without weakening approval or observer boundaries.
+  a one-line bootstrap; the current 57-route contracts, direct unit/coverage
+  gates, and all 18 smoke scripts pass without weakening approval or observer
+  boundaries.
 - [x] Complete the post-refactor readability pass: split Git workflow into five
   domain services, agent orchestration into queue/loop/step/inspection/recovery,
   edit operations into four handlers, validation into four services, HTTP into
   seven route groups, and composition into explicit domain assemblies.
-- Add task cancellation. (Command-run cancellation and agent-loop pause/abort
-  already exist; a single task-level cancel that composes them is still open.)
+- [x] Add task cancellation. `POST /tasks/:taskID/cancel` now persists one
+  idempotent `Requested -> Completed` cancellation record, removes queued work,
+  requests an active Agent Loop abort at its safe checkpoint, sends SIGTERM/
+  bounded SIGKILL to runtime-owned task-command or validation children, skips
+  remaining validation commands, and lands in an immutable `Cancelled` task
+  state while retaining plans/diffs/output. Startup recovery finalizes a
+  persisted request only after all interrupted work is terminal. The macOS
+  task header exposes the composed action behind a consequence-confirming
+  alert. `smoke:task-cancel` covers idle, queued, loop, command, validation,
+  immutability, idempotency, and restart recovery paths.
 - [x] Add timeout and stuck-task recovery. Per-command timeouts and startup
   recovery already covered "the command ran too long" and "the process died";
   the gap was a runtime that stays up while its own work wedges (a stalled
@@ -177,7 +198,14 @@ the core runtime smoke. Preserve these completed boundaries:
   never swept — failing to detect beats killing live work.
   smoke:stuck-detection (pure) + smoke:stuck-recovery (e2e against real
   in-flight work, no restart involved).
-- Add clearer audit log exports.
+- [x] Add clearer audit log exports. The read-only
+  `GET /tasks/:taskID/audit-export?format=markdown|json` endpoint emits a
+  versioned, portable record of task state, cancellation, approvals, timeline,
+  Agent Loops/steps, tools, bounded command output, validation, file-change
+  metadata, and edit transactions. Known Bearer/GitHub/OpenAI/common secret
+  patterns are recursively redacted. The macOS Audit surface now uses a native
+  save panel for real `.md`/`.json` files instead of copying event lines while
+  claiming to export.
 
 ## P5: Native macOS Product
 

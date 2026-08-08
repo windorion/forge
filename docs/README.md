@@ -30,6 +30,7 @@ Timestamped working history lives in `session_log.md`, not in the root README.
 | `macos_native.md` | macOS-specific features, permissions, distribution, and native integrations. |
 | `multi_agent.md` | Agent roles, responsibilities, handoffs, orchestration, and state transitions. |
 | `runtime_architecture.md` | Local runtime modules, app-runtime boundaries, tool execution, and event streams. |
+| `runtime_server_architecture.md` | Current server composition, UML component model, startup/request flows, and domain sequence diagrams. |
 | `runtime_server_refactor.md` | Behavior-preserving plan for decomposing the runtime server monolith. |
 | `model_providers.md` | Model-provider boundary, configuration, and provider implementation rules. |
 | `edit_proposals.md` | Safe edit proposal flow and distinction between proposed and applied changes. |

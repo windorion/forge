@@ -185,6 +185,24 @@ Reordering or removing a queue entry cannot run a command, apply a proposal,
 commit, push, or publish. Dispatch re-enters the same Agent Loop gates and
 audit trail used by an immediate run.
 
+Task-level cancellation composes existing controls without granting a broader
+process capability. `POST /tasks/:taskID/cancel` identifies work only from the
+runtime-owned task snapshot: it may dequeue the task, request the active Agent
+Loop's existing cooperative abort, and terminate only the active task-command
+or validation child registered by this runtime. It accepts no PID, executable,
+shell text, file operation, or Git target. The runtime records one `Cancel
+Task` approval plus request/completion events, waits for every persisted
+in-flight item to reach a terminal state, and then makes the task immutable in
+`Cancelled`; existing review artifacts are retained.
+
+Audit export is read-only but may contain repository and command evidence, so
+it remains an explicit local user action. The exported schema selects audit
+fields rather than serializing process configuration or provider settings,
+omits proposal diff bodies, and recursively replaces known credential patterns
+with `[REDACTED]`. This is defense in depth, not a guarantee that arbitrary
+private customer data is safe to share; the native save panel warns the user
+to review the local Markdown or JSON file before distribution.
+
 Mission Control observer runtimes add visibility, not authority. They use
 unique loopback ports, remove remote-provider secrets from their child
 environment, open existing task SQLite files read-only, skip all startup

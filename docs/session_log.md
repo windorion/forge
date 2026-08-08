@@ -5630,3 +5630,201 @@ Next:
 
 - Verify the `main` GitHub Actions checks and address any environment-specific
   regression if one appears.
+
+## 2026-08-02 10:49:39 +0200 (CEST)
+
+Conversation summary:
+
+- Documented the current post-refactor runtime server architecture with UML and
+  sequence diagrams grounded in the implementation on `main`.
+
+Done:
+
+- Added `docs/runtime_server_architecture.md` as the code-oriented companion to
+  the domain-focused runtime architecture document.
+- Documented the modular-monolith deployment model, source ownership map,
+  component dependencies, factory-returned object model, explicit composition
+  root, and four intentional deferred dependency bridges.
+- Added Mermaid diagrams for system context, components, core object contracts,
+  startup/shutdown, HTTP routing, task approval, Agent Loop/Step execution,
+  edit transactions, validation/process execution, Git publication,
+  persistence/SSE, and recovery/watchdog behavior.
+- Recorded all seven route groups and their 54 GET/POST routes plus the global
+  OPTIONS contract, trust boundaries, concurrency rules, known architectural
+  edges, and a change-to-test ownership matrix.
+- Linked the new document from the documentation map, runtime architecture, and
+  completed refactor plan.
+- Verified balanced Markdown fences, 12 Mermaid blocks, balanced sequence
+  control blocks, route totals, and `git diff --check`.
+
+Not done:
+
+- No runtime code, public contract, product behavior, or test configuration was
+  changed.
+- The documentation changes have not been committed or pushed.
+
+Next:
+
+- Keep the diagrams synchronized whenever route ownership, service assembly,
+  persistence boundaries, or recovery behavior changes.
+
+## 2026-08-02 11:10:04 +0200 (CEST)
+
+Conversation summary:
+
+- Fixed the macOS cold-launch dead end so first-run onboarding, restored
+  repositories, app-managed Runtime recovery, the Offline workspace, and the
+  normal new-task workspace form one usable startup flow.
+
+Done:
+
+- Replaced the launch-only health probe with `restoreWorkspaceOnLaunch()`: a
+  reachable external Runtime is accepted first, and a failed probe starts the
+  bundled/local managed Runtime when a valid saved repository is available.
+- Made `Reopen last workspace` authoritative. It defaults to enabled, restores
+  the saved repository, and now has focused tests for both enabled and disabled
+  behavior.
+- Added a shared `recoverRuntimeConnection()` action and used it from both the
+  Offline workspace and General Settings; Runtime lifecycle state remains
+  owned by `WorkspaceModel`.
+- Turned the Offline workspace into an actionable recovery surface with
+  Start/Reconnect, Switch Repository, Settings, and in-session cached-audit
+  navigation. Removed unsupported claims about cold-launch drafts and cached
+  diffs/history.
+- Restored visible Runtime lifecycle controls and diagnostics access in General
+  Settings, including Stop for an app-owned child process.
+- Removed persisted debug-default influence from normal onboarding. Genuine
+  first launch always begins at Connect GitHub, while the debug presentation
+  hook passes an explicit step without changing normal startup state.
+- Added two `WorkspaceModel` tests; all 22 Swift tests pass and
+  `git diff --check` passes.
+- Rebuilt and launched `dist/Forge.app`, visually verified onboarding step 1,
+  the connected new-task workspace, Runtime Settings, and the actionable
+  Offline workspace, then performed a stop/relaunch fault drill.
+- Confirmed the final managed Runtime remains healthy, is bound to DemoTodo,
+  and reports 9 persisted tasks.
+- Updated README, project status, TODO, development, and macOS-native lifecycle
+  documentation to match the implemented behavior.
+
+Not done:
+
+- Hosted Forge-account/email authentication is still not implemented; the
+  onboarding connection action remains the existing GitHub device flow.
+- Changes from this conversation are not committed or pushed. Pre-existing
+  runtime-architecture documentation edits remain untouched and uncommitted.
+
+Next:
+
+- Complete or skip the visible onboarding in the running app, then use the
+  restored new-task composer normally. Decide separately whether Forge needs a
+  mandatory hosted-account authentication gate before the workspace.
+
+## 2026-08-02 11:34:14 +0200 (CEST)
+
+Conversation summary:
+
+- Continued the startup/UI repair by replacing the unfinished GitHub and Email
+  sign-in affordances with a complete, testable GitHub Device Flow boundary and
+  an honest Email service-status/local-continuation path.
+
+Done:
+
+- Reworked `GitHubAuth` into a cancellable and dependency-injectable Device
+  Flow client. It accepts a locally persisted public Client ID, uses form
+  requests, validates HTTP responses, honors GitHub's polling interval and
+  `slow_down` increase, handles expiry/denial, validates the granted token via
+  `/user`, then stores it in the shared macOS Keychain account.
+- Added Client ID setup, Open GitHub, Copy Code, connected receipt, Continue to
+  Forge, restored connection state, and disconnect behavior to Sign In.
+- Removed the hard-disabled Settings → GitHub connection button. Added OAuth
+  Client ID configuration, real connection/token status, GitHub settings entry,
+  and corrected copy distinguishing GitHub's `repo` OAuth scope from Forge's
+  three internal action categories.
+- Replaced the inert Email action and unsupported sync promise with an explicit
+  status screen and a functional Continue Locally action.
+- Updated onboarding scope copy and connected-account label.
+- Added three `GitHubAuthTests`; all 25 Swift tests pass with zero failures.
+  Rebuilt `dist/Forge.app` and the bundled TypeScript runtime successfully.
+- Rendered and visually inspected the account welcome, GitHub Client ID setup,
+  Email status, and Settings → GitHub screens. The foreground Debug app stayed
+  running during interaction; the earlier Launch Services process exit was not
+  reproduced as a crash.
+- Updated README, development/status/TODO, handoff coverage, and 6a/15a
+  verification notes. `git diff --check` passes.
+
+Not done:
+
+- A live GitHub authorization was not possible because the repository still
+  has no founder-owned GitHub OAuth App Client ID with Device Flow enabled.
+- Hosted Email authentication remains unimplemented because no Windorion
+  account backend, verification-email service, or sync API exists. Choosing a
+  hosted provider/backend or removing Email sign-in is a product decision.
+- Changes are not committed or pushed. Pre-existing runtime-architecture
+  documentation edits remain untouched and uncommitted.
+
+Next:
+
+- Register the Forge OAuth App, enable Device Flow, paste its Client ID in
+  Settings → GitHub, and capture one live code/connected-state verification.
+- Decide whether Email should become hosted magic-link authentication or be
+  removed in favor of a permanently local-only product; then implement that
+  selected boundary.
+
+## 2026-08-08 20:45:19 +0200 (CEST)
+
+Conversation summary:
+
+- Chose and completed the next Alpha reliability/control milestone: one
+  task-level cancellation boundary that composes queue, Agent Loop,
+  task-command, validation, persistence, macOS control, and portable audit
+  export behavior.
+
+Done:
+
+- Added durable `Requested -> Completed` task cancellation evidence and the
+  `Cancelled` task terminal status. `POST /tasks/:taskID/cancel` is idempotent,
+  removes queued work, requests Agent Loop abort at a safe checkpoint, stops
+  runtime-owned task-command/validation children, skips remaining validation
+  commands, retains review evidence, and makes cancelling/cancelled tasks
+  immutable to later task-scoped POST actions.
+- Added cancellable validation subprocess ownership with SIGTERM and bounded
+  SIGKILL fallback. Cancelled validation commands/runs are distinct from
+  failure and do not generate repair briefs.
+- Added restart ordering: interrupted running work first fails closed through
+  existing recovery, then a persisted cancellation request completes only when
+  loops, steps, commands, validations, and tool calls are terminal.
+- Added `GET /tasks/:taskID/audit-export?format=markdown|json`. Its versioned
+  export selects task/cancellation, approval, event, loop/step, tool, bounded
+  command output, validation, context metadata, file-change metadata, and edit
+  transaction evidence; proposal diff bodies/provider settings are omitted and
+  known Bearer/GitHub/OpenAI/common secret patterns are recursively redacted.
+- Replaced Audit Log's misleading clipboard-only export with real Markdown/JSON
+  file export through a narrow native `NSSavePanel` bridge. Added a confirmed
+  `CANCEL TASK` control to the existing task header and disabled run/resume
+  controls while cancelling or after cancellation.
+- Added `smoke:task-cancel` covering idle/idempotent cancellation, immutable
+  terminal tasks, queued removal, active Agent Loop abort, task-command and
+  validation process cancellation, restart completion, and both audit export
+  formats. Added a pure audit/redaction unit test and expanded the public HTTP
+  contract to 57 routes.
+- Verified `npm run check`, 18 runtime unit scripts, `smoke:http-contract`,
+  `smoke:task-cancel`, `smoke:core`, and 26 Swift tests. Updated README,
+  project status, TODO, development, runtime/security/database architecture,
+  and server-refactor documentation.
+
+Not done:
+
+- No commit or push was requested. The pre-existing uncommitted GitHub OAuth,
+  onboarding, runtime-architecture, and related documentation changes remain
+  in the shared worktree and were preserved.
+- The next broader Alpha track—repeated real-repository success with richer
+  autonomous tool and patch behavior—has not started in this conversation.
+
+Next:
+
+- Run a representative-repository reliability campaign: define a small task
+  corpus, execute Forge end to end, classify failures by context/proposal/
+  command/review stage, and use those results to choose the next safe tool or
+  patch-engine expansion.
+- Add export retention/purge controls before treating command-heavy audit files
+  as suitable for long-lived commercial use.

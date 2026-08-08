@@ -88,8 +88,12 @@ Purpose:
 
 Current implementation:
 
-- the toolbar, sidebar runtime badge, and Settings window can start/stop an
-  app-managed runtime process
+- a saved repository is restored only when `Reopen last workspace` is enabled;
+  launch probes the endpoint and automatically starts the managed runtime when
+  no external runtime is reachable
+- the Offline workspace and General Settings expose start/reconnect and
+  repository-switch controls; Settings can also stop an app-managed process
+  and copy diagnostics
 - the app can build a development checkout runtime or launch a prebuilt
   bundled runtime resource with `node dist/server.js`
 - the app resolves the runtime installation directory separately from the

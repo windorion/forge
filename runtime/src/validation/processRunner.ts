@@ -10,8 +10,14 @@ interface ActiveTaskCommand {
   timeout?: ReturnType<typeof setTimeout>; cancelTimeout?: ReturnType<typeof setTimeout>;
   cancelled: boolean; cancellationNote?: string; cancelledAt?: string;
 }
+interface ActiveValidationCommand {
+  taskID: string; validationRunID: string; validationCommandResultID: string;
+  child: ReturnType<typeof spawn>; timeout?: ReturnType<typeof setTimeout>;
+  cancelTimeout?: ReturnType<typeof setTimeout>; cancelled: boolean;
+}
 interface TaskCommandExecutionResult { outputSummary: string; exitCode: number; cancelled?: boolean; }
 interface SpawnedTaskCommandResult { exitCode: number; output: string; timedOut: boolean; cancelled: boolean; }
+interface ValidationCancellationRequest { taskID: string; requestedAt: string; note?: string; }
 
 export function createProcessRunner(options: ValidationServiceOptions) {
 const {
@@ -32,6 +38,8 @@ const {
   resolveEditableWorkspacePath
 } = options;
 const activeTaskCommands = new Map<string, ActiveTaskCommand>();
+const activeValidationCommands = new Map<string, ActiveValidationCommand>();
+const validationCancellationRequests = new Map<string, ValidationCancellationRequest>();
 const validationCommandTimeoutMs = 60_000;
 const taskCommandCancellationGraceMs = 3_000;
 const taskCommandOutputChunkLimit = 80;
@@ -113,6 +121,47 @@ async function cancelTaskCommand(taskID: string, input: CancelTaskCommandRequest
   requested.createdAt = now;
   saveAndBroadcast(task, requested);
   return task;
+}
+
+function requestValidationCancellation(taskID: string, note?: string): boolean {
+  const task = tasks.get(taskID);
+  if (!task) {
+    throw new HttpError(404, `Task not found: ${taskID}`);
+  }
+  const validationRun = [...task.validationRuns].reverse().find((run) => run.status === "Running");
+  if (!validationRun) return false;
+  if (validationCancellationRequests.has(validationRun.id)) return true;
+
+  const requestedAt = new Date().toISOString();
+  validationCancellationRequests.set(validationRun.id, {
+    taskID,
+    requestedAt,
+    note: note?.trim() || undefined
+  });
+  validationRun.summary = "Cancellation requested; Forge will stop the active command and skip remaining validation commands.";
+
+  const active = [...activeValidationCommands.values()].find(
+    (candidate) => candidate.taskID === taskID && candidate.validationRunID === validationRun.id
+  );
+  if (active && !active.cancelled) {
+    active.cancelled = true;
+    active.cancelTimeout = setTimeout(() => active.child.kill("SIGKILL"), taskCommandCancellationGraceMs);
+    active.child.kill("SIGTERM");
+  }
+
+  saveAndBroadcast(
+    task,
+    event("validation.cancel.requested", `Validation cancellation requested: ${validationRun.presetName}.`)
+  );
+  return true;
+}
+
+function validationCancellationWasRequested(validationRunID: string): boolean {
+  return validationCancellationRequests.has(validationRunID);
+}
+
+function clearValidationCancellationRequest(validationRunID: string): void {
+  validationCancellationRequests.delete(validationRunID);
 }
 
 async function runBuiltInTaskCommand(
@@ -283,7 +332,8 @@ function trimTaskCommandOutputChunks(commandRun: TaskCommandRun): void {
 
 async function runValidationCommand(
   command: InternalValidationCommand,
-  task: ForgeTask
+  task: ForgeTask,
+  validationRunID: string
 ): Promise<ValidationCommandResult> {
   const startedAt = new Date().toISOString();
   const result: ValidationCommandResult = {
@@ -298,13 +348,20 @@ async function runValidationCommand(
     startedAt
   };
 
+  if (validationCancellationWasRequested(validationRunID)) {
+    result.status = "Cancelled";
+    result.outputSummary = "Skipped because task cancellation was requested.";
+    result.endedAt = new Date().toISOString();
+    return result;
+  }
+
   try {
-    const output = command.kind === "BuiltIn"
+    const output: { outputSummary: string; exitCode?: number; cancelled?: boolean } = command.kind === "BuiltIn"
       ? await runBuiltInValidationCommand(command, task)
-      : await runProjectValidationCommand(command);
+      : await runProjectValidationCommand(command, task, validationRunID, result.id);
     result.outputSummary = output.outputSummary;
     result.exitCode = output.exitCode;
-    result.status = output.exitCode === 0 ? "Passed" : "Failed";
+    result.status = output.cancelled ? "Cancelled" : output.exitCode === 0 ? "Passed" : "Failed";
   } catch (error) {
     result.status = "Failed";
     result.outputSummary = error instanceof Error ? error.message : String(error);
@@ -329,30 +386,58 @@ async function runBuiltInValidationCommand(
 }
 
 async function runProjectValidationCommand(
-  command: InternalValidationCommand
-): Promise<{ outputSummary: string; exitCode?: number }> {
+  command: InternalValidationCommand,
+  task: ForgeTask,
+  validationRunID: string,
+  validationCommandResultID: string
+): Promise<{ outputSummary: string; exitCode?: number; cancelled?: boolean }> {
   if (!command.executable || !command.args) {
     throw new Error(`Project validation command is missing executable metadata: ${command.command}`);
   }
 
   const cwd = resolvePresetCommandCwd(command.cwd);
-  const { exitCode, output } = await runSpawnedCommand(command.executable, command.args, cwd);
-  const summary = summarizeCommandOutput(command.command, exitCode, output);
+  const { exitCode, output, cancelled } = await runSpawnedValidationCommand(
+    command.executable,
+    command.args,
+    cwd,
+    task.id,
+    validationRunID,
+    validationCommandResultID
+  );
+  const summary = cancelled
+    ? `${command.command} cancelled by task cancellation.`
+    : summarizeCommandOutput(command.command, exitCode, output);
 
-  return { outputSummary: summary, exitCode };
+  return { outputSummary: summary, exitCode, cancelled };
 }
 
-function runSpawnedCommand(
+function runSpawnedValidationCommand(
   executable: string,
   args: string[],
-  cwd: string
-): Promise<{ exitCode: number; output: string }> {
+  cwd: string,
+  taskID: string,
+  validationRunID: string,
+  validationCommandResultID: string
+): Promise<{ exitCode: number; output: string; cancelled: boolean }> {
   return new Promise((resolve, reject) => {
     const child = spawn(executable, args, {
       cwd,
       shell: false,
       env: { ...runtimeEnvironment, CI: "1" }
     });
+    const active: ActiveValidationCommand = {
+      taskID,
+      validationRunID,
+      validationCommandResultID,
+      child,
+      cancelled: false
+    };
+    activeValidationCommands.set(validationCommandResultID, active);
+    if (validationCancellationWasRequested(validationRunID)) {
+      active.cancelled = true;
+      active.cancelTimeout = setTimeout(() => active.child.kill("SIGKILL"), taskCommandCancellationGraceMs);
+      active.child.kill("SIGTERM");
+    }
 
     let output = "";
     const appendOutput = (chunk: Buffer) => {
@@ -364,18 +449,26 @@ function runSpawnedCommand(
 
     const timeout = setTimeout(() => {
       child.kill("SIGTERM");
+      activeValidationCommands.delete(validationCommandResultID);
       reject(new Error(`Command timed out after ${validationCommandTimeoutMs / 1000}s.`));
     }, validationCommandTimeoutMs);
+    active.timeout = timeout;
+
+    const clearActiveCommand = () => {
+      clearTimeout(timeout);
+      if (active.cancelTimeout) clearTimeout(active.cancelTimeout);
+      activeValidationCommands.delete(validationCommandResultID);
+    };
 
     child.stdout.on("data", appendOutput);
     child.stderr.on("data", appendOutput);
     child.on("error", (error) => {
-      clearTimeout(timeout);
+      clearActiveCommand();
       reject(error);
     });
     child.on("close", (code) => {
-      clearTimeout(timeout);
-      resolve({ exitCode: code ?? 1, output });
+      clearActiveCommand();
+      resolve({ exitCode: active.cancelled ? 130 : code ?? 1, output, cancelled: active.cancelled });
     });
   });
 }
@@ -386,5 +479,14 @@ function summarizeCommandOutput(command: string, exitCode: number, output: strin
   return [`${command} exited with code ${exitCode}.`, tail].filter(Boolean).join("\n");
 }
 
-return { cancelTaskCommand, runBuiltInTaskCommand, runProjectTaskCommand, appendTaskCommandOutputChunk, runValidationCommand };
+return {
+  cancelTaskCommand,
+  requestValidationCancellation,
+  validationCancellationWasRequested,
+  clearValidationCancellationRequest,
+  runBuiltInTaskCommand,
+  runProjectTaskCommand,
+  appendTaskCommandOutputChunk,
+  runValidationCommand
+};
 }

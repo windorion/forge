@@ -7,6 +7,7 @@ final class WorkspaceModel: ObservableObject {
     static let expectedRuntimeVersion = "0.1.0"
     nonisolated private static let runtimeProcessOutputLimit = 12_000
     nonisolated private static let repositoryPreferenceKey = "forge.selectedRepositoryRoot"
+    nonisolated private static let reopenLastWorkspacePreferenceKey = "forge.reopenLastWorkspace"
     nonisolated private static let missionControlRepositoriesKey = "forge.missionControlRepositories"
 
     @Published var tasks: [ForgeTask] = []
@@ -70,6 +71,8 @@ final class WorkspaceModel: ObservableObject {
     @Published private var runningTaskCommandTaskIDs = Set<ForgeTask.ID>()
     @Published private var rerunningRepairCommandEvidenceIDs = Set<CommandRerunEvidence.ID>()
     @Published private var cancellingTaskCommandRunIDs = Set<TaskCommandRun.ID>()
+    @Published private var cancellingTaskIDs = Set<ForgeTask.ID>()
+    @Published private var exportingAuditTaskIDs = Set<ForgeTask.ID>()
     @Published private var approvingValidationPresetTaskIDs = Set<String>()
     @Published private var refreshingGitStatus = false
     @Published private var loadingGitDiffPaths = Set<String>()
@@ -125,7 +128,10 @@ final class WorkspaceModel: ObservableObject {
                 return sanitized
             }
         }
-        if let path = userDefaults.string(forKey: Self.repositoryPreferenceKey), !path.isEmpty {
+        let shouldReopenLastWorkspace = userDefaults.object(forKey: Self.reopenLastWorkspacePreferenceKey) as? Bool ?? true
+        if shouldReopenLastWorkspace,
+           let path = userDefaults.string(forKey: Self.repositoryPreferenceKey),
+           !path.isEmpty {
             preferredRepositoryRoot = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
             registerMissionControlRepository(path: preferredRepositoryRoot!.path(percentEncoded: false))
         }
@@ -205,6 +211,10 @@ final class WorkspaceModel: ObservableObject {
             (runtimeProcessState == .running || runtimeProcessState == .starting)
     }
 
+    var shouldStartManagedRuntimeAfterConnectionFailure: Bool {
+        hasSelectedRepository && canStartRuntimeProcess
+    }
+
     deinit {
         eventStreamTask?.cancel()
         if runtimeProcess?.isRunning == true {
@@ -234,6 +244,7 @@ final class WorkspaceModel: ObservableObject {
         }
 
         runtimeProcessState = .starting
+        runtimeLastError = nil
         runtimeProcessMessage = "Building runtime before launch..."
         runtimeProcessDirectory = launchResolution.runtimeDirectory.path(percentEncoded: false)
         runtimeRepositoryRoot = launchResolution.repositoryRoot.path(percentEncoded: false)
@@ -293,6 +304,36 @@ final class WorkspaceModel: ObservableObject {
     }
 
     func refreshRuntimeHealth(connectEventStream: Bool) {
+        refreshRuntimeHealth(
+            connectEventStream: connectEventStream,
+            startManagedRuntimeIfUnavailable: false
+        )
+    }
+
+    func restoreWorkspaceOnLaunch() {
+        guard runtimeState == .unchecked else { return }
+        refreshRuntimeHealth(
+            connectEventStream: true,
+            startManagedRuntimeIfUnavailable: true
+        )
+    }
+
+    func recoverRuntimeConnection() {
+        if shouldStartManagedRuntimeAfterConnectionFailure {
+            startRuntimeProcess()
+            return
+        }
+
+        refreshRuntimeHealth(
+            connectEventStream: true,
+            startManagedRuntimeIfUnavailable: true
+        )
+    }
+
+    private func refreshRuntimeHealth(
+        connectEventStream: Bool,
+        startManagedRuntimeIfUnavailable: Bool
+    ) {
         runtimeState = .checking
         runtimeLastError = nil
         statusMessage = "Checking runtime..."
@@ -327,6 +368,11 @@ final class WorkspaceModel: ObservableObject {
                 eventStreamState = .disconnected
                 eventStreamStatus = "Event stream disconnected"
                 eventStreamTask?.cancel()
+
+                if startManagedRuntimeIfUnavailable,
+                   shouldStartManagedRuntimeAfterConnectionFailure {
+                    startRuntimeProcess()
+                }
             }
         }
     }
@@ -1147,6 +1193,61 @@ final class WorkspaceModel: ObservableObject {
         }
 
         return cancellingTaskCommandRunIDs.contains(runID)
+    }
+
+    func cancelTask(_ task: ForgeTask) {
+        guard task.status != "Cancelled", task.cancellation?.status != "Requested" else { return }
+        cancellingTaskIDs.insert(task.id)
+        Task {
+            do {
+                let updatedTask = try await runtime.cancelTask(
+                    taskID: task.id,
+                    note: "Cancelled from Forge macOS app."
+                )
+                upsert(updatedTask)
+                selectedTaskID = updatedTask.id
+                statusMessage = updatedTask.status == "Cancelled"
+                    ? "Task cancelled. Review artifacts were retained."
+                    : "Task cancellation requested. Waiting for a safe checkpoint."
+                taskQueueSnapshot = try? await runtime.taskQueue()
+                startEventStream()
+            } catch {
+                statusMessage = "Cancel task failed: \(error.localizedDescription)"
+            }
+            cancellingTaskIDs.remove(task.id)
+        }
+    }
+
+    func isCancellingTask(taskID: ForgeTask.ID) -> Bool {
+        cancellingTaskIDs.contains(taskID)
+    }
+
+    func exportAuditLog(for task: ForgeTask, format: String) {
+        guard format == "markdown" || format == "json" else { return }
+        exportingAuditTaskIDs.insert(task.id)
+        Task {
+            do {
+                let export = try await runtime.taskAuditExport(taskID: task.id, format: format)
+                let panel = NSSavePanel()
+                panel.canCreateDirectories = true
+                panel.isExtensionHidden = false
+                panel.nameFieldStringValue = export.filename
+                panel.message = "Known credential patterns are redacted. Review the local audit file before sharing it."
+                if panel.runModal() == .OK, let url = panel.url {
+                    try export.content.write(to: url, atomically: true, encoding: .utf8)
+                    statusMessage = "Audit exported to \(url.lastPathComponent)."
+                } else {
+                    statusMessage = "Audit export cancelled."
+                }
+            } catch {
+                statusMessage = "Export audit failed: \(error.localizedDescription)"
+            }
+            exportingAuditTaskIDs.remove(task.id)
+        }
+    }
+
+    func isExportingAudit(taskID: ForgeTask.ID) -> Bool {
+        exportingAuditTaskIDs.contains(taskID)
     }
 
     func validationPermissions(for taskID: ForgeTask.ID) -> [ValidationPresetPermission] {
