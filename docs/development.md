@@ -782,10 +782,14 @@ cd runtime && npm run test:unit
 cd runtime && npm run smoke:core
 cd runtime && npm run smoke:git-conflicts
 cd runtime && npm run smoke:git-remote
+cd runtime && npm run campaign:reliability
 ```
 
 Before a release-shaped change, run every `smoke:*` script — the full suite is
-16 scripts and takes a few minutes.
+18 scripts and takes a few minutes. The reliability campaign is intentionally
+separate from `smoke:all`: it creates four isolated Git repositories and emits
+a staged scorecard. Use `campaign:reliability:baseline` only when intentionally
+refreshing the durable evidence in `docs/reliability/`.
 
 ## Current Limitations
 
@@ -818,6 +822,12 @@ Before a release-shaped change, run every `smoke:*` script — the full suite is
   mismatched paths, counts, ranges, context, or malformed newline markers. Richer OpenAI proposals can include unsupported
   preview-only operations for review, but those proposals are blocked from
   apply until revised to an apply-ready subset.
+- The local deterministic provider recognizes explicit quoted replacements,
+  including escaped quotes inside source strings, and bounded Markdown
+  appends. Its passing repository reliability baseline is deterministic
+  regression evidence, not a claim that it can synthesize arbitrary code from
+  unconstrained natural language. Broader model quality still depends on the
+  OpenAI path and a future curated external-repository campaign.
 - Rollback is explicit and guarded. The runtime stores restore snapshots under
   `.forge/rollback-snapshots/`, verifies the current file still matches the
   recorded post-apply hash, and then restores prior contents or deletes a

@@ -23,6 +23,7 @@ Timestamped working history lives in `session_log.md`, not in the root README.
 | `product_positioning.md` | Market position, competitors, differentiation, and messaging. |
 | `project_status.md` | Current implementation state, distance to finished product, and completion estimates. |
 | `todo.md` | Active TODO list, priority order, and next concrete tasks. |
+| `reliability/README.md` | Repeatable Alpha repository reliability corpus, stage semantics, baseline evidence, and limitations. |
 | `user_personas.md` | Target users, pains, motivations, objections, and success criteria. |
 | `user_flows.md` | End-to-end workflows from onboarding to review and shipping. |
 | `workspace_design.md` | Product surface model, screen structure, panels, states, and interaction rules. |

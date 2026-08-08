@@ -5828,3 +5828,55 @@ Next:
   patch-engine expansion.
 - Add export retention/purge controls before treating command-heavy audit files
   as suitable for long-lived commercial use.
+
+## 2026-08-08 21:05:30 +0200 (CEST)
+
+Conversation summary:
+
+- Published the accumulated startup/authentication and runtime-control work,
+  then completed the next Alpha reliability milestone: a repeatable staged
+  repository-task campaign that uses failing baselines to select runtime fixes.
+
+Done:
+
+- Created and pushed `codex/alpha-runtime-controls`; commit `9253ce1` contains
+  the previously completed startup, GitHub Device Flow, cancellation, audit
+  export, macOS controls, regression, and documentation work.
+- Added a four-case reliability corpus. Every case initializes an isolated
+  committed Git repository and starts its own local Forge runtime/database/
+  settings/queue state. Positive cases cover a TypeScript bugfix, Python
+  two-hunk refactor, and Markdown append; the negative control requires an
+  ambiguous exact replacement to fail closed without mutation.
+- Added thirteen-stage classification from fixture/runtime/index through
+  intake, plan, approval, proposal validation, per-file review, apply, Git
+  evidence, external content oracle, and JSON/Markdown audit export. Expected
+  safety blocking is reported separately as `Guarded`.
+- Added versioned JSON aggregation, Markdown scorecard rendering, pure report
+  tests, temporary campaign mode, and an intentional durable-baseline mode.
+- Used the first baselines to find and fix two runtime defects. A bounded
+  referenced follow-up no longer reopens generic clarification after intent is
+  established and planned. Exact replacement instructions now parse escaped
+  quotes inside source strings, enabling the Python multi-hunk edit.
+- Recorded a passing baseline: 3 applied, 1 guarded, 0 unexpected failures,
+  and 100% scored-stage pass rate. Updated README, development, status, TODO,
+  and documentation map with the evidence boundary.
+- Verified `npm run check`, all 19 runtime unit-test files, the complete 18-script
+  smoke suite, 26 Swift tests, the durable four-case campaign, and
+  `git diff --check`.
+
+Not done:
+
+- The campaign uses deterministic repository-shaped fixtures and the local
+  provider. It does not yet prove provider-backed quality on curated external
+  repositories, large histories, arbitrary Unified Diffs, or project-command
+  repair.
+- Live GitHub OAuth still requires a founder-owned OAuth App Client ID with
+  Device Flow enabled. Hosted Email authentication still requires a product
+  boundary and backend decision.
+
+Next:
+
+- Expand reliability evidence with a curated external-repository corpus using
+  OpenAI, approved project commands, Unified Diff edits, and recovery cases.
+- Add audit export retention/purge controls and continue the remaining live
+  OAuth and visual handoff verification work.

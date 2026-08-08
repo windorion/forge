@@ -3,7 +3,7 @@
 Document role: maintain the active backlog, priority order, and next concrete
 engineering tasks for Forge.
 
-Last updated: 2026-08-02
+Last updated: 2026-08-08
 
 ## Rule
 
@@ -62,6 +62,23 @@ the core runtime smoke. Preserve these completed boundaries:
   infrastructure. Do not block other screens on this.
 
 ## P1: Real Agent Behavior
+
+- [x] Add a repeatable isolated-repository Alpha reliability campaign with
+  TypeScript bugfix, Python two-hunk refactor, Markdown append, and ambiguous
+  replacement negative-control cases. The runner exercises index, intake,
+  clarification, plan/approval, proposal validation, per-file review, apply,
+  Git evidence, external oracle, and JSON/Markdown audit stages. The passing
+  baseline is in `docs/reliability/` and reports 3 applied + 1 guarded, 0
+  unexpected failures, and 100% scored-stage pass rate.
+- [x] Fix the two runtime defects found by the failing campaign baselines:
+  bounded referenced follow-ups now preserve established intent instead of
+  reopening a generic clarification, and exact replacement parsing supports
+  escaped quotes inside code strings. Both have provider-level regressions.
+- Next reliability expansion: run a curated corpus against real public
+  repositories with OpenAI, project-command validation, Unified Diff changes,
+  and recovery scenarios. Keep fixture and external-repository results
+  separate so deterministic regression evidence is not confused with model
+  quality evidence.
 
 - [x] Safe query-variation handling beyond the exact-fingerprint repeat guard:
   a subset-aware, order-insensitive, case-folded redundancy guard now blocks

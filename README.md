@@ -164,6 +164,12 @@ Implemented today:
   audit remain reviewable. Audit Log now saves recursively redacted Markdown
   or JSON through a native macOS panel instead of copying event lines while
   claiming to export.
+- A repeatable Alpha repository reliability campaign now runs three applied
+  TypeScript/Python/Markdown tasks and one guarded ambiguity control through
+  isolated Git repositories, separate runtimes, review/apply, Git evidence,
+  external content oracles, and JSON/Markdown audit export. The current
+  baseline has zero unexpected failures; detail and evidence live in
+  `docs/reliability/`.
 - Validation failure repair briefs that turn failed command output into a
   reviewable next-step diagnosis.
 - Follow-up repair edit proposals generated from validation repair briefs,
@@ -231,11 +237,11 @@ Product-readiness estimate:
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| Trust/runtime foundation | 84-88% | Local runtime, task state, review gates, restricted edits, validation, composed cancellation, redacted audit export, guarded git actions, explicit multi-runtime authorization, diagnostics, and smoke coverage are real. |
+| Trust/runtime foundation | 86-90% | Local runtime, task state, review gates, restricted edits, validation, composed cancellation, redacted audit export, guarded git actions, explicit multi-runtime authorization, diagnostics, and a staged repository reliability baseline are real. |
 | Coding-agent demo V0 behavior | 100% | The documented functional acceptance path is implemented and smoke-covered. |
 | Primary V0 handoff UI | 100% | The five primary screens are `Verified` with rendered-comparison evidence in `docs/verification/`. |
 | Full handoff UI | 95-97% | 41 of 43 named screens/states are `Verified` (rendered comparison on real data, evidence in `docs/verification/`). The two remaining: `6a` GitHub is `Partial` (configuration UI, Device Flow, polling, Keychain persistence, and connected state are implemented and tested; live GitHub authorization still needs a founder-owned OAuth App Client ID with Device Flow enabled); `35a` Widget is a documented platform-blocked descope (hand-assembled ad-hoc-signed extension not discovered by pluginkit; unblocks with P6 signing). |
-| Useful developer alpha | 55-65% | Forge can cancel/recover interrupted loops, commands, validations, and edit transactions, export review evidence, and apply guarded source create/modify/delete changes; it still needs broader autonomous tool use and repeated success on real repositories. |
+| Useful developer alpha | 60-68% | Forge now repeats three applied repository-shaped tasks plus one guarded negative control across the full reviewed lifecycle; it still needs broader autonomous tool use and provider-backed success on curated external repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 | 20-25% | Queueing and explicitly authorized active runtimes across repositories are real; full background task/review routing, native distribution, indexing, memory, MCP/GitHub, and product polish remain. |
 

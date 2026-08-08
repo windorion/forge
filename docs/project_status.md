@@ -85,6 +85,17 @@ Implemented:
   writes recursively redacted Markdown or JSON through a native save panel.
   The focused smoke covers idle, queue, loop, command, validation,
   immutability, idempotency, restart, and export paths.
+- Repeatable Alpha repository reliability campaign. Four isolated committed
+  Git repositories exercise TypeScript exact replacement, Python ordered
+  multi-hunk patching, Markdown append, and an ambiguous-replacement negative
+  control through index, intake/clarification, plan approval, proposal
+  validation, per-file review, apply, Git status, independent content oracle,
+  and JSON/Markdown audit export. The current durable baseline records three
+  applied cases, one correctly guarded case, zero unexpected failures, and a
+  100% scored-stage pass rate. The first failing runs also drove fixes for
+  follow-up messages reopening resolved clarification and escaped quotes in
+  exact replacement instructions. This is deterministic repository-shaped
+  evidence; curated external-repository/provider testing remains an Alpha gap.
 - Partial but functional `4a` Mission Control. The handoff-aligned 1240px
   surface supervises the primary repository plus up to two unique-port
   background runtimes. They default to read-only observer mode. Explicit
@@ -368,11 +379,11 @@ use different denominators and must not be added together.
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| Trust/runtime foundation | 84-88% | Local runtime, task state, review gates, restricted edits, validation, composed cancellation, redacted audit export, guarded git actions, explicit multi-runtime authorization, diagnostics, and smoke coverage are real. |
+| Trust/runtime foundation | 86-90% | Local runtime, task state, review gates, restricted edits, validation, composed cancellation, redacted audit export, guarded git actions, explicit multi-runtime authorization, diagnostics, and a staged repository reliability baseline are real. |
 | Coding-agent demo V0 behavior | 100% | All documented functional acceptance criteria are implemented and smoke-covered. |
 | Primary V0 handoff UI | 95-98% | Five primary screens are substantially implemented; exact typography and rendered comparison remain. |
 | Full 43-screen handoff UI | 95-97% | 41 of 43 screens Verified with rendered-comparison evidence (docs/verification/). Remaining: 6a Partial (OAuth configuration, Device Flow, standards-compliant polling, Keychain persistence, and connected UI are implemented and unit-tested; a live grant still needs the founder GitHub OAuth Client ID with Device Flow enabled); 35a a documented platform-blocked widget-signing descope (P6). |
-| Useful developer alpha | 55-65% | Forge can cancel/recover interrupted loops, commands, validations, and edit transactions, export review evidence, and apply guarded source create/modify/delete changes; it still needs broader autonomous tool use and repeated success on real repositories. |
+| Useful developer alpha | 60-68% | Forge now repeats three applied repository-shaped tasks plus one guarded negative control across the full reviewed lifecycle; it still needs broader autonomous tool use and repeated provider-backed success on curated external repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 product | 20-25% | The real queue and session-authorized active multi-repository runtimes exist; full background task/review routing, indexing, packaging, updates, onboarding, billing, and integrations remain. |
 

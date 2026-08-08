@@ -1,0 +1,471 @@
+{
+  "schemaVersion": 1,
+  "campaign": "Forge Alpha repository reliability campaign",
+  "generatedAt": "2026-08-08T19:07:10.317Z",
+  "runtimeProvider": "local-deterministic",
+  "durationMs": 3824,
+  "caseCount": 4,
+  "passedCount": 3,
+  "guardedCount": 1,
+  "failedCount": 0,
+  "stagePassRate": 1,
+  "status": "Passed",
+  "cases": [
+    {
+      "id": "typescript-bugfix",
+      "title": "TypeScript arithmetic bugfix",
+      "category": "code-bugfix",
+      "language": "TypeScript",
+      "expectedOutcome": "Applied",
+      "status": "Passed",
+      "durationMs": 367,
+      "operationKind": "ReplaceText",
+      "changedFiles": [
+        "src/calculator.ts"
+      ],
+      "stages": [
+        {
+          "id": "fixture",
+          "status": "Passed",
+          "durationMs": 42,
+          "summary": "Initialized isolated Git repository with 3 tracked files."
+        },
+        {
+          "id": "runtime",
+          "status": "Passed",
+          "durationMs": 125,
+          "summary": "Started an isolated runtime with local provider, database, settings, and queue state.",
+          "evidence": [
+            "workspace=isolated-git-repository",
+            "provider=local-deterministic"
+          ]
+        },
+        {
+          "id": "index",
+          "status": "Passed",
+          "durationMs": 23,
+          "summary": "Indexed 3 changed and 0 unchanged files."
+        },
+        {
+          "id": "intake",
+          "status": "Passed",
+          "durationMs": 9,
+          "summary": "Task intake reached human plan review with persisted planning evidence.",
+          "evidence": [
+            "planRevisions=1",
+            "clarification=resolved"
+          ]
+        },
+        {
+          "id": "plan",
+          "status": "Passed",
+          "durationMs": 4,
+          "summary": "Generated plan revision 2 from a resolved file reference."
+        },
+        {
+          "id": "approval",
+          "status": "Passed",
+          "durationMs": 7,
+          "summary": "Approved the plan and retained a human approval plus execution proposal."
+        },
+        {
+          "id": "proposal",
+          "status": "Passed",
+          "durationMs": 3,
+          "summary": "Generated a bounded ReplaceText proposal for src/calculator.ts.",
+          "evidence": [
+            "revision=1",
+            "repairAttempts=0"
+          ]
+        },
+        {
+          "id": "proposal-validation",
+          "status": "Passed",
+          "durationMs": 2,
+          "summary": "Runtime validated the proposed operation as apply-ready.",
+          "evidence": [
+            "Validation passed for 1 proposed file change(s)."
+          ]
+        },
+        {
+          "id": "file-review",
+          "status": "Passed",
+          "durationMs": 1,
+          "summary": "Approved every proposed file individually before mutation."
+        },
+        {
+          "id": "apply",
+          "status": "Passed",
+          "durationMs": 6,
+          "summary": "Applied the reviewed edit and passed built-in post-apply validation."
+        },
+        {
+          "id": "git-evidence",
+          "status": "Passed",
+          "durationMs": 41,
+          "summary": "1 changed file(s) in main.",
+          "evidence": [
+            "Modified:src/calculator.ts"
+          ]
+        },
+        {
+          "id": "oracle",
+          "status": "Passed",
+          "durationMs": 0,
+          "summary": "External content oracle verified src/calculator.ts."
+        },
+        {
+          "id": "audit-export",
+          "status": "Passed",
+          "durationMs": 2,
+          "summary": "Exported parseable JSON and readable Markdown audit artifacts.",
+          "evidence": [
+            "jsonSchemaVersion=1",
+            "markdownEventTimeline=true"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python-refactor",
+      "title": "Python two-hunk normalization refactor",
+      "category": "code-refactor",
+      "language": "Python",
+      "expectedOutcome": "Applied",
+      "status": "Passed",
+      "durationMs": 2762,
+      "operationKind": "PatchText",
+      "changedFiles": [
+        "src/slugify.py"
+      ],
+      "stages": [
+        {
+          "id": "fixture",
+          "status": "Passed",
+          "durationMs": 52,
+          "summary": "Initialized isolated Git repository with 3 tracked files."
+        },
+        {
+          "id": "runtime",
+          "status": "Passed",
+          "durationMs": 106,
+          "summary": "Started an isolated runtime with local provider, database, settings, and queue state.",
+          "evidence": [
+            "workspace=isolated-git-repository",
+            "provider=local-deterministic"
+          ]
+        },
+        {
+          "id": "index",
+          "status": "Passed",
+          "durationMs": 22,
+          "summary": "Indexed 3 changed and 0 unchanged files."
+        },
+        {
+          "id": "intake",
+          "status": "Passed",
+          "durationMs": 2397,
+          "summary": "Task intake reached human plan review with persisted planning evidence.",
+          "evidence": [
+            "planRevisions=1",
+            "clarification=not-needed"
+          ]
+        },
+        {
+          "id": "plan",
+          "status": "Passed",
+          "durationMs": 7,
+          "summary": "Generated plan revision 2 from a resolved file reference."
+        },
+        {
+          "id": "approval",
+          "status": "Passed",
+          "durationMs": 9,
+          "summary": "Approved the plan and retained a human approval plus execution proposal."
+        },
+        {
+          "id": "proposal",
+          "status": "Passed",
+          "durationMs": 4,
+          "summary": "Generated a bounded PatchText proposal for src/slugify.py.",
+          "evidence": [
+            "revision=1",
+            "repairAttempts=0"
+          ]
+        },
+        {
+          "id": "proposal-validation",
+          "status": "Passed",
+          "durationMs": 1,
+          "summary": "Runtime validated the proposed operation as apply-ready.",
+          "evidence": [
+            "Validation passed for 1 proposed file change(s)."
+          ]
+        },
+        {
+          "id": "file-review",
+          "status": "Passed",
+          "durationMs": 2,
+          "summary": "Approved every proposed file individually before mutation."
+        },
+        {
+          "id": "apply",
+          "status": "Passed",
+          "durationMs": 7,
+          "summary": "Applied the reviewed edit and passed built-in post-apply validation."
+        },
+        {
+          "id": "git-evidence",
+          "status": "Passed",
+          "durationMs": 52,
+          "summary": "1 changed file(s) in main.",
+          "evidence": [
+            "Modified:src/slugify.py"
+          ]
+        },
+        {
+          "id": "oracle",
+          "status": "Passed",
+          "durationMs": 0,
+          "summary": "External content oracle verified src/slugify.py."
+        },
+        {
+          "id": "audit-export",
+          "status": "Passed",
+          "durationMs": 2,
+          "summary": "Exported parseable JSON and readable Markdown audit artifacts.",
+          "evidence": [
+            "jsonSchemaVersion=1",
+            "markdownEventTimeline=true"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "documentation-append",
+      "title": "Documentation append",
+      "category": "documentation",
+      "language": "Markdown",
+      "expectedOutcome": "Applied",
+      "status": "Passed",
+      "durationMs": 344,
+      "operationKind": "AppendText",
+      "changedFiles": [
+        "docs/usage.md"
+      ],
+      "stages": [
+        {
+          "id": "fixture",
+          "status": "Passed",
+          "durationMs": 46,
+          "summary": "Initialized isolated Git repository with 2 tracked files."
+        },
+        {
+          "id": "runtime",
+          "status": "Passed",
+          "durationMs": 107,
+          "summary": "Started an isolated runtime with local provider, database, settings, and queue state.",
+          "evidence": [
+            "workspace=isolated-git-repository",
+            "provider=local-deterministic"
+          ]
+        },
+        {
+          "id": "index",
+          "status": "Passed",
+          "durationMs": 21,
+          "summary": "Indexed 2 changed and 0 unchanged files."
+        },
+        {
+          "id": "intake",
+          "status": "Passed",
+          "durationMs": 7,
+          "summary": "Task intake reached human plan review with persisted planning evidence.",
+          "evidence": [
+            "planRevisions=1",
+            "clarification=resolved"
+          ]
+        },
+        {
+          "id": "plan",
+          "status": "Passed",
+          "durationMs": 2,
+          "summary": "Generated plan revision 2 from a resolved file reference."
+        },
+        {
+          "id": "approval",
+          "status": "Passed",
+          "durationMs": 7,
+          "summary": "Approved the plan and retained a human approval plus execution proposal."
+        },
+        {
+          "id": "proposal",
+          "status": "Passed",
+          "durationMs": 3,
+          "summary": "Generated a bounded AppendText proposal for docs/usage.md.",
+          "evidence": [
+            "revision=1",
+            "repairAttempts=0"
+          ]
+        },
+        {
+          "id": "proposal-validation",
+          "status": "Passed",
+          "durationMs": 1,
+          "summary": "Runtime validated the proposed operation as apply-ready.",
+          "evidence": [
+            "Validation passed for 1 proposed file change(s)."
+          ]
+        },
+        {
+          "id": "file-review",
+          "status": "Passed",
+          "durationMs": 1,
+          "summary": "Approved every proposed file individually before mutation."
+        },
+        {
+          "id": "apply",
+          "status": "Passed",
+          "durationMs": 6,
+          "summary": "Applied the reviewed edit and passed built-in post-apply validation."
+        },
+        {
+          "id": "git-evidence",
+          "status": "Passed",
+          "durationMs": 39,
+          "summary": "1 changed file(s) in main.",
+          "evidence": [
+            "Modified:docs/usage.md"
+          ]
+        },
+        {
+          "id": "oracle",
+          "status": "Passed",
+          "durationMs": 0,
+          "summary": "External content oracle verified docs/usage.md."
+        },
+        {
+          "id": "audit-export",
+          "status": "Passed",
+          "durationMs": 3,
+          "summary": "Exported parseable JSON and readable Markdown audit artifacts.",
+          "evidence": [
+            "jsonSchemaVersion=1",
+            "markdownEventTimeline=true"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ambiguous-replacement-guard",
+      "title": "Ambiguous replacement safety guard",
+      "category": "negative-control",
+      "language": "TypeScript",
+      "expectedOutcome": "Guarded",
+      "status": "Guarded",
+      "durationMs": 348,
+      "operationKind": "ReplaceText",
+      "changedFiles": [],
+      "stages": [
+        {
+          "id": "fixture",
+          "status": "Passed",
+          "durationMs": 50,
+          "summary": "Initialized isolated Git repository with 2 tracked files."
+        },
+        {
+          "id": "runtime",
+          "status": "Passed",
+          "durationMs": 106,
+          "summary": "Started an isolated runtime with local provider, database, settings, and queue state.",
+          "evidence": [
+            "workspace=isolated-git-repository",
+            "provider=local-deterministic"
+          ]
+        },
+        {
+          "id": "index",
+          "status": "Passed",
+          "durationMs": 22,
+          "summary": "Indexed 2 changed and 0 unchanged files."
+        },
+        {
+          "id": "intake",
+          "status": "Passed",
+          "durationMs": 7,
+          "summary": "Task intake reached human plan review with persisted planning evidence.",
+          "evidence": [
+            "planRevisions=1",
+            "clarification=resolved"
+          ]
+        },
+        {
+          "id": "plan",
+          "status": "Passed",
+          "durationMs": 3,
+          "summary": "Generated plan revision 2 from a resolved file reference."
+        },
+        {
+          "id": "approval",
+          "status": "Passed",
+          "durationMs": 7,
+          "summary": "Approved the plan and retained a human approval plus execution proposal."
+        },
+        {
+          "id": "proposal",
+          "status": "Passed",
+          "durationMs": 7,
+          "summary": "Generated a bounded ReplaceText proposal for src/repeated.ts.",
+          "evidence": [
+            "revision=3",
+            "repairAttempts=2"
+          ]
+        },
+        {
+          "id": "proposal-validation",
+          "status": "Passed",
+          "durationMs": 1,
+          "summary": "Runtime correctly blocked the ambiguous replacement after bounded repair attempts.",
+          "evidence": [
+            "Validation blocked 1 of 1 proposed file change(s)."
+          ]
+        },
+        {
+          "id": "file-review",
+          "status": "Skipped",
+          "durationMs": 0,
+          "summary": "Unsafe proposal was not offered for approval."
+        },
+        {
+          "id": "apply",
+          "status": "Skipped",
+          "durationMs": 0,
+          "summary": "Blocked proposal was not applied."
+        },
+        {
+          "id": "git-evidence",
+          "status": "Passed",
+          "durationMs": 41,
+          "summary": "Working tree clean on main.",
+          "evidence": []
+        },
+        {
+          "id": "oracle",
+          "status": "Passed",
+          "durationMs": 0,
+          "summary": "External content oracle verified src/repeated.ts."
+        },
+        {
+          "id": "audit-export",
+          "status": "Passed",
+          "durationMs": 3,
+          "summary": "Exported parseable JSON and readable Markdown audit artifacts.",
+          "evidence": [
+            "jsonSchemaVersion=1",
+            "markdownEventTimeline=true"
+          ]
+        }
+      ]
+    }
+  ]
+}

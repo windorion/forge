@@ -834,6 +834,10 @@ class LocalDeterministicModelProvider implements ModelProvider {
     const isClarificationReply = request.task.messages.some((message) =>
       message.role === "Assistant" && (message.intentBrief?.openQuestions.length ?? 0) > 0
     ) && request.task.messages.filter((message) => message.role === "User").length > 1;
+    const hasEstablishedIntent = request.task.planRevisions.length > 0 && request.task.messages.some((message) =>
+      message.role === "Assistant" && message.intentBrief !== undefined && message.intentBrief.openQuestions.length === 0
+    );
+    const preservesEstablishedIntent = hasEstablishedIntent && resolvedReferences.length > 0;
 
     return {
       summary: latestMessage || objective || "Clarify the software task and keep it reviewable.",
@@ -858,9 +862,13 @@ class LocalDeterministicModelProvider implements ModelProvider {
           ? `Any follow-up work accounts for ${changedFileCount} changed file(s).`
           : "No workspace mutation happens until an explicit approval gate."
       ],
-      openQuestions: isClarificationReply ? [] : buildOpenQuestions(latestMessage, resolvedReferences.length > 0),
-      nextAction: isClarificationReply
-        ? "Clarification is recorded. Generate the reviewable plan."
+      openQuestions: isClarificationReply || preservesEstablishedIntent
+        ? []
+        : buildOpenQuestions(latestMessage, resolvedReferences.length > 0),
+      nextAction: isClarificationReply || preservesEstablishedIntent
+        ? preservesEstablishedIntent
+          ? "The bounded follow-up preserves the established intent. Generate a revised reviewable plan."
+          : "Clarification is recorded. Generate the reviewable plan."
         : "Review the intent brief, answer any open question, then continue to planning."
     };
   }
@@ -1908,17 +1916,25 @@ function editOperationLabel(operation: ProposedFileOperation): string {
 }
 
 function parseExactReplaceInstructions(content: string): PatchTextHunkInput[] {
-  const patterns = [
-    /\breplace\s+["“]([\s\S]+?)["”]\s+(?:with|to)\s+["“]([\s\S]+?)["”]/gi,
-    /(?:把|将)\s*[“"]([\s\S]+?)[”"]\s*替换(?:成|为)\s*[“"]([\s\S]+?)[”"]/g
+  const patterns: Array<{ expression: RegExp; decodeEscapes?: boolean }> = [
+    {
+      expression: /\breplace\s+"((?:\\.|[^"\\])*)"\s+(?:with|to)\s+"((?:\\.|[^"\\])*)"/gi,
+      decodeEscapes: true
+    },
+    { expression: /\breplace\s+“([\s\S]+?)”\s+(?:with|to)\s+“([\s\S]+?)”/gi },
+    {
+      expression: /(?:把|将)\s*"((?:\\.|[^"\\])*)"\s*替换(?:成|为)\s*"((?:\\.|[^"\\])*)"/g,
+      decodeEscapes: true
+    },
+    { expression: /(?:把|将)\s*“([\s\S]+?)”\s*替换(?:成|为)\s*“([\s\S]+?)”/g }
   ];
   const instructions: PatchTextHunkInput[] = [];
   const seen = new Set<string>();
 
   for (const pattern of patterns) {
-    for (const match of content.matchAll(pattern)) {
-      const findText = match[1]?.trim();
-      const replaceWith = match[2]?.trim();
+    for (const match of content.matchAll(pattern.expression)) {
+      const findText = normalizeQuotedInstruction(match[1], pattern.decodeEscapes);
+      const replaceWith = normalizeQuotedInstruction(match[2], pattern.decodeEscapes);
       if (findText && replaceWith && findText !== replaceWith && !seen.has(findText)) {
         instructions.push({
           findText: findText.slice(0, 10_000),
@@ -1934,6 +1950,12 @@ function parseExactReplaceInstructions(content: string): PatchTextHunkInput[] {
   }
 
   return instructions;
+}
+
+function normalizeQuotedInstruction(value: string | undefined, decodeEscapes = false): string | undefined {
+  if (value === undefined) return undefined;
+  const normalized = decodeEscapes ? value.replace(/\\(["\\])/g, "$1") : value;
+  return normalized.trim();
 }
 
 function buildAppendTextDiffPreview(targetPath: string, appendText: string): string {

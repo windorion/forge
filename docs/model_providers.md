@@ -34,7 +34,13 @@ conversation includes an explicit quoted replacement instruction such as
 emit an exact replace-text operation against the latest referenced Markdown or
 allowlisted source/text file. When the latest task conversation includes
 multiple explicit quoted replacement instructions for one referenced file, the
-provider emits a multi-hunk `PatchText` operation instead. When a proposal is
+provider emits a multi-hunk `PatchText` operation instead. Straight-quoted
+instructions may contain escaped quotes and backslashes, so source expressions
+such as string replacements are decoded before exact-match validation. Once a
+task has an established question-free intent and a plan, a bounded follow-up
+with a resolved file reference preserves that intent rather than reopening the
+generic validation clarification; it still generates a new reviewable plan
+revision. When a proposal is
 rejected, the provider can produce a revised proposal from the latest task
 conversation while preserving the same review and validation boundary. The
 provider still does not apply changes itself; validating, applying, rejecting,

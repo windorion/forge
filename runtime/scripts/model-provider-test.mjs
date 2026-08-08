@@ -21,6 +21,78 @@ const localConfig = getModelProviderConfiguration({ providerID: undefined, model
 ok(localConfig.status === "Ready" && localConfig.sendsRemoteContext === false, "local configuration is ready and local-only");
 ok(localConfig.provider.model === "local-deterministic-v0", "local model fallback");
 
+const followUpMessage = {
+  id: "follow-up",
+  role: "User",
+  kind: "UserMessage",
+  content: "Use @src/slugify.py and replace the named expression.",
+  createdAt: "2026-08-08T12:00:00.000Z",
+  fileReferences: [{
+    id: "reference",
+    requestedPath: "src/slugify.py",
+    path: "src/slugify.py",
+    status: "Resolved",
+    summary: "slugify source",
+    detectedAt: "2026-08-08T12:00:00.000Z"
+  }]
+};
+const establishedTask = {
+  objective: "Refactor slugify and verify it with the repository test.",
+  messages: [
+    {
+      id: "initial-brief",
+      role: "Assistant",
+      kind: "IntentBrief",
+      content: "Intent established.",
+      createdAt: "2026-08-08T11:59:00.000Z",
+      fileReferences: [],
+      intentBrief: {
+        summary: "Refactor and test slugify.",
+        constraints: [],
+        acceptanceCriteria: ["Repository test passes."],
+        openQuestions: [],
+        nextAction: "Generate the plan."
+      }
+    },
+    followUpMessage
+  ],
+  planRevisions: [{ id: "plan-1" }],
+  contextFiles: [],
+  changedFiles: []
+};
+const preservedFollowUp = await local.createIntentBrief({ task: establishedTask, latestUserMessage: followUpMessage });
+ok(preservedFollowUp.openQuestions.length === 0, "bounded follow-up preserves established intent without reopening generic clarification");
+ok(preservedFollowUp.nextAction.includes("revised reviewable plan"), "bounded follow-up routes to plan revision");
+
+const unplannedTask = { ...establishedTask, messages: [followUpMessage], planRevisions: [] };
+const unplannedFollowUp = await local.createIntentBrief({ task: unplannedTask, latestUserMessage: followUpMessage });
+ok(unplannedFollowUp.openQuestions.length === 1, "unplanned request still asks for missing validation criteria");
+
+const escapedPatchMessage = {
+  ...followUpMessage,
+  id: "escaped-patch",
+  content: [
+    "Use @src/slugify.py.",
+    "Replace \"value = text.strip()\" with \"value = text.strip().lower()\".",
+    "Replace \"return value.replace(\\\" \\\", \\\"_\\\")\" with \"return value.replace(\\\" \\\", \\\"-\\\")\"."
+  ].join(" ")
+};
+const escapedPatch = await local.createEditProposal({
+  task: {
+    ...establishedTask,
+    title: "Escaped quote patch",
+    messages: [escapedPatchMessage]
+  },
+  sourceMessage: escapedPatchMessage,
+  revisionNumber: 1
+});
+const escapedOperation = escapedPatch.fileChanges[0].applyOperation;
+ok(escapedOperation.kind === "PatchText" && escapedOperation.hunks.length === 2, "escaped quotes produce a two-hunk patch");
+ok(
+  escapedOperation.kind === "PatchText" && escapedOperation.hunks[1].findText === "return value.replace(\" \", \"_\")",
+  "escaped quote text is decoded before exact-match validation"
+);
+
 const openAIMissing = getModelProviderConfiguration({
   providerID: "openai",
   modelName: " ",
