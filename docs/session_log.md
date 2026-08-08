@@ -5979,6 +5979,10 @@ Not done:
 - The GitHub default branch is intentionally unchanged until a human reviews
   and merges the task branch; the screenshot's `main` README therefore remains
   stale even after this task branch is pushed.
+- Draft PR creation was attempted through the connected GitHub App after the
+  branch push, but GitHub returned 403 `Resource not accessible by integration`.
+  Both local `gh` account tokens were already invalid, so no review entry was
+  created and no browser/UI workaround was used.
 - Automatic fork-owner discovery and optional background PR refresh remain.
   Live-model public-repository trials, live `6a` OAuth verification, signed
   `35a` WidgetKit packaging, semantic retrieval, and full multi-runtime task
@@ -5986,7 +5990,8 @@ Not done:
 
 Next:
 
-- Push this evidence-synchronized branch and open a draft review entry without
+- Grant the GitHub App pull-request write access for `windorion/forge` or
+  reauthenticate `gh`, then open the prepared draft review entry without
   merging `main`; use review/CI feedback to choose the next correction.
 - Run the pinned public-repository live-model corpus under explicit request,
   token, cost, command, and mutation budgets, then widen provider behavior only
