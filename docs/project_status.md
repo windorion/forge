@@ -96,6 +96,15 @@ Implemented:
   follow-up messages reopening resolved clarification and escaped quotes in
   exact replacement instructions. This is deterministic repository-shaped
   evidence; curated external-repository/provider testing remains an Alpha gap.
+- Separate mock-OpenAI provider reliability campaign. Four isolated committed
+  repositories exercise the production Responses adapter through model-guided
+  context, strict-schema two-file Unified Diff generation, explicit project
+  command approval/execution, an unapproved-command safety control, command
+  failure diagnosis, reviewed repair apply, linked rerun, Git/content oracles,
+  and redacted audit export. The current baseline records 3 passed, 1 guarded,
+  0 unexpected failures, 37 provider requests, and 100% scored-stage pass rate
+  without external API cost. Failing iterations fixed omission of the complete
+  repair-brief object from first command-sourced repair proposal prompts.
 - Partial but functional `4a` Mission Control. The handoff-aligned 1240px
   surface supervises the primary repository plus up to two unique-port
   background runtimes. They default to read-only observer mode. Explicit
@@ -379,11 +388,11 @@ use different denominators and must not be added together.
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| Trust/runtime foundation | 86-90% | Local runtime, task state, review gates, restricted edits, validation, composed cancellation, redacted audit export, guarded git actions, explicit multi-runtime authorization, diagnostics, and a staged repository reliability baseline are real. |
+| Trust/runtime foundation | 88-92% | Local runtime, task state, review gates, restricted edits, validation, composed cancellation, redacted audit export, guarded git actions, explicit multi-runtime authorization, diagnostics, and separate local/provider protocol reliability baselines are real. |
 | Coding-agent demo V0 behavior | 100% | All documented functional acceptance criteria are implemented and smoke-covered. |
 | Primary V0 handoff UI | 95-98% | Five primary screens are substantially implemented; exact typography and rendered comparison remain. |
 | Full 43-screen handoff UI | 95-97% | 41 of 43 screens Verified with rendered-comparison evidence (docs/verification/). Remaining: 6a Partial (OAuth configuration, Device Flow, standards-compliant polling, Keychain persistence, and connected UI are implemented and unit-tested; a live grant still needs the founder GitHub OAuth Client ID with Device Flow enabled); 35a a documented platform-blocked widget-signing descope (P6). |
-| Useful developer alpha | 60-68% | Forge now repeats three applied repository-shaped tasks plus one guarded negative control across the full reviewed lifecycle; it still needs broader autonomous tool use and repeated provider-backed success on curated external repositories. |
+| Useful developer alpha | 64-72% | Forge now repeats the reviewed lifecycle across deterministic local-provider and mock-OpenAI adapter corpora, including Unified Diff, approved commands, safety guarding, and repair/rerun; it still needs broader autonomous tool use and repeated live-model success on pinned public repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
 | Polished v1 product | 20-25% | The real queue and session-authorized active multi-repository runtimes exist; full background task/review routing, indexing, packaging, updates, onboarding, billing, and integrations remain. |
 

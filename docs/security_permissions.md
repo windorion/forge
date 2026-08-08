@@ -162,6 +162,13 @@ runnable. A provider-selected `RerunRepairCommand` is accepted only for stored
 ready/failed rerun evidence. Waiting for human review and requesting plan
 approval are explicit blocked states, not silent no-ops.
 
+The mock-OpenAI provider reliability negative control verifies this policy
+through the real HTTP lifecycle: a valid proposal remains pending review, the
+medium-risk preset remains unapproved, and a provider-selected
+`RunTaskCommand` is downgraded to `WaitForHumanReview`. No command process,
+file mutation, or repair lineage is created; Git and independent content
+oracles remain clean.
+
 `POST /tasks/:taskID/run-agent-loop` does not add a broader autonomy tier. It
 repeats the same `run-agent-step` boundary under a runtime-enforced step limit
 and stops at review gates, passed commands, verified self-fix reruns,

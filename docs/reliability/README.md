@@ -11,11 +11,17 @@ catch cross-service regressions in intake, planning, approval, proposal
 generation, safe-edit validation, file review, apply, Git evidence, and audit
 export.
 
-The current baseline is stored in:
+The deterministic local-provider baseline is stored in:
 
 - `alpha-repository-baseline.json`: machine-readable schema-versioned result
 - `alpha-repository-baseline.md`: human-readable scorecard and per-stage
   evidence
+
+The OpenAI adapter protocol baseline is stored separately in:
+
+- `alpha-provider-baseline.json`: machine-readable schema-versioned result
+- `alpha-provider-baseline.md`: human-readable provider/request, review-gate,
+  command, repair, and audit evidence
 
 ## Corpus
 
@@ -29,6 +35,12 @@ and removes the fixture after reporting.
 | Python normalization refactor | Two ordered source hunks, including escaped quotes inside the instruction | Applied |
 | Markdown documentation note | Bounded append preserving the original prefix | Applied |
 | Ambiguous TypeScript replacement | The same find text occurs twice | Guarded without mutation |
+
+The provider-protocol corpus runs the production OpenAI Responses adapter
+against a loopback strict-schema mock. It covers a context-guided two-file
+Unified Diff, a provider-selected approved project command, an unapproved
+command negative control, and command failure followed by a reviewed repair
+proposal and linked rerun.
 
 ## Stages And Success Semantics
 
@@ -59,15 +71,20 @@ From `runtime/`:
 ```bash
 npm run campaign:reliability
 npm run campaign:reliability:baseline
+npm run campaign:provider-reliability
+npm run campaign:provider-reliability:baseline
 ```
 
-The first command writes temporary reports and removes them with its fixtures.
-The baseline command updates the two durable files in this directory. Both
-commands exit nonzero for any unexpected case failure.
+The non-baseline commands write temporary reports and remove them with their
+fixtures. The baseline commands intentionally update the matching durable
+files in this directory. Every command exits nonzero for an unexpected case
+failure.
 
 Pure report aggregation and Markdown rendering are covered by
-`scripts/reliability-campaign-test.mjs`; provider follow-up and escaped-quote
-parsing regressions are covered by `scripts/model-provider-test.mjs`.
+`scripts/reliability-campaign-test.mjs` and
+`scripts/provider-reliability-campaign-test.mjs`; provider follow-up,
+repair-context, and escaped-quote parsing regressions are covered by
+`scripts/model-provider-test.mjs`.
 
 ## Current Baseline And Findings
 
@@ -83,12 +100,23 @@ fixed before recording the passing baseline:
   strings, were split at the inner quote and repeatedly produced a blocked
   patch.
 
+The 2026-08-08 provider-protocol baseline records three passed cases, one
+correctly guarded negative control, zero unexpected failures, 37 strict-schema
+provider requests, and a 100% scored-stage pass rate. Its failing iterations
+found a third production defect: a first command-sourced repair proposal had
+no previous proposal or ordinary validation feedback, so prompt construction
+returned early and omitted the dedicated repair-brief object. The provider now
+receives the complete repair lineage, including command IDs, likely cause,
+recommended actions, follow-up prompt, and risk.
+
 ## Evidence Boundary
 
-This is a deterministic, repository-shaped regression corpus, not proof of
-broad autonomous coding quality. It does not yet cover external repository
-histories, large monorepositories, remote OpenAI behavior, arbitrary Unified
-Diff generation, project-specific command approval, network tools, merge
-conflicts, commits, pushes, or PR publication. Those capabilities retain their
-focused smoke coverage, while the next reliability expansion should add a
-curated set of real public repositories and provider-backed tasks.
+These are deterministic, repository-shaped regression corpora, not proof of
+broad autonomous coding quality. The provider campaign proves production
+adapter request shaping and runtime enforcement without an external API call
+or API cost; its scripted mock does not measure real-model quality. Neither
+baseline yet covers large external histories, monorepositories, live OpenAI
+behavior, network tools, merge conflicts, commits, pushes, or PR publication.
+The next evidence layer should pin a curated set of public repositories and
+run budgeted live-provider tasks while keeping those results separate from the
+deterministic baselines.

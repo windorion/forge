@@ -80,7 +80,12 @@ presence/absence, cross-file transaction safety, and recovery. When validation c
 task-scoped commands fail, the runtime can ask the provider for a repair brief
 from compact command summaries. A later edit proposal request can include that
 repair brief so the provider proposes a narrow follow-up repair artifact. The
-provider can also choose one Agent Run Step v0 action from a bounded enum:
+dedicated request context includes the complete brief on the first
+command-sourced repair proposal even when there is no previous proposal or
+ordinary validation feedback; command/validation lineage, likely cause,
+recommended actions, full follow-up prompt, and risk are therefore not reduced
+to compact task history. The provider can also choose one Agent Run Step v0
+action from a bounded enum:
 inspect the repository, generate an edit proposal, run an already-approved
 task command, generate a validation repair proposal, rerun reviewed self-fix
 evidence, wait for human review, or request plan approval. For repository
@@ -201,7 +206,8 @@ A provider receives task state and returns structured output. Current output:
 - preview-only unsupported operations for review artifacts
 - validation feedback for bounded proposal repair attempts
 - validation and task-command failure repair brief summaries
-- validation repair brief context for follow-up proposals
+- complete validation repair brief context for follow-up proposals, including
+  first command-sourced repairs without a previous proposal
 - agent run step action, summary, rationale, command id, and rerun evidence id
 - risk level
 - generated timestamp

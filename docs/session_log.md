@@ -5880,3 +5880,58 @@ Next:
   OpenAI, approved project commands, Unified Diff edits, and recovery cases.
 - Add audit export retention/purge controls and continue the remaining live
   OAuth and visual handoff verification work.
+
+## 2026-08-08 21:35:02 +0200 (CEST)
+
+Conversation summary:
+
+- Continued from the pushed Alpha runtime-controls/repository-campaign branch
+  and completed the next long reliability milestone: a repeatable production
+  OpenAI-adapter protocol campaign with commands, safety blocking, repair, and
+  rerun evidence.
+
+Done:
+
+- Added a four-case mock-OpenAI corpus over isolated committed repositories and
+  isolated Forge runtime/database/settings/queue state. It covers a
+  context-guided two-file Unified Diff, a provider-selected approved command,
+  an unapproved-command negative control, and approved-command failure followed
+  by provider diagnosis, reviewed repair apply, and linked passed rerun.
+- Added 21-stage result classification, schema-versioned JSON aggregation,
+  Markdown rendering, strict Responses request capture, Git/content oracles,
+  and redacted JSON/Markdown audit verification. The loopback provider asserts
+  Bearer authentication, `store=false`, strict output schemas, and required
+  planning/context calls without external API traffic or API cost.
+- Used failing campaign iterations to find and fix a production prompt-context
+  defect: the first command-sourced repair proposal returned early when it had
+  no previous proposal or ordinary validation feedback, omitting the complete
+  dedicated repair brief. The OpenAI regression now asserts the brief identity
+  and full follow-up prompt.
+- Found and fixed a campaign hermeticity defect during the final rerun. The
+  miniature repository command had depended on a parent `npm run` PATH to find
+  `tsc`; it now uses a repository-owned zero-dependency Node checker, and its
+  report test prevents the hidden parent-tool dependency from returning.
+- Recorded the passing provider baseline in `docs/reliability/`: 3 passed, 1
+  guarded, 0 unexpected failures, 37 provider requests, and 100% scored-stage
+  pass rate. Updated the reliability guide, README, status, TODO, development,
+  provider, edit, validation, and permission documents with the evidence and
+  live-model boundary.
+- Verified `npm run check`, all 20 runtime unit-test files, both four-repository
+  reliability campaigns, the complete 18-script smoke suite, 26 Swift tests,
+  credential/path redaction checks, and `git diff --check`.
+
+Not done:
+
+- The provider corpus uses a strict-schema scripted loopback mock. It proves
+  request shaping and runtime policy enforcement but does not measure live
+  OpenAI model quality; no external API call or token cost was incurred.
+- A draft pull request could not be opened because both locally configured
+  `gh` accounts currently have invalid tokens. SSH Git push remains available.
+
+Next:
+
+- Pin a small public-repository/task corpus and run budgeted live OpenAI trials
+  with model/version, request, token, cost, command, diff, and recovery evidence
+  stored separately from deterministic protocol baselines.
+- Reauthenticate `gh` before draft PR publication, then continue audit export
+  retention/purge controls and remaining live OAuth/visual handoff work.

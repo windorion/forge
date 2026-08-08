@@ -1,0 +1,759 @@
+{
+  "schemaVersion": 1,
+  "campaign": "Forge Alpha mock-OpenAI provider reliability campaign",
+  "generatedAt": "2026-08-08T19:32:17.913Z",
+  "provider": "OpenAI Responses compatible mock",
+  "providerMode": "mock-remote",
+  "durationMs": 11539,
+  "caseCount": 4,
+  "passedCount": 3,
+  "guardedCount": 1,
+  "failedCount": 0,
+  "providerRequestCount": 37,
+  "stagePassRate": 1,
+  "status": "Passed",
+  "cases": [
+    {
+      "id": "openai-context-unified-diff",
+      "title": "OpenAI context-guided two-file Unified Diff",
+      "category": "provider-edit",
+      "expectedOutcome": "Applied",
+      "status": "Passed",
+      "durationMs": 2787,
+      "providerRequestCount": 8,
+      "providerRequestNames": {
+        "forge_intent_brief": 2,
+        "forge_plan_revision": 2,
+        "forge_plan_context_request": 2,
+        "forge_execution_proposal": 1,
+        "forge_edit_proposal": 1
+      },
+      "operationKinds": [
+        "UnifiedDiff",
+        "UnifiedDiff"
+      ],
+      "changedFiles": [
+        "src/greeting.test.ts",
+        "src/greeting.ts"
+      ],
+      "commandStatuses": [],
+      "stages": [
+        {
+          "id": "fixture",
+          "status": "Passed",
+          "durationMs": 40,
+          "summary": "Initialized an isolated committed repository with 3 files."
+        },
+        {
+          "id": "mock-provider",
+          "status": "Passed",
+          "durationMs": 4,
+          "summary": "Started a loopback OpenAI Responses-compatible strict-schema mock."
+        },
+        {
+          "id": "runtime",
+          "status": "Passed",
+          "durationMs": 114,
+          "summary": "Started an isolated runtime configured for the remote OpenAI provider boundary.",
+          "evidence": [
+            "provider=openai",
+            "remoteEndpoint=loopback-mock",
+            "apiCost=0"
+          ]
+        },
+        {
+          "id": "index",
+          "status": "Passed",
+          "durationMs": 23,
+          "summary": "Indexed 3 changed and 0 unchanged files."
+        },
+        {
+          "id": "intake",
+          "status": "Passed",
+          "durationMs": 2417,
+          "summary": "OpenAI intent, provider-guided context loop, and revised plan reached human review.",
+          "evidence": [
+            "planProvider=openai",
+            "planRevisions=2"
+          ]
+        },
+        {
+          "id": "provider-contract",
+          "status": "Passed",
+          "durationMs": 0,
+          "summary": "Verified Bearer auth, store=false, strict schemas, and required planning calls.",
+          "evidence": [
+            "forge_intent_brief=2",
+            "forge_plan_revision=2",
+            "forge_plan_context_request=2"
+          ]
+        },
+        {
+          "id": "context-evidence",
+          "status": "Passed",
+          "durationMs": 0,
+          "summary": "Runtime mediated the provider's read-only context request and persisted tool evidence.",
+          "evidence": [
+            "src/greeting.ts",
+            "src/greeting.test.ts",
+            "README.md"
+          ]
+        },
+        {
+          "id": "plan-approval",
+          "status": "Passed",
+          "durationMs": 13,
+          "summary": "Approved the OpenAI-authored plan and prepared a context-backed execution proposal.",
+          "evidence": [
+            "executionContextFiles=3"
+          ]
+        },
+        {
+          "id": "proposal",
+          "status": "Passed",
+          "durationMs": 6,
+          "summary": "Generated 2 OpenAI Unified Diff change(s).",
+          "evidence": [
+            "UnifiedDiff",
+            "UnifiedDiff"
+          ]
+        },
+        {
+          "id": "proposal-validation",
+          "status": "Passed",
+          "durationMs": 3,
+          "summary": "Validation passed for 2 proposed file change(s)."
+        },
+        {
+          "id": "file-review",
+          "status": "Passed",
+          "durationMs": 3,
+          "summary": "Approved every provider-proposed file individually before mutation."
+        },
+        {
+          "id": "apply",
+          "status": "Passed",
+          "durationMs": 9,
+          "summary": "Applied the reviewed Unified Diff transaction and passed built-in validation."
+        },
+        {
+          "id": "command-approval",
+          "status": "Skipped",
+          "durationMs": 0,
+          "summary": "This provider-edit case does not run a project command."
+        },
+        {
+          "id": "command-run",
+          "status": "Skipped",
+          "durationMs": 0,
+          "summary": "This provider-edit case does not run a project command."
+        },
+        {
+          "id": "repair-brief",
+          "status": "Skipped",
+          "durationMs": 0,
+          "summary": "No repair was expected for the passing provider-edit case."
+        },
+        {
+          "id": "repair-proposal",
+          "status": "Skipped",
+          "durationMs": 0,
+          "summary": "No repair was expected for the passing provider-edit case."
+        },
+        {
+          "id": "repair-apply",
+          "status": "Skipped",
+          "durationMs": 0,
+          "summary": "No repair was expected for the passing provider-edit case."
+        },
+        {
+          "id": "repair-rerun",
+          "status": "Skipped",
+          "durationMs": 0,
+          "summary": "No repair was expected for the passing provider-edit case."
+        },
+        {
+          "id": "git-evidence",
+          "status": "Passed",
+          "durationMs": 51,
+          "summary": "2 changed file(s) in main.",
+          "evidence": [
+            "Modified:src/greeting.test.ts",
+            "Modified:src/greeting.ts"
+          ]
+        },
+        {
+          "id": "oracle",
+          "status": "Passed",
+          "durationMs": 0,
+          "summary": "Independent file-content oracle verified the expected repository state."
+        },
+        {
+          "id": "audit-export",
+          "status": "Passed",
+          "durationMs": 3,
+          "summary": "Exported redacted JSON and Markdown audit evidence without provider credentials."
+        }
+      ]
+    },
+    {
+      "id": "openai-approved-command-pass",
+      "title": "OpenAI-selected approved project command",
+      "category": "provider-command",
+      "expectedOutcome": "CommandPassed",
+      "status": "Passed",
+      "durationMs": 2913,
+      "providerRequestCount": 9,
+      "providerRequestNames": {
+        "forge_intent_brief": 2,
+        "forge_plan_revision": 2,
+        "forge_plan_context_request": 2,
+        "forge_execution_proposal": 1,
+        "forge_edit_proposal": 1,
+        "forge_agent_run_step": 1
+      },
+      "operationKinds": [
+        "UnifiedDiff"
+      ],
+      "changedFiles": [
+        "runtime/src/math.ts"
+      ],
+      "commandStatuses": [
+        "Passed"
+      ],
+      "stages": [
+        {
+          "id": "fixture",
+          "status": "Passed",
+          "durationMs": 53,
+          "summary": "Initialized an isolated committed repository with 5 files."
+        },
+        {
+          "id": "mock-provider",
+          "status": "Passed",
+          "durationMs": 1,
+          "summary": "Started a loopback OpenAI Responses-compatible strict-schema mock."
+        },
+        {
+          "id": "runtime",
+          "status": "Passed",
+          "durationMs": 106,
+          "summary": "Started an isolated runtime configured for the remote OpenAI provider boundary.",
+          "evidence": [
+            "provider=openai",
+            "remoteEndpoint=loopback-mock",
+            "apiCost=0"
+          ]
+        },
+        {
+          "id": "index",
+          "status": "Passed",
+          "durationMs": 25,
+          "summary": "Indexed 5 changed and 0 unchanged files."
+        },
+        {
+          "id": "intake",
+          "status": "Passed",
+          "durationMs": 2412,
+          "summary": "OpenAI intent, provider-guided context loop, and revised plan reached human review.",
+          "evidence": [
+            "planProvider=openai",
+            "planRevisions=2"
+          ]
+        },
+        {
+          "id": "provider-contract",
+          "status": "Passed",
+          "durationMs": 0,
+          "summary": "Verified Bearer auth, store=false, strict schemas, and required planning calls.",
+          "evidence": [
+            "forge_intent_brief=2",
+            "forge_plan_revision=2",
+            "forge_plan_context_request=2"
+          ]
+        },
+        {
+          "id": "context-evidence",
+          "status": "Passed",
+          "durationMs": 0,
+          "summary": "Runtime mediated the provider's read-only context request and persisted tool evidence.",
+          "evidence": [
+            "runtime/src/math.ts",
+            "runtime/tsconfig.json",
+            "runtime/package.json",
+            "README.md"
+          ]
+        },
+        {
+          "id": "plan-approval",
+          "status": "Passed",
+          "durationMs": 9,
+          "summary": "Approved the OpenAI-authored plan and prepared a context-backed execution proposal.",
+          "evidence": [
+            "executionContextFiles=4"
+          ]
+        },
+        {
+          "id": "proposal",
+          "status": "Passed",
+          "durationMs": 4,
+          "summary": "Generated 1 OpenAI Unified Diff change(s).",
+          "evidence": [
+            "UnifiedDiff"
+          ]
+        },
+        {
+          "id": "proposal-validation",
+          "status": "Passed",
+          "durationMs": 2,
+          "summary": "Validation passed for 1 proposed file change(s)."
+        },
+        {
+          "id": "file-review",
+          "status": "Passed",
+          "durationMs": 1,
+          "summary": "Approved every provider-proposed file individually before mutation."
+        },
+        {
+          "id": "apply",
+          "status": "Passed",
+          "durationMs": 8,
+          "summary": "Applied the reviewed Unified Diff transaction and passed built-in validation."
+        },
+        {
+          "id": "command-approval",
+          "status": "Passed",
+          "durationMs": 3,
+          "summary": "Proved blocked-before-approval and runnable-after-approval command states."
+        },
+        {
+          "id": "command-run",
+          "status": "Passed",
+          "durationMs": 149,
+          "summary": "OpenAI selected the approved command and the no-shell process passed.",
+          "evidence": [
+            "status=Passed",
+            "exitCode=0"
+          ]
+        },
+        {
+          "id": "repair-brief",
+          "status": "Skipped",
+          "durationMs": 0,
+          "summary": "The approved project command passed; no repair lineage was needed."
+        },
+        {
+          "id": "repair-proposal",
+          "status": "Skipped",
+          "durationMs": 0,
+          "summary": "The approved project command passed; no repair lineage was needed."
+        },
+        {
+          "id": "repair-apply",
+          "status": "Skipped",
+          "durationMs": 0,
+          "summary": "The approved project command passed; no repair lineage was needed."
+        },
+        {
+          "id": "repair-rerun",
+          "status": "Skipped",
+          "durationMs": 0,
+          "summary": "The approved project command passed; no repair lineage was needed."
+        },
+        {
+          "id": "git-evidence",
+          "status": "Passed",
+          "durationMs": 36,
+          "summary": "1 changed file(s) in main.",
+          "evidence": [
+            "Modified:runtime/src/math.ts"
+          ]
+        },
+        {
+          "id": "oracle",
+          "status": "Passed",
+          "durationMs": 0,
+          "summary": "Independent file-content oracle verified the expected repository state."
+        },
+        {
+          "id": "audit-export",
+          "status": "Passed",
+          "durationMs": 3,
+          "summary": "Exported redacted JSON and Markdown audit evidence without provider credentials."
+        }
+      ]
+    },
+    {
+      "id": "openai-unapproved-command-guard",
+      "title": "OpenAI unapproved command safety guard",
+      "category": "provider-negative-control",
+      "expectedOutcome": "Guarded",
+      "status": "Guarded",
+      "durationMs": 2779,
+      "providerRequestCount": 9,
+      "providerRequestNames": {
+        "forge_intent_brief": 2,
+        "forge_plan_revision": 2,
+        "forge_plan_context_request": 2,
+        "forge_execution_proposal": 1,
+        "forge_edit_proposal": 1,
+        "forge_agent_run_step": 1
+      },
+      "operationKinds": [
+        "UnifiedDiff"
+      ],
+      "changedFiles": [],
+      "commandStatuses": [],
+      "stages": [
+        {
+          "id": "fixture",
+          "status": "Passed",
+          "durationMs": 56,
+          "summary": "Initialized an isolated committed repository with 5 files."
+        },
+        {
+          "id": "mock-provider",
+          "status": "Passed",
+          "durationMs": 0,
+          "summary": "Started a loopback OpenAI Responses-compatible strict-schema mock."
+        },
+        {
+          "id": "runtime",
+          "status": "Passed",
+          "durationMs": 107,
+          "summary": "Started an isolated runtime configured for the remote OpenAI provider boundary.",
+          "evidence": [
+            "provider=openai",
+            "remoteEndpoint=loopback-mock",
+            "apiCost=0"
+          ]
+        },
+        {
+          "id": "index",
+          "status": "Passed",
+          "durationMs": 23,
+          "summary": "Indexed 5 changed and 0 unchanged files."
+        },
+        {
+          "id": "intake",
+          "status": "Passed",
+          "durationMs": 2411,
+          "summary": "OpenAI intent, provider-guided context loop, and revised plan reached human review.",
+          "evidence": [
+            "planProvider=openai",
+            "planRevisions=2"
+          ]
+        },
+        {
+          "id": "provider-contract",
+          "status": "Passed",
+          "durationMs": 0,
+          "summary": "Verified Bearer auth, store=false, strict schemas, and required planning calls.",
+          "evidence": [
+            "forge_intent_brief=2",
+            "forge_plan_revision=2",
+            "forge_plan_context_request=2"
+          ]
+        },
+        {
+          "id": "context-evidence",
+          "status": "Passed",
+          "durationMs": 0,
+          "summary": "Runtime mediated the provider's read-only context request and persisted tool evidence.",
+          "evidence": [
+            "runtime/src/guard.ts",
+            "runtime/tsconfig.json",
+            "runtime/package.json",
+            "README.md"
+          ]
+        },
+        {
+          "id": "plan-approval",
+          "status": "Passed",
+          "durationMs": 11,
+          "summary": "Approved the OpenAI-authored plan and prepared a context-backed execution proposal.",
+          "evidence": [
+            "executionContextFiles=4"
+          ]
+        },
+        {
+          "id": "proposal",
+          "status": "Passed",
+          "durationMs": 4,
+          "summary": "Generated 1 OpenAI Unified Diff change(s).",
+          "evidence": [
+            "UnifiedDiff"
+          ]
+        },
+        {
+          "id": "proposal-validation",
+          "status": "Passed",
+          "durationMs": 2,
+          "summary": "Validation passed for 1 proposed file change(s)."
+        },
+        {
+          "id": "file-review",
+          "status": "Skipped",
+          "durationMs": 0,
+          "summary": "The negative control intentionally leaves the valid proposal awaiting human review."
+        },
+        {
+          "id": "apply",
+          "status": "Skipped",
+          "durationMs": 0,
+          "summary": "The negative control must not mutate the repository."
+        },
+        {
+          "id": "command-approval",
+          "status": "Passed",
+          "durationMs": 1,
+          "summary": "Intentionally withheld the medium-risk command preset approval."
+        },
+        {
+          "id": "command-run",
+          "status": "Passed",
+          "durationMs": 7,
+          "summary": "Runtime rejected the provider-selected unapproved command and waited for human review without a process side effect."
+        },
+        {
+          "id": "repair-brief",
+          "status": "Skipped",
+          "durationMs": 0,
+          "summary": "The unsafe command never ran, so no failure repair lineage was created."
+        },
+        {
+          "id": "repair-proposal",
+          "status": "Skipped",
+          "durationMs": 0,
+          "summary": "The unsafe command never ran, so no failure repair lineage was created."
+        },
+        {
+          "id": "repair-apply",
+          "status": "Skipped",
+          "durationMs": 0,
+          "summary": "The unsafe command never ran, so no failure repair lineage was created."
+        },
+        {
+          "id": "repair-rerun",
+          "status": "Skipped",
+          "durationMs": 0,
+          "summary": "The unsafe command never ran, so no failure repair lineage was created."
+        },
+        {
+          "id": "git-evidence",
+          "status": "Passed",
+          "durationMs": 53,
+          "summary": "Working tree clean on main.",
+          "evidence": []
+        },
+        {
+          "id": "oracle",
+          "status": "Passed",
+          "durationMs": 0,
+          "summary": "Independent file-content oracle verified the expected repository state."
+        },
+        {
+          "id": "audit-export",
+          "status": "Passed",
+          "durationMs": 3,
+          "summary": "Exported redacted JSON and Markdown audit evidence without provider credentials."
+        }
+      ]
+    },
+    {
+      "id": "openai-command-self-repair",
+      "title": "OpenAI command failure, reviewed repair, and rerun",
+      "category": "provider-recovery",
+      "expectedOutcome": "RepairVerified",
+      "status": "Passed",
+      "durationMs": 3059,
+      "providerRequestCount": 11,
+      "providerRequestNames": {
+        "forge_intent_brief": 2,
+        "forge_plan_revision": 2,
+        "forge_plan_context_request": 2,
+        "forge_execution_proposal": 1,
+        "forge_agent_run_step": 2,
+        "forge_validation_repair_brief": 1,
+        "forge_edit_proposal": 1
+      },
+      "operationKinds": [
+        "UnifiedDiff"
+      ],
+      "changedFiles": [
+        "runtime/src/broken.ts"
+      ],
+      "commandStatuses": [
+        "Failed",
+        "Passed"
+      ],
+      "stages": [
+        {
+          "id": "fixture",
+          "status": "Passed",
+          "durationMs": 44,
+          "summary": "Initialized an isolated committed repository with 5 files."
+        },
+        {
+          "id": "mock-provider",
+          "status": "Passed",
+          "durationMs": 0,
+          "summary": "Started a loopback OpenAI Responses-compatible strict-schema mock."
+        },
+        {
+          "id": "runtime",
+          "status": "Passed",
+          "durationMs": 106,
+          "summary": "Started an isolated runtime configured for the remote OpenAI provider boundary.",
+          "evidence": [
+            "provider=openai",
+            "remoteEndpoint=loopback-mock",
+            "apiCost=0"
+          ]
+        },
+        {
+          "id": "index",
+          "status": "Passed",
+          "durationMs": 23,
+          "summary": "Indexed 5 changed and 0 unchanged files."
+        },
+        {
+          "id": "intake",
+          "status": "Passed",
+          "durationMs": 2413,
+          "summary": "OpenAI intent, provider-guided context loop, and revised plan reached human review.",
+          "evidence": [
+            "planProvider=openai",
+            "planRevisions=2"
+          ]
+        },
+        {
+          "id": "provider-contract",
+          "status": "Passed",
+          "durationMs": 0,
+          "summary": "Verified Bearer auth, store=false, strict schemas, and required planning calls.",
+          "evidence": [
+            "forge_intent_brief=2",
+            "forge_plan_revision=2",
+            "forge_plan_context_request=2"
+          ]
+        },
+        {
+          "id": "context-evidence",
+          "status": "Passed",
+          "durationMs": 0,
+          "summary": "Runtime mediated the provider's read-only context request and persisted tool evidence.",
+          "evidence": [
+            "runtime/src/broken.ts",
+            "runtime/tsconfig.json",
+            "runtime/package.json",
+            "README.md"
+          ]
+        },
+        {
+          "id": "plan-approval",
+          "status": "Passed",
+          "durationMs": 14,
+          "summary": "Approved the OpenAI-authored plan and prepared a context-backed execution proposal.",
+          "evidence": [
+            "executionContextFiles=3"
+          ]
+        },
+        {
+          "id": "proposal",
+          "status": "Skipped",
+          "durationMs": 0,
+          "summary": "This recovery case begins with an approved command failure before any edit proposal."
+        },
+        {
+          "id": "proposal-validation",
+          "status": "Skipped",
+          "durationMs": 0,
+          "summary": "This recovery case begins with an approved command failure before any edit proposal."
+        },
+        {
+          "id": "file-review",
+          "status": "Skipped",
+          "durationMs": 0,
+          "summary": "This recovery case begins with an approved command failure before any edit proposal."
+        },
+        {
+          "id": "apply",
+          "status": "Skipped",
+          "durationMs": 0,
+          "summary": "This recovery case begins with an approved command failure before any edit proposal."
+        },
+        {
+          "id": "command-approval",
+          "status": "Passed",
+          "durationMs": 5,
+          "summary": "Proved blocked-before-approval and runnable-after-approval command states."
+        },
+        {
+          "id": "command-run",
+          "status": "Passed",
+          "durationMs": 163,
+          "summary": "OpenAI selected the approved command and the runtime captured its expected compiler failure.",
+          "evidence": [
+            "status=Failed",
+            "exitCode=2"
+          ]
+        },
+        {
+          "id": "repair-brief",
+          "status": "Passed",
+          "durationMs": 0,
+          "summary": "Generated an OpenAI repair brief from bounded command output.",
+          "evidence": [
+            "source=TaskCommandRun",
+            "risk=Medium"
+          ]
+        },
+        {
+          "id": "repair-proposal",
+          "status": "Passed",
+          "durationMs": 6,
+          "summary": "Generated, validated, and per-file approved a repair-linked Unified Diff."
+        },
+        {
+          "id": "repair-apply",
+          "status": "Passed",
+          "durationMs": 5,
+          "summary": "Applied the reviewed self-fix and created linked rerun evidence."
+        },
+        {
+          "id": "repair-rerun",
+          "status": "Passed",
+          "durationMs": 139,
+          "summary": "OpenAI selected stored rerun evidence; the original command passed after the reviewed repair.",
+          "evidence": [
+            "source=Failed",
+            "rerun=Passed",
+            "evidence=Passed"
+          ]
+        },
+        {
+          "id": "git-evidence",
+          "status": "Passed",
+          "durationMs": 37,
+          "summary": "1 changed file(s) in main.",
+          "evidence": [
+            "Modified:runtime/src/broken.ts"
+          ]
+        },
+        {
+          "id": "oracle",
+          "status": "Passed",
+          "durationMs": 0,
+          "summary": "Independent file-content oracle verified the expected repository state."
+        },
+        {
+          "id": "audit-export",
+          "status": "Passed",
+          "durationMs": 3,
+          "summary": "Exported redacted JSON and Markdown audit evidence without provider credentials."
+        }
+      ]
+    }
+  ]
+}

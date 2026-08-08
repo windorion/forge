@@ -74,11 +74,22 @@ the core runtime smoke. Preserve these completed boundaries:
   bounded referenced follow-ups now preserve established intent instead of
   reopening a generic clarification, and exact replacement parsing supports
   escaped quotes inside code strings. Both have provider-level regressions.
-- Next reliability expansion: run a curated corpus against real public
-  repositories with OpenAI, project-command validation, Unified Diff changes,
-  and recovery scenarios. Keep fixture and external-repository results
-  separate so deterministic regression evidence is not confused with model
-  quality evidence.
+- [x] Add a separate mock-OpenAI provider protocol campaign covering
+  model-guided repository context, strict-schema multi-file Unified Diff,
+  explicit project-command approval/execution, an unapproved-command negative
+  control, command failure diagnosis, reviewed repair apply, linked rerun,
+  Git/content oracles, and redacted audit export. The durable baseline reports
+  3 passed + 1 guarded, 0 unexpected failures, 37 provider requests, and 100%
+  scored-stage pass rate without external API cost.
+- [x] Fix the provider-context defect found by the command-repair case: first
+  command-sourced repair proposals now receive the complete dedicated repair
+  brief even when there is no previous proposal or ordinary validation
+  feedback. A fetch-mocked OpenAI regression asserts the brief ID and full
+  follow-up prompt are present.
+- Next reliability expansion: pin a curated public-repository/task corpus and
+  run budgeted live OpenAI trials with recorded model/version, request count,
+  token/cost ceilings, Unified Diff and approved-command recovery cases. Keep
+  live-model evidence separate from deterministic fixture/protocol baselines.
 
 - [x] Safe query-variation handling beyond the exact-fingerprint repeat guard:
   a subset-aware, order-insensitive, case-folded redundancy guard now blocks

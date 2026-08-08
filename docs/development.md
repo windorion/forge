@@ -783,13 +783,17 @@ cd runtime && npm run smoke:core
 cd runtime && npm run smoke:git-conflicts
 cd runtime && npm run smoke:git-remote
 cd runtime && npm run campaign:reliability
+cd runtime && npm run campaign:provider-reliability
 ```
 
 Before a release-shaped change, run every `smoke:*` script — the full suite is
-18 scripts and takes a few minutes. The reliability campaign is intentionally
-separate from `smoke:all`: it creates four isolated Git repositories and emits
-a staged scorecard. Use `campaign:reliability:baseline` only when intentionally
-refreshing the durable evidence in `docs/reliability/`.
+18 scripts and takes a few minutes. Both reliability campaigns are
+intentionally separate from `smoke:all`: each creates four isolated Git
+repositories and emits a staged scorecard. Use the corresponding `:baseline`
+variant only when intentionally refreshing durable evidence in
+`docs/reliability/`. The provider campaign runs the production OpenAI Responses
+adapter against a loopback strict-schema mock, so it sends no repository data
+to an external API and incurs no API cost.
 
 ## Current Limitations
 
@@ -809,6 +813,10 @@ refreshing the durable evidence in `docs/reliability/`.
 - The OpenAI provider uses compact task/context summaries and Structured
   Outputs. It can now run bounded read/search context loops before plan
   revisions and before execution proposals, but tool use is still read-only.
+  A first command-sourced repair proposal receives the complete dedicated
+  repair-brief object even when no prior proposal or ordinary validation
+  feedback exists; the mock-provider campaign covers this boundary. This
+  protocol evidence does not measure live-model coding quality.
 - Edit proposal application is intentionally narrow: v0 supports append-text
   operations on existing Markdown files in `README.md` or `docs/`, exact
   replace-text and multi-hunk patch-text operations on existing Markdown or

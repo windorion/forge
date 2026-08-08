@@ -153,6 +153,13 @@ when the process exits. Cancelled commands do not create failure repair briefs.
   provider-generated repair brief from compact command summaries. The brief is
   advisory and does not rerun commands or change files.
 
+The mock-OpenAI provider reliability campaign proves these boundaries end to
+end: the same medium-risk command is blocked before preset approval and runs
+only after approval; a provider-selected unapproved command becomes
+`WaitForHumanReview` without spawning a process or mutating a file; and a
+failed approved command can produce a full repair brief, reviewed self-fix,
+and linked passed rerun through the original command ID and no-shell runner.
+
 ## Future Work
 
 - Add a settings editor for workspace presets.

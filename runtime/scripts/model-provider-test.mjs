@@ -93,6 +93,80 @@ ok(
   "escaped quote text is decoded before exact-match validation"
 );
 
+const originalFetch = globalThis.fetch;
+let capturedRepairPrompt = "";
+try {
+  globalThis.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    capturedRepairPrompt = body.input.flatMap((message) => message.content).map((part) => part.text).join("\n");
+    return new Response(JSON.stringify({
+      status: "completed",
+      output: [{
+        type: "message",
+        content: [{
+          type: "output_text",
+          text: JSON.stringify({
+            summary: "Repair the failed command fixture.",
+            riskLevel: "Medium",
+            fileChanges: [{
+              path: "runtime/src/broken.ts",
+              changeType: "Modify",
+              rationale: "Use the complete repair brief.",
+              diffPreview: "--- a/runtime/src/broken.ts\n+++ b/runtime/src/broken.ts\n@@ -1 +1 @@\n-broken\n+fixed",
+              operationKind: "ReplaceText",
+              appendText: "",
+              findText: "broken",
+              replaceWith: "fixed",
+              patchHunks: [],
+              unifiedDiff: "",
+              content: ""
+            }]
+          })
+        }]
+      }]
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  const openAIForRepair = createModelProvider({
+    providerID: "openai",
+    modelName: "repair-context-test",
+    openAIBaseURL: "https://provider.test/v1",
+    openAIAPIKey: "test-key"
+  });
+  const repairBrief = {
+    id: "brief-1",
+    provider: openAIForRepair.info,
+    source: "TaskCommandRun",
+    sourceSummary: "Runtime type-check / Failed",
+    taskCommandRunID: "command-run-1",
+    summary: "The TypeScript check failed.",
+    likelyCause: "An incomplete assignment is present.",
+    recommendedActions: ["Fix the exact assignment."],
+    followUpPrompt: "Fix broken.ts and rerun runtime-npm-check.",
+    riskLevel: "Medium",
+    generatedAt: "2026-08-08T12:00:00.000Z"
+  };
+  await openAIForRepair.createEditProposal({
+    task: {
+      ...establishedTask,
+      id: "task-1",
+      title: "Repair command failure",
+      status: "Failed",
+      currentPhase: "Command Failed",
+      reviewSummary: "Review the repair brief.",
+      planSteps: [],
+      validationRepairBriefs: [repairBrief],
+      agentRunSteps: []
+    },
+    revisionNumber: 1,
+    validationRepairBrief: repairBrief
+  });
+  ok(capturedRepairPrompt.includes('"validationRepairBrief": {'), "first command repair proposal includes a dedicated repair-brief object");
+  ok(capturedRepairPrompt.includes('"id": "brief-1"'), "first command repair proposal includes repair-brief identity");
+  ok(capturedRepairPrompt.includes('"followUpPrompt": "Fix broken.ts and rerun runtime-npm-check."'), "first command repair proposal includes the full follow-up prompt");
+} finally {
+  globalThis.fetch = originalFetch;
+}
+
 const openAIMissing = getModelProviderConfiguration({
   providerID: "openai",
   modelName: " ",

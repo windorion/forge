@@ -60,7 +60,11 @@ For post-apply validation failures, the previously applied proposal is
 archived, the new proposal is validated, and the task returns to human review.
 For task-command failures, Forge can create a linked review-only proposal even
 when no proposal has been applied yet. This does not mutate files until the
-user applies the new proposal. If the user applies a command-sourced repair
+user applies the new proposal. The provider request carries the full dedicated
+repair-brief object on this first command-sourced proposal even though there is
+no previous proposal or ordinary validation feedback, preserving command
+lineage, diagnosis, recommended actions, follow-up prompt, and risk. If the
+user applies a command-sourced repair
 proposal, Forge records `commandRerunEvidence` tying together the failed
 command run, repair brief, applied proposal, and original command id; the
 separate rerun action then verifies the repair through the approved command

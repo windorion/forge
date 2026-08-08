@@ -1660,7 +1660,7 @@ function taskProviderContext(task: ForgeTask, sourceMessage?: TaskMessage): stri
 }
 
 function editProposalRequestContext(request: EditProposalRequest): string {
-  if (!request.previousProposal && !request.validationFeedback) {
+  if (!request.previousProposal && !request.validationFeedback && !request.validationRepairBrief) {
     return JSON.stringify({
       editProposalRequest: {
         revisionNumber: request.revisionNumber,
