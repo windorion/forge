@@ -49,8 +49,8 @@ Secondary V0-adjacent states:
 - `33a` Agent question waiting for answer.
 - `19a` Task failed / rollback.
 - `24a` First task success.
-- `1d` Run complete / PR ready, initially as PR handoff if full PR creation is
-  not ready.
+- `1d` Run complete / PR ready, using the reviewed handoff before publication
+  and the real PR number/state after guarded publication succeeds.
 
 ## V0 Product Feeling
 

@@ -1666,8 +1666,8 @@ final class WorkspaceModel: ObservableObject {
         pullRequestPublishErrors[taskID]
     }
 
-    /// Refresh the real state (open / closed / merged) of the task's published
-    /// PR from GitHub. Read-only; the token is read from the Keychain per call.
+    /// Refresh state, review decision, check runs, and mergeability for the
+    /// task's published PR. Read-only; Keychain token is loaded per call.
     func refreshPullRequestStatus(for task: ForgeTask) {
         guard task.pullRequest != nil else { return }
         guard let token = try? KeychainStore.read(account: KeychainStore.githubTokenAccount), !token.isEmpty else {

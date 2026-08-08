@@ -3,7 +3,7 @@
 Document role: record sequencing, milestones, proof points, and what should
 not be built too early.
 
-Last updated: 2026-07-14
+Last updated: 2026-08-08
 
 ## Direction Reset
 
@@ -40,7 +40,7 @@ terminal-adjacent, and operational.
 
 ### Foundation V0: Trust And Runtime Skeleton
 
-Status: mostly built.
+Status: implemented and regression-covered; ongoing work hardens it.
 
 Goal: prove local runtime, task state, review gates, safe mutation boundaries,
 git preflight, validation, persistence, and diagnostics.
@@ -84,17 +84,27 @@ Proof point:
 
 ### Alpha: Useful Local Coding Agent
 
+Status: deterministic local/provider protocol baselines pass; live-model
+public-repository evidence remains.
+
 Goal: make Forge useful on small real engineering tasks.
 
-Deliverables:
+Implemented toward Alpha:
 
-- OpenAI provider in the normal run flow, not just plan/proposal demos.
-- Tool-call-driven loop for read/search/patch/run/repair.
-- Patch engine with multi-file apply, rollback, and workspace revalidation.
-- Repository index v1: ripgrep search plus lightweight symbols.
-- Hosted GitHub PR creation after explicit approval.
-- Task cancellation, pause/resume, and crash recovery checkpoints.
-- Workspace/repository picker and provider onboarding.
+- OpenAI in normal plan/context/proposal/step/repair flows.
+- Runtime-owned read/search plus reviewed patch/run/repair steps.
+- Multi-file apply/rollback/recovery and strict Unified Diff support.
+- Durable file, symbol, and trigram text indexes.
+- Hosted GitHub PR publication after explicit approval.
+- Task cancellation, pause/resume, stuck detection, and crash recovery.
+- Repository selection, provider settings, and first-run onboarding.
+
+Remaining Alpha evidence:
+
+- pinned public-repository tasks run with a live model under explicit budgets;
+- broader provider tool/patch choices and repeated successful recovery;
+- automatic fork-owner discovery and optional background PR refresh; and
+- full background task/detail/review routing across authorized repositories.
 
 Proof point:
 
@@ -103,17 +113,22 @@ Proof point:
 
 ### Beta: Installable Mac Product
 
+Status: product surfaces exist; signed distribution and production services do
+not.
+
 Goal: make Forge trustworthy outside the development checkout.
 
-Deliverables:
+Remaining deliverables:
 
 - Signed/notarized app distribution.
 - DMG and update mechanism.
-- Robust app-managed runtime packaging.
-- GitHub auth with least scopes.
-- Keychain provider setup.
-- Notifications, menu bar, and quick capture.
+- Production app-managed runtime packaging.
+- Live-verified GitHub auth with the founder OAuth Client ID.
+- Production diagnostics, privacy, and support boundaries.
 - Usage/cost reporting and budget guardrails.
+
+Keychain provider setup, onboarding, notifications, menu bar, quick capture,
+and update UI are implemented but must be proven inside the signed package.
 
 Proof point:
 
@@ -123,18 +138,22 @@ Proof point:
 
 ### v1: Native Agent Workspace
 
+Status: much of the workspace surface arrived early; memory/semantic retrieval,
+hosted collaboration, and signed WidgetKit remain.
+
 Goal: turn the single-task coding loop into a durable engineering workspace.
 
-Deliverables:
+Implemented ahead of v1:
 
 - Multi-task queue and mission control.
 - Decision inbox.
 - Task templates.
-- Local memory and semantic context.
 - CLI companion.
-- Shareable task review artifacts.
-- System integrations: menu bar, global shortcut, Spotlight, widgets,
-  notifications.
+- Local share/audit artifacts.
+- System integrations: menu bar, global shortcut, Spotlight, and notifications.
+
+Remaining v1 deliverables include local memory/semantic context, hosted
+collaboration, signed widgets, and complete multi-repository task routing.
 
 Proof point:
 
@@ -148,14 +167,17 @@ additive.
 
 ## Immediate Build Order
 
-1. Complete and strictly verify all 43 named screens/states in the delivered
-   design handoff, following `docs/design_handoff_coverage.md`.
-2. Harden the completed V0 behavior across varied real repositories.
-3. Extend the provider-owned tool loop, query variation, and malformed-output
-   recovery without weakening approval boundaries.
-4. Add durable text and lightweight symbol indexing.
-5. Connect the guarded git flow to approved publication and draft PR creation.
-6. Complete beta packaging, signing, onboarding, and update paths.
+1. Keep the 41 Verified handoff states stable; close live `6a` OAuth when the
+   founder Client ID exists and `35a` only with P6 signing.
+2. Run a pinned public-repository live-model corpus with explicit request,
+   token, cost, command, and mutation budgets.
+3. Use those failures to widen provider tool/patch/recovery behavior without
+   weakening runtime ownership or human review.
+4. Add automatic fork-owner discovery and optional background refresh after
+   the existing publication and on-demand review/check flow.
+5. Finish background task/detail/review routing across authorized repositories.
+6. Complete signed/notarized packaging, appcast install/relaunch, production
+   diagnostics, and commercial decisions.
 
 ## What Not To Optimize Next
 

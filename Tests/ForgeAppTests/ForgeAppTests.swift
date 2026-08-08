@@ -73,6 +73,29 @@ final class ForgeAppTests: XCTestCase {
         XCTAssertEqual(bridged.openedAt, result.generatedAt)
         XCTAssertEqual(bridged.lastCheckedAt, result.generatedAt)
         XCTAssertFalse(bridged.merged)
+        XCTAssertEqual(bridged.reviewLabel, "REVIEW UNKNOWN")
+        XCTAssertEqual(bridged.checksLabel, "CHECKS UNKNOWN")
+
+        let evidenceJSON = """
+        {
+          "number":42,"url":"https://github.com/acme/forge/pull/42",
+          "state":"open","merged":false,"draft":false,
+          "owner":"acme","repo":"forge","baseBranch":"main","headBranch":"codex/tests",
+          "openedAt":"2026-07-31T12:00:00Z","lastCheckedAt":"2026-07-31T12:01:00Z",
+          "mergeable":true,"mergeableState":"clean","reviewStatus":"Approved",
+          "approvalCount":2,"changesRequestedCount":0,"requestedReviewerCount":0,
+          "checksStatus":"Passing","checkRunCount":3,"passedCheckCount":3,
+          "failedCheckCount":0,"pendingCheckCount":0,"skippedCheckCount":0,
+          "headSha":"abc123","reviewSummary":"Review: approved by 2 reviewers.",
+          "checksSummary":"Checks: 3 passed."
+        }
+        """
+        let evidence = try JSONDecoder().decode(TaskPullRequest.self, from: Data(evidenceJSON.utf8))
+        XCTAssertEqual(evidence.reviewLabel, "REVIEW APPROVED")
+        XCTAssertEqual(evidence.checksLabel, "CHECKS PASSING")
+        XCTAssertEqual(evidence.approvalCount, 2)
+        XCTAssertEqual(evidence.passedCheckCount, 3)
+        XCTAssertEqual(evidence.mergeableState, "clean")
     }
 
     func testModelProviderSettingsEncodingDistinguishesClearFromNoUpdate() throws {

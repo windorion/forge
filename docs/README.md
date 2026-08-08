@@ -22,6 +22,7 @@ Timestamped working history lives in `session_log.md`, not in the root README.
 | `product_vision.md` | Why Forge exists, what category it creates, and what principles must not change. |
 | `product_positioning.md` | Market position, competitors, differentiation, and messaging. |
 | `project_status.md` | Current implementation state, distance to finished product, and completion estimates. |
+| `documentation_truth.md` | Authority order, automated consistency checks, and task-branch versus default-branch publication boundaries. |
 | `todo.md` | Active TODO list, priority order, and next concrete tasks. |
 | `reliability/README.md` | Repeatable Alpha repository reliability corpus, stage semantics, baseline evidence, and limitations. |
 | `user_personas.md` | Target users, pains, motivations, objections, and success criteria. |
@@ -44,7 +45,7 @@ Timestamped working history lives in `session_log.md`, not in the root README.
 | `business_model.md` | Packaging, pricing hypotheses, customer segments, and distribution. |
 | `roadmap.md` | Phases, milestones, sequencing, and proof points. |
 | `founder_notes.md` | Distilled founder/product decisions from conversations. |
-| `development.md` | How to run the current app/runtime skeleton and what is not wired yet. |
+| `development.md` | How to run, test, diagnose, and verify the current app and runtime. |
 | `v0_scope.md` | Defines the first end-to-end product target and completion criteria. |
 | `session_log.md` | Timestamped work-session history with summary, done, not done, and next steps. |
 

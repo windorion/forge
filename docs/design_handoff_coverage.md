@@ -3,7 +3,7 @@
 Document role: track implementation and exact visual/interaction verification
 for every named screen in `design_handoff_forge/Forge App States.dc.html`.
 
-Last updated: 2026-08-02
+Last updated: 2026-08-08
 
 ## Completion Rule
 
@@ -40,7 +40,7 @@ the actual visual source of truth.
 | Decisions | `34a` Batch questions | Verified | Rendered comparison done with a real waiting task (docs/verification/34a). |
 | Decisions | `18a` Merge conflict | Verified | Rendered comparison done on a real conflicted merge (docs/verification/18a). |
 | Decisions | `19a` Failed/rollback | Verified | Rendered comparison done via the real startup-recovery fail path (docs/verification/19a). |
-| Decisions | `24a` First success | Verified | Rendered comparison done on the real first Completed task (docs/verification/24a); runtime branch-name bug fixed. Merged-PR wording stays P2. |
+| Decisions | `24a` First success | Verified | Rendered comparison done on the real first Completed task (docs/verification/24a); runtime branch-name bug fixed. The guarded publication flow now supplies a real PR number/state when one exists. |
 | Decisions | `37a` Cost breakdown | Verified | Step/model-call accordion surface built and compared (docs/verification/37a); token columns await token accounting; in-app cost-metric entry point pending. |
 | Settings | `22a` General | Verified | Rendered comparison done (docs/verification/22a); notify/theme prefs persist, login item registers via SMAppService, CHECK NOW drives the real 13a update dialog. |
 | Settings | `3a` Model | Verified | Rendered comparison done (docs/verification/3a); STANDARD/MAX labels, real budget usage, real stats footer. Provider cards list real runtime providers, not the illustrative Claude lineup. |
@@ -110,25 +110,22 @@ checks hierarchy and opacity only; it does not replace screenshot comparison.
 - Dedicated native Settings scene with an opaque root: `22a`, `3a`, `6a`,
   `30a`, `5b`, `16a`, and `1e`.
 - Native menu surface without a second content hierarchy: `21a`.
-- Partial or missing dedicated product surfaces that cannot currently create
-  duplicate UI: `37a`, `12a`, `7a`, `27a`, `36a`, `8a`, `9a`, `11a`, `35a`,
+- Dedicated native or auxiliary surfaces verified outside the primary
+  workspace hierarchy: `37a`, `12a`, `7a`, `27a`, `36a`, `8a`, `9a`, `11a`,
   `15a`, `25a`, `13a`, `28a`, and `23a`.
+- Remaining partial/missing boundaries: `6a` needs one live OAuth grant with a
+  founder-owned Client ID; `35a` needs the signed P6 WidgetKit pipeline.
 
 System alerts and confirmation dialogs remain intentional native modal layers.
 They are not counted as obsolete or duplicate product interfaces.
 
-## Design-First Implementation Order
+## Remaining Closeout Order
 
-1. Verify and close `1a`, `1b`, `10a`, `14a`, and `32a` line by line.
-2. Complete compact task states `1c`, `1d`, and `1e`.
-3. Rebuild the shared settings shell and finish `22a`, `3a`, `6a`, `30a`,
-   `5b`, and `16a`.
-4. Complete decision and recovery states, starting with `33a`, `19a`, `31a`,
-   `29a`, and `17a`.
-5. Complete queue/history/audit and multi-task surfaces.
-6. Complete quick-entry and native system integrations.
-7. Complete onboarding, authorization, updates, sharing, cost, templates, and
-   first-success polish.
-
-No new feature track should move ahead of this sequence unless it is required
-to make a handoff interaction real.
+1. Live-verify `6a` after the founder supplies a GitHub OAuth App Client ID
+   with Device Flow enabled; retain the grant/error capture as evidence.
+2. Revisit `35a` only with the P6 signed packaging pipeline; the documented
+   ad-hoc experiment is not a shippable WidgetKit path.
+3. Preserve rendered evidence when later product work changes a Verified
+   surface. Recorded follow-ons such as PR checks, cost tokens, cross-runtime
+   routing, and semantic retrieval belong in `docs/todo.md`; they do not reopen
+   the completed visual verification unless the rendered surface changes.

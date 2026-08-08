@@ -1088,6 +1088,22 @@ export interface TaskPullRequest {
   headBranch: string;
   openedAt: string;
   lastCheckedAt: string;
+  /** GitHub's current mergeability snapshot; null while GitHub is computing it. */
+  mergeable?: boolean | null;
+  mergeableState?: string;
+  reviewStatus?: "Approved" | "ChangesRequested" | "ReviewRequired" | "Unknown";
+  approvalCount?: number;
+  changesRequestedCount?: number;
+  requestedReviewerCount?: number;
+  checksStatus?: "Passing" | "Failing" | "Pending" | "None" | "Unknown";
+  checkRunCount?: number;
+  passedCheckCount?: number;
+  failedCheckCount?: number;
+  pendingCheckCount?: number;
+  skippedCheckCount?: number;
+  headSha?: string;
+  reviewSummary?: string;
+  checksSummary?: string;
 }
 
 export interface GitPullRequestStatusRequest {

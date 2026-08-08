@@ -42,9 +42,10 @@ should no longer feel like a generic workflow dashboard.
 Last updated: 2026-08-08
 
 The trust/runtime foundation is strong and the Coding-Agent Demo V0 functional
-acceptance path is complete. Strict visual closeout is still in progress: the
-primary new-task, clarification/plan, live-session, and diff-review screens are
-being matched against the latest `design_handoff_forge/` references.
+acceptance path is complete. All five primary handoff screens are rendered and
+Verified. Full handoff closeout is 41 of 43: live GitHub OAuth capture awaits a
+founder-owned Client ID, while WidgetKit packaging awaits the signed P6 build
+pipeline.
 
 Implemented today:
 
@@ -200,9 +201,10 @@ Implemented today:
   structured preflight metadata, guarded by expected-HEAD/branch/upstream
   checks, blockers, classified push failure messages, and a no-force-push
   boundary.
-- Read-only PR handoff preview with base/head branch awareness, suggested
-  branch name, PR title/body, test plan, commits, changed files, structured
-  preflight metadata, blockers, risk notes, and a no-publication boundary.
+- Reviewed PR handoff and explicit publication with base/head awareness,
+  optimistic-concurrency checks, no-force branch push, per-request Keychain
+  token use, persisted PR lineage, and on-demand open/closed/merged, review,
+  check-run, and mergeability evidence in the completion surface.
 - SQLite task persistence.
 - Validation presets and runtime-derived command permission state.
 - Local deterministic model provider and optional OpenAI Responses provider.
@@ -229,12 +231,15 @@ Implemented today:
 
 Beyond V0:
 
-- Continued handoff fidelity and broader decision-inbox polish.
-- Rich autonomous model-backed read/search/patch/run/repair beyond the current
-  bounded loop and restricted unified-diff patch engine.
-- Actual PR creation/publication after explicit review.
-- Durable repository index with symbols and semantic search.
-- Full workspace picker and commercial packaging/signing path.
+- Repeated live-model success on pinned public repositories with explicit
+  request/token/cost budgets and failure classification.
+- Richer autonomous model-backed read/search/patch/run/repair beyond the
+  current bounded loop and reviewed Unified Diff path.
+- Automatic fork-head detection and optional background PR refresh after the
+  existing approved publication and on-demand review/check flow.
+- Semantic or hybrid retrieval beyond the existing durable file, symbol, and
+  trigram text indexes.
+- Full background task/detail/review routing across authorized repositories.
 - Packaged, signed, notarized, auto-updating Mac distribution.
 
 ## Completion Estimate

@@ -829,12 +829,46 @@ struct TaskPullRequest: Codable, Hashable {
     var headBranch: String
     var openedAt: String
     var lastCheckedAt: String
+    var mergeable: Bool?
+    var mergeableState: String?
+    var reviewStatus: String?
+    var approvalCount: Int?
+    var changesRequestedCount: Int?
+    var requestedReviewerCount: Int?
+    var checksStatus: String?
+    var checkRunCount: Int?
+    var passedCheckCount: Int?
+    var failedCheckCount: Int?
+    var pendingCheckCount: Int?
+    var skippedCheckCount: Int?
+    var headSha: String?
+    var reviewSummary: String?
+    var checksSummary: String?
 
     /// Handoff wording for the completion header.
     var stateLabel: String {
         if merged { return "MERGED" }
         if state == "closed" { return "CLOSED" }
         return draft ? "DRAFT" : "OPEN"
+    }
+
+    var reviewLabel: String {
+        switch reviewStatus {
+        case "Approved": return "REVIEW APPROVED"
+        case "ChangesRequested": return "CHANGES REQUESTED"
+        case "ReviewRequired": return "REVIEW REQUIRED"
+        default: return "REVIEW UNKNOWN"
+        }
+    }
+
+    var checksLabel: String {
+        switch checksStatus {
+        case "Passing": return "CHECKS PASSING"
+        case "Failing": return "CHECKS FAILING"
+        case "Pending": return "CHECKS PENDING"
+        case "None": return "NO CHECKS"
+        default: return "CHECKS UNKNOWN"
+        }
     }
 
     /// Bridge an in-session publish result into the persisted shape, so the
@@ -851,6 +885,21 @@ struct TaskPullRequest: Codable, Hashable {
         headBranch = result.headBranch
         openedAt = result.generatedAt
         lastCheckedAt = result.generatedAt
+        mergeable = nil
+        mergeableState = nil
+        reviewStatus = nil
+        approvalCount = nil
+        changesRequestedCount = nil
+        requestedReviewerCount = nil
+        checksStatus = nil
+        checkRunCount = nil
+        passedCheckCount = nil
+        failedCheckCount = nil
+        pendingCheckCount = nil
+        skippedCheckCount = nil
+        headSha = nil
+        reviewSummary = nil
+        checksSummary = nil
     }
 }
 

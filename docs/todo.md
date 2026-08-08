@@ -10,42 +10,22 @@ Last updated: 2026-08-08
 Keep this file practical. A future agent should be able to open it and know
 what to do next without rereading the whole project history.
 
-## P0: Complete And Verify The Design Handoff
+## P0: Close The Two Remaining Handoff Boundaries
 
-Do not start another feature track until the handoff implementation is
-complete. Use `docs/design_handoff_coverage.md` as the screen-by-screen source
-of truth and the delivered HTML/CSS as the exact visual/content specification.
+`docs/design_handoff_coverage.md` is authoritative: 41 of 43 named states are
+Verified, including all five primary V0 screens and compact states `1c`–`1e`.
 
-- Finish exact line-by-line verification of `1a`, `1b`, `10a`, `14a`, and
-  `32a`.
-- Render-verify the implemented compact task states `1c`, `1d`, and `1e`.
-- Live-verify GitHub OAuth after the founder creates the Forge OAuth App and
-  enables Device Flow. Client ID configuration, device-code request, browser
-  opening, interval/slow-down polling, user validation, Keychain persistence,
-  connected/disconnect UI, and focused tests are implemented. Finish runtime
-  shortcut remapping; Account/Usage, General, Guardrails, Model, and API Key
-  settings structures are implemented.
-- Finish background task creation/detail/review routing for authorized Mission
-  Control runtimes, then continue through quick entry and native integrations,
-  onboarding, updates, sharing, cost, and templates until all 43 named HTML
-  screens/states are verified.
-- Render-verify the implemented `⌘K` Command Palette and extend the new native
-  Forge menu from its core commands to the complete `21a` handoff command set.
-- Render-verify the implemented full Plan Approval expansion, including its
-  real six-step and one-step runtime modes and selected-step revision request.
-- Render-verify the implemented History, Audit, Failure/Rollback, and Crash
-  Recovery surfaces. Offline now has real start/reconnect, repository-switch,
-  Settings, and in-session cached-audit actions; No Repository and Merge
-  Conflict are implemented. First Success now has its real one-time Completed-task receipt;
-  connect its final merged-PR wording/link after hosted PR publication exists.
-- Render-verify the full Agent Question state; the context-backed answer flow
-  now records a decision and resumes the paused loop instead of stopping at a
-  static choice card. The multi-task Answer Queue now uses the same boundary;
-  render-verify it and continue with conflict/no-repository recovery states.
-- Bundle JetBrains Mono under the SIL OFL license and use the exact handoff
-  typography in packaged builds.
-- Keep screenshots or equivalent visual comparison evidence for each screen;
-  do not mark a screen verified from code inspection alone.
+- [x] Render-verify the five primary screens, compact states, settings,
+  decisions, recovery, queue/history/audit, quick-entry, native integrations,
+  onboarding, updates, sharing, cost, templates, and first-success surfaces.
+- Live-verify `6a` GitHub after the founder creates an OAuth App Client ID with
+  Device Flow enabled. Configuration, polling, browser opening, user
+  validation, Keychain persistence, connected/disconnect UI, and focused tests
+  are already implemented.
+- Revisit missing `35a` Widget only with P6 signing infrastructure. The
+  timeboxed ad-hoc experiment is documented and does not block Alpha work.
+- Preserve screenshot/rendered evidence when future product changes alter a
+  Verified surface; do not reopen verification from code inspection alone.
 
 ## Coding-Agent Demo V0: Functional Complete
 
@@ -149,9 +129,17 @@ the core runtime smoke. Preserve these completed boundaries:
   and sync APIs, or remove Email sign-in and keep Forge local-only. The current
   UI no longer presents a fake successful flow: it explains the missing service
   and offers Continue Locally.
+- [x] Surface PR review/check/mergeability status alongside open/closed/merged
+  state. `POST /git/pr-status` now reads the PR, latest decisive review per
+  reviewer, requested reviewers/teams, and head-SHA check runs using the
+  per-request Keychain token; the task persists normalized approvals/change
+  requests, passing/pending/failing counts, mergeability, summaries, and audit
+  events. The completion surface renders this evidence, and the local mock
+  GitHub fixture covers pending, blocked/failing, approved/passing, and merged
+  transitions.
 - Follow-on: detect the fork owner automatically (today `headOwner` must be
-  supplied), surface PR review/check status (approvals, CI) alongside the
-  merge state, and poll status in the background rather than on demand.
+  supplied) and optionally poll PR status in the background rather than only
+  after the explicit CHECK STATUS action.
 - Add hosted-remote fixtures for push/branch-publish auth failures,
   disconnected networks, hosting-provider branch protection, and fork remotes.
 
@@ -237,12 +225,15 @@ the core runtime smoke. Preserve these completed boundaries:
 
 ## P5: Native macOS Product
 
-- Add repository/workspace picker.
-- Add menu bar entry.
-- Add global shortcut for creating or resuming a task.
-- Add notifications for review gates and completed validation.
-- Add Dock progress or badge state for running tasks.
-- Add Finder and "open in IDE" integrations.
+- Finish background task creation/detail/review routing for authorized Mission
+  Control runtimes and cross-runtime click-through from repository cards.
+- Add Finder and broader "open in IDE" integrations beyond the current
+  file/repository reveal actions.
+- Run final human-input verification for remappable shortcuts, native Dock/menu
+  chrome, notifications, and the global quick-capture hotkey.
+- Keep the implemented repository picker, menu bar entry, global shortcut,
+  notifications, Dock state, Spotlight, CLI, templates, and onboarding covered
+  while packaging work changes process boundaries.
 
 ## P6: Commercial Readiness
 
@@ -250,8 +241,9 @@ the core runtime smoke. Preserve these completed boundaries:
 - Decide open-core boundaries.
 - Prepare Developer ID signing and notarization.
 - Build DMG distribution.
-- Add update mechanism.
-- Add onboarding and first-run provider setup.
+- Finish signed appcast install/relaunch on top of the implemented update UI.
+- Package the implemented onboarding and first-run provider setup in the signed
+  distribution path.
 - Add error reporting and support diagnostics.
 
 ## Done Recently
@@ -291,9 +283,9 @@ the core runtime smoke. Preserve these completed boundaries:
   persists compact snapshots for up to two recently connected repositories.
   The app exposes `⌘⇧M`, `⌘1–3` focus, `⌘⇧N` New Task, cooperative Pause All,
   repository-slot selection, real status/progress cards, and cached timestamps.
-  Observer supervision, live aggregation, and explicit session activation are
-  now implemented. Full task creation/detail/review routing into a background
-  active runtime and strict rendered comparison remain.
+  Observer supervision, live aggregation, explicit session activation, and
+  rendered comparison are now implemented. Full task creation/detail/review
+  routing into a background active runtime remains.
 
 - Implemented `26a` Task Queue as real runtime scheduling rather than a static
   task list. Approved Agent Loops now persist ordered queue requests whenever
@@ -312,8 +304,8 @@ the core runtime smoke. Preserve these completed boundaries:
   values come from real task/run/proposal/validation/review/plan evidence.
   Queue Next returns to the composer. View on GitHub is enabled only when the
   runtime can safely normalize a configured `github.com` remote to HTTPS.
-  Copy says Shipped/Completed rather than inventing a merged PR; hosted PR
-  publication remains the boundary for exact merged wording and PR URL.
+  Copy says Shipped/Completed rather than inventing a merged PR; the guarded
+  publication flow supplies the exact PR number/state/URL when available.
 
 - Implemented the real `18a` Merge Conflict flow. Actual Git unmerged entries
   now open the 1240px conflict workspace with a 250px file list,

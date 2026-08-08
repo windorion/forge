@@ -43,6 +43,8 @@ Examples:
 - prepare a read-only PR handoff artifact from branch status, default-base
   detection, commit summaries, changed files, optional task context, and latest
   task validation state plus preflight evidence
+- refresh an already-published PR's state, review decision, check runs, and
+  mergeability using a per-request token without mutating GitHub
 - prepare execution proposal context through bounded read-only repo tools after
   plan approval
 - read project docs
@@ -293,6 +295,21 @@ upstream branch. If the git push fails, Forge classifies common auth,
 non-fast-forward, protected-branch, network, remote-rejected, and unknown
 failures before surfacing bounded output. It does not force push, merge,
 reset, delete branches, or create a PR.
+
+Current PR publication is high risk and requires the exact
+`PublishPullRequest` confirmation, a fresh reviewed HEAD/base/head tuple, and a
+GitHub token loaded by the app from Keychain for that request. The runtime
+re-derives preflight, rejects stale or blocked state, pushes the head branch
+without force, creates the PR, and records task approval/event/lineage. It does
+not merge, close, approve, comment, force push, reset, or delete branches.
+
+PR status refresh is read-only against GitHub and does not require a publishing
+approval, but it remains user-triggered because it spends external API quota
+and sends a credential. `POST /git/pr-status` keeps the token out of URLs and
+persistence, reads only PR/review/check metadata, normalizes the latest
+decisive review per reviewer, and fails closed on GitHub authentication or
+authorization errors. Missing non-auth auxiliary metadata is displayed as
+Unknown rather than treated as approval or passing CI.
 
 ## Approval Dialogs
 

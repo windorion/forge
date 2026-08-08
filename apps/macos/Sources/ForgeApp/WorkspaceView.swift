@@ -2297,6 +2297,29 @@ private struct RunCompleteState: View {
                     .textSelection(.enabled)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                HStack(spacing: 7) {
+                    Text(pr.reviewLabel)
+                        .foregroundStyle(pr.reviewStatus == "ChangesRequested" ? ForgeDesign.danger : ForgeDesign.ink)
+                    Text(pr.checksLabel)
+                        .foregroundStyle(pr.checksStatus == "Failing" ? ForgeDesign.danger : ForgeDesign.ink)
+                    if let mergeableState = pr.mergeableState, !mergeableState.isEmpty {
+                        Text("MERGEABILITY \(mergeableState.uppercased())")
+                            .foregroundStyle(ForgeDesign.muted)
+                    }
+                }
+                .font(.custom("JetBrains Mono", fixedSize: 9.5).weight(.bold))
+                if let reviewSummary = pr.reviewSummary {
+                    Text(reviewSummary)
+                        .font(.custom("JetBrains Mono", fixedSize: 9.5))
+                        .foregroundStyle(ForgeDesign.muted)
+                        .lineLimit(2)
+                }
+                if let checksSummary = pr.checksSummary {
+                    Text(checksSummary)
+                        .font(.custom("JetBrains Mono", fixedSize: 9.5))
+                        .foregroundStyle(pr.checksStatus == "Failing" ? ForgeDesign.danger : ForgeDesign.muted)
+                        .lineLimit(2)
+                }
             } else {
                 HStack(spacing: 8) {
                     Text(preview.readiness.uppercased())

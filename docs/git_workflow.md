@@ -271,8 +271,21 @@ Current implementation:
 - The preview blocks when the user is still on the default base branch, has no
   upstream, has unpushed commits, is behind upstream, is detached, has
   unmerged files, or has no commits between base and HEAD.
-- Forge does not create, publish, update, close, or comment on pull requests
-  yet.
+- `POST /git/pr-publish` requires `PublishPullRequest`, a per-request GitHub
+  token, and the reviewed HEAD/base/head branches. It re-derives preflight,
+  rejects stale state, pushes the head without force, opens the PR, records the
+  approval/event, and persists number, URL, state, owner/repo, and branches on
+  the linked task.
+- `POST /git/pr-status` is a user-triggered read-only refresh. It reads PR
+  open/draft/closed/merged and mergeability state, the latest decisive review
+  from each reviewer plus requested reviewers/teams, and check runs for the
+  current head SHA. Normalized approvals/change requests and passing/pending/
+  failing/skipped counts are persisted with summaries and change events.
+- The token is loaded from Keychain by the app and supplied only in each POST
+  body. It is never placed in a URL, task snapshot, event, or runtime settings.
+- Forge does not approve reviews, rerun checks, merge, close, comment, force
+  push, reset, or delete branches. Fork PRs currently require an explicit
+  `headOwner`; automatic fork-owner discovery and background refresh remain.
 
 ## Safety Rules
 

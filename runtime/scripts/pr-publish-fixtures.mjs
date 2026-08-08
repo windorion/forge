@@ -23,21 +23,63 @@ function assert(condition, message) {
 }
 
 let captured = null;
-let statusRequest = null;
+const statusRequests = [];
 // Flipped by the test to make the mock report the PR as merged.
 let prMerged = false;
+let prBlocking = false;
+let denyMetadata = false;
 const mock = createServer((req, res) => {
   let body = "";
   req.on("data", (chunk) => { body += chunk; });
   req.on("end", () => {
     if (req.method === "GET" && req.url === "/repos/acme/widgets/pulls/42") {
-      statusRequest = { authorization: req.headers.authorization, apiVersion: req.headers["x-github-api-version"] };
+      statusRequests.push({ url: req.url, authorization: req.headers.authorization, apiVersion: req.headers["x-github-api-version"] });
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify(
         prMerged
-          ? { number: 42, state: "closed", merged: true, merged_at: "2026-07-25T12:00:00Z", draft: false }
-          : { number: 42, state: "open", merged: false, draft: false }
+          ? { number: 42, state: "closed", merged: true, merged_at: "2026-07-25T12:00:00Z", draft: false, mergeable: true, mergeable_state: "clean", requested_reviewers: [], head: { sha: "head-sha-42" } }
+          : { number: 42, state: "open", merged: false, draft: false, mergeable: prBlocking ? false : null, mergeable_state: prBlocking ? "blocked" : "unknown", requested_reviewers: prBlocking ? [] : [{ login: "alice" }], head: { sha: "head-sha-42" } }
       ));
+      return;
+    }
+    if (req.method === "GET" && req.url === "/repos/acme/widgets/pulls/42/reviews?per_page=100") {
+      statusRequests.push({ url: req.url, authorization: req.headers.authorization, apiVersion: req.headers["x-github-api-version"] });
+      if (denyMetadata) {
+        res.writeHead(403, { "content-type": "application/json" });
+        res.end(JSON.stringify({ message: "Resource not accessible by token" }));
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(prBlocking
+        ? [
+            { user: { login: "bob" }, state: "APPROVED", submitted_at: "2026-07-25T10:00:00Z" },
+            { user: { login: "bob" }, state: "CHANGES_REQUESTED", submitted_at: "2026-07-25T11:00:00Z" }
+          ]
+        : [
+            { user: { login: "bob" }, state: "APPROVED", submitted_at: "2026-07-25T11:00:00Z" }
+          ]));
+      return;
+    }
+    if (req.method === "GET" && req.url === "/repos/acme/widgets/commits/head-sha-42/check-runs?per_page=100") {
+      statusRequests.push({ url: req.url, authorization: req.headers.authorization, apiVersion: req.headers["x-github-api-version"] });
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({
+        total_count: 2,
+        check_runs: prMerged
+          ? [
+              { name: "build", status: "completed", conclusion: "success" },
+              { name: "test", status: "completed", conclusion: "success" }
+            ]
+          : prBlocking
+            ? [
+                { name: "build", status: "completed", conclusion: "success" },
+                { name: "test", status: "completed", conclusion: "failure" }
+              ]
+          : [
+              { name: "build", status: "completed", conclusion: "success" },
+              { name: "test", status: "in_progress", conclusion: null }
+            ]
+      }));
       return;
     }
     captured = { method: req.method, url: req.url, authorization: req.headers.authorization, apiVersion: req.headers["x-github-api-version"], body: JSON.parse(body || "{}") };
@@ -148,18 +190,46 @@ try {
     const openStatus = await post(port, "/git/pr-status", { taskID: task.id, githubToken: "test-token-123" });
     assert(openStatus.pullRequest.state === "open" && openStatus.pullRequest.merged === false, "Open PR status wrong.");
     assert(openStatus.summary.includes("is open"), `Unexpected open summary: ${openStatus.summary}`);
-    assert(statusRequest?.authorization === "Bearer test-token-123", "Status refresh did not send Bearer auth.");
+    assert(openStatus.pullRequest.reviewStatus === "ReviewRequired", `Expected pending requested reviewer, got ${openStatus.pullRequest.reviewStatus}.`);
+    assert(openStatus.pullRequest.approvalCount === 1 && openStatus.pullRequest.requestedReviewerCount === 1, "Open review counts are wrong.");
+    assert(openStatus.pullRequest.checksStatus === "Pending", `Expected pending checks, got ${openStatus.pullRequest.checksStatus}.`);
+    assert(openStatus.pullRequest.passedCheckCount === 1 && openStatus.pullRequest.pendingCheckCount === 1, "Open check counts are wrong.");
+    assert(openStatus.pullRequest.headSha === "head-sha-42", "PR head SHA was not persisted.");
+    assert(statusRequests.length === 3, `Expected three GitHub read requests, got ${statusRequests.length}.`);
+    assert(statusRequests.every((request) => request.authorization === "Bearer test-token-123"), "Status evidence refresh did not send Bearer auth on every request.");
+    assert(statusRequests.every((request) => request.apiVersion === "2022-11-28"), "Status evidence refresh omitted the API version header.");
+
+    // A token that can read the PR but not its review metadata fails closed;
+    // Forge must not persist Unknown as if the refresh succeeded.
+    denyMetadata = true;
+    const deniedMetadata = await postRaw(port, "/git/pr-status", { taskID: task.id, githubToken: "metadata-denied" });
+    assert(deniedMetadata.status === 401, `Expected 401 for denied review metadata, got ${deniedMetadata.status}: ${deniedMetadata.text}`);
+    denyMetadata = false;
+
+    // A reviewer's latest decisive review supersedes their earlier approval;
+    // failed checks and GitHub mergeability are persisted as blocking evidence.
+    prBlocking = true;
+    const blockingStatus = await post(port, "/git/pr-status", { taskID: task.id, githubToken: "test-token-123" });
+    assert(blockingStatus.pullRequest.reviewStatus === "ChangesRequested", "Latest changes-requested review did not supersede an older approval.");
+    assert(blockingStatus.pullRequest.approvalCount === 0 && blockingStatus.pullRequest.changesRequestedCount === 1, "Blocking review counts are wrong.");
+    assert(blockingStatus.pullRequest.checksStatus === "Failing" && blockingStatus.pullRequest.failedCheckCount === 1, "Failed CI was not persisted.");
+    assert(blockingStatus.pullRequest.mergeable === false && blockingStatus.pullRequest.mergeableState === "blocked", "Blocked mergeability was not persisted.");
 
     // Status refresh after the PR is merged — this is what drives 1d's real
     // merged wording (previously blocked on hosted PR publication).
     prMerged = true;
+    prBlocking = false;
     const mergedStatus = await post(port, "/git/pr-status", { taskID: task.id, githubToken: "test-token-123" });
     assert(mergedStatus.pullRequest.merged === true, "Merged PR status not reflected.");
     assert(mergedStatus.pullRequest.state === "closed", "Merged PR should report closed state.");
     assert(mergedStatus.summary.includes("merged"), `Unexpected merged summary: ${mergedStatus.summary}`);
+    assert(mergedStatus.pullRequest.reviewStatus === "Approved" && mergedStatus.pullRequest.approvalCount === 1, "Merged review evidence should be approved.");
+    assert(mergedStatus.pullRequest.checksStatus === "Passing" && mergedStatus.pullRequest.passedCheckCount === 2, "Merged check evidence should be passing.");
+    assert(mergedStatus.pullRequest.mergeable === true && mergedStatus.pullRequest.mergeableState === "clean", "Mergeability evidence was not persisted.");
     const merged = (await get(port, "/tasks")).tasks.find((t) => t.id === task.id);
     assert(merged.pullRequest.merged === true, "Merged state was not persisted on the task.");
     assert(merged.events.some((e) => e.type === "git.pull_request.state_changed"), "State change was not recorded as an event.");
+    assert(merged.events.some((e) => e.type === "git.pull_request.review_checks_changed"), "Review/check evidence change was not recorded as an event.");
 
     // Status guards.
     const noPRTask = await post(port, "/tasks", { title: "No PR", objective: "Task without a published PR." });
@@ -197,7 +267,7 @@ try {
     console.log("- Preview readiness, 400 (confirmation/token), 409 (stale HEAD, no API call)");
     console.log("- Real PR creation: payload, Bearer auth, owner/repo parsed from remote");
     console.log("- Head branch pushed to remote; task approval + event recorded");
-    console.log("- PR persisted on the task; status refresh reports open → merged");
+    console.log("- PR persisted on the task; status refresh reports state, reviews, checks, and mergeability");
     console.log("- Status guards (no PR, no token); fork head owner:branch; draft flag");
   } finally {
     await stopRuntime(runtime);

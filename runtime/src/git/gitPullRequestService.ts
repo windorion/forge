@@ -58,6 +58,31 @@ interface CreatedGitHubPullRequest {
   draft: boolean;
 }
 
+interface GitHubReadResult {
+  ok: boolean;
+  status: number;
+  value?: unknown;
+  error?: string;
+}
+
+interface PullRequestReviewEvidence {
+  status: NonNullable<TaskPullRequest["reviewStatus"]>;
+  approvals: number;
+  changesRequested: number;
+  requestedReviewers: number;
+  summary: string;
+}
+
+interface PullRequestCheckEvidence {
+  status: NonNullable<TaskPullRequest["checksStatus"]>;
+  total: number;
+  passed: number;
+  failed: number;
+  pending: number;
+  skipped: number;
+  summary: string;
+}
+
 type GitRemoteSummary = {
   name: string;
   urlKind: "HTTPS" | "SSH" | "Local" | "Other" | "Unknown";
@@ -433,8 +458,8 @@ function recordGitPullRequestOnTask(
 
 
 /**
- * Refresh the persisted PR's real state from GitHub (open / closed / merged).
- * Read-only against GitHub; the token is per-request and never stored.
+ * Refresh the persisted PR's state, review decision, and check runs from
+ * GitHub. Read-only against GitHub; the token is per-request and never stored.
  */
 async function refreshGitPullRequestStatus(
   input: GitPullRequestStatusRequest
@@ -459,41 +484,41 @@ async function refreshGitPullRequestStatus(
     throw new HttpError(409, "This task has no published pull request to refresh.");
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30_000);
-  let response: Response;
-  try {
-    response = await fetch(
-      `${githubApiBase}/repos/${encodeURIComponent(existing.owner)}/${encodeURIComponent(existing.repo)}/pulls/${existing.number}`,
-      {
-        headers: {
-          Authorization: `Bearer ${githubToken}`,
-          Accept: "application/vnd.github+json",
-          "X-GitHub-Api-Version": "2022-11-28",
-          "User-Agent": "Forge"
-        },
-        signal: controller.signal
-      }
+  const repoPath = `/repos/${encodeURIComponent(existing.owner)}/${encodeURIComponent(existing.repo)}`;
+  const pullResult = await readGitHubJSON(`${repoPath}/pulls/${existing.number}`, githubToken, "pull request status");
+  if (!pullResult.ok) {
+    throw new HttpError(
+      pullResult.status === 401 || pullResult.status === 403 ? 401 : pullResult.status === 0 ? 502 : 409,
+      pullResult.error ?? "GitHub pull request status request failed."
     );
-  } catch (error) {
-    throw new HttpError(502, `GitHub pull request status request failed: ${(error as Error).message}`);
-  } finally {
-    clearTimeout(timeout);
   }
-
-  const text = await response.text();
-  if (!response.ok) {
-    throw new HttpError(response.status === 401 || response.status === 403 ? 401 : 409, gitHubApiErrorMessage(response.status, text));
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    throw new HttpError(502, "GitHub returned an unparseable pull request status response.");
-  }
+  const parsed = pullResult.value;
   if (!isRecord(parsed)) {
     throw new HttpError(502, "GitHub pull request status response was not an object.");
   }
+
+  const head = isRecord(parsed.head) ? parsed.head : undefined;
+  const headSha = typeof head?.sha === "string" && head.sha.trim() ? head.sha.trim() : existing.headSha;
+  const requestedReviewerCount =
+    (Array.isArray(parsed.requested_reviewers) ? parsed.requested_reviewers.length : 0)
+    + (Array.isArray(parsed.requested_teams) ? parsed.requested_teams.length : 0);
+  const [reviewsResult, checksResult] = await Promise.all([
+    readGitHubJSON(`${repoPath}/pulls/${existing.number}/reviews?per_page=100`, githubToken, "pull request reviews"),
+    headSha
+      ? readGitHubJSON(`${repoPath}/commits/${encodeURIComponent(headSha)}/check-runs?per_page=100`, githubToken, "pull request checks")
+      : Promise.resolve<GitHubReadResult>({ ok: false, status: 0, error: "GitHub did not return the PR head SHA." })
+  ]);
+  for (const auxiliary of [reviewsResult, checksResult]) {
+    if (!auxiliary.ok && (auxiliary.status === 401 || auxiliary.status === 403)) {
+      throw new HttpError(401, auxiliary.error ?? "GitHub rejected access to pull request evidence.");
+    }
+  }
+  const reviewEvidence = reviewsResult.ok
+    ? summarizePullRequestReviews(reviewsResult.value, requestedReviewerCount)
+    : unavailableReviewEvidence(requestedReviewerCount, reviewsResult.error);
+  const checkEvidence = checksResult.ok
+    ? summarizePullRequestChecks(checksResult.value)
+    : unavailableCheckEvidence(checksResult.error);
 
   const now = new Date().toISOString();
   const merged = parsed.merged === true || typeof parsed.merged_at === "string";
@@ -502,23 +527,42 @@ async function refreshGitPullRequestStatus(
     state: typeof parsed.state === "string" ? parsed.state : existing.state,
     merged,
     draft: parsed.draft === true,
-    lastCheckedAt: now
+    lastCheckedAt: now,
+    mergeable: typeof parsed.mergeable === "boolean" ? parsed.mergeable : parsed.mergeable === null ? null : existing.mergeable,
+    mergeableState: typeof parsed.mergeable_state === "string" ? parsed.mergeable_state : existing.mergeableState,
+    reviewStatus: reviewEvidence.status,
+    approvalCount: reviewEvidence.approvals,
+    changesRequestedCount: reviewEvidence.changesRequested,
+    requestedReviewerCount: reviewEvidence.requestedReviewers,
+    checksStatus: checkEvidence.status,
+    checkRunCount: checkEvidence.total,
+    passedCheckCount: checkEvidence.passed,
+    failedCheckCount: checkEvidence.failed,
+    pendingCheckCount: checkEvidence.pending,
+    skippedCheckCount: checkEvidence.skipped,
+    headSha,
+    reviewSummary: reviewEvidence.summary,
+    checksSummary: checkEvidence.summary
   };
 
   const stateChanged = refreshed.state !== existing.state || refreshed.merged !== existing.merged || refreshed.draft !== existing.draft;
-  const summary = merged
+  const evidenceChanged = pullRequestEvidenceFingerprint(refreshed) !== pullRequestEvidenceFingerprint(existing);
+  const stateSummary = merged
     ? `Pull request #${refreshed.number} is merged.`
     : refreshed.state === "closed"
       ? `Pull request #${refreshed.number} was closed without merging.`
       : `Pull request #${refreshed.number} is ${refreshed.draft ? "an open draft" : "open"}.`;
+  const summary = `${stateSummary} ${reviewEvidence.summary} ${checkEvidence.summary}`;
+
+  const nextEvents = [...task.events];
+  if (stateChanged) nextEvents.push(event("git.pull_request.state_changed", stateSummary));
+  if (evidenceChanged) nextEvents.push(event("git.pull_request.review_checks_changed", `${reviewEvidence.summary} ${checkEvidence.summary}`));
 
   const updatedTask: ForgeTask = {
     ...task,
-    updatedAt: stateChanged ? now : task.updatedAt,
+    updatedAt: stateChanged || evidenceChanged ? now : task.updatedAt,
     pullRequest: refreshed,
-    events: stateChanged
-      ? [...task.events, event("git.pull_request.state_changed", summary)]
-      : task.events
+    events: nextEvents
   };
   tasks.set(updatedTask.id, updatedTask);
   taskStore.saveTask(updatedTask);
@@ -535,6 +579,156 @@ async function refreshGitPullRequestStatus(
       summary
     }
   };
+}
+
+async function readGitHubJSON(path: string, githubToken: string, label: string): Promise<GitHubReadResult> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+  let response: Response;
+  try {
+    response = await fetch(`${githubApiBase}${path}`, {
+      headers: {
+        Authorization: `Bearer ${githubToken}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "Forge"
+      },
+      signal: controller.signal
+    });
+  } catch (error) {
+    return { ok: false, status: 0, error: `GitHub ${label} request failed: ${(error as Error).message}` };
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  const text = await response.text();
+  if (!response.ok) {
+    return { ok: false, status: response.status, error: gitHubApiErrorMessage(response.status, text) };
+  }
+  try {
+    return { ok: true, status: response.status, value: JSON.parse(text) };
+  } catch {
+    return { ok: false, status: 0, error: `GitHub returned an unparseable ${label} response.` };
+  }
+}
+
+function summarizePullRequestReviews(value: unknown, requestedReviewers: number): PullRequestReviewEvidence {
+  if (!Array.isArray(value)) return unavailableReviewEvidence(requestedReviewers, "GitHub review response was not an array.");
+  if (value.length >= 100) return unavailableReviewEvidence(requestedReviewers, "Review history reached the 100-item safety cap.");
+  const latestByReviewer = new Map<string, { state: string; submittedAt?: number; index: number }>();
+  for (const [index, review] of value.entries()) {
+    if (!isRecord(review) || !isRecord(review.user) || typeof review.user.login !== "string" || typeof review.state !== "string") continue;
+    const state = review.state.toUpperCase();
+    if (!["APPROVED", "CHANGES_REQUESTED", "DISMISSED"].includes(state)) continue;
+    const submittedAt = typeof review.submitted_at === "string" ? Date.parse(review.submitted_at) : Number.NaN;
+    const candidate = { state, submittedAt: Number.isFinite(submittedAt) ? submittedAt : undefined, index };
+    const current = latestByReviewer.get(review.user.login);
+    let candidateIsLater = !current;
+    if (current && candidate.submittedAt !== undefined && current.submittedAt !== undefined) {
+      candidateIsLater = candidate.submittedAt > current.submittedAt
+        || candidate.submittedAt === current.submittedAt && candidate.index > current.index;
+    } else if (current) {
+      candidateIsLater = candidate.index > current.index;
+    }
+    if (candidateIsLater) {
+      latestByReviewer.set(review.user.login, candidate);
+    }
+  }
+  const states = [...latestByReviewer.values()].map((review) => review.state);
+  const approvals = states.filter((state) => state === "APPROVED").length;
+  const changesRequested = states.filter((state) => state === "CHANGES_REQUESTED").length;
+  const status: PullRequestReviewEvidence["status"] = changesRequested > 0
+    ? "ChangesRequested"
+    : requestedReviewers > 0 || approvals === 0
+      ? "ReviewRequired"
+      : "Approved";
+  const summary = status === "ChangesRequested"
+    ? `Review: ${changesRequested} change request${changesRequested === 1 ? "" : "s"} blocks merge; ${approvals} approval${approvals === 1 ? "" : "s"}.`
+    : status === "Approved"
+      ? `Review: approved by ${approvals} reviewer${approvals === 1 ? "" : "s"}.`
+      : `Review: ${requestedReviewers > 0 ? `${requestedReviewers} requested reviewer${requestedReviewers === 1 ? "" : "s"} pending` : "approval required"}; ${approvals} approval${approvals === 1 ? "" : "s"}.`;
+  return { status, approvals, changesRequested, requestedReviewers, summary };
+}
+
+function unavailableReviewEvidence(requestedReviewers: number, reason?: string): PullRequestReviewEvidence {
+  return {
+    status: "Unknown",
+    approvals: 0,
+    changesRequested: 0,
+    requestedReviewers,
+    summary: `Review: unavailable${reason ? ` (${reason})` : ""}.`
+  };
+}
+
+function summarizePullRequestChecks(value: unknown): PullRequestCheckEvidence {
+  if (!isRecord(value) || !Array.isArray(value.check_runs)) return unavailableCheckEvidence("GitHub check-runs response was not an object.");
+  let passed = 0;
+  let failed = 0;
+  let pending = 0;
+  let skipped = 0;
+  for (const check of value.check_runs) {
+    if (!isRecord(check)) continue;
+    if (check.status !== "completed") {
+      pending += 1;
+      continue;
+    }
+    const conclusion = typeof check.conclusion === "string" ? check.conclusion : "";
+    if (!conclusion) pending += 1;
+    else if (conclusion === "success") passed += 1;
+    else if (["neutral", "skipped", "stale"].includes(conclusion)) skipped += 1;
+    else failed += 1;
+  }
+  const parsedTotal = passed + failed + pending + skipped;
+  const reportedTotal = typeof value.total_count === "number" && Number.isFinite(value.total_count)
+    ? Math.max(0, Math.floor(value.total_count))
+    : parsedTotal;
+  pending += Math.max(0, reportedTotal - parsedTotal);
+  const total = passed + failed + pending + skipped;
+  const status: PullRequestCheckEvidence["status"] = total === 0
+    ? "None"
+    : failed > 0
+      ? "Failing"
+      : pending > 0
+        ? "Pending"
+        : "Passing";
+  const summary = status === "None"
+    ? "Checks: no check runs reported."
+    : status === "Failing"
+      ? `Checks: ${failed} failed, ${passed} passed, ${pending} pending, ${skipped} skipped.`
+      : status === "Pending"
+        ? `Checks: ${pending} pending, ${passed} passed, ${skipped} skipped.`
+        : `Checks: ${passed} passed${skipped > 0 ? `, ${skipped} skipped` : ""}.`;
+  return { status, total, passed, failed, pending, skipped, summary };
+}
+
+function unavailableCheckEvidence(reason?: string): PullRequestCheckEvidence {
+  return {
+    status: "Unknown",
+    total: 0,
+    passed: 0,
+    failed: 0,
+    pending: 0,
+    skipped: 0,
+    summary: `Checks: unavailable${reason ? ` (${reason})` : ""}.`
+  };
+}
+
+function pullRequestEvidenceFingerprint(pullRequest: TaskPullRequest): string {
+  return JSON.stringify([
+    pullRequest.reviewStatus,
+    pullRequest.approvalCount,
+    pullRequest.changesRequestedCount,
+    pullRequest.requestedReviewerCount,
+    pullRequest.checksStatus,
+    pullRequest.checkRunCount,
+    pullRequest.passedCheckCount,
+    pullRequest.failedCheckCount,
+    pullRequest.pendingCheckCount,
+    pullRequest.skippedCheckCount,
+    pullRequest.headSha,
+    pullRequest.mergeable,
+    pullRequest.mergeableState
+  ]);
 }
 
 

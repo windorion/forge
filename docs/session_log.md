@@ -5935,3 +5935,61 @@ Next:
   stored separately from deterministic protocol baselines.
 - Reauthenticate `gh` before draft PR publication, then continue audit export
   retention/purge controls and remaining live OAuth/visual handoff work.
+
+## 2026-08-08 22:01:41 +0200 (CEST)
+
+Conversation summary:
+
+- Compared the founder's GitHub `main` screenshot with the current
+  `codex/alpha-runtime-controls` branch, reconciled product documentation with
+  executable evidence, and continued into the next Alpha gap rather than
+  treating a branch push as an implicit default-branch merge.
+
+Done:
+
+- Added `script/check_documentation_truth.mjs`, `npm run check:docs`, CI
+  execution, and `docs/documentation_truth.md`. The check fails when critical
+  status dates/readiness estimates drift, the 43-state handoff count changes,
+  versioned reliability evidence disagrees with prose, completed capabilities
+  return to future/TODO sections, or route/smoke/test inventory and PR evidence
+  contracts drift.
+- Reconciled README, project status, TODO, roadmap, design coverage,
+  development, V0, Git workflow, and security docs. Current truth is five of
+  five primary screens Verified, 41 of 43 complete handoff states, `6a`
+  Partial pending a founder OAuth Client ID, and `35a` Missing pending signed
+  WidgetKit packaging. Repository indexing and guarded PR publication are no
+  longer described as future work.
+- Extended user-triggered PR status refresh to collect the current head SHA,
+  mergeability, requested reviewers/teams, the latest decisive review per
+  reviewer, and head-SHA check runs. Normalized approval/change-request and
+  passing/pending/failing/skipped evidence is persisted, audited, decoded by
+  the macOS app, and shown in the completion surface. Credentials remain
+  per-request; auth failures fail closed and incomplete metadata is Unknown.
+- Expanded the mock GitHub end-to-end fixture through pending review/checks,
+  metadata authorization failure, latest-review supersession, blocked
+  mergeability, failing CI, approved/passing CI, merged state, fork heads, and
+  drafts.
+- Verified documentation truth, TypeScript check/build, all 20 runtime unit
+  suites, the complete 18-script smoke suite, both four-case Alpha reliability
+  campaigns (each 3 passed, 1 guarded, 0 failed; provider campaign 37 requests
+  and 100% scored-stage pass rate), 26 Swift tests, and `git diff --check`.
+
+Not done:
+
+- The GitHub default branch is intentionally unchanged until a human reviews
+  and merges the task branch; the screenshot's `main` README therefore remains
+  stale even after this task branch is pushed.
+- Automatic fork-owner discovery and optional background PR refresh remain.
+  Live-model public-repository trials, live `6a` OAuth verification, signed
+  `35a` WidgetKit packaging, semantic retrieval, and full multi-runtime task
+  routing also remain separate milestones.
+
+Next:
+
+- Push this evidence-synchronized branch and open a draft review entry without
+  merging `main`; use review/CI feedback to choose the next correction.
+- Run the pinned public-repository live-model corpus under explicit request,
+  token, cost, command, and mutation budgets, then widen provider behavior only
+  from classified failures.
+- Add automatic fork-owner discovery and a conservative opt-in background PR
+  refresh policy with quota, credential, lifecycle, and audit boundaries.

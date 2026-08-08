@@ -27,6 +27,9 @@ jobs:
       - name: Show Swift toolchain
         run: swift --version
 
+      - name: Check documentation truth
+        run: node script/check_documentation_truth.mjs
+
       - name: Run tests with coverage
         run: swift test --enable-code-coverage
 

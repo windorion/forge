@@ -321,7 +321,14 @@ changed files, structured preflight metadata, blockers, and risk notes. The
 preflight card summarizes base ref resolution, head/upstream readiness,
 multi-remote or fork-like review risk, validation state, test evidence, and
 publish readiness. That preview does not create, publish, update, close, or
-comment on any pull request.
+comment on any pull request. After explicit confirmation, `POST
+/git/pr-publish` rechecks the reviewed HEAD/branches, pushes without force,
+opens the PR through GitHub, and persists its task lineage. `POST
+/git/pr-status` is read-only against GitHub and uses a token supplied only in
+that request to refresh open/closed/merged state, latest decisive reviews,
+requested reviewers/teams, head-SHA check runs, and mergeability. The macOS
+completion surface shows normalized review/check evidence; Forge does not
+approve, merge, close, rerun checks, or comment on the PR.
 
 Use the sidebar composer to create a custom task. The app connects to
 `GET /events` and refreshes tasks as runtime events arrive.
@@ -777,6 +784,7 @@ also prints the application-only LLVM coverage report:
 swift build
 swift test --enable-code-coverage
 cd runtime && npm run check
+cd runtime && npm run check:docs
 cd runtime && npm run build
 cd runtime && npm run test:unit
 cd runtime && npm run smoke:core
@@ -794,6 +802,10 @@ variant only when intentionally refreshing durable evidence in
 `docs/reliability/`. The provider campaign runs the production OpenAI Responses
 adapter against a loopback strict-schema mock, so it sends no repository data
 to an external API and incurs no API cost.
+
+`npm run check:docs` validates duplicated headline facts against the handoff
+table, versioned reliability JSON, route manifest, and package scripts. See
+`docs/documentation_truth.md` for the authority and branch-publication rules.
 
 ## Current Limitations
 
@@ -876,9 +888,10 @@ to an external API and incurs no API cost.
   stored rerun evidence.
 - SQLite currently stores full task snapshots plus basic task index fields; the
   full normalized runs/messages/tool-calls schema is still ahead.
-- Repository context is still a bounded v1 scanner, not a full repository
-  index. It does not use Tree-sitter, symbols, embeddings, dependency graphs,
-  or semantic search yet.
+- Repository context remains bounded, but it now has durable file metadata,
+  lightweight symbols, and trigram text indexes with live-scan verification.
+  It still does not use Tree-sitter, embeddings, dependency graphs, or
+  semantic/hybrid retrieval.
 - Agent Loop v0 is still bounded and proposal-first. It now gathers read-only
   context before planning and before execution proposals. Agent Run Step v0
   can choose one safe proposal/command/repair action at a time, and Agent Run

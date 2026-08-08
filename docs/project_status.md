@@ -66,8 +66,8 @@ Implemented:
   The handoff celebration, hard-edge confetti, receipt, and next-step actions
   use real elapsed/agent time, proposal diff lines, passed checks, requested
   review changes, plan cost, current branch, and a safely normalized GitHub
-  remote. Forge says Shipped/Completed rather than falsely claiming a merged
-  PR until hosted PR publication provides that fact.
+  remote. Without a published PR Forge says Shipped/Completed; once the guarded
+  publication flow records a real PR it can show the actual number and state.
 - Real `26a` multi-task queue and scheduler. Approved Agent Loops occupy one
   repository execution slot or persist an ordered queue request in the task
   snapshot. The opaque 1240px Queue surface exposes running, queued, and needs-you
@@ -114,8 +114,8 @@ Implemented:
   authorization ID in health. The supervisor accepts active data only after
   mode, read-write state, authorization ID, and exact repo root all match, and
   terminates a mismatched process. Pause All covers primary and authorized
-  background loops. Full background task creation/detail/review routing and
-  rendered comparison remain.
+  background loops. The surface is rendered-verified; full background task
+  creation/detail/review routing remains.
 - Local TypeScript runtime.
 - Completed seven-phase runtime decomposition: the former 12,496-line
   `runtime/src/server.ts` is now a one-line packaged bootstrap over typed
@@ -317,13 +317,15 @@ Implemented:
   rejection, branch-publish remote branch collision, and remote policy
   rejection. Remote branch collision checks now use both local tracking refs
   and `git ls-remote --heads`.
-- Read-only PR handoff preview from the runtime. The runtime resolves
-  a default base branch when possible, compares current branch work against
-  that base, suggests a branch name, PR title, draft body, test plan, commits,
-  changed files, structured preflight metadata, blockers, and risk notes, and
-  explicitly does not create or publish a PR. The preflight summarizes base ref
-  resolution, head/upstream readiness, fork-like or multi-remote risk,
-  validation state, test evidence, and publication readiness.
+- Reviewed PR handoff plus explicit publication and status evidence. The
+  runtime resolves base/head/upstream state, validates the reviewed HEAD and
+  branch again, pushes without force, opens a GitHub PR only after explicit
+  confirmation, and persists its task lineage. On each user-triggered refresh,
+  it reads the PR, latest decisive review per reviewer, requested reviewers or
+  teams, head-SHA check runs, and GitHub mergeability. The macOS completion
+  surface shows open/draft/closed/merged state, approvals/change requests,
+  passing/pending/failing checks, and mergeability without persisting the
+  Keychain token.
 - Built-in and allowlisted project validation presets.
 - Runtime-derived command permission state in the app.
 - Runtime model-provider abstraction.
@@ -390,7 +392,7 @@ use different denominators and must not be added together.
 | --- | ---: | --- |
 | Trust/runtime foundation | 88-92% | Local runtime, task state, review gates, restricted edits, validation, composed cancellation, redacted audit export, guarded git actions, explicit multi-runtime authorization, diagnostics, and separate local/provider protocol reliability baselines are real. |
 | Coding-agent demo V0 behavior | 100% | All documented functional acceptance criteria are implemented and smoke-covered. |
-| Primary V0 handoff UI | 95-98% | Five primary screens are substantially implemented; exact typography and rendered comparison remain. |
+| Primary V0 handoff UI | 100% | All five primary screens are `Verified` with rendered-comparison evidence in `docs/verification/`. |
 | Full 43-screen handoff UI | 95-97% | 41 of 43 screens Verified with rendered-comparison evidence (docs/verification/). Remaining: 6a Partial (OAuth configuration, Device Flow, standards-compliant polling, Keychain persistence, and connected UI are implemented and unit-tested; a live grant still needs the founder GitHub OAuth Client ID with Device Flow enabled); 35a a documented platform-blocked widget-signing descope (P6). |
 | Useful developer alpha | 64-72% | Forge now repeats the reviewed lifecycle across deterministic local-provider and mock-OpenAI adapter corpora, including Unified Diff, approved commands, safety guarding, and repair/rerun; it still needs broader autonomous tool use and repeated live-model success on pinned public repositories. |
 | Commercial beta | 20-25% | Needs installable packaging, onboarding, GitHub/provider setup, trust polish, and repeated success on real repos. |
@@ -406,12 +408,12 @@ The hardest remaining work is not the app shell. The hardest remaining work is:
 
 - a richer model-backed coding loop with read/search tool choices and broader
   patch/recovery behavior
-- strict implementation and verification of all 43 named handoff screens and
-  states; see `docs/design_handoff_coverage.md`
-- a useful source-code patch engine beyond exact text-based hunks
-- reliable repository understanding beyond bounded file scans
-- git workflow from dirty tree to approved published PR
-- robust command execution and failure recovery
+- close the two remaining handoff boundaries: live `6a` GitHub authorization
+  with a founder Client ID and signed `35a` WidgetKit packaging in P6
+- repeated live-model patch/command/recovery success on pinned public repos
+- semantic or hybrid retrieval beyond the durable file/symbol/trigram indexes
+- automatic fork-head discovery and optional background PR refresh
+- broader project-command catalogs and revocable approval memory
 - native macOS distribution, signing, notarization, and updates
 - trust polish: permissions, audit trail, secret handling, and clear user
   control
@@ -423,26 +425,27 @@ The V0 functional finish line is complete. The Coding-Agent Demo defined in
 watch a live agent run, see code/test activity, review a real source diff, and
 approve the final patch.
 
-Design completion is tracked separately and is not complete. The primary V0
-screens must pass strict line-by-line visual and interaction verification, and
-the remaining handoff screens continue cumulatively through alpha, beta, and
-v1. Broader autonomous runtime work is paused behind this design-first pass.
+Design completion is tracked separately. The five primary V0 screens have
+passed strict rendered verification; full handoff status is 41 of 43. The two
+remaining entries are externally gated (`6a` live OAuth grant and `35a` signed
+WidgetKit packaging), so they no longer block safe Alpha reliability work.
 
 ## Alpha Finish Line
 
 Alpha is done when Forge can complete small real documentation or code tasks
 with a model provider while preserving human review.
 
-Alpha requires:
+Current Alpha evidence already includes provider-backed read/search, reviewed
+source patches, approved command execution, repair/rerun, full diff review,
+streamed output, guarded Git/PR publication, restart recovery, and onboarding.
 
-- richer provider-backed read/search/patch/run/repair in normal flows
-- richer provider-backed tool use and repeated real-repository success
-- full diff review matching the design handoff
-- streamed terminal/test output in the task
-- git status, changed-file inspection, commit preparation, local commit,
-  branch publish, guarded push, and PR handoff/publication
-- task recovery after runtime restart and common failures
-- a clean onboarding path for choosing a repo and provider
+Alpha still requires:
+
+- repeated live-model success on a pinned public-repository task corpus
+- broader provider tool/patch choices without weakening review boundaries
+- automatic fork-head discovery and optional background PR refresh
+- background task/detail/review routing across authorized repositories
+- founder completion of live GitHub OAuth verification
 
 ## Commercial Beta Finish Line
 
