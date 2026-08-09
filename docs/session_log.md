@@ -6409,3 +6409,42 @@ Next:
   archive the six-hour supervision soak with explicit AC/sleep conditions.
 - Use any resulting failure to add only the necessary reconnect/backoff or
   supervisor telemetry rather than speculative instrumentation.
+
+## 2026-08-09 19:59:30 +0200 (CEST)
+
+Conversation summary:
+
+- The founder asked Forge to continue and repair the failing CI/CD checks.
+
+Done:
+
+- Used GitHub Actions run/job logs to identify four consecutive failing Swift
+  workflows. The latest run (`31303647190`, job `93220369610`) passed checkout
+  and documentation truth, then failed during `swift test
+  --enable-code-coverage` on the macOS 15 arm64 runner with Swift 6.1.2.
+- Isolated the actionable diagnostics hidden above the final `fatalError`:
+  generic async routing closures in `MissionControlRuntimeSupervisor` were
+  treated as nonisolated, making their generic results illegal to return across
+  actor boundaries; the global SwiftUI `routingHeader` helper likewise built a
+  MainActor-isolated `Spacer` from a nonisolated function.
+- Preserved behavior and strict concurrency. The routing closures are now
+  explicitly MainActor-isolated and `routingHeader` is marked `@MainActor`; no
+  `@unchecked Sendable`, compiler downgrade, warning suppression, or CI bypass
+  was introduced.
+- Reproduced the older isolation model locally by disabling Swift 6.2's
+  `NonisolatedNonsendingByDefault` upcoming feature. The exact coverage build
+  then passed all 47 Swift tests.
+
+Not done:
+
+- The repair still needs the GitHub-hosted Swift 6.1.2 workflow result after
+  push; local compatibility evidence is passing.
+- The previously documented authenticated XCUITest archive and six-hour soak
+  remain the next API-free long-running evidence tasks.
+
+Next:
+
+- Push the actor-isolation repair, wait for the Swift Tests workflow, and only
+  call CI repaired after the hosted runner passes.
+- Once green, add a hosted XCUITest `build-for-testing` compile gate or proceed
+  to the full supervision soak without weakening the interactive test boundary.

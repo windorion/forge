@@ -1020,6 +1020,7 @@ struct MissionControlTaskDetailView: View {
     }
 }
 
+@MainActor
 private func routingHeader(title: String, close: @escaping () -> Void) -> some View {
     HStack(spacing: 12) {
         ForgeLogo(size: 18)

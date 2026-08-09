@@ -694,7 +694,7 @@ final class MissionControlRuntimeSupervisor {
 
     private func mutateRepository<Result>(
         path: String,
-        operation: (RuntimeClient) async throws -> Result
+        operation: @MainActor (RuntimeClient) async throws -> Result
     ) async throws -> Result {
         try await withRouteRequest(key: "mutation:\(path)") {
             let client = try await validatedClient(path: path, requireActive: true)
@@ -704,7 +704,10 @@ final class MissionControlRuntimeSupervisor {
         }
     }
 
-    private func withRouteRequest<T>(key: String, operation: () async throws -> T) async throws -> T {
+    private func withRouteRequest<T>(
+        key: String,
+        operation: @MainActor () async throws -> T
+    ) async throws -> T {
         guard inFlightRouteKeys.insert(key).inserted else {
             throw MissionControlSupervisorError.requestAlreadyInFlight
         }
