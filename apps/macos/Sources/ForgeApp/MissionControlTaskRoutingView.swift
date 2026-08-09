@@ -236,6 +236,7 @@ struct MissionControlTaskDetailView: View {
         }
         .background(ForgeDesign.paper)
         .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("mission-control-task-detail")
         .onAppear {
             #if DEBUG

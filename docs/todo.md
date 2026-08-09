@@ -279,22 +279,28 @@ the core runtime smoke. Preserve these completed boundaries:
   methods cover observer authorization/revocation, 1/2 slot changes, review-card
   navigation, preset approval, active-command cancellation, and Git branch/
   commit confirmation cancellation. The project and test bundle compile via
-  `script/test_mission_control_ui.sh`; the first execution reached XCTest Runner
-  initialization but local macOS authentication was cancelled before methods
-  ran, so this is not yet passing action-level evidence.
+  `script/test_mission_control_ui.sh`. An authenticated run executed all three
+  methods and passed the slot/card-navigation method. The two remaining methods
+  exposed sheet scoping and stale-element assertions; their fixes compile in
+  build-only mode, but a complete passing archive is still outstanding.
 - [x] Make supervision soak runs independently auditable. The same two-runtime
   fairness oracle now writes schema-versioned JSON/Markdown with requested and
   actual duration, exact timestamps, environment/power notes, grant/restart/
   queue totals, failure stacks/runtime output tails, and preserved failure
-  fixtures. A three-second diagnostic passed with 11 soak restart cycles; the
-  sandbox-negative run also proved failure artifact preservation.
+  fixtures. A bounded five-minute diagnostic passed with six alternating
+  grants, 1,086 soak restart cycles, no startup auto-dispatch, stale-ID
+  rejection, no starvation, and empty final queues; it is not the six-hour
+  acceptance run. The sandbox-negative run also proved failure artifact
+  preservation.
 - **Next API-free long task — archive full evidence and close exposed gaps:**
-  - Run and archive the configured six-hour Mission Control soak with exact
+  - Run and archive the configured six-hour Mission Control soak under stable
+    AC power with exact
     command, environment, machine sleep/power conditions, start/end times,
     grant/restart/queue totals, and failure artifacts.
-  - Approve macOS local authentication and archive a passing run of the existing
-    three-method XCUITest suite. Keep the deterministic DEBUG driver as a fast
-    visual check and keep its evidence distinct from XCUITest.
+  - Archive a passing run of the existing three-method XCUITest suite only in a
+    user-approved unattended desktop window. Do not run focus-stealing UI
+    automation while the user is working. Keep the deterministic DEBUG driver
+    and compile-only CI gate distinct from action-level XCUITest evidence.
   - Add disconnect/reconnect/backoff scenarios and lightweight supervisor
     telemetry only where the soak or XCUITest exposes a real blind spot.
 - Add Finder and broader "open in IDE" integrations beyond the current

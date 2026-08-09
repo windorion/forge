@@ -12,10 +12,12 @@ final class MissionControlUITests: XCTestCase {
         XCTAssertTrue(authorize.waitForExistence(timeout: 5))
         authorize.click()
 
-        let authorizeAlert = app.alerts["Authorize active runtime?"]
-        XCTAssertTrue(authorizeAlert.waitForExistence(timeout: 3))
-        assertAlert(authorizeAlert, contains: "/tmp/forge-ui-alpha")
-        authorizeAlert.buttons["Cancel"].click()
+        let authorizeDialog = assertDialog(
+            in: app,
+            title: "Authorize active runtime?",
+            contains: "/tmp/forge-ui-alpha"
+        )
+        authorizeDialog.buttons["Cancel"].click()
         XCTAssertTrue(authorize.exists)
 
         app.terminate()
@@ -24,10 +26,12 @@ final class MissionControlUITests: XCTestCase {
         XCTAssertTrue(revoke.waitForExistence(timeout: 5))
         revoke.click()
 
-        let revokeAlert = app.alerts["Return repository to read-only?"]
-        XCTAssertTrue(revokeAlert.waitForExistence(timeout: 3))
-        assertAlert(revokeAlert, contains: "/tmp/forge-ui-alpha")
-        revokeAlert.buttons["Cancel"].click()
+        let revokeDialog = assertDialog(
+            in: app,
+            title: "Return repository to read-only?",
+            contains: "/tmp/forge-ui-alpha"
+        )
+        revokeDialog.buttons["Cancel"].click()
         XCTAssertTrue(revoke.exists)
     }
 
@@ -35,10 +39,10 @@ final class MissionControlUITests: XCTestCase {
         let app = launch(surface: "missionControlFixture:review")
         let slotMenu = element("mission-control-slot-menu", in: app)
         XCTAssertTrue(slotMenu.waitForExistence(timeout: 5))
-        XCTAssertEqual(slotMenu.label, "BG SLOTS 1")
+        XCTAssertEqual(slotMenu.title, "BG SLOTS 1")
         slotMenu.click()
         app.menuItems["2 — two repositories"].click()
-        XCTAssertEqual(slotMenu.label, "BG SLOTS 2")
+        XCTAssertEqual(slotMenu.title, "BG SLOTS 2")
 
         let reviewCard = element("mission-control-task-ui-alpha-review", in: app)
         XCTAssertTrue(reviewCard.waitForExistence(timeout: 3))
@@ -51,7 +55,7 @@ final class MissionControlUITests: XCTestCase {
         let app = launch(surface: "missionControlRouteFixture:commands")
         XCTAssertTrue(element("mission-control-task-detail", in: app).waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["AUTHORIZED ROUTE"].exists)
-        XCTAssertTrue(app.staticTexts["/tmp/forge-ui-alpha"].exists)
+        assertText(in: app, contains: "/tmp/forge-ui-alpha")
 
         let approvePreset = element("mission-control-approve-preset-macos-swiftpm", in: app)
         XCTAssertTrue(approvePreset.waitForExistence(timeout: 3))
@@ -61,23 +65,27 @@ final class MissionControlUITests: XCTestCase {
         let cancelCommand = element("mission-control-cancel-command-ui-command-running", in: app)
         XCTAssertTrue(cancelCommand.exists)
         cancelCommand.click()
-        XCTAssertFalse(cancelCommand.waitForExistence(timeout: 1))
         XCTAssertTrue(app.staticTexts["CANCELLED"].waitForExistence(timeout: 3))
+        XCTAssertFalse(element("mission-control-cancel-command-ui-command-running", in: app).exists)
 
         element("mission-control-tab-git", in: app).click()
         XCTAssertTrue(app.staticTexts["BACKGROUND REPOSITORY GIT"].waitForExistence(timeout: 3))
 
         element("mission-control-git-branch", in: app).click()
-        let branchAlert = app.alerts["Change background branch?"]
-        XCTAssertTrue(branchAlert.waitForExistence(timeout: 3))
-        assertAlert(branchAlert, contains: "/tmp/forge-ui-alpha")
-        branchAlert.buttons["Cancel"].click()
+        let branchDialog = assertDialog(
+            in: app,
+            title: "Change background branch?",
+            contains: "/tmp/forge-ui-alpha"
+        )
+        branchDialog.buttons["Cancel"].click()
 
         element("mission-control-git-commit", in: app).click()
-        let commitAlert = app.alerts["Create background local commit?"]
-        XCTAssertTrue(commitAlert.waitForExistence(timeout: 3))
-        assertAlert(commitAlert, contains: "/tmp/forge-ui-alpha")
-        commitAlert.buttons["Cancel"].click()
+        let commitDialog = assertDialog(
+            in: app,
+            title: "Create background local commit?",
+            contains: "/tmp/forge-ui-alpha"
+        )
+        commitDialog.buttons["Cancel"].click()
 
         XCTAssertFalse(element("mission-control-git-branchPublish", in: app).exists)
         XCTAssertFalse(element("mission-control-git-push", in: app).exists)
@@ -95,8 +103,52 @@ final class MissionControlUITests: XCTestCase {
         app.descendants(matching: .any).matching(identifier: identifier).firstMatch
     }
 
-    private func assertAlert(_ alert: XCUIElement, contains text: String) {
-        let match = alert.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch
-        XCTAssertTrue(match.exists, "Expected alert to contain \(text). Accessibility tree:\n\(alert.debugDescription)")
+    private func assertDialog(
+        in app: XCUIApplication,
+        title: String,
+        contains text: String
+    ) -> XCUIElement {
+        let dialog = app.sheets.firstMatch
+        XCTAssertTrue(
+            dialog.waitForExistence(timeout: 3),
+            "Expected a confirmation sheet. Accessibility tree:\n\(app.debugDescription)"
+        )
+        let titleMatch = accessibleText(title, in: dialog)
+        XCTAssertTrue(
+            titleMatch.waitForExistence(timeout: 3),
+            "Expected a dialog titled \(title). Accessibility tree:\n\(dialog.debugDescription)"
+        )
+        let bodyMatch = accessibleText(text, in: dialog)
+        XCTAssertTrue(
+            bodyMatch.waitForExistence(timeout: 3),
+            "Expected a dialog containing \(text). Accessibility tree:\n\(dialog.debugDescription)"
+        )
+        XCTAssertTrue(dialog.buttons["Cancel"].exists, "Expected a cancellable confirmation dialog.")
+        return dialog
+    }
+
+    private func assertText(in app: XCUIApplication, contains text: String) {
+        let match = accessibleText(text, in: app)
+        XCTAssertTrue(
+            match.waitForExistence(timeout: 3),
+            "Expected accessible text containing \(text). Accessibility tree:\n\(app.debugDescription)"
+        )
+    }
+
+    private func accessibleText(_ text: String, in app: XCUIApplication) -> XCUIElement {
+        accessibleText(text, in: app as XCUIElement)
+    }
+
+    private func accessibleText(_ text: String, in element: XCUIElement) -> XCUIElement {
+        element.descendants(matching: .any)
+            .matching(
+                NSPredicate(
+                    format: "label CONTAINS[c] %@ OR title CONTAINS[c] %@ OR value CONTAINS[c] %@",
+                    text,
+                    text,
+                    text
+                )
+            )
+            .firstMatch
     }
 }

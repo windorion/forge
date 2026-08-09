@@ -49,9 +49,11 @@ This remains the fast native view/action-transition evidence, distinct from
 XCUITest. Forge now also has a generated `ForgeApp.xcodeproj` UI-test host and
 three real `XCUIApplication` methods for authorization/revocation, slots, card
 navigation, command actions, and Git confirmation cancellation. The bundle
-passes `build-for-testing`. Its first action-level launch reached XCTest Runner
-but macOS local authentication was cancelled before the methods executed, so a
-passing authenticated archive and signed-build automation pass remain.
+passes `build-for-testing`. An authenticated action-level run executed all three
+methods and passed the slot/card-navigation path. The other two exposed sheet
+scoping and stale-element assertions; scoped fixes compile, while a complete
+passing archive remains for a user-approved unattended desktop window because
+XCUITest takes foreground focus.
 The committed app host and UI-test bundle are also compile-gated in a separate
 macOS 15 GitHub Actions job with signing disabled; this is hosted toolchain
 evidence only and does not replace the interactive accessibility run.

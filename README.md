@@ -149,13 +149,17 @@ Implemented today:
   two-runtime fixture proves six alternating grants, stale-ID rejection,
   restart hold, and no starvation; a configurable six-hour local soak entry
   now emits versioned JSON/Markdown reports with exact timing, environment,
-  grant/restart/queue totals, and preserved failure artifacts. A three-second
-  diagnostic completed 11 restart cycles. The four-state DEBUG native capture
-  driver remains available without APIs. A generated Xcode project and three
-  real `XCUIApplication` test methods cover authorization/revocation, slot
-  changes, card navigation, command actions, and Git confirmation cancellation;
-  the test bundle compiles, while the first action-level run still needs the
-  local macOS UI-automation authentication prompt to be approved. The
+  grant/restart/queue totals, and preserved failure artifacts. A bounded
+  five-minute diagnostic completed 1,086 soak restart cycles with all six fair
+  grants and empty final queues; it is not the outstanding six-hour acceptance
+  run. The four-state DEBUG native capture driver remains available without
+  APIs. A generated Xcode project and three real `XCUIApplication` test methods
+  cover authorization/revocation, slot changes, card navigation, command
+  actions, and Git confirmation cancellation. An authenticated action-level
+  run executed all three methods and passed the slot/card-navigation path; it
+  exposed two accessibility-query assertions, whose scoped fixes now pass
+  `build-for-testing`. A fully passing archive remains for a user-approved
+  unattended window so UI automation does not interrupt desktop work. The
   two-runtime routing fixture also proves command approval/run/cancel, retained
   cancelled output, repository-local status/diff/commit/branch actions, and
   honest remote-less publish/push/PR blockers for both repositories.
@@ -275,7 +279,7 @@ Beyond V0:
 - Semantic or hybrid retrieval beyond the existing durable file, symbol, and
   trigram text indexes.
 - Full-duration supervision soak evidence and a passing action-level XCUITest
-  archive after local macOS UI-automation authentication.
+  archive captured in a user-approved unattended desktop window.
 - Packaged, signed, notarized, auto-updating Mac distribution.
 
 ## Completion Estimate
@@ -302,8 +306,9 @@ Top priorities are tracked in `docs/todo.md`. Current post-V0 themes:
 
 - run a budgeted live-model corpus on pinned public repositories
 - use classified failures to widen safe provider tool/patch/recovery behavior
-- archive a full-duration supervision soak, approve and archive the implemented
-  Mission Control XCUITest run, and prepare signed Mac distribution
+- archive a full-duration supervision soak under stable AC power, capture the
+  implemented Mission Control XCUITest in an unattended window, and prepare
+  signed Mac distribution
 
 The subsystem-by-subsystem readiness and remaining-gap matrix lives in
 `docs/project_status.md` under **Component Gap Matrix**.

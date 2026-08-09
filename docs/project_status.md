@@ -136,8 +136,9 @@ Implemented:
   driver cover observer/active/queued/review states. The soak now emits
   schema-versioned JSON/Markdown with requested/actual timing, environment and
   power notes, grant/restart/queue totals, runtime output tails, and preserved
-  failure fixtures. A three-second end-to-end diagnostic passed with six fair
-  grants, two drain-time restarts, 11 soak restarts, and empty final queues.
+  failure fixtures. A bounded five-minute end-to-end diagnostic passed with six
+  fair grants, two drain-time restarts, 1,086 soak restarts, and empty final
+  queues. It remains distinct from the outstanding six-hour acceptance run.
   A second native driver
   proves the routed Commands -> Git -> Commands action transition with real
   rendered view-hierarchy evidence. The two-repository HTTP fixture proves
@@ -146,10 +147,12 @@ Implemented:
   PR blockers on both runtimes. A generated Xcode UI-test host and three real
   `XCUIApplication` methods now cover observer authorization/revocation, 1/2
   slots, card navigation, command approval/cancel, and Git confirmation cancel.
-  `build-for-testing` passes; the first action-level run reached XCTest Runner
-  initialization but macOS local authentication was cancelled before any test
-  method ran. A completed multi-hour run and an authenticated passing UI-test
-  archive remain.
+  `build-for-testing` passes. An authenticated action-level run executed all
+  three methods: the slot/card-navigation path passed and two assertions exposed
+  macOS sheet-query and stale-element semantics. The fixes scope confirmation
+  queries to the owning sheet and re-query command state after cancellation;
+  they compile, but the passing archive is deferred to a user-approved
+  unattended window. A completed multi-hour run also remains.
   A bounded 20-second local extension completed 79 restart cycles without
   unexpected dispatch, identity drift, task loss, or queue resurrection.
 - Local TypeScript runtime.
@@ -452,13 +455,13 @@ finish line.
 | Runtime, task state, recovery | 91-95% | 5-9% | 59-route contract, SQLite persistence, task detail, supervised/automatic queue modes, cancellation, watchdog recovery, transaction journals. | Normalize long-term run/tool history, retention, migration, full-duration soak, and production telemetry. |
 | Security, permissions, and audit | 89-94% | 6-11% | Explicit plan/edit/command/git/PR gates, observer runtimes, fresh repository/session checks for every routed mutation, redacted portable audit export, bounded PR refresh attempts. | Approval expiry/revocation, audit retention/purge, broader secret detection, and signed-build threat review. |
 | Handoff UI fidelity | 95-97% | 3-5% | Five primary screens and 41 of 43 total states are Verified. | Live `6a` OAuth evidence and signed `35a` WidgetKit packaging. |
-| Native macOS behavior and integrations | 83-90% | 10-17% | SwiftUI app, menus, shortcuts, notifications, Spotlight, CLI, onboarding, settings, managed runtimes, fair-queue state, rendered routed-tab transitions, and three compiled `XCUIApplication` methods. | Authenticate and archive a passing UI-test run, final human-input checks, deeper Finder/IDE handoff, WidgetKit, and signed-package proof. |
+| Native macOS behavior and integrations | 83-90% | 10-17% | SwiftUI app, menus, shortcuts, notifications, Spotlight, CLI, onboarding, settings, managed runtimes, fair-queue state, rendered routed-tab transitions, three compiled `XCUIApplication` methods, and one passing action-level path. | Archive the full UI-test suite in an unattended window, final human-input checks, deeper Finder/IDE handoff, WidgetKit, and signed-package proof. |
 | Agent and live-model coding quality | 58-68% | 32-42% | Bounded plan/context/step loop, strict structured-output recovery, mock-OpenAI protocol campaign. | Pinned public-repository live-model evidence, broader tool choice, patch recovery, and measured quality/cost. |
 | Edit, command, validation, and repair | 84-91% | 9-16% | Reviewed multi-file create/modify/delete, Unified Diff, rollback, approved commands, repair/rerun, and repository-scoped background command control. | Broader source transformations, command catalogs, revocable approval memory, and post-rollback validation. |
 | Repository understanding | 68-78% | 22-32% | Durable file metadata, lightweight symbols, trigram text index, bounded live verification. | Semantic/hybrid retrieval, dependency relationships, higher-fidelity parsing, ranking evaluation, and large-repo budgets. |
 | Git and GitHub workflow | 88-93% | 7-12% | Status/diff, guarded commit/branch/push, routed background preflights/actions, fork-aware PR publication, reviews/checks/mergeability evidence, bounded background refresh. | Live OAuth proof, hosted auth/network/branch-protection fixtures, richer provider portability, and merge/update policy decisions. |
-| Multi-task and multi-repository supervision | 92-96% | 4-8% | Persisted queues, observers, session authorization, routed task/command/Git review, serialized mutations, fair 1-2-slot grants, restart injection, two-repository isolation, reportable soak tooling, and compiled action-level UI tests. | Full multi-hour and authenticated UI-test evidence, disconnect backoff, and telemetry. |
-| Reliability, evaluation, and test evidence | 83-90% | 10-17% | 21 runtime unit files, 20 smoke scripts, 47 Swift tests, 3 compiled XCUITest methods, fork/mock-GitHub E2E, two campaigns, two-runtime fixtures, and success/failure soak reports. | Live-model corpus, wider real repositories, hosted-network cases, a passing XCUITest archive, performance evidence, and a completed multi-hour soak. |
+| Multi-task and multi-repository supervision | 92-96% | 4-8% | Persisted queues, observers, session authorization, routed task/command/Git review, serialized mutations, fair 1-2-slot grants, restart injection, two-repository isolation, a passing 300-second/1,086-restart soak, and an action-level UI-test path. | Full multi-hour and complete UI-test evidence, disconnect backoff, and telemetry. |
+| Reliability, evaluation, and test evidence | 83-90% | 10-17% | 21 runtime unit files, 20 smoke scripts, 47 Swift tests, 3 compiled XCUITest methods, one passing action path, fork/mock-GitHub E2E, two campaigns, two-runtime fixtures, and success/failure soak reports. | Live-model corpus, wider real repositories, hosted-network cases, a complete passing XCUITest archive, performance evidence, and a completed multi-hour soak. |
 | Distribution, updates, and operations | 25-35% | 65-75% | App-managed/bundled-runtime path, update UI/appcast client, diagnostics surfaces. | Developer ID, hardened runtime, notarization, DMG, signed appcast install/relaunch, crash reporting, release rehearsal. |
 | Account, sync, and collaboration services | 10-20% | 80-90% | Honest local-only continuation and GitHub/provider credentials in Keychain. | Decide whether accounts exist; if yes, build verified email identity, sync, sharing, tenancy, and deletion/privacy APIs. |
 | Pricing, packaging, and go-to-market | 20-30% | 70-80% | Product category, personas, positioning, and business-model hypotheses are documented. | Choose solo/team wedge, open-core boundary, packaging, price, entitlement/billing, support, and launch evidence. |
@@ -470,12 +473,14 @@ edit, command, and reliability work instead of expanding those systems by
 intuition.
 
 The API-free Mission Control verification milestone now includes versioned
-success/failure soak evidence and a compiled true-XCUITest target for the main
-authorization, slot, navigation, command, Git-confirmation, and revocation
-gates. The strongest next API-free step is operational rather than another
-fixture: approve the local macOS UI-automation authentication prompt, archive a
-passing action-level run, then archive the configured multi-hour soak. That
-attacks the remaining 4-8% supervision gap without provider credentials.
+success/failure soak evidence, a passing bounded five-minute/1,086-restart run,
+and an authenticated true-XCUITest execution of all three methods. The slot and
+card-navigation path passed; the other two produced actionable accessibility
+assertion fixes that compile. The strongest next API-free step is operational:
+archive the configured multi-hour soak under stable AC power and rerun the UI
+suite only in a user-approved unattended desktop window. That attacks the
+remaining 4-8% supervision gap without provider credentials or interrupting
+the user's work.
 
 ## Distance To "Finished"
 
@@ -521,7 +526,8 @@ Alpha still requires:
 
 - repeated live-model success on a pinned public-repository task corpus
 - broader provider tool/patch choices without weakening review boundaries
-- a completed multi-hour active/observer soak and action-level native UI proof
+- a completed multi-hour active/observer soak and complete passing action-level
+  native UI archive captured without interrupting the user's desktop work
 - founder completion of live GitHub OAuth verification
 
 ## Commercial Beta Finish Line

@@ -6519,3 +6519,52 @@ Next:
   Mission Control reliability work with the reportable six-hour soak.
 - Preserve the compile-only/authenticated-run distinction when updating the
   reliability evidence and completion estimates.
+
+## 2026-08-09 23:17:26 +0200 (CEST)
+
+Conversation summary:
+
+- Continued the API-free Mission Control reliability task, checked hosted CI,
+  exercised the real XCUITest harness once, and then honored the user's request
+  to stop all focus-stealing desktop automation and continue with code-only
+  work.
+
+Done:
+
+- Confirmed the latest two `main` GitHub Actions runs were green, including all
+  47 Swift tests and the hosted signing-disabled XCUITest `build-for-testing`
+  gate.
+- Ran a bounded five-minute two-runtime supervision soak. It passed six fair
+  alpha/beta grants, stale-authorization rejection, startup hold, starvation
+  prevention, two drain-time restarts, 1,086 soak restart cycles, and empty
+  final queues. The report explicitly records battery/power conditions and does
+  not claim the six-hour acceptance gate.
+- The authenticated XCUITest run executed all three methods. Slot change and
+  review-card navigation passed; the other methods exposed macOS sheet-scoping
+  and stale-element query behavior rather than app-host compilation failures.
+- Removed the root accessibility identifier that was propagating over Mission
+  Control descendants, added an explicit semantic container for routed task
+  detail, scoped confirmation queries and Cancel actions to their owning sheet,
+  used menu titles for macOS MenuButton assertions, and re-queried command state
+  after retained `CANCELLED` evidence.
+- Stopped action-level XCUITest immediately after the user reported foreground
+  interference. No further app, browser, or desktop automation was run.
+- Passed all 47 background Swift tests and the non-launching XCUITest
+  `build-for-testing` compile gate after the fixes.
+- Updated README, project status, TODO, macOS, and development documentation to
+  distinguish the passing five-minute soak, partial action-level evidence,
+  compile-only proof, and outstanding unattended/full-duration gates.
+
+Not done:
+
+- The three XCUITest methods have not been rerun together after the final query
+  fixes because foreground UI automation would interrupt the user's work.
+- The official six-hour soak has not run; it remains deferred until stable AC
+  power and an appropriate long-running window are available.
+
+Next:
+
+- Commit and push the accessibility/test/documentation repair, then confirm the
+  non-interactive hosted SwiftPM and XCUITest compile jobs remain green.
+- Run the action-level suite only in a user-approved unattended desktop window,
+  and run the six-hour soak only under documented stable AC/sleep conditions.

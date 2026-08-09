@@ -187,9 +187,11 @@ time, start/end timestamps, host/Node/OS/architecture, operator-supplied power
 conditions, held/granted/restarted/final queue totals, and all negative-control
 results. Failures include the stack and bounded runtime output tails and keep
 the temporary repositories by default (`FORGE_FAIR_QUEUE_PRESERVE_FAILURES=0`
-disables preservation). The 2026-08-09 three-second proof completed six fair
-grants, two drain-time restarts, 11 soak restarts, and empty final queues; it is
-a pipeline diagnostic, not the outstanding six-hour evidence.
+disables preservation). The 2026-08-09 bounded five-minute proof completed six
+fair grants in alpha/beta alternation, two drain-time restarts, 1,086 soak
+restarts, stale-authorization rejection, no startup auto-dispatch, no
+starvation, and empty final queues. It ran under an explicit battery/power note
+and is a pipeline diagnostic, not the outstanding six-hour evidence.
 
 For native visual automation, run a DEBUG ForgeApp and use:
 
@@ -230,10 +232,15 @@ slot changes, review-card navigation, preset approval, active command cancel,
 and Git branch/commit confirmation cancellation. The script regenerates
 `ForgeApp.xcodeproj` deterministically from all app/UI-test Swift sources. On
 first use macOS may require local authentication before XCTest can control the
-UI; approve that system prompt and rerun. On 2026-08-09 `build-for-testing`
-passed, while the first real run stopped at Runner initialization with Local
-Authentication code -2 (cancelled) before any method executed. Do not call
-that attempt a passing XCUITest run.
+UI. On 2026-08-09 an authenticated run executed all three methods: slot change
+and review-card navigation passed; the authorization/revocation method exposed
+sheet-scoping semantics, and the command/Git method exposed a stale element
+query after cancellation. The fixes now scope text and Cancel queries to the
+owning sheet and re-query the cancellation control after observing retained
+`CANCELLED` evidence; `build-for-testing` passes. This is not yet a complete
+passing archive. Because action-level XCUITest takes foreground focus, run it
+only in a user-approved unattended desktop window. Build-only mode is safe for
+normal background development.
 
 GitHub Actions also builds the committed `ForgeAppUI` scheme in a separate
 `Mission Control XCUITest build` job on the macOS 15 arm64 image. It uses

@@ -77,7 +77,6 @@ struct MissionControlView: View {
                 .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
             }
         }
-        .accessibilityIdentifier("mission-control-root")
         .onAppear { workspace.refreshMissionControl() }
         .onChange(of: workspace.missionControlTaskRoute) { _, route in
             if route != nil { showingTaskComposer = false }
