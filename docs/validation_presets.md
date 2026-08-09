@@ -88,7 +88,9 @@ Each permission snapshot includes:
 The macOS Review panel uses this endpoint to show command permission requests.
 The macOS session action rail also uses the same envelope's task-command list
 to populate its command chooser. The UI should not locally invent a different
-permission policy.
+permission policy. Mission Control's routed Commands tab loads this same
+envelope from the exact repository runtime after fresh identity validation; it
+does not copy permission state from the primary workspace.
 
 Approval and execution readiness are intentionally separate. A medium-risk
 preset can be approved before an edit proposal is applied. Running a full
@@ -133,6 +135,13 @@ active child process it started for the given task command run. A cancellation
 request records a `Cancel Task Command` approval/audit entry, appends a system
 output chunk, emits cancellation events, and marks the command `Cancelled`
 when the process exits. Cancelled commands do not create failure repair briefs.
+
+For an accepted Mission Control runtime, preset approval/run, command run/
+cancel, and reviewed repair rerun use the same endpoints and identifiers. The
+native supervisor revalidates repository root, read-write mode, session
+authorization, and supervised-dispatch health immediately before each POST,
+serializes the request with every other mutation for that repository, and
+refreshes both task state and the permission envelope after completion.
 
 ## Safety Rules
 

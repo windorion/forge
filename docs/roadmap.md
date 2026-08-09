@@ -3,7 +3,7 @@
 Document role: record sequencing, milestones, proof points, and what should
 not be built too early.
 
-Last updated: 2026-08-08
+Last updated: 2026-08-09
 
 ## Direction Reset
 
@@ -176,9 +176,8 @@ additive.
    token, cost, command, and mutation budgets.
 3. Use those failures to widen provider tool/patch/recovery behavior without
    weakening runtime ownership or human review.
-4. Extend the completed background task/detail/review routing with
-   routed background command/git reviews, action-level native UI automation,
-   and archived full-duration soak evidence.
+4. Archive full-duration Mission Control soak evidence and add true XCUITest
+   for the now-complete routed task/command/Git review and confirmation gates.
 5. Complete signed/notarized packaging, appcast install/relaunch, production
    diagnostics, and commercial decisions.
 

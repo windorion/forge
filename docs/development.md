@@ -124,10 +124,14 @@ uses its own loopback client after the supervisor refreshes health and verifies
 the exact repository root, primary/read-write mode, `repository-active` scope,
 and current in-memory authorization ID. Background cards use the read-only
 `GET /tasks/:taskID` route for fresh detail and open a Mission Control-owned
-Overview/Review/Activity surface instead of replacing the primary workspace.
-When active, that surface can send conversation, regenerate/approve plans,
-review proposal files, Apply, and run validation. All writes share one
-per-repository in-flight gate; observer detail never issues a POST.
+Overview/Review/Commands/Git/Activity surface instead of replacing the primary
+workspace. When active, that surface can send conversation, regenerate/approve
+plans, review proposal files, Apply, approve/run validation presets, run/cancel
+runtime-known commands, rerun reviewed repairs, and separately confirm local
+commit/branch/non-force publish/push. The Git tab loads bounded status/diff and
+all five preflight artifacts from the owning runtime; PR publication remains in
+the focused Keychain-backed workflow. All writes share one per-repository
+in-flight gate; observer detail never issues a POST.
 
 Run the observer safety regression with:
 
@@ -144,10 +148,15 @@ active, then rejected again after read-only restoration.
 
 `smoke:mission-control` starts two isolated temporary repositories/runtimes,
 creates six tasks concurrently in each authorized runtime, verifies exact task
-detail and a cross-repository 404 negative control, then returns both runtimes
-to observer mode for repeated health/tasks/queue/git/detail polling. The final
-oracle requires observer POST rejection and byte-identical SQLite files across
-the read-only soak. `FORGE_MISSION_CONTROL_SOAK_ITERATIONS` and
+detail and a cross-repository 404 negative control, then approves and runs one
+known command per repository, cancels each runtime's active long command by its
+own run ID, verifies retained Cancelled evidence, modifies each isolated Git
+worktree, loads its status/diff/commit/branch preflights, creates a scoped local
+commit and task branch, and proves remote-less publish/push/PR previews remain
+blocked. It then returns both runtimes to observer mode for repeated health/
+tasks/queue/git/detail polling. The final oracle requires observer POST
+rejection and byte-identical SQLite files across the read-only soak.
+`FORGE_MISSION_CONTROL_SOAK_ITERATIONS` and
 `FORGE_MISSION_CONTROL_TASK_COUNT` can raise the local stress budget.
 
 `smoke:mission-control-fairness` starts two authorized supervised runtimes,
@@ -173,12 +182,16 @@ script/drive_surface.sh missionControlFixture:active
 script/drive_surface.sh missionControlFixture:queued
 script/drive_surface.sh missionControlFixture:review
 script/verify_mission_control_surfaces.sh
+script/drive_surface.sh missionControlRouteFixture:commands
+script/drive_mission_control_action.sh show-git
+script/verify_mission_control_routed_actions.sh
 ```
 
 The fixture state lives in the shared `WorkspaceModel`, not view-local state,
-and the verification script captures the app's native view hierarchy without
-Screen Recording permission. This is deterministic surface/transition
-automation, not yet action-level XCUITest.
+and the verification scripts capture the app's native view hierarchy without
+Screen Recording permission. The routed-action script proves a Commands -> Git
+-> Commands transition in the view that owns the real tab buttons. This is
+deterministic DEBUG native action/transition automation, not XCUITest.
 
 The shell also includes a first usable `10a`-style full-screen diff review
 surface. It opens from the Diff tab or review state card, shows a file tree,
@@ -828,7 +841,7 @@ routing, Mission Control access-policy negatives, and SSE frame parsing:
 swift test --enable-code-coverage
 ```
 
-This remains an early native unit-test baseline. The 44 current tests include
+This remains an early native unit-test baseline. The 47 current tests include
 three focused GitHub Device Flow tests covering local Client ID configuration,
 GitHub `slow_down` interval handling, user validation before token persistence,
 connected-state restoration, and actionable HTTP failures. The broader suite
@@ -836,7 +849,9 @@ raises direct `RuntimeClient.swift` line coverage to 53.37%, including explicit
 review, validation, agent-loop control, and PR refresh source parameters.
 The suite also covers Mission Control supervised-runtime evidence, fair queue
 oldest-first/round-robin/eligibility/global-limit policy, and authorization
-placement for supervisor grants. `WorkspaceModel` now accepts an
+placement for supervisor grants. It additionally covers routed background
+command/Git HTTP contracts and exact fail-closed Git request construction from
+reviewed evidence. `WorkspaceModel` now accepts an
 isolated runtime and preferences store for tests; mock-runtime tests cover
 successful and failed health refreshes, task creation/upsert/selection,
 selection persistence, runtime-process start eligibility, validation-preset

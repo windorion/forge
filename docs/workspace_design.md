@@ -3,7 +3,7 @@
 Document role: record the product surface, information architecture, screen
 responsibilities, and interaction rules for the Forge workspace.
 
-Last updated: 2026-08-08
+Last updated: 2026-08-09
 
 ## Design Direction
 
@@ -79,7 +79,14 @@ repository-scoped task detail/Review surface without changing the primary
 workspace, and the target-aware composer/actions stay disabled for observers.
 An accepted active runtime can create a task, continue conversation, approve a
 plan, review proposal files, Apply, and run validation only through the
-supervisor's fresh authorization gate.
+supervisor's fresh authorization gate. Its task detail uses five mutually
+exclusive tabs: Overview, Review, Commands, Git, and Activity. Commands renders
+the target runtime's permission envelope and exposes only preset approval/run,
+runtime-known command run/cancel, and reviewed self-fix rerun. Git renders
+bounded status/diff and commit/branch/publish/push/PR preflights; explicit
+local commit/branch/non-force publish/push confirmations are available only
+when that preview has no blocker. PR publication remains in the focused
+Keychain-backed workflow instead of being duplicated in this overview.
 
 Authorized background columns also participate in one shared fair queue. A
 visible `BG SLOTS 1/2` control is a durable user preference; the authorization

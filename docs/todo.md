@@ -3,7 +3,7 @@
 Document role: maintain the active backlog, priority order, and next concrete
 engineering tasks for Forge.
 
-Last updated: 2026-08-08
+Last updated: 2026-08-09
 
 ## Rule
 
@@ -267,10 +267,23 @@ the core runtime smoke. Preserve these completed boundaries:
   alternating grants, stale-ID rejection, and injected restart hold. A
   configurable six-hour soak command and DEBUG native capture driver cover
   observer/active/queued/review states.
-- Route approved background command/validation-catalog/git review actions
-  through the same repository authorization and in-flight gates.
-- Run and archive a full multi-hour Mission Control soak, then add action-level
-  XCUITest for authorization, slot changes, card navigation, and review gates.
+- [x] Route approved background command/validation-catalog/git review actions
+  through the same repository authorization and in-flight gates. Commands now
+  cover preset approval/run, known-command run/cancel, and reviewed repair
+  rerun. Git covers status/diff and reviewed local commit/branch/non-force
+  publish/push while PR publication stays in its focused Keychain workflow.
+  Swift request-factory/client tests, a two-runtime HTTP fixture, and a DEBUG
+  Commands -> Git -> Commands native capture sequence prove the slice.
+- **Next API-free long task — supervision soak and true XCUITest:**
+  - Run and archive the configured six-hour Mission Control soak with exact
+    command, environment, machine sleep/power conditions, start/end times,
+    grant/restart/queue totals, and failure artifacts.
+  - Add XCUITest for observer authorization, 1/2 slot changes, background card
+    navigation, command approval/cancel, Git confirmation/cancel, and
+    revocation gates. Keep the deterministic DEBUG driver as a fast visual
+    check, but do not describe it as accessibility-driven XCUITest.
+  - Add disconnect/reconnect/backoff scenarios and lightweight supervisor
+    telemetry only where the soak or XCUITest exposes a real blind spot.
 - Add Finder and broader "open in IDE" integrations beyond the current
   file/repository reveal actions.
 - Run final human-input verification for remappable shortcuts, native Dock/menu
@@ -291,6 +304,14 @@ the core runtime smoke. Preserve these completed boundaries:
 - Add error reporting and support diagnostics.
 
 ## Done Recently
+
+- Routed the remaining safe background command and Git workflow through
+  Mission Control. Fresh repository/mode/session checks now guard validation
+  preset approval/run, known-command run/cancel, reviewed repair rerun, Git
+  status/diff/previews, local commit/branch, and non-force publish/push. A
+  two-repository fixture proves exact ownership and cross-repository rejection;
+  native DEBUG action automation and rendered evidence cover Commands -> Git
+  -> Commands without switching the primary workspace.
 
 - Added fail-closed Mission Control fair queue supervision. Active background
   children advertise `queueDispatch.mode=supervised`, hold persisted queue

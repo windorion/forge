@@ -154,12 +154,21 @@ The native supervisor is also the repository-scoped task router. Read-only
 task-card navigation performs a fresh health check, then fetches the exact task
 through `GET /tasks/:taskID` without changing the primary workspace. Task
 creation, conversation, plan regeneration/approval, proposal-file review,
-Apply, and validation require an accepted active runtime. Immediately before
-each mutation, the supervisor rechecks exact repo root, primary/read-write
-mode, `repository-active` scope, and the current memory-only authorization ID.
-All mutations for one repository share one in-flight key; runtime revocation is
-blocked until that scoped request completes. Any identity or authorization
-mismatch terminates the child and clears its active authorization.
+Apply, validation-catalog approval/run, task-command run/cancel, reviewed
+repair rerun, and Git actions require an accepted active runtime. The routed
+review loader fetches the validation permission envelope and Git status,
+commit, branch, publish, push, and PR previews from that exact loopback child;
+file diffs remain bounded read-only evidence. Local commit, branch creation or
+switch, first publish, and current-branch push requests are constructed only
+from the reviewed task ID, expected HEAD/branch/upstream/paths, and exact
+runtime confirmation strings. Missing evidence fails before an HTTP request.
+Immediately before each mutation, the supervisor rechecks exact repo root,
+primary/read-write mode, `repository-active` scope, and the current memory-only
+authorization ID. All mutations for one repository share one in-flight key;
+runtime revocation is blocked until that scoped request completes. Any identity
+or authorization mismatch terminates the child and clears its active
+authorization. PR publication is intentionally not routed through Mission
+Control because the focused workflow owns per-request Keychain/GitHub consent.
 
 The native supervisor aggregates only authorized background queue snapshots.
 Its persisted limit is 1-2 simultaneous background repositories; each runtime

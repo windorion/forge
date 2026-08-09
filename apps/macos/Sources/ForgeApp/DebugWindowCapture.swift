@@ -3,6 +3,7 @@ import AppKit
 
 extension Notification.Name {
     static let forgeDebugPresentSurface = Notification.Name("forge.debug.presentSurface")
+    static let forgeDebugMissionControlAction = Notification.Name("forge.debug.missionControlAction")
 }
 
 /// Development-only capture hook used by `script/capture_screen.sh`.
@@ -62,6 +63,29 @@ enum DebugWindowCapture {
                 }
             },
             "com.windorion.forge.debug.present" as CFString,
+            nil,
+            .deliverImmediately
+        )
+        // Exercise action-driven state changes after a surface is visible.
+        // The verification script stores a small allowlisted action name and
+        // this hook forwards it into the same view that owns the real tab
+        // buttons. No runtime or repository action is bypassed by this DEBUG-
+        // only channel.
+        CFNotificationCenterAddObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            nil,
+            { _, _, _, _, _ in
+                DispatchQueue.main.async {
+                    let action = UserDefaults.standard.string(
+                        forKey: "forge.debug.missionControlAction"
+                    )
+                    NotificationCenter.default.post(
+                        name: .forgeDebugMissionControlAction,
+                        object: action
+                    )
+                }
+            },
+            "com.windorion.forge.debug.mission-control-action" as CFString,
             nil,
             .deliverImmediately
         )

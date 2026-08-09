@@ -249,13 +249,20 @@ serialization remains enforced underneath the cross-runtime 1-2 slot limit.
 
 Background task routing does not convert cached visibility into authority.
 Task detail uses the observer-safe `GET /tasks/:taskID` route after fresh health
-identity validation. Every background POST—new task, conversation, plan,
-per-file review, Apply, or validation—first revalidates the exact repo root,
-primary/read-write mode, `repository-active` scope, and current session
-authorization ID. Mutations are serialized per repository, authorization
-cannot change while one is in flight, and a mode/root/ID mismatch terminates
-the child and clears the session authorization. The app never falls back to
-the primary runtime for a background task ID.
+identity validation. The same validated child supplies the validation
+permission envelope and Git status/diff/commit/branch/publish/push/PR review
+artifacts. Every background POST—new task, conversation, plan, per-file review,
+Apply, validation approval/run, known-command run/cancel, reviewed repair
+rerun, local commit/branch, or non-force publish/push—first revalidates the
+exact repo root, primary/read-write mode, `repository-active` scope, and
+current session authorization ID. Git requests carry the reviewed task ID and
+optimistic-concurrency evidence; missing HEAD/branch/upstream/paths fails in
+the app before the request, and the runtime rechecks it again. Mutations are
+serialized per repository, authorization cannot change while one is in
+flight, and a mode/root/ID mismatch terminates the child and clears the session
+authorization. The app never falls back to the primary runtime for a
+background task ID. Mission Control does not publish PRs or accept GitHub
+tokens; that action remains in the focused Keychain-backed flow.
 
 ### High Risk
 

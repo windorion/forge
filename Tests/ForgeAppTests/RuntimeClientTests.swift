@@ -370,6 +370,57 @@ final class RuntimeClientTests: XCTestCase {
         XCTAssertEqual(body["note"] as? String, "Stop all task work")
     }
 
+    func testBackgroundCommandAndGitReviewContractsStayRepositoryScoped() async throws {
+        let recorder = RequestRecorder()
+        let (client, session) = makeClient { request in
+            recorder.record(request)
+            return Self.response(request, status: 503, body: #"{"error":"contract probe"}"#)
+        }
+        defer { session.invalidateAndCancel() }
+
+        _ = try? await client.validationPermissions(taskID: "task-bg")
+        XCTAssertEqual(recorder.lastRequest?.httpMethod, "GET")
+        XCTAssertEqual(recorder.lastRequest?.url?.path, "/api/tasks/task-bg/validation-permissions")
+
+        _ = try? await client.runTaskCommand(taskID: "task-bg", commandID: "swift-tests")
+        XCTAssertEqual(recorder.lastRequest?.httpMethod, "POST")
+        XCTAssertEqual(recorder.lastRequest?.url?.path, "/api/tasks/task-bg/run-task-command")
+        var body = try jsonObject(try XCTUnwrap(recorder.lastBody))
+        XCTAssertEqual(body["commandID"] as? String, "swift-tests")
+
+        _ = try? await client.gitCommitPreview(taskID: "task-bg")
+        XCTAssertEqual(recorder.lastRequest?.url?.path, "/api/git/commit-preview")
+        XCTAssertEqual(URLComponents(url: try XCTUnwrap(recorder.lastRequest?.url), resolvingAgainstBaseURL: false)?.queryItems?.first?.value, "task-bg")
+
+        _ = try? await client.gitBranchPreview(taskID: "task-bg", targetBranch: "forge/background")
+        XCTAssertEqual(recorder.lastRequest?.url?.path, "/api/git/branch-preview")
+        let branchItems = URLComponents(url: try XCTUnwrap(recorder.lastRequest?.url), resolvingAgainstBaseURL: false)?.queryItems
+        XCTAssertEqual(branchItems?.first(where: { $0.name == "taskID" })?.value, "task-bg")
+        XCTAssertEqual(branchItems?.first(where: { $0.name == "targetBranch" })?.value, "forge/background")
+
+        _ = try? await client.gitBranchPublishPreview(taskID: "task-bg")
+        XCTAssertEqual(recorder.lastRequest?.url?.path, "/api/git/branch-publish-preview")
+
+        _ = try? await client.gitPushPreview(taskID: "task-bg")
+        XCTAssertEqual(recorder.lastRequest?.url?.path, "/api/git/push-preview")
+
+        _ = try? await client.gitPullRequestPreview(taskID: "task-bg")
+        XCTAssertEqual(recorder.lastRequest?.url?.path, "/api/git/pr-preview")
+
+        _ = try? await client.createGitCommit(GitCreateCommitRequest(
+            taskID: "task-bg",
+            expectedHead: "abc123",
+            title: "Background commit",
+            body: [],
+            paths: ["Sources/Worker.swift"],
+            confirmation: "CreateLocalCommit"
+        ))
+        XCTAssertEqual(recorder.lastRequest?.url?.path, "/api/git/commit")
+        body = try jsonObject(try XCTUnwrap(recorder.lastBody))
+        XCTAssertEqual(body["taskID"] as? String, "task-bg")
+        XCTAssertEqual(body["confirmation"] as? String, "CreateLocalCommit")
+    }
+
     func testEventsUsesInjectedSessionAndParsesSSEFrames() async throws {
         let recorder = RequestRecorder()
         let (client, session) = makeClient { request in

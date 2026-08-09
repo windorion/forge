@@ -290,6 +290,37 @@ final class MissionControlRuntimeSupervisor {
         }
     }
 
+    func routedEvidence(path: String, taskID: ForgeTask.ID) async throws -> MissionControlRoutedEvidence {
+        try await withRouteRequest(key: "evidence:\(path):\(taskID)") {
+            let client = try await validatedClient(path: path, requireActive: false)
+            async let validation = client.validationPermissions(taskID: taskID)
+            async let status = client.gitStatus()
+            async let commit = client.gitCommitPreview(taskID: taskID)
+            async let branch = client.gitBranchPreview(taskID: taskID)
+            async let branchPublish = client.gitBranchPublishPreview(taskID: taskID)
+            async let push = client.gitPushPreview(taskID: taskID)
+            async let pullRequest = client.gitPullRequestPreview(taskID: taskID)
+            return try await MissionControlRoutedEvidence(
+                validation: validation,
+                git: MissionControlGitReviewEvidence(
+                    status: status,
+                    commit: commit,
+                    branch: branch,
+                    branchPublish: branchPublish,
+                    push: push,
+                    pullRequest: pullRequest
+                )
+            )
+        }
+    }
+
+    func gitFileDiff(path: String, taskID: ForgeTask.ID, filePath: String) async throws -> GitFileDiff {
+        try await withRouteRequest(key: "git-diff:\(path):\(taskID):\(filePath)") {
+            let client = try await validatedClient(path: path, requireActive: false)
+            return try await client.gitFileDiff(path: filePath)
+        }
+    }
+
     func createTask(path: String, title: String, objective: String) async throws -> ForgeTask {
         try await mutate(path: path) { client in
             try await client.createTask(title: title, objective: objective)
@@ -340,6 +371,103 @@ final class MissionControlRuntimeSupervisor {
     func runValidation(path: String, taskID: ForgeTask.ID) async throws -> ForgeTask {
         try await mutate(path: path) { client in
             try await client.runValidation(taskID: taskID)
+        }
+    }
+
+    func runValidation(
+        path: String,
+        taskID: ForgeTask.ID,
+        presetID: ValidationPreset.ID
+    ) async throws -> ForgeTask {
+        try await mutate(path: path) { client in
+            try await client.runValidation(taskID: taskID, presetID: presetID)
+        }
+    }
+
+    func approveValidationPreset(
+        path: String,
+        taskID: ForgeTask.ID,
+        presetID: ValidationPreset.ID
+    ) async throws -> ForgeTask {
+        try await mutate(path: path) { client in
+            try await client.approveValidationPreset(
+                taskID: taskID,
+                presetID: presetID,
+                note: "Approved from Mission Control command review"
+            )
+        }
+    }
+
+    func runTaskCommand(
+        path: String,
+        taskID: ForgeTask.ID,
+        commandID: String
+    ) async throws -> ForgeTask {
+        try await mutate(path: path) { client in
+            try await client.runTaskCommand(taskID: taskID, commandID: commandID)
+        }
+    }
+
+    func cancelTaskCommand(
+        path: String,
+        taskID: ForgeTask.ID,
+        taskCommandRunID: TaskCommandRun.ID
+    ) async throws -> ForgeTask {
+        try await mutate(path: path) { client in
+            try await client.cancelTaskCommand(
+                taskID: taskID,
+                taskCommandRunID: taskCommandRunID,
+                note: "Cancelled from Mission Control command review"
+            )
+        }
+    }
+
+    func rerunRepairCommand(
+        path: String,
+        taskID: ForgeTask.ID,
+        evidenceID: CommandRerunEvidence.ID
+    ) async throws -> ForgeTask {
+        try await mutate(path: path) { client in
+            try await client.rerunRepairCommand(
+                taskID: taskID,
+                commandRerunEvidenceID: evidenceID
+            )
+        }
+    }
+
+    func createGitCommit(
+        path: String,
+        request: GitCreateCommitRequest
+    ) async throws -> GitCreateCommitResult {
+        try await mutateRepository(path: path) { client in
+            try await client.createGitCommit(request)
+        }
+    }
+
+    func createOrSwitchGitBranch(
+        path: String,
+        request: GitBranchRequest
+    ) async throws -> GitBranchResult {
+        try await mutateRepository(path: path) { client in
+            try await client.createOrSwitchGitBranch(request)
+        }
+    }
+
+    func publishGitBranch(
+        path: String,
+        request: GitBranchPublishRequest
+    ) async throws -> GitBranchPublishResult {
+        try await mutateRepository(path: path) { client in
+            try await client.publishGitBranch(request)
+        }
+    }
+
+    func pushGitBranch(
+        path: String,
+        request: GitPushRequest
+    ) async throws -> GitPushResult {
+        try await mutateRepository(path: path) { client in
+            try await client.pushGitBranch(request)
         }
     }
 
@@ -561,6 +689,18 @@ final class MissionControlRuntimeSupervisor {
             upsert(task, for: path)
             publish()
             return task
+        }
+    }
+
+    private func mutateRepository<Result>(
+        path: String,
+        operation: (RuntimeClient) async throws -> Result
+    ) async throws -> Result {
+        try await withRouteRequest(key: "mutation:\(path)") {
+            let client = try await validatedClient(path: path, requireActive: true)
+            let result = try await operation(client)
+            publish()
+            return result
         }
     }
 

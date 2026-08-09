@@ -447,6 +447,6 @@ without changing the public runtime contract:
   packaged `server.ts` remains one line.
 
 The current compatibility gate passes TypeScript check/build, 20 unit scripts,
-unit coverage, all 20 runtime smoke scripts, and 44 Swift tests. The current
+unit coverage, all 20 runtime smoke scripts, and 47 Swift tests. The current
 unit coverage aggregate is 56.94% lines, 88.42% branches, and 67.29%
 functions.

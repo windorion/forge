@@ -185,13 +185,25 @@ struct MissionControlTaskDetailView: View {
 
     @State private var tab: DetailTab = .overview
     @State private var selectedFileChangeID: String?
+    @State private var selectedGitPath: String?
     @State private var message = ""
     @State private var reviewNote = ""
+    @State private var pendingGitAction: PendingGitAction?
 
     private enum DetailTab: String, CaseIterable, Identifiable {
         case overview = "OVERVIEW"
         case review = "REVIEW"
+        case commands = "COMMANDS"
+        case git = "GIT"
         case activity = "ACTIVITY"
+        var id: String { rawValue }
+    }
+
+    private enum PendingGitAction: String, Identifiable {
+        case branch
+        case commit
+        case branchPublish
+        case push
         var id: String { rawValue }
     }
 
@@ -225,10 +237,28 @@ struct MissionControlTaskDetailView: View {
         .background(ForgeDesign.paper)
         .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
         .onAppear {
+            #if DEBUG
+            if let requestedTab = workspace.missionControlDebugDetailTab {
+                tab = requestedTab == "git" ? .git : .commands
+            }
+            #endif
             if workspace.missionControlRoutedTask?.id != route.taskID {
                 workspace.openMissionControlTask(path: route.repositoryPath, taskID: route.taskID)
             }
         }
+        #if DEBUG
+        .onReceive(NotificationCenter.default.publisher(for: .forgeDebugMissionControlAction)) { note in
+            switch note.object as? String {
+            case "show-commands":
+                tab = .commands
+            case "show-git":
+                tab = .git
+            default:
+                break
+            }
+        }
+        #endif
+        .alert(item: $pendingGitAction, content: gitActionAlert)
     }
 
     private var task: ForgeTask? {
@@ -318,6 +348,10 @@ struct MissionControlTaskDetailView: View {
             overview(task)
         case .review:
             review(task)
+        case .commands:
+            commands(task)
+        case .git:
+            git(task)
         case .activity:
             activity(task)
         }
@@ -489,6 +523,377 @@ struct MissionControlTaskDetailView: View {
         }
     }
 
+    private func commands(_ task: ForgeTask) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack {
+                    sectionTitle("VALIDATION CATALOG")
+                    Spacer()
+                    if workspace.missionControlRouteEvidenceIsLoading {
+                        ProgressView().controlSize(.small)
+                    }
+                    Button("REFRESH PERMISSIONS") { workspace.refreshMissionControlRouteEvidence() }
+                        .buttonStyle(MissionRouteSecondaryButtonStyle())
+                        .disabled(workspace.missionControlRouteEvidenceIsLoading)
+                }
+
+                if let validation = workspace.missionControlRoutedEvidence?.validation {
+                    ForEach(validation.permissions) { permission in
+                        VStack(alignment: .leading, spacing: 9) {
+                            HStack(alignment: .top) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(permission.preset.name)
+                                        .font(.system(size: 12.5, weight: .bold))
+                                    Text("\(permission.preset.source) · \(permission.preset.riskLevel) · \(permission.executionState)")
+                                        .font(ForgeDesign.mono(8.5))
+                                        .foregroundStyle(ForgeDesign.muted)
+                                }
+                                Spacer()
+                                if permission.canApprove && authorized {
+                                    Button("APPROVE PRESET") {
+                                        workspace.approveMissionControlValidationPreset(permission.id)
+                                    }
+                                    .buttonStyle(MissionRouteSecondaryButtonStyle())
+                                }
+                                if permission.canRun && authorized {
+                                    Button("RUN PRESET") {
+                                        workspace.runMissionControlValidation(presetID: permission.id)
+                                    }
+                                    .buttonStyle(MissionRoutePrimaryButtonStyle())
+                                }
+                            }
+                            Text(permission.preset.description)
+                                .font(.system(size: 11.5))
+                            Text(permission.preset.commands.map(\.command).joined(separator: "\n"))
+                                .font(ForgeDesign.mono(9))
+                                .foregroundStyle(ForgeDesign.muted)
+                                .textSelection(.enabled)
+                            if !permission.blockedReasons.isEmpty {
+                                Text(permission.blockedReasons.joined(separator: " · "))
+                                    .font(ForgeDesign.mono(8.5))
+                                    .foregroundStyle(ForgeDesign.warning)
+                            }
+                        }
+                        .routePanel()
+                        .disabled(workspace.missionControlRouteIsMutating)
+                    }
+
+                    sectionTitle("APPROVED TASK COMMANDS")
+                    if validation.taskCommands.isEmpty {
+                        emptyPanel("No runtime-known project commands are available for this task.")
+                    } else {
+                        ForEach(validation.taskCommands) { permission in
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(alignment: .top) {
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(permission.command.name)
+                                            .font(.system(size: 12.5, weight: .bold))
+                                        Text("\(permission.command.id) · \(permission.executionState)")
+                                            .font(ForgeDesign.mono(8.5))
+                                            .foregroundStyle(ForgeDesign.muted)
+                                    }
+                                    Spacer()
+                                    if permission.canRun && authorized {
+                                        Button("RUN COMMAND") {
+                                            workspace.runMissionControlTaskCommand(permission.id)
+                                        }
+                                        .buttonStyle(MissionRoutePrimaryButtonStyle())
+                                    }
+                                }
+                                Text(permission.command.command)
+                                    .font(ForgeDesign.mono(9.5))
+                                    .textSelection(.enabled)
+                                Text(permission.command.boundary)
+                                    .font(ForgeDesign.mono(8.5))
+                                    .foregroundStyle(ForgeDesign.muted)
+                                if let lastRun = permission.lastRun {
+                                    Text("LAST · \(lastRun.status.uppercased()) · \(lastRun.summary)")
+                                        .font(ForgeDesign.mono(8.5))
+                                }
+                            }
+                            .routePanel()
+                            .disabled(workspace.missionControlRouteIsMutating)
+                        }
+                    }
+                } else {
+                    emptyPanel(workspace.missionControlRouteEvidenceError ?? "Loading the runtime-owned permission envelope…")
+                }
+
+                if let activeRun = task.taskCommandRuns.reversed().first(where: { $0.status == "Running" }) {
+                    sectionTitle("ACTIVE COMMAND")
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(activeRun.name).font(.system(size: 12.5, weight: .bold))
+                            Text(activeRun.outputSummary).font(ForgeDesign.mono(9)).foregroundStyle(ForgeDesign.muted)
+                        }
+                        Spacer()
+                        if authorized {
+                            Button("CANCEL COMMAND") {
+                                workspace.cancelMissionControlTaskCommand(activeRun.id)
+                            }
+                            .buttonStyle(MissionRouteSecondaryButtonStyle())
+                            .disabled(workspace.missionControlRouteIsMutating)
+                        }
+                    }
+                    .routePanel()
+                }
+
+                if let readyEvidence = task.commandRerunEvidence.reversed().first(where: { $0.status == "Ready" }) {
+                    sectionTitle("SELF-FIX RERUN")
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(readyEvidence.commandName).font(.system(size: 12.5, weight: .bold))
+                            Text(readyEvidence.summary).font(ForgeDesign.mono(9)).foregroundStyle(ForgeDesign.muted)
+                        }
+                        Spacer()
+                        if authorized {
+                            Button("RERUN SELF-FIX") {
+                                workspace.rerunMissionControlRepairCommand(readyEvidence.id)
+                            }
+                            .buttonStyle(MissionRoutePrimaryButtonStyle())
+                            .disabled(workspace.missionControlRouteIsMutating)
+                        }
+                    }
+                    .routePanel()
+                }
+
+                sectionTitle("RECENT COMMAND OUTPUT")
+                if task.taskCommandRuns.isEmpty {
+                    emptyPanel("No task-scoped command runs are recorded.")
+                } else {
+                    ForEach(task.taskCommandRuns.suffix(8).reversed()) { run in
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack {
+                                Text(run.status.uppercased()).font(ForgeDesign.mono(8.5, weight: .bold))
+                                Text(run.name).font(.system(size: 11.5, weight: .bold))
+                                Spacer()
+                                Text(run.exitCode.map { "EXIT \($0)" } ?? "NO EXIT")
+                                    .font(ForgeDesign.mono(8.5)).foregroundStyle(ForgeDesign.muted)
+                            }
+                            Text(run.outputSummary).font(ForgeDesign.mono(9)).textSelection(.enabled)
+                        }
+                        .routePanel()
+                    }
+                }
+            }
+            .padding(22)
+        }
+    }
+
+    private func git(_ task: ForgeTask) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack {
+                    sectionTitle("BACKGROUND REPOSITORY GIT")
+                    Spacer()
+                    if workspace.missionControlRouteEvidenceIsLoading {
+                        ProgressView().controlSize(.small)
+                    }
+                    Button("REFRESH PREFLIGHTS") { workspace.refreshMissionControlRouteEvidence() }
+                        .buttonStyle(MissionRouteSecondaryButtonStyle())
+                        .disabled(workspace.missionControlRouteEvidenceIsLoading)
+                }
+
+                if let git = workspace.missionControlRoutedEvidence?.git {
+                    HStack(spacing: 20) {
+                        metric("BRANCH", git.status.branch ?? "DETACHED")
+                        metric("CHANGED", "\(git.status.changedFiles.count)")
+                        metric("AHEAD/BEHIND", "\(git.status.ahead ?? 0)/\(git.status.behind ?? 0)")
+                    }
+                    .routePanel()
+
+                    sectionTitle("WORKING TREE DIFF")
+                    if git.status.changedFiles.isEmpty {
+                        emptyPanel("The background working tree is clean.")
+                    } else {
+                        HStack(alignment: .top, spacing: 0) {
+                            VStack(spacing: 0) {
+                                ForEach(git.status.changedFiles) { change in
+                                    Button {
+                                        selectedGitPath = change.path
+                                        workspace.loadMissionControlGitDiff(path: change.path)
+                                    } label: {
+                                        HStack {
+                                            Text(change.status.uppercased())
+                                                .font(ForgeDesign.mono(8, weight: .bold))
+                                                .frame(width: 54, alignment: .leading)
+                                            Text(change.path).font(ForgeDesign.mono(9.5)).lineLimit(2)
+                                            Spacer()
+                                        }
+                                        .padding(10)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .background(selectedGitPath == change.path ? ForgeDesign.accent.opacity(0.3) : Color.white)
+                                        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .frame(width: 260)
+
+                            Rectangle().fill(ForgeDesign.ink).frame(width: 1.5)
+
+                            ScrollView([.horizontal, .vertical]) {
+                                Text(workspace.missionControlRoutedGitDiff?.diff ?? "Select a changed file to load its bounded read-only diff.")
+                                    .font(ForgeDesign.mono(9.5))
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
+                                    .padding(14)
+                            }
+                            .background(Color(red: 20 / 255, green: 20 / 255, blue: 20 / 255))
+                            .foregroundStyle(Color(red: 226 / 255, green: 226 / 255, blue: 220 / 255))
+                        }
+                        .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+                    }
+
+                    sectionTitle("REVIEWED GIT ACTIONS")
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 12) {
+                        gitReviewCard(
+                            title: "LOCAL BRANCH",
+                            readiness: git.branch.readiness,
+                            summary: git.branch.summary,
+                            blockers: git.branch.blockers,
+                            actionLabel: git.branch.mode == "CreateBranch" ? "CREATE BRANCH" : "SWITCH BRANCH",
+                            action: .branch
+                        )
+                        gitReviewCard(
+                            title: "LOCAL COMMIT",
+                            readiness: git.commit.readiness,
+                            summary: git.commit.summary,
+                            blockers: git.commit.blockers,
+                            actionLabel: "CREATE COMMIT",
+                            action: .commit
+                        )
+                        gitReviewCard(
+                            title: "FIRST PUBLISH",
+                            readiness: git.branchPublish.readiness,
+                            summary: git.branchPublish.summary,
+                            blockers: git.branchPublish.blockers,
+                            actionLabel: "PUBLISH BRANCH",
+                            action: .branchPublish
+                        )
+                        gitReviewCard(
+                            title: "CURRENT PUSH",
+                            readiness: git.push.readiness,
+                            summary: git.push.summary,
+                            blockers: git.push.blockers,
+                            actionLabel: "PUSH BRANCH",
+                            action: .push
+                        )
+                        gitReviewCard(
+                            title: "PULL REQUEST HANDOFF",
+                            readiness: git.pullRequest.readiness,
+                            summary: git.pullRequest.summary,
+                            blockers: git.pullRequest.blockers,
+                            actionLabel: nil,
+                            action: nil
+                        )
+                    }
+
+                    Text("PR publication is intentionally not routed here: it remains in the Keychain-backed focused workflow with explicit GitHub authorization. No force push, reset, merge, or branch deletion is available.")
+                        .font(ForgeDesign.mono(9))
+                        .foregroundStyle(ForgeDesign.muted)
+                        .routePanel()
+                } else {
+                    emptyPanel(workspace.missionControlRouteEvidenceError ?? "Loading background Git status and preflights…")
+                }
+
+                if let result = workspace.missionControlGitActionResult {
+                    Text(result)
+                        .font(ForgeDesign.mono(9.5, weight: .bold))
+                        .foregroundStyle(ForgeDesign.accent)
+                        .routePanel()
+                }
+            }
+            .padding(22)
+        }
+        .onAppear {
+            guard selectedGitPath == nil,
+                  let first = workspace.missionControlRoutedEvidence?.git.status.changedFiles.first
+            else { return }
+            selectedGitPath = first.path
+            if workspace.missionControlRoutedGitDiff?.path != first.path {
+                workspace.loadMissionControlGitDiff(path: first.path)
+            }
+        }
+    }
+
+    private func gitReviewCard(
+        title: String,
+        readiness: String,
+        summary: String,
+        blockers: [String],
+        actionLabel: String?,
+        action: PendingGitAction?
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title).font(ForgeDesign.mono(9, weight: .bold))
+                Spacer()
+                Text(readiness.uppercased())
+                    .font(ForgeDesign.mono(8, weight: .bold))
+                    .foregroundStyle(readiness.lowercased() == "ready" ? ForgeDesign.accent : ForgeDesign.warning)
+            }
+            Text(summary).font(.system(size: 11.5))
+            if !blockers.isEmpty {
+                Text(blockers.joined(separator: " · "))
+                    .font(ForgeDesign.mono(8.5))
+                    .foregroundStyle(ForgeDesign.warning)
+            }
+            if let actionLabel, let action, blockers.isEmpty {
+                HStack {
+                    Spacer()
+                    Button(actionLabel) { pendingGitAction = action }
+                        .buttonStyle(MissionRoutePrimaryButtonStyle())
+                        .disabled(!authorized || workspace.missionControlRouteIsMutating)
+                }
+            }
+        }
+        .routePanel()
+    }
+
+    private func gitActionAlert(_ action: PendingGitAction) -> Alert {
+        let evidence = workspace.missionControlRoutedEvidence?.git
+        let title: String
+        let button: String
+        let summary: String
+        let boundary: String
+        let perform: () -> Void
+
+        switch action {
+        case .branch:
+            title = "Change background branch?"
+            button = evidence?.branch.mode == "CreateBranch" ? "Create Branch" : "Switch Branch"
+            summary = evidence?.branch.summary ?? "Branch review unavailable."
+            boundary = evidence?.branch.operationBoundary ?? "A fresh preflight is required."
+            perform = workspace.createOrSwitchMissionControlGitBranch
+        case .commit:
+            title = "Create background local commit?"
+            button = "Create Local Commit"
+            summary = evidence?.commit.summary ?? "Commit review unavailable."
+            boundary = evidence?.commit.operationBoundary ?? "A fresh preflight is required."
+            perform = workspace.createMissionControlGitCommit
+        case .branchPublish:
+            title = "Publish background branch?"
+            button = "Publish Without Force"
+            summary = evidence?.branchPublish.summary ?? "Branch publish review unavailable."
+            boundary = evidence?.branchPublish.operationBoundary ?? "A fresh preflight is required."
+            perform = workspace.publishMissionControlGitBranch
+        case .push:
+            title = "Push background branch?"
+            button = "Push Without Force"
+            summary = evidence?.push.summary ?? "Push review unavailable."
+            boundary = evidence?.push.operationBoundary ?? "A fresh preflight is required."
+            perform = workspace.pushMissionControlGitBranch
+        }
+
+        return Alert(
+            title: Text(title),
+            message: Text("Repository: \(route.repositoryPath)\n\n\(summary)\n\n\(boundary)\n\nMission Control will revalidate repository identity and session authorization before sending this action."),
+            primaryButton: .default(Text(button), action: perform),
+            secondaryButton: .cancel()
+        )
+    }
+
     private func activity(_ task: ForgeTask) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -560,7 +965,7 @@ struct MissionControlTaskDetailView: View {
             if workspace.missionControlRouteIsMutating {
                 ProgressView().controlSize(.small)
                 Text("Revalidating and sending scoped request…").font(ForgeDesign.mono(9))
-            } else if let error = workspace.missionControlRouteError {
+            } else if let error = workspace.missionControlRouteError ?? workspace.missionControlRouteEvidenceError {
                 Text(error).font(ForgeDesign.mono(9)).foregroundStyle(ForgeDesign.danger).lineLimit(1)
             } else {
                 Text("No primary-workspace switch required").font(ForgeDesign.mono(9)).foregroundStyle(ForgeDesign.muted)

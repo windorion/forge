@@ -24,11 +24,14 @@ transition shows its exact path/port/consequences, verifies a generated health
 authorization ID, displays shortened evidence in the footer, permits safe
 return to read-only, and extends Pause All across accepted active runtimes.
 Repository task cards now retain an explicit `(repository path, task ID)`
-selection and open fresh Overview/Review/Activity detail inside the root-owned
-Mission Control surface, without a modal sheet or primary-workspace restart.
+selection and open fresh Overview/Review/Commands/Git/Activity detail inside
+the root-owned Mission Control surface, without a modal sheet or primary-
+workspace restart.
 The new-task composer selects its target repository explicitly. Accepted
-active runtimes support scoped conversation, plan, file-review, Apply, and
-validation actions; observers expose the same evidence read-only. Loading,
+active runtimes support scoped conversation, plan, file-review, Apply,
+validation preset approval/run, runtime-known command run/cancel, reviewed
+self-fix rerun, and separately confirmed local commit/branch/non-force publish/
+push actions. Observers expose the same GET evidence read-only. Loading,
 mutation, authorization, and routing errors live in the shared workspace model
 rather than view-local network state.
 Active background runtimes now report a supervised queue mode. The same shared
@@ -38,8 +41,12 @@ history count. These appear in the main Mission Control chrome rather than a
 modal. DEBUG builds expose deterministic `missionControlFixture:observer`,
 `:active`, `:queued`, and `:review` states through the existing native surface
 driver; `script/verify_mission_control_surfaces.sh` captures all four view
-hierarchies without Screen Recording permission. Action-level XCUITest and a
-signed-build automation pass remain future work.
+hierarchies without Screen Recording permission. A second allowlisted DEBUG
+action channel drives the owning task-detail view through Commands -> Git ->
+Commands, and `script/verify_mission_control_routed_actions.sh` archives the
+three rendered states in `docs/verification/mission-control-routed-actions/`.
+This is native view/action-transition evidence, not XCUITest; accessibility-
+driven confirmation and a signed-build automation pass remain future work.
 The final observer/active/queued/review capture set and repair notes live in
 `docs/verification/mission-control-fairness/`.
 

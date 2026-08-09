@@ -6270,3 +6270,76 @@ Next:
 - Run the pinned live-model corpus only after explicit provider, token, cost,
   and external-network authorization; use measured failures to reorder agent
   and retrieval work.
+
+## 2026-08-09 09:58:27 +0200 (CEST)
+
+Conversation summary:
+
+- The founder asked Forge to continue the next long task and maximize useful,
+  API-free progress after the fair multi-repository scheduler milestone.
+
+Done:
+
+- Completed repository-scoped Mission Control command and validation routing.
+  The routed Commands tab loads the owning runtime's permission envelope and
+  can explicitly approve/run presets, run or cancel runtime-known command IDs,
+  and rerun the original command from reviewed self-fix evidence. Every POST
+  revalidates exact repository root, primary/read-write mode, supervised queue
+  mode, session authorization, and the shared per-repository mutation gate.
+- Completed routed background Git review and guarded actions. The Git tab loads
+  status, bounded file diffs, and commit/branch/first-publish/push/PR preflights
+  from the exact background runtime. Local commit, branch create/switch, and
+  non-force publish/push require separate confirmation and reviewed HEAD/
+  branch/upstream/path evidence; missing evidence fails before HTTP and the
+  runtime performs its existing optimistic-concurrency checks again. PR
+  publication remains in the focused Keychain-backed workflow.
+- Extended the two-repository Mission Control fixture. Both isolated runtimes
+  now prove preset approval, command start/cancel with retained Cancelled
+  evidence, repository-local Git status/diff, local commit and branch creation,
+  cross-repository 404 isolation, and honest publish/push/PR blockers without a
+  configured remote before observer revocation and byte-identical SQLite soak.
+- Added exact Swift request-factory and RuntimeClient contract tests. The suite
+  is now 47 tests; missing reviewed HEAD/upstream/path evidence is covered as a
+  fail-closed pre-request error.
+- Added a DEBUG routed-action fixture and allowlisted native action channel.
+  `script/verify_mission_control_routed_actions.sh` drove a running app through
+  Commands -> Git -> Commands and saved three reviewed app-window captures in
+  `docs/verification/mission-control-routed-actions/`. Visual review found and
+  fixed an absent-runtime diff request and misleading controls on blocked Git
+  cards. This evidence is explicitly not claimed as XCUITest.
+- Updated README, project status and component gap matrix, TODO, roadmap,
+  development, workspace/macOS design, user flows, runtime/security
+  architecture, validation, Git workflow, refactor evidence, and verification
+  notes. Current directional estimates are trust/runtime 91-95%, Alpha 72-80%,
+  polished v1 26-32%, and multi-repository supervision 90-94% (6-10% gap).
+- Passed documentation truth (59 routes, 20 smoke scripts, 20 runtime unit
+  files, 47 Swift tests), TypeScript check/build, all runtime unit tests, all
+  20 smoke scripts, Swift build/test, DEBUG app bundle launch, and native routed
+  action capture. Both reliability campaigns passed again at 3 successful + 1
+  guarded + 0 failed; the mock provider campaign made 37 loopback requests.
+- Used only local providers, loopback services, temporary repositories and
+  native local capture. No external API, hosted provider, or paid token was
+  used.
+
+Not done:
+
+- The configured six-hour Mission Control soak is still not archived as a
+  full-duration result; this conversation ran the default fixture and the
+  existing short extension evidence only.
+- The native routed-action driver changes allowlisted DEBUG view actions but is
+  not accessibility-driven XCUITest. Observer authorization, 1/2 slot changes,
+  card navigation, confirmation/cancel paths, and revocation still need true
+  XCUITest.
+- Disconnect/reconnect backoff and supervisor telemetry remain evidence-driven
+  follow-ups. Live-model public-repository runs, live OAuth, signing/
+  notarization, WidgetKit, semantic retrieval, accounts, and commercial
+  validation remain separate milestones.
+
+Next:
+
+- Continue the API-free P5 milestone by archiving the configured multi-hour
+  soak and implementing true XCUITest for Mission Control authorization, slot,
+  navigation, command, Git confirmation, and revocation boundaries.
+- Run the pinned public-repository live-model corpus only after explicit
+  provider/network/token/cost authorization, then use its measured failure
+  taxonomy to choose the next agent/retrieval change.

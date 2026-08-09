@@ -4,6 +4,7 @@ set -euo pipefail
 # Drive the DEBUG build onto a workspace surface for verification captures.
 # Usage: script/drive_surface.sh <spec>
 # Specs: missionControl | missionControlFixture:<observer|active|queued|review> |
+#        missionControlRouteFixture:<commands|git> |
 #        history | answerQueue | taskQueue | palette |
 #        dismiss | diff:<taskID> | audit:<taskID> | fullPlan:<taskID>:<revID>
 

@@ -22,8 +22,14 @@ try {
   await mkdir(tempRoot, { recursive: true });
   for (const repo of repositories) {
     await mkdir(repo.root, { recursive: true });
+    await mkdir(join(repo.root, "runtime"), { recursive: true });
     await writeFile(join(repo.root, "README.md"), `# ${repo.name}\n`, "utf8");
+    await writeFile(join(repo.root, "runtime", ".keep"), "", "utf8");
     await run("git", ["init", "--quiet", repo.root], tempRoot);
+    await run("git", ["config", "user.name", "Forge Mission Fixture"], repo.root);
+    await run("git", ["config", "user.email", "forge-mission@example.invalid"], repo.root);
+    await run("git", ["add", "README.md", "runtime/.keep"], repo.root);
+    await run("git", ["commit", "--quiet", "-m", "Seed Mission Control fixture"], repo.root);
     const seed = await startRuntime(repo, "primary");
     await stopRuntime(seed);
   }
@@ -76,6 +82,10 @@ try {
   const crossRoute = await request(repositories[1], "GET", `/tasks/${[...alphaIDs][0]}`, undefined, false);
   assert(crossRoute.status === 404, "A task detail request crossed repository runtime boundaries.");
 
+  await Promise.all(repositories.map((repo) =>
+    exerciseRoutedCommandAndGitActions(repo, createdByRepository.get(repo.name)[0])
+  ));
+
   await stopAll();
   const activeHashes = new Map();
   for (const repo of repositories) {
@@ -111,6 +121,8 @@ try {
   console.log(`- Repositories: ${repositories.length} isolated loopback runtimes`);
   console.log(`- Authorized creation: ${taskCountPerRepository * repositories.length} tasks (${taskCountPerRepository} concurrent per repository)`);
   console.log("- Detail routing: exact task reads plus cross-repository 404 negative control");
+  console.log("- Routed actions: permission approval, command start/cancel, diff, local commit, and local branch per repository");
+  console.log("- Git review: branch-publish, push, and PR handoff previews stayed read-only with no configured remote");
   console.log(`- Observer soak: ${soakIterations} health/tasks/queue/git/detail polling iterations per repository`);
   console.log("- Revocation: POST blocked and task databases byte-identical during read-only supervision");
 } finally {
@@ -137,6 +149,93 @@ function taskInput(repo, index) {
   };
 }
 
+async function exerciseRoutedCommandAndGitActions(repo, task) {
+  let permissions = await request(repo, "GET", `/tasks/${task.id}/validation-permissions`);
+  const smokePreset = permissions.permissions.find((item) => item.preset.id === "smoke-task-commands");
+  const smokeCommand = permissions.taskCommands.find((item) => item.command.id === "smoke-long-task-command");
+  assert(smokePreset?.canApprove === true, `${repo.name} did not expose the task-level command approval.`);
+  assert(smokeCommand?.canRun === false, `${repo.name} allowed the command before approval.`);
+
+  await request(repo, "POST", `/tasks/${task.id}/approve-validation-preset`, {
+    presetID: "smoke-task-commands",
+    note: "Mission Control routed command fixture approval."
+  });
+  permissions = await request(repo, "GET", `/tasks/${task.id}/validation-permissions`);
+  assert(
+    permissions.taskCommands.find((item) => item.command.id === "smoke-long-task-command")?.canRun === true,
+    `${repo.name} did not make the approved command runnable.`
+  );
+
+  const commandPromise = request(repo, "POST", `/tasks/${task.id}/run-task-command`, {
+    commandID: "smoke-long-task-command"
+  });
+  let runningID;
+  await waitUntil(async () => {
+    const detail = await request(repo, "GET", `/tasks/${task.id}`);
+    runningID = detail.taskCommandRuns?.find((run) => run.commandID === "smoke-long-task-command" && run.status === "Running")?.id;
+    return Boolean(runningID);
+  }, `${repo.name} routed command start`);
+  await request(repo, "POST", `/tasks/${task.id}/cancel-task-command`, {
+    taskCommandRunID: runningID,
+    note: "Mission Control routed command fixture cancellation."
+  });
+  await commandPromise;
+  const cancelled = await request(repo, "GET", `/tasks/${task.id}`);
+  assert(
+    cancelled.taskCommandRuns.some((run) => run.id === runningID && run.status === "Cancelled"),
+    `${repo.name} did not retain routed command cancellation evidence.`
+  );
+
+  await writeFile(
+    join(repo.root, "README.md"),
+    `# ${repo.name}\n\nMission Control routed command and Git evidence.\n`,
+    "utf8"
+  );
+  const status = await request(repo, "GET", "/git/status");
+  assert(status.changedFiles.some((file) => file.path === "README.md"), `${repo.name} Git status missed its own change.`);
+  const diff = await request(repo, "GET", "/git/diff?path=README.md");
+  assert(diff.diff.includes("Mission Control routed command"), `${repo.name} Git diff returned the wrong repository content.`);
+
+  const commitPreview = await request(repo, "GET", `/git/commit-preview?taskID=${task.id}`);
+  assert(commitPreview.expectedHead && commitPreview.blockers.length === 0, `${repo.name} commit preview was unexpectedly blocked.`);
+  assert(commitPreview.includedFiles.some((file) => file.path === "README.md"), `${repo.name} commit preview missed README.md.`);
+  const commit = await request(repo, "POST", "/git/commit", {
+    taskID: task.id,
+    expectedHead: commitPreview.expectedHead,
+    title: `Record ${repo.name} routed action evidence`,
+    body: ["Created by the isolated Mission Control fixture."],
+    paths: ["README.md"],
+    confirmation: "CreateLocalCommit"
+  });
+  assert(commit.committedFiles.some((file) => file.path === "README.md"), `${repo.name} local commit omitted README.md.`);
+
+  const targetBranch = `forge/mission-${repo.name}`;
+  const branchPreview = await request(
+    repo,
+    "GET",
+    `/git/branch-preview?taskID=${task.id}&targetBranch=${encodeURIComponent(targetBranch)}`
+  );
+  assert(branchPreview.blockers.length === 0 && branchPreview.mode === "CreateBranch", `${repo.name} branch preview was not ready to create.`);
+  const branch = await request(repo, "POST", "/git/branch", {
+    taskID: task.id,
+    expectedHead: branchPreview.expectedHead,
+    expectedCurrentBranch: branchPreview.currentBranch,
+    targetBranch: branchPreview.targetBranch,
+    mode: branchPreview.mode,
+    confirmation: branchPreview.mode
+  });
+  assert(branch.branch === targetBranch, `${repo.name} changed to the wrong local branch.`);
+
+  const [publishPreview, pushPreview, prPreview] = await Promise.all([
+    request(repo, "GET", `/git/branch-publish-preview?taskID=${task.id}`),
+    request(repo, "GET", `/git/push-preview?taskID=${task.id}`),
+    request(repo, "GET", `/git/pr-preview?taskID=${task.id}`)
+  ]);
+  assert(publishPreview.blockers.length > 0, `${repo.name} branch publish preview invented a remote.`);
+  assert(pushPreview.blockers.length > 0, `${repo.name} push preview invented an upstream.`);
+  assert(prPreview.blockers.length > 0, `${repo.name} PR preview invented publish readiness.`);
+}
+
 async function startRuntime(repo, mode, authorizationID) {
   const environment = {
     ...process.env,
@@ -147,14 +246,17 @@ async function startRuntime(repo, mode, authorizationID) {
     FORGE_MODEL_PROVIDER_SETTINGS_PATH: repo.settingsPath,
     FORGE_MODEL_PROVIDER: "local",
     FORGE_MODEL_PROVIDER_LOCK: "local",
+    FORGE_ENABLE_SMOKE_COMMANDS: "1",
     OPENAI_API_KEY: ""
   };
   if (authorizationID) {
     environment.FORGE_RUNTIME_AUTHORIZATION_ID = authorizationID;
     environment.FORGE_RUNTIME_AUTHORIZED_AT = "2026-08-08T12:00:00.000Z";
+    environment.FORGE_QUEUE_DISPATCH_MODE = "supervised";
   } else {
     delete environment.FORGE_RUNTIME_AUTHORIZATION_ID;
     delete environment.FORGE_RUNTIME_AUTHORIZED_AT;
+    delete environment.FORGE_QUEUE_DISPATCH_MODE;
   }
 
   const child = spawn("node", ["--disable-warning=ExperimentalWarning", "dist/server.js"], {
@@ -205,6 +307,15 @@ async function request(repo, method, path, body, requireOK = true) {
   const parsed = text ? JSON.parse(text) : undefined;
   if (requireOK && !response.ok) throw new Error(`${repo.name} ${method} ${path} failed (${response.status}): ${text}`);
   return requireOK ? parsed : { status: response.status, body: parsed };
+}
+
+async function waitUntil(operation, label, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await operation()) return;
+    await sleep(80);
+  }
+  throw new Error(`Timed out waiting for ${label}.`);
 }
 
 async function run(command, args, cwd) {

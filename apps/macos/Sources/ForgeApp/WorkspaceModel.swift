@@ -52,9 +52,14 @@ final class WorkspaceModel: ObservableObject {
     @Published var missionControlRepositories: [MissionControlRepositorySnapshot] = []
     @Published var missionControlTaskRoute: MissionControlTaskRoute?
     @Published var missionControlRoutedTask: ForgeTask?
+    @Published var missionControlRoutedEvidence: MissionControlRoutedEvidence?
+    @Published var missionControlRoutedGitDiff: GitFileDiff?
     @Published var missionControlRouteIsLoading = false
+    @Published var missionControlRouteEvidenceIsLoading = false
     @Published var missionControlRouteIsMutating = false
     @Published var missionControlRouteError: String?
+    @Published var missionControlRouteEvidenceError: String?
+    @Published var missionControlGitActionResult: String?
     @Published var missionControlCreatingRepositoryPath: String?
     @Published var missionControlFairQueueState = MissionControlFairQueueState()
     @Published private var validationPermissionSnapshots: [ForgeTask.ID: [ValidationPresetPermission]] = [:]
@@ -123,6 +128,7 @@ final class WorkspaceModel: ObservableObject {
     private var pendingMissionControlTaskID: ForgeTask.ID?
     #if DEBUG
     private var missionControlDebugFixtureActive = false
+    @Published var missionControlDebugDetailTab: String?
     #endif
 
     init(
@@ -1198,18 +1204,24 @@ final class WorkspaceModel: ObservableObject {
         }
         missionControlTaskRoute = MissionControlTaskRoute(repositoryPath: path, taskID: taskID)
         missionControlRoutedTask = nil
+        missionControlRoutedEvidence = nil
+        missionControlRoutedGitDiff = nil
         missionControlRouteError = nil
+        missionControlRouteEvidenceError = nil
+        missionControlGitActionResult = nil
         missionControlRouteIsLoading = true
+        let route = MissionControlTaskRoute(repositoryPath: path, taskID: taskID)
         Task {
             do {
                 let task = try await missionControlSupervisor.task(path: path, taskID: taskID)
-                guard missionControlTaskRoute == MissionControlTaskRoute(repositoryPath: path, taskID: taskID) else {
+                guard missionControlTaskRoute == route else {
                     missionControlRouteIsLoading = false
                     return
                 }
                 missionControlRoutedTask = task
+                await loadMissionControlRoutedEvidence(route)
             } catch {
-                guard missionControlTaskRoute == MissionControlTaskRoute(repositoryPath: path, taskID: taskID) else {
+                guard missionControlTaskRoute == route else {
                     missionControlRouteIsLoading = false
                     return
                 }
@@ -1222,14 +1234,47 @@ final class WorkspaceModel: ObservableObject {
     func closeMissionControlTask() {
         missionControlTaskRoute = nil
         missionControlRoutedTask = nil
+        missionControlRoutedEvidence = nil
+        missionControlRoutedGitDiff = nil
         missionControlRouteError = nil
+        missionControlRouteEvidenceError = nil
+        missionControlGitActionResult = nil
         missionControlRouteIsLoading = false
+        missionControlRouteEvidenceIsLoading = false
         missionControlRouteIsMutating = false
     }
 
     func refreshMissionControlTask() {
         guard let route = missionControlTaskRoute else { return }
         openMissionControlTask(path: route.repositoryPath, taskID: route.taskID)
+    }
+
+    func refreshMissionControlRouteEvidence() {
+        guard let route = missionControlTaskRoute else { return }
+        Task { await loadMissionControlRoutedEvidence(route) }
+    }
+
+    func loadMissionControlGitDiff(path: String) {
+        guard let route = missionControlTaskRoute else { return }
+        missionControlRouteEvidenceIsLoading = true
+        missionControlRouteEvidenceError = nil
+        Task {
+            do {
+                let diff = try await missionControlSupervisor.gitFileDiff(
+                    path: route.repositoryPath,
+                    taskID: route.taskID,
+                    filePath: path
+                )
+                guard missionControlTaskRoute == route else { return }
+                missionControlRoutedGitDiff = diff
+            } catch {
+                guard missionControlTaskRoute == route else { return }
+                missionControlRouteEvidenceError = "Load background Git diff failed: \(error.localizedDescription)"
+            }
+            if missionControlTaskRoute == route {
+                missionControlRouteEvidenceIsLoading = false
+            }
+        }
     }
 
     func createMissionControlTask(path: String, title: String, objective: String) {
@@ -1309,9 +1354,139 @@ final class WorkspaceModel: ObservableObject {
         }
     }
 
-    func runMissionControlValidation() {
+    func runMissionControlValidation(presetID: ValidationPreset.ID? = nil) {
         performMissionControlMutation { route in
-            try await self.missionControlSupervisor.runValidation(path: route.repositoryPath, taskID: route.taskID)
+            if let presetID {
+                return try await self.missionControlSupervisor.runValidation(
+                    path: route.repositoryPath,
+                    taskID: route.taskID,
+                    presetID: presetID
+                )
+            }
+            return try await self.missionControlSupervisor.runValidation(
+                path: route.repositoryPath,
+                taskID: route.taskID
+            )
+        }
+    }
+
+    func approveMissionControlValidationPreset(_ presetID: ValidationPreset.ID) {
+        performMissionControlMutation { route in
+            try await self.missionControlSupervisor.approveValidationPreset(
+                path: route.repositoryPath,
+                taskID: route.taskID,
+                presetID: presetID
+            )
+        }
+    }
+
+    func runMissionControlTaskCommand(_ commandID: String) {
+        performMissionControlMutation { route in
+            try await self.missionControlSupervisor.runTaskCommand(
+                path: route.repositoryPath,
+                taskID: route.taskID,
+                commandID: commandID
+            )
+        }
+    }
+
+    func cancelMissionControlTaskCommand(_ taskCommandRunID: TaskCommandRun.ID) {
+        performMissionControlMutation { route in
+            try await self.missionControlSupervisor.cancelTaskCommand(
+                path: route.repositoryPath,
+                taskID: route.taskID,
+                taskCommandRunID: taskCommandRunID
+            )
+        }
+    }
+
+    func rerunMissionControlRepairCommand(_ evidenceID: CommandRerunEvidence.ID) {
+        performMissionControlMutation { route in
+            try await self.missionControlSupervisor.rerunRepairCommand(
+                path: route.repositoryPath,
+                taskID: route.taskID,
+                evidenceID: evidenceID
+            )
+        }
+    }
+
+    func createMissionControlGitCommit() {
+        guard let route = missionControlTaskRoute,
+              let preview = missionControlRoutedEvidence?.git.commit
+        else { return }
+        do {
+            let request = try MissionControlGitActionRequestFactory.commit(
+                taskID: route.taskID,
+                preview: preview
+            )
+            performMissionControlGitAction("Create local commit") { route in
+                try await self.missionControlSupervisor.createGitCommit(
+                    path: route.repositoryPath,
+                    request: request
+                ).summary
+            }
+        } catch {
+            missionControlRouteError = error.localizedDescription
+        }
+    }
+
+    func createOrSwitchMissionControlGitBranch() {
+        guard let route = missionControlTaskRoute,
+              let preview = missionControlRoutedEvidence?.git.branch
+        else { return }
+        do {
+            let request = try MissionControlGitActionRequestFactory.branch(
+                taskID: route.taskID,
+                preview: preview
+            )
+            performMissionControlGitAction("Change local branch") { route in
+                try await self.missionControlSupervisor.createOrSwitchGitBranch(
+                    path: route.repositoryPath,
+                    request: request
+                ).summary
+            }
+        } catch {
+            missionControlRouteError = error.localizedDescription
+        }
+    }
+
+    func publishMissionControlGitBranch() {
+        guard let route = missionControlTaskRoute,
+              let preview = missionControlRoutedEvidence?.git.branchPublish
+        else { return }
+        do {
+            let request = try MissionControlGitActionRequestFactory.branchPublish(
+                taskID: route.taskID,
+                preview: preview
+            )
+            performMissionControlGitAction("Publish current branch") { route in
+                try await self.missionControlSupervisor.publishGitBranch(
+                    path: route.repositoryPath,
+                    request: request
+                ).summary
+            }
+        } catch {
+            missionControlRouteError = error.localizedDescription
+        }
+    }
+
+    func pushMissionControlGitBranch() {
+        guard let route = missionControlTaskRoute,
+              let preview = missionControlRoutedEvidence?.git.push
+        else { return }
+        do {
+            let request = try MissionControlGitActionRequestFactory.push(
+                taskID: route.taskID,
+                preview: preview
+            )
+            performMissionControlGitAction("Push current branch") { route in
+                try await self.missionControlSupervisor.pushGitBranch(
+                    path: route.repositoryPath,
+                    request: request
+                ).summary
+            }
+        } catch {
+            missionControlRouteError = error.localizedDescription
         }
     }
 
@@ -1339,6 +1514,7 @@ final class WorkspaceModel: ObservableObject {
                 }
                 missionControlRoutedTask = task
                 statusMessage = "Background task updated in \(missionControlRepositoryName(path: route.repositoryPath))."
+                await loadMissionControlRoutedEvidence(route)
             } catch {
                 guard missionControlTaskRoute == route else {
                     missionControlRouteIsMutating = false
@@ -1348,6 +1524,63 @@ final class WorkspaceModel: ObservableObject {
                 statusMessage = "Background task action failed: \(error.localizedDescription)"
             }
             missionControlRouteIsMutating = false
+        }
+    }
+
+    private func performMissionControlGitAction(
+        _ action: String,
+        operation: @escaping (MissionControlTaskRoute) async throws -> String
+    ) {
+        guard let route = missionControlTaskRoute, !missionControlRouteIsMutating else { return }
+        missionControlRouteIsMutating = true
+        missionControlRouteError = nil
+        missionControlGitActionResult = nil
+        Task {
+            do {
+                let summary = try await operation(route)
+                guard missionControlTaskRoute == route else {
+                    missionControlRouteIsMutating = false
+                    return
+                }
+                missionControlGitActionResult = summary
+                missionControlRoutedTask = try await missionControlSupervisor.task(
+                    path: route.repositoryPath,
+                    taskID: route.taskID
+                )
+                await loadMissionControlRoutedEvidence(route)
+                statusMessage = summary
+            } catch {
+                guard missionControlTaskRoute == route else {
+                    missionControlRouteIsMutating = false
+                    return
+                }
+                missionControlRouteError = "\(action) failed: \(error.localizedDescription)"
+                statusMessage = missionControlRouteError ?? "\(action) failed."
+            }
+            missionControlRouteIsMutating = false
+        }
+    }
+
+    private func loadMissionControlRoutedEvidence(_ route: MissionControlTaskRoute) async {
+        missionControlRouteEvidenceIsLoading = true
+        missionControlRouteEvidenceError = nil
+        do {
+            let evidence = try await missionControlSupervisor.routedEvidence(
+                path: route.repositoryPath,
+                taskID: route.taskID
+            )
+            guard missionControlTaskRoute == route else { return }
+            missionControlRoutedEvidence = evidence
+            if let selectedPath = missionControlRoutedGitDiff?.path,
+               !evidence.git.status.changedFiles.contains(where: { $0.path == selectedPath }) {
+                missionControlRoutedGitDiff = nil
+            }
+        } catch {
+            guard missionControlTaskRoute == route else { return }
+            missionControlRouteEvidenceError = "Load background command/Git review failed: \(error.localizedDescription)"
+        }
+        if missionControlTaskRoute == route {
+            missionControlRouteEvidenceIsLoading = false
         }
     }
 

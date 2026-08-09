@@ -3,7 +3,7 @@
 Document role: record end-to-end workflows that product, design, and runtime
 implementation must support.
 
-Last updated: 2026-07-11
+Last updated: 2026-08-09
 
 ## Flow 1: First Launch And Workspace Setup
 
@@ -234,6 +234,36 @@ Required evidence:
 - exact session authorization and supervised-dispatch health
 - restart hold and stale-ID rejection
 - Pause All across accepted active runtimes
+
+## Flow 11: Background Command And Git Review
+
+Goal: review and explicitly control one accepted background repository without
+switching the primary workspace or borrowing its permissions.
+
+Steps:
+
+1. User opens a background task card; Forge revalidates exact repository,
+   runtime mode, supervised dispatch, and session authorization.
+2. Commands loads that runtime's permission envelope. The user may approve/run
+   a known preset, run/cancel a runtime-owned command ID, or rerun the exact
+   command captured by reviewed repair evidence.
+3. Git loads that runtime's bounded status/diff and fresh commit, branch,
+   publish, push, and PR preflights.
+4. A local commit, branch change, non-force first publish, or non-force push
+   requires a separate consequence confirmation. Forge revalidates the route
+   and the runtime rechecks optimistic-concurrency evidence.
+5. Blocked remote/upstream states remain visibly blocked. PR publication stays
+   in the focused Keychain-backed GitHub flow.
+6. After every mutation Forge refreshes the same routed task and evidence;
+   cross-repository task IDs and stale authorization fail closed.
+
+Required evidence:
+
+- repository path and authorized/read-only route state
+- preset/command approval, last-run, cancellation, and repair-rerun lineage
+- changed paths, bounded diff, expected HEAD/branch/upstream, blockers, and
+  operation boundary
+- explicit confirmation for every Git mutation and no force/reset/merge/delete
 
 ## Flow Quality Bar
 

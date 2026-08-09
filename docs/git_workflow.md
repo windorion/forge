@@ -36,6 +36,19 @@ Current implementation:
   suggestions, risk notes, blockers, and a non-mutating operation boundary
 - the macOS Review panel can request and display that commit review artifact
   from the Working Tree surface
+- Mission Control's routed Git tab requests status, bounded file diff, commit,
+  branch, first-publish, push, and PR previews from the exact accepted
+  background runtime without changing the primary workspace
+
+For active background repositories, the same optimistic-concurrency contracts
+apply to local commit, branch create/switch, branch publish, and push. The app
+constructs requests from the routed task ID plus the reviewed HEAD, branch,
+upstream, remote, and file list, shows a separate confirmation, and the
+supervisor repeats repository/session validation immediately before the POST.
+Observer routes never expose mutation controls. PR publication stays in the
+focused Keychain-backed workflow so Mission Control never duplicates GitHub
+credential consent. No force push, reset, merge, discard, or branch deletion is
+routed.
 
 ## Diff Workflow
 
