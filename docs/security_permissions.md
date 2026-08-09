@@ -247,6 +247,17 @@ fail with 403. The grant selects only the existing queue head and cannot name a
 different task or add plan/edit/command/Git authority. Per-repository
 serialization remains enforced underneath the cross-runtime 1-2 slot limit.
 
+Reconnect behavior cannot expand authorization. Transport and process failures
+use a capped `2, 4, 8, 16, 30` second retry schedule and may relaunch only the
+supervisor-owned target already held in memory for that repository. A relaunched
+active child receives the same session-scoped authorization and remains in
+`supervised` queue mode; it still must echo the exact repository, mode,
+read/write, authorization, and grant evidence before any mutation route is
+available. Identity or authorization mismatches clear the restart target and
+active authorization instead of retrying. Telemetry stores bounded error
+summaries and counters only; it does not capture tokens, child environments,
+command output, repository content, or authorization secrets.
+
 Background task routing does not convert cached visibility into authority.
 Task detail uses the observer-safe `GET /tasks/:taskID` route after fresh health
 identity validation. The same validated child supplies the validation

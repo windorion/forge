@@ -103,6 +103,90 @@ final class MissionControlRuntimeAccessTests: XCTestCase {
         ))
     }
 
+    func testReconnectBackoffGrowsExponentiallyAndCapsAtThirtySeconds() {
+        XCTAssertEqual(
+            (0...7).map(MissionControlReconnectPolicy.delay(forConsecutiveFailureCount:)),
+            [0, 2, 4, 8, 16, 30, 30, 30]
+        )
+    }
+
+    func testReconnectFailureRecordsBoundedTelemetryAndRetryDeadline() {
+        let now = Date(timeIntervalSince1970: 1_000)
+        let first = MissionControlReconnectPolicy.recordingFailure(
+            nil,
+            at: now,
+            summary: String(repeating: "x", count: 300)
+        )
+        XCTAssertEqual(first.consecutiveFailures, 1)
+        XCTAssertEqual(first.totalFailures, 1)
+        XCTAssertEqual(first.nextRetryAt, now.addingTimeInterval(2))
+        XCTAssertEqual(first.lastFailureSummary?.count, 240)
+
+        let second = MissionControlReconnectPolicy.recordingFailure(
+            first,
+            at: now.addingTimeInterval(2),
+            summary: "connection refused"
+        )
+        XCTAssertEqual(second.consecutiveFailures, 2)
+        XCTAssertEqual(second.totalFailures, 2)
+        XCTAssertEqual(second.nextRetryAt, now.addingTimeInterval(6))
+    }
+
+    func testReconnectDeadlineFailsClosedUntilBoundary() {
+        let now = Date(timeIntervalSince1970: 2_000)
+        let telemetry = MissionControlReconnectPolicy.recordingFailure(
+            nil,
+            at: now,
+            summary: "offline"
+        )
+        XCTAssertFalse(MissionControlReconnectPolicy.isRetryDue(
+            telemetry,
+            at: now.addingTimeInterval(1.999)
+        ))
+        XCTAssertTrue(MissionControlReconnectPolicy.isRetryDue(
+            telemetry,
+            at: now.addingTimeInterval(2)
+        ))
+    }
+
+    func testReconnectAttemptRetainsFailureLineageAndClearsDeadline() {
+        let failed = MissionControlReconnectPolicy.recordingFailure(
+            nil,
+            at: Date(timeIntervalSince1970: 3_000),
+            summary: "process exited"
+        )
+        let attempted = MissionControlReconnectPolicy.recordingRestartAttempt(failed)
+        XCTAssertEqual(attempted.restartAttempts, 1)
+        XCTAssertEqual(attempted.consecutiveFailures, 1)
+        XCTAssertEqual(attempted.totalFailures, 1)
+        XCTAssertNil(attempted.nextRetryAt)
+    }
+
+    func testReconnectSuccessResetsBackoffAndCountsOneRecovery() {
+        let failed = MissionControlReconnectPolicy.recordingFailure(
+            nil,
+            at: Date(timeIntervalSince1970: 4_000),
+            summary: "timed out"
+        )
+        let recovered = MissionControlReconnectPolicy.recordingSuccess(
+            failed,
+            at: Date(timeIntervalSince1970: 4_002)
+        )
+        XCTAssertEqual(recovered.consecutiveFailures, 0)
+        XCTAssertEqual(recovered.totalFailures, 1)
+        XCTAssertEqual(recovered.successfulRecoveries, 1)
+        XCTAssertEqual(recovered.successfulRefreshes, 1)
+        XCTAssertNil(recovered.nextRetryAt)
+        XCTAssertNil(recovered.lastFailureSummary)
+
+        let healthy = MissionControlReconnectPolicy.recordingSuccess(
+            recovered,
+            at: Date(timeIntervalSince1970: 4_004)
+        )
+        XCTAssertEqual(healthy.successfulRecoveries, 1)
+        XCTAssertEqual(healthy.successfulRefreshes, 2)
+    }
+
     private func expectation(
         mode: String,
         authorizationID: String? = nil,

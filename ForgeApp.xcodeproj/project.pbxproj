@@ -7,44 +7,45 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		0AC6AFE509303821D0D48CFF3E4BD441 /* MenuBarMiniWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4118CBC87A55A5F3A8112653B8EFDC71 /* MenuBarMiniWindow.swift */; };
-		0DC80E1B367C88786952757461E6C415 /* SignInPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D6F7B3379DD2620F16DD6904D642EEE /* SignInPanelController.swift */; };
-		1610448A0236B178928D29B503AD5933 /* appcast.xml in Resources */ = {isa = PBXBuildFile; fileRef = DB42DBADA4C43FBF902FCE691DCA49A9 /* appcast.xml */; };
-		1936AFB709992402033C5C9CC40CD1FA /* ForgeShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0269E03A0BF21CCF534914D8EC7CDE /* ForgeShortcuts.swift */; };
-		1FBB8232A4006F8974F1081DE38D730E /* ForgeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4721F798766B16F10DF4E19A6537321 /* ForgeApp.swift */; };
-		20904CCB93E89C7992C3CE4EA4166A83 /* GitHubAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1BC81479ACBC0FA46BB4A93C182584 /* GitHubAuth.swift */; };
-		3498230F321160A432829293A2676907 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A820D0A5B60BE3AD05F7341EF27B93B /* SettingsView.swift */; };
-		3F2457F04253A8C1D3A1266809747072 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53F2FB63D28DBC37AADD7F130BA812AB /* OnboardingView.swift */; };
-		484BE00F517275843D6054AA936B1C1E /* TaskShare.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF60E367C54B3E181D1CE837A66EF20E /* TaskShare.swift */; };
+		0BF223E0ED9DCDC579F52BB7A055DB54 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7D5FCAEC40D071761FD633F01279517 /* Models.swift */; };
+		0E44EFCD8055A566D177605AA607EAFB /* PullRequestRefreshPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9700D81F7BA583D837C398DA326FC81 /* PullRequestRefreshPolicy.swift */; };
+		124629412C22B2226467D256D92A0D22 /* ForgeUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFDF7B4CB729A1B12CF599E0094DF9B0 /* ForgeUpdater.swift */; };
+		16442AB1072846227FFA7330E66F2CCE /* QuickCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0E5ECE71E8FF3F4760EBD9C415160E /* QuickCapture.swift */; };
+		1763224C8C68939C0AAF6AFFAEA82F59 /* WorkspaceModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 282CCCB1CC03CB3FE5A810B515304B36 /* WorkspaceModel.swift */; };
+		1829F1EC38DDF5381DFBD011582F3C0B /* appcast.xml in Resources */ = {isa = PBXBuildFile; fileRef = DB42DBADA4C43FBF902FCE691DCA49A9 /* appcast.xml */; };
+		1B625D487F92F62AB02B128912AD02BF /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFDB597E6CB49D913CA0C67974A1B1D6 /* SignInView.swift */; };
+		2360586071AA1E7A53D0E7AACDD55649 /* forge-logo.png in Resources */ = {isa = PBXBuildFile; fileRef = 9704D692CE40363A6FED53D8EF4C9ED2 /* forge-logo.png */; };
+		42E6502E0EAA1E20CAD303777C705041 /* MenuBarMiniWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEDBE168D34A55F8A9F334FA5E7A6CD6 /* MenuBarMiniWindow.swift */; };
+		456E896F6039D5A6319506CACDB525D6 /* MissionControlRoutedActionDebugFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1484DD351792BEC52FC9176F603B6FC7 /* MissionControlRoutedActionDebugFixture.swift */; };
+		47BF2D978168409F8408D89B308DD0EC /* DebugWindowCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB6A475CC9965DB23C93F3ECDC522EB5 /* DebugWindowCapture.swift */; };
+		496F5855C5411570DB4FEDA495F76A2B /* ForgeShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 702B03B541AB04EC6523A2048995EA3C /* ForgeShortcuts.swift */; };
 		4F5DF4775C99B166700F3F43A289A2B6 /* MissionControlUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F2E3859FFBA36D8F7DB15996B63492B /* MissionControlUITests.swift */; };
-		540B71CC916D8672A649CD9CA2FCD4D1 /* ForgeUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4213DF184C97DB9F8E1495DA5EA400A0 /* ForgeUpdater.swift */; };
-		5992FF74C3E04A3C20B0FD56E5B30438 /* QuickCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECEBF8F7B3C833F4D1FD2E4B5BD1E72B /* QuickCapture.swift */; };
-		63388E87B098316A33540171946EBA98 /* MissionControlTaskRoutingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD245E2BDFB4EAF040A5DF6F8BC27B60 /* MissionControlTaskRoutingView.swift */; };
-		6735A9DDEC06FB5F93BA736D4197A7B2 /* MissionControlFairQueueScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0591FDAB1E9208DCBB3695E63FE1865A /* MissionControlFairQueueScheduler.swift */; };
-		795B5E547105C2FD8AE1479F6B99E29D /* OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = 863BAB18A96BEC9CE7DA194C30046D97 /* OFL.txt */; };
-		7A137E7E901CA863EF41CAC49C0DDDFB /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9B7BA9071DBA66B0628C21835B2180CF /* Cocoa.framework */; };
-		7E9D3784B7233D84EBB30897D4BF911D /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81970C1A97C98F7CE1EDA587B1B1C259 /* Models.swift */; };
-		81CE44DE47540F49EAD4E2779006F033 /* RuntimeClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 655368CDB358E0D493EB3479B51CFB70 /* RuntimeClient.swift */; };
-		8DFE1156BD80111A4EBCA13DD0948D61 /* MissionControlView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9902FD34A3CDA187312639CA44481362 /* MissionControlView.swift */; };
-		8E700DEBEF5CA12E8A12A6FD6981C58B /* MissionControlRoutedActionDebugFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6958CA490817756B40997337B4D57C3 /* MissionControlRoutedActionDebugFixture.swift */; };
-		9021A7770B7ADCE783CACF6597AD2ADC /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 684EC1DB56F98AF012F401D0638FB064 /* KeychainStore.swift */; };
-		A2C46C8E0E49848A210518F72B959E4E /* TaskTemplates.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA52D7F0DA6270924D527C896B496F40 /* TaskTemplates.swift */; };
-		AF4135D22464A2FE29E6AFF727D8E01B /* JetBrainsMono-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 128B8D0FBEB86AA4F301308E0875D7BF /* JetBrainsMono-Regular.ttf */; };
-		AFC8E7BB1D3E365E2207B3915B68EB5E /* JetBrainsMono-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 4028C663F4FD8180323CF643D67C919F /* JetBrainsMono-Bold.ttf */; };
-		B8D6063FF66F2AAB9A5D236B6EFC8E82 /* WorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7032D9BBD0AE64A6D26B52F5D65D6845 /* WorkspaceView.swift */; };
-		BA4B1E484D8C1C52C9D90AD2EEA9215A /* WorkspaceModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF58E01E4BAF7DD362C4F1C11BBF176D /* WorkspaceModel.swift */; };
+		540CEE226F58E3CD61EBE3F9BF8931CC /* TaskShare.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32CDE0AC381346385556BCA53185012D /* TaskShare.swift */; };
+		585AC75ACE6C0120CEB242EF1629666B /* UpdateViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FEB1F7E34EC605168135CA9D8BC1561 /* UpdateViews.swift */; };
+		63870004860193E1E85046FE9167A063 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51BB76690E0AC027FF0A8641A8D4BA40 /* SettingsView.swift */; };
+		6BD5B2B788357647CFFA2B2FED671823 /* ForgeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1C607F4A435EA603E91AA1972F461FB /* ForgeApp.swift */; };
+		7B4F3FF50660DA8455C39A20C16DC9D6 /* TaskTemplates.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02509372AEC66B36D863FC45A1130731 /* TaskTemplates.swift */; };
+		83C066418EC7426277DC8139691135EA /* MissionControlTaskRoutingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A3D1C6D17B513BFED39D90B0D957A4B /* MissionControlTaskRoutingView.swift */; };
+		8AF15FD0E7056D239B20F4302C8F3B9A /* MissionControlReconnectPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2518665C7540FD9A9B1FD6AC80BFF837 /* MissionControlReconnectPolicy.swift */; };
+		94B8CE08A800C17E0BF68FF5E814B964 /* WorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85324BA3FB842A663EEB813C75D071F2 /* WorkspaceView.swift */; };
+		9D92ACFA0DF243AE61CE9BB3B0EAB338 /* SignInPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B51BB1ADBC1967519672137C8E6EE48F /* SignInPanelController.swift */; };
+		ADA1D8EC276147286EBA00974475C65E /* GitHubAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2D36E7720349EA59EE86B90E4B86D79 /* GitHubAuth.swift */; };
+		B32FC758ACC771F2597BFEC7C13A68D2 /* MissionControlFairQueueScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EE6EF4B1573061ACF5598D244172C80 /* MissionControlFairQueueScheduler.swift */; };
+		B3F63D8508E50E8AEF361F7C6E5D707C /* ForgeSpotlight.swift in Sources */ = {isa = PBXBuildFile; fileRef = 882B5A67CCBA9B4527504D3578CD6524 /* ForgeSpotlight.swift */; };
+		BE121E4A51EF7F119D178211EC7CD645 /* MissionControlView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FEC04D52D0DF922041B322CEC5DD531 /* MissionControlView.swift */; };
 		BEEF69822FF9D45FB8F9F0BBB16F0D8E /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9B7BA9071DBA66B0628C21835B2180CF /* Cocoa.framework */; };
-		C16E776348346D4B42CC00E965610E7E /* UpdateViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C8109EE425F447F24079ED709E9CA91 /* UpdateViews.swift */; };
-		C3997017F8C56E00FEBCB506A16EE63E /* ForgeSpotlight.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC6C9F7F22FF3C98AEA22D0448F043FA /* ForgeSpotlight.swift */; };
-		C452375DECE97237CD582AC8A671E44C /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E448D9F76DB80B0432AF5A25CED8E252 /* SignInView.swift */; };
-		C87F3C6197D635DAD4B55DDA005A2AF1 /* MissionControlRuntimeSupervisor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18858212532961FA0C9F69FC28C08646 /* MissionControlRuntimeSupervisor.swift */; };
-		CD16D4762C31A1C9DABC4CDAAE7FBCC4 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96E03750538677D3F954E7676EB4297B /* AppDelegate.swift */; };
-		DDBC4E8072A9D44F5A80268203509E8B /* MissionControlRoutedEvidence.swift in Sources */ = {isa = PBXBuildFile; fileRef = B883240CD4F85718CA4833452FC334D8 /* MissionControlRoutedEvidence.swift */; };
-		E09436CC359AD897616512ED212D3235 /* PullRequestRefreshPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBA09AC213470FCB0E34C82E480BE497 /* PullRequestRefreshPolicy.swift */; };
-		E0F709EE14E9261B380904FF25DD7576 /* ForgeNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5BE6554F46A682B5171CE54FE36A9CE /* ForgeNotifications.swift */; };
-		E14667D9A4E12E02D1DFDB3FB5AC1F7C /* MenuBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 756D8775A2E6B22201D9F35ED3AF1C3A /* MenuBarController.swift */; };
-		EA9CAD4440E0B1A83DB8730D7589ABA5 /* forge-logo.png in Resources */ = {isa = PBXBuildFile; fileRef = 9704D692CE40363A6FED53D8EF4C9ED2 /* forge-logo.png */; };
-		EABBDE079B3207C1838472477718A81F /* DebugWindowCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CEEC0967BBAA5006D83F9E90FB26E1C /* DebugWindowCapture.swift */; };
+		C48A57109847DC0A7925D70CF127E004 /* JetBrainsMono-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 4028C663F4FD8180323CF643D67C919F /* JetBrainsMono-Bold.ttf */; };
+		C58C4920834D318A19885143F0D0E53D /* OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = 863BAB18A96BEC9CE7DA194C30046D97 /* OFL.txt */; };
+		CC54DB4CEB8B5398DC7B5DF2FA10BF5D /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A44002404DD1B59A8343FEF18B1622EF /* AppDelegate.swift */; };
+		D09D1BCA8D05F80EF60AD70D2BF2C3E4 /* JetBrainsMono-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 128B8D0FBEB86AA4F301308E0875D7BF /* JetBrainsMono-Regular.ttf */; };
+		D15C7A6B610452A1F6D7DED80BBEADE2 /* RuntimeClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7A439422C3B58C23244A40E0B4BC2C8 /* RuntimeClient.swift */; };
+		D622584B1EFAB23CEBD56F96C94337B7 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9B7BA9071DBA66B0628C21835B2180CF /* Cocoa.framework */; };
+		ECE997DA4DB09DBE540B392A0676D3E0 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 417BEBDCCDFD716D84BBFBF50C63C628 /* KeychainStore.swift */; };
+		ED973292C686943342E19F52E51FB6A0 /* MissionControlRuntimeSupervisor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58EAB4CD862F31FC1E0C73FAB0AB7ED2 /* MissionControlRuntimeSupervisor.swift */; };
+		F3468379CFD3A8BC23BDC107225AD01B /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B158E3F7E5B128725C284D7CF9161465 /* OnboardingView.swift */; };
+		F618BB19776C8742E4F6B33E76A49A4C /* MenuBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53C341A5740EEB7662E13AC67E4F7428 /* MenuBarController.swift */; };
+		FE129D9CF8BE576385C1CDBC8D1ECA82 /* MissionControlRoutedEvidence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EE4A402D91BE74F402AE407F79B1D55 /* MissionControlRoutedEvidence.swift */; };
+		FF038ECD2EE8D6180038E4531499DB5A /* ForgeNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 842051B4875603454FCDA059AAC5CDC9 /* ForgeNotifications.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -52,67 +53,68 @@
 			isa = PBXContainerItemProxy;
 			containerPortal = C816F1CFB0D7D70FEC82A985204D6451 /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = 3D709BE2A07E3CAAEDC9709C5952A5F0;
+			remoteGlobalIDString = 37946EE3136DC135DB1D4EAC7534CF8A;
 			remoteInfo = ForgeAppUIHost;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		0591FDAB1E9208DCBB3695E63FE1865A /* MissionControlFairQueueScheduler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MissionControlFairQueueScheduler.swift; sourceTree = "<group>"; };
-		0CEEC0967BBAA5006D83F9E90FB26E1C /* DebugWindowCapture.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DebugWindowCapture.swift; sourceTree = "<group>"; };
-		0F1BC81479ACBC0FA46BB4A93C182584 /* GitHubAuth.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GitHubAuth.swift; sourceTree = "<group>"; };
+		02509372AEC66B36D863FC45A1130731 /* TaskTemplates.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskTemplates.swift; sourceTree = "<group>"; };
 		0F2E3859FFBA36D8F7DB15996B63492B /* MissionControlUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MissionControlUITests.swift; sourceTree = "<group>"; };
 		128B8D0FBEB86AA4F301308E0875D7BF /* JetBrainsMono-Regular.ttf */ = {isa = PBXFileReference; includeInIndex = 1; name = "JetBrainsMono-Regular.ttf"; path = "apps/macos/Resources/Fonts/JetBrainsMono-Regular.ttf"; sourceTree = "<group>"; };
-		18858212532961FA0C9F69FC28C08646 /* MissionControlRuntimeSupervisor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MissionControlRuntimeSupervisor.swift; sourceTree = "<group>"; };
-		1A820D0A5B60BE3AD05F7341EF27B93B /* SettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		1484DD351792BEC52FC9176F603B6FC7 /* MissionControlRoutedActionDebugFixture.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MissionControlRoutedActionDebugFixture.swift; sourceTree = "<group>"; };
+		2518665C7540FD9A9B1FD6AC80BFF837 /* MissionControlReconnectPolicy.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MissionControlReconnectPolicy.swift; sourceTree = "<group>"; };
+		282CCCB1CC03CB3FE5A810B515304B36 /* WorkspaceModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkspaceModel.swift; sourceTree = "<group>"; };
+		2EE4A402D91BE74F402AE407F79B1D55 /* MissionControlRoutedEvidence.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MissionControlRoutedEvidence.swift; sourceTree = "<group>"; };
+		32CDE0AC381346385556BCA53185012D /* TaskShare.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskShare.swift; sourceTree = "<group>"; };
+		3A3D1C6D17B513BFED39D90B0D957A4B /* MissionControlTaskRoutingView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MissionControlTaskRoutingView.swift; sourceTree = "<group>"; };
+		3EE6EF4B1573061ACF5598D244172C80 /* MissionControlFairQueueScheduler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MissionControlFairQueueScheduler.swift; sourceTree = "<group>"; };
 		4028C663F4FD8180323CF643D67C919F /* JetBrainsMono-Bold.ttf */ = {isa = PBXFileReference; includeInIndex = 1; name = "JetBrainsMono-Bold.ttf"; path = "apps/macos/Resources/Fonts/JetBrainsMono-Bold.ttf"; sourceTree = "<group>"; };
-		4118CBC87A55A5F3A8112653B8EFDC71 /* MenuBarMiniWindow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MenuBarMiniWindow.swift; sourceTree = "<group>"; };
-		4213DF184C97DB9F8E1495DA5EA400A0 /* ForgeUpdater.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ForgeUpdater.swift; sourceTree = "<group>"; };
-		53F2FB63D28DBC37AADD7F130BA812AB /* OnboardingView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
-		5C0269E03A0BF21CCF534914D8EC7CDE /* ForgeShortcuts.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ForgeShortcuts.swift; sourceTree = "<group>"; };
-		655368CDB358E0D493EB3479B51CFB70 /* RuntimeClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RuntimeClient.swift; sourceTree = "<group>"; };
-		684EC1DB56F98AF012F401D0638FB064 /* KeychainStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
-		6C8109EE425F447F24079ED709E9CA91 /* UpdateViews.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = UpdateViews.swift; sourceTree = "<group>"; };
-		7032D9BBD0AE64A6D26B52F5D65D6845 /* WorkspaceView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkspaceView.swift; sourceTree = "<group>"; };
-		756D8775A2E6B22201D9F35ED3AF1C3A /* MenuBarController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MenuBarController.swift; sourceTree = "<group>"; };
-		81970C1A97C98F7CE1EDA587B1B1C259 /* Models.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		417BEBDCCDFD716D84BBFBF50C63C628 /* KeychainStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		4A0E5ECE71E8FF3F4760EBD9C415160E /* QuickCapture.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QuickCapture.swift; sourceTree = "<group>"; };
+		51BB76690E0AC027FF0A8641A8D4BA40 /* SettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		53C341A5740EEB7662E13AC67E4F7428 /* MenuBarController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MenuBarController.swift; sourceTree = "<group>"; };
+		58EAB4CD862F31FC1E0C73FAB0AB7ED2 /* MissionControlRuntimeSupervisor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MissionControlRuntimeSupervisor.swift; sourceTree = "<group>"; };
+		6FEB1F7E34EC605168135CA9D8BC1561 /* UpdateViews.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = UpdateViews.swift; sourceTree = "<group>"; };
+		702B03B541AB04EC6523A2048995EA3C /* ForgeShortcuts.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ForgeShortcuts.swift; sourceTree = "<group>"; };
+		7FEC04D52D0DF922041B322CEC5DD531 /* MissionControlView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MissionControlView.swift; sourceTree = "<group>"; };
+		842051B4875603454FCDA059AAC5CDC9 /* ForgeNotifications.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ForgeNotifications.swift; sourceTree = "<group>"; };
+		85324BA3FB842A663EEB813C75D071F2 /* WorkspaceView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkspaceView.swift; sourceTree = "<group>"; };
 		863BAB18A96BEC9CE7DA194C30046D97 /* OFL.txt */ = {isa = PBXFileReference; includeInIndex = 1; name = OFL.txt; path = apps/macos/Resources/Fonts/OFL.txt; sourceTree = "<group>"; };
-		96E03750538677D3F954E7676EB4297B /* AppDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		882B5A67CCBA9B4527504D3578CD6524 /* ForgeSpotlight.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ForgeSpotlight.swift; sourceTree = "<group>"; };
 		9704D692CE40363A6FED53D8EF4C9ED2 /* forge-logo.png */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = image.png; name = "forge-logo.png"; path = "design_handoff_forge/assets/forge-logo.png"; sourceTree = "<group>"; };
-		9902FD34A3CDA187312639CA44481362 /* MissionControlView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MissionControlView.swift; sourceTree = "<group>"; };
 		9B7BA9071DBA66B0628C21835B2180CF /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
-		9D6F7B3379DD2620F16DD6904D642EEE /* SignInPanelController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SignInPanelController.swift; sourceTree = "<group>"; };
+		A44002404DD1B59A8343FEF18B1622EF /* AppDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		B158E3F7E5B128725C284D7CF9161465 /* OnboardingView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		B51BB1ADBC1967519672137C8E6EE48F /* SignInPanelController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SignInPanelController.swift; sourceTree = "<group>"; };
 		B785BEF2F582CEEA55B8A8A6D7D0D439 /* ForgeAppUIHost.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ForgeAppUIHost.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		B883240CD4F85718CA4833452FC334D8 /* MissionControlRoutedEvidence.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MissionControlRoutedEvidence.swift; sourceTree = "<group>"; };
-		BA52D7F0DA6270924D527C896B496F40 /* TaskTemplates.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskTemplates.swift; sourceTree = "<group>"; };
+		B7D5FCAEC40D071761FD633F01279517 /* Models.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		BBAF7916EB259E6AEB0FAE71D3EEBC56 /* ForgeAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ForgeAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		BD245E2BDFB4EAF040A5DF6F8BC27B60 /* MissionControlTaskRoutingView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MissionControlTaskRoutingView.swift; sourceTree = "<group>"; };
+		CFDB597E6CB49D913CA0C67974A1B1D6 /* SignInView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
 		DB42DBADA4C43FBF902FCE691DCA49A9 /* appcast.xml */ = {isa = PBXFileReference; includeInIndex = 1; name = appcast.xml; path = apps/macos/Resources/appcast.xml; sourceTree = "<group>"; };
-		DBA09AC213470FCB0E34C82E480BE497 /* PullRequestRefreshPolicy.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PullRequestRefreshPolicy.swift; sourceTree = "<group>"; };
-		DF60E367C54B3E181D1CE837A66EF20E /* TaskShare.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskShare.swift; sourceTree = "<group>"; };
-		E448D9F76DB80B0432AF5A25CED8E252 /* SignInView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
-		E4721F798766B16F10DF4E19A6537321 /* ForgeApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ForgeApp.swift; sourceTree = "<group>"; };
-		E6958CA490817756B40997337B4D57C3 /* MissionControlRoutedActionDebugFixture.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MissionControlRoutedActionDebugFixture.swift; sourceTree = "<group>"; };
-		EC6C9F7F22FF3C98AEA22D0448F043FA /* ForgeSpotlight.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ForgeSpotlight.swift; sourceTree = "<group>"; };
-		ECEBF8F7B3C833F4D1FD2E4B5BD1E72B /* QuickCapture.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QuickCapture.swift; sourceTree = "<group>"; };
-		F5BE6554F46A682B5171CE54FE36A9CE /* ForgeNotifications.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ForgeNotifications.swift; sourceTree = "<group>"; };
-		FF58E01E4BAF7DD362C4F1C11BBF176D /* WorkspaceModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkspaceModel.swift; sourceTree = "<group>"; };
+		DEDBE168D34A55F8A9F334FA5E7A6CD6 /* MenuBarMiniWindow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MenuBarMiniWindow.swift; sourceTree = "<group>"; };
+		E2D36E7720349EA59EE86B90E4B86D79 /* GitHubAuth.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GitHubAuth.swift; sourceTree = "<group>"; };
+		E9700D81F7BA583D837C398DA326FC81 /* PullRequestRefreshPolicy.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PullRequestRefreshPolicy.swift; sourceTree = "<group>"; };
+		F1C607F4A435EA603E91AA1972F461FB /* ForgeApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ForgeApp.swift; sourceTree = "<group>"; };
+		F7A439422C3B58C23244A40E0B4BC2C8 /* RuntimeClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RuntimeClient.swift; sourceTree = "<group>"; };
+		FB6A475CC9965DB23C93F3ECDC522EB5 /* DebugWindowCapture.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DebugWindowCapture.swift; sourceTree = "<group>"; };
+		FFDF7B4CB729A1B12CF599E0094DF9B0 /* ForgeUpdater.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ForgeUpdater.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		1C7EC8EC1E6D78120A55D2F88DDCD85E /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				7A137E7E901CA863EF41CAC49C0DDDFB /* Cocoa.framework in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		5D0C1627BCDA28408B13AE7E19B0059A /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				BEEF69822FF9D45FB8F9F0BBB16F0D8E /* Cocoa.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B414E3F81AA13D88033C82F06164D27B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D622584B1EFAB23CEBD56F96C94337B7 /* Cocoa.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -145,6 +147,45 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
+		7D92D355F2F3C0CBD014D1D4A85D040A /* ForgeApp Sources */ = {
+			isa = PBXGroup;
+			children = (
+				A44002404DD1B59A8343FEF18B1622EF /* AppDelegate.swift */,
+				FB6A475CC9965DB23C93F3ECDC522EB5 /* DebugWindowCapture.swift */,
+				F1C607F4A435EA603E91AA1972F461FB /* ForgeApp.swift */,
+				842051B4875603454FCDA059AAC5CDC9 /* ForgeNotifications.swift */,
+				702B03B541AB04EC6523A2048995EA3C /* ForgeShortcuts.swift */,
+				882B5A67CCBA9B4527504D3578CD6524 /* ForgeSpotlight.swift */,
+				FFDF7B4CB729A1B12CF599E0094DF9B0 /* ForgeUpdater.swift */,
+				E2D36E7720349EA59EE86B90E4B86D79 /* GitHubAuth.swift */,
+				417BEBDCCDFD716D84BBFBF50C63C628 /* KeychainStore.swift */,
+				53C341A5740EEB7662E13AC67E4F7428 /* MenuBarController.swift */,
+				DEDBE168D34A55F8A9F334FA5E7A6CD6 /* MenuBarMiniWindow.swift */,
+				3EE6EF4B1573061ACF5598D244172C80 /* MissionControlFairQueueScheduler.swift */,
+				2518665C7540FD9A9B1FD6AC80BFF837 /* MissionControlReconnectPolicy.swift */,
+				1484DD351792BEC52FC9176F603B6FC7 /* MissionControlRoutedActionDebugFixture.swift */,
+				2EE4A402D91BE74F402AE407F79B1D55 /* MissionControlRoutedEvidence.swift */,
+				58EAB4CD862F31FC1E0C73FAB0AB7ED2 /* MissionControlRuntimeSupervisor.swift */,
+				3A3D1C6D17B513BFED39D90B0D957A4B /* MissionControlTaskRoutingView.swift */,
+				7FEC04D52D0DF922041B322CEC5DD531 /* MissionControlView.swift */,
+				B7D5FCAEC40D071761FD633F01279517 /* Models.swift */,
+				B158E3F7E5B128725C284D7CF9161465 /* OnboardingView.swift */,
+				E9700D81F7BA583D837C398DA326FC81 /* PullRequestRefreshPolicy.swift */,
+				4A0E5ECE71E8FF3F4760EBD9C415160E /* QuickCapture.swift */,
+				F7A439422C3B58C23244A40E0B4BC2C8 /* RuntimeClient.swift */,
+				51BB76690E0AC027FF0A8641A8D4BA40 /* SettingsView.swift */,
+				B51BB1ADBC1967519672137C8E6EE48F /* SignInPanelController.swift */,
+				CFDB597E6CB49D913CA0C67974A1B1D6 /* SignInView.swift */,
+				32CDE0AC381346385556BCA53185012D /* TaskShare.swift */,
+				02509372AEC66B36D863FC45A1130731 /* TaskTemplates.swift */,
+				6FEB1F7E34EC605168135CA9D8BC1561 /* UpdateViews.swift */,
+				282CCCB1CC03CB3FE5A810B515304B36 /* WorkspaceModel.swift */,
+				85324BA3FB842A663EEB813C75D071F2 /* WorkspaceView.swift */,
+			);
+			name = "ForgeApp Sources";
+			path = apps/macos/Sources/ForgeApp;
+			sourceTree = "<group>";
+		};
 		9C69A3085EC414C6E6E661A9F3F10C90 /* ForgeApp Resources */ = {
 			isa = PBXGroup;
 			children = (
@@ -162,48 +203,10 @@
 			children = (
 				664AA274C975F3BE2EB7FFC08F10E68F /* Products */,
 				7045C91044301860634576F48D802B60 /* Frameworks */,
-				D989362CAEF2C3AEEE02C82DD5971A1D /* ForgeApp Sources */,
+				7D92D355F2F3C0CBD014D1D4A85D040A /* ForgeApp Sources */,
 				3923D68D685D3CA55564F5CC21C7AD2C /* ForgeApp UI Tests */,
 				9C69A3085EC414C6E6E661A9F3F10C90 /* ForgeApp Resources */,
 			);
-			sourceTree = "<group>";
-		};
-		D989362CAEF2C3AEEE02C82DD5971A1D /* ForgeApp Sources */ = {
-			isa = PBXGroup;
-			children = (
-				96E03750538677D3F954E7676EB4297B /* AppDelegate.swift */,
-				0CEEC0967BBAA5006D83F9E90FB26E1C /* DebugWindowCapture.swift */,
-				E4721F798766B16F10DF4E19A6537321 /* ForgeApp.swift */,
-				F5BE6554F46A682B5171CE54FE36A9CE /* ForgeNotifications.swift */,
-				5C0269E03A0BF21CCF534914D8EC7CDE /* ForgeShortcuts.swift */,
-				EC6C9F7F22FF3C98AEA22D0448F043FA /* ForgeSpotlight.swift */,
-				4213DF184C97DB9F8E1495DA5EA400A0 /* ForgeUpdater.swift */,
-				0F1BC81479ACBC0FA46BB4A93C182584 /* GitHubAuth.swift */,
-				684EC1DB56F98AF012F401D0638FB064 /* KeychainStore.swift */,
-				756D8775A2E6B22201D9F35ED3AF1C3A /* MenuBarController.swift */,
-				4118CBC87A55A5F3A8112653B8EFDC71 /* MenuBarMiniWindow.swift */,
-				0591FDAB1E9208DCBB3695E63FE1865A /* MissionControlFairQueueScheduler.swift */,
-				E6958CA490817756B40997337B4D57C3 /* MissionControlRoutedActionDebugFixture.swift */,
-				B883240CD4F85718CA4833452FC334D8 /* MissionControlRoutedEvidence.swift */,
-				18858212532961FA0C9F69FC28C08646 /* MissionControlRuntimeSupervisor.swift */,
-				BD245E2BDFB4EAF040A5DF6F8BC27B60 /* MissionControlTaskRoutingView.swift */,
-				9902FD34A3CDA187312639CA44481362 /* MissionControlView.swift */,
-				81970C1A97C98F7CE1EDA587B1B1C259 /* Models.swift */,
-				53F2FB63D28DBC37AADD7F130BA812AB /* OnboardingView.swift */,
-				DBA09AC213470FCB0E34C82E480BE497 /* PullRequestRefreshPolicy.swift */,
-				ECEBF8F7B3C833F4D1FD2E4B5BD1E72B /* QuickCapture.swift */,
-				655368CDB358E0D493EB3479B51CFB70 /* RuntimeClient.swift */,
-				1A820D0A5B60BE3AD05F7341EF27B93B /* SettingsView.swift */,
-				9D6F7B3379DD2620F16DD6904D642EEE /* SignInPanelController.swift */,
-				E448D9F76DB80B0432AF5A25CED8E252 /* SignInView.swift */,
-				DF60E367C54B3E181D1CE837A66EF20E /* TaskShare.swift */,
-				BA52D7F0DA6270924D527C896B496F40 /* TaskTemplates.swift */,
-				6C8109EE425F447F24079ED709E9CA91 /* UpdateViews.swift */,
-				FF58E01E4BAF7DD362C4F1C11BBF176D /* WorkspaceModel.swift */,
-				7032D9BBD0AE64A6D26B52F5D65D6845 /* WorkspaceView.swift */,
-			);
-			name = "ForgeApp Sources";
-			path = apps/macos/Sources/ForgeApp;
 			sourceTree = "<group>";
 		};
 		EB5EE496413C7D7F5A7BCBFE479BFB60 /* OS X */ = {
@@ -217,13 +220,13 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		3D709BE2A07E3CAAEDC9709C5952A5F0 /* ForgeAppUIHost */ = {
+		37946EE3136DC135DB1D4EAC7534CF8A /* ForgeAppUIHost */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 00D2DF4F32ADCB8F4A196F268505A632 /* Build configuration list for PBXNativeTarget "ForgeAppUIHost" */;
+			buildConfigurationList = 45B229A08273D75CED94B4D206310523 /* Build configuration list for PBXNativeTarget "ForgeAppUIHost" */;
 			buildPhases = (
-				2AE589486978029BC12D5BBD88089796 /* Sources */,
-				1C7EC8EC1E6D78120A55D2F88DDCD85E /* Frameworks */,
-				3D5F1E1E1031BE66BBF7B8A325708725 /* Resources */,
+				EBF950FFF7AD2B7C9C7A8E6F9E11B3C0 /* Sources */,
+				B414E3F81AA13D88033C82F06164D27B /* Frameworks */,
+				C7AED4694766B74AC614077AD3CD1800 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -261,12 +264,12 @@
 				LastSwiftUpdateCheck = 1500;
 				LastUpgradeCheck = 1500;
 				TargetAttributes = {
-					3D709BE2A07E3CAAEDC9709C5952A5F0 = {
+					37946EE3136DC135DB1D4EAC7534CF8A = {
 						CreatedOnToolsVersion = 26.2;
 					};
 					7DA7381DE3FAF978041BFB0E0A365277 = {
 						CreatedOnToolsVersion = 26.2;
-						TestTargetID = 3D709BE2A07E3CAAEDC9709C5952A5F0;
+						TestTargetID = 37946EE3136DC135DB1D4EAC7534CF8A;
 					};
 				};
 			};
@@ -283,22 +286,22 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				3D709BE2A07E3CAAEDC9709C5952A5F0 /* ForgeAppUIHost */,
+				37946EE3136DC135DB1D4EAC7534CF8A /* ForgeAppUIHost */,
 				7DA7381DE3FAF978041BFB0E0A365277 /* ForgeAppUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		3D5F1E1E1031BE66BBF7B8A325708725 /* Resources */ = {
+		C7AED4694766B74AC614077AD3CD1800 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				EA9CAD4440E0B1A83DB8730D7589ABA5 /* forge-logo.png in Resources */,
-				1610448A0236B178928D29B503AD5933 /* appcast.xml in Resources */,
-				AF4135D22464A2FE29E6AFF727D8E01B /* JetBrainsMono-Regular.ttf in Resources */,
-				AFC8E7BB1D3E365E2207B3915B68EB5E /* JetBrainsMono-Bold.ttf in Resources */,
-				795B5E547105C2FD8AE1479F6B99E29D /* OFL.txt in Resources */,
+				2360586071AA1E7A53D0E7AACDD55649 /* forge-logo.png in Resources */,
+				1829F1EC38DDF5381DFBD011582F3C0B /* appcast.xml in Resources */,
+				D09D1BCA8D05F80EF60AD70D2BF2C3E4 /* JetBrainsMono-Regular.ttf in Resources */,
+				C48A57109847DC0A7925D70CF127E004 /* JetBrainsMono-Bold.ttf in Resources */,
+				C58C4920834D318A19885143F0D0E53D /* OFL.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -312,48 +315,49 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		2AE589486978029BC12D5BBD88089796 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				CD16D4762C31A1C9DABC4CDAAE7FBCC4 /* AppDelegate.swift in Sources */,
-				EABBDE079B3207C1838472477718A81F /* DebugWindowCapture.swift in Sources */,
-				1FBB8232A4006F8974F1081DE38D730E /* ForgeApp.swift in Sources */,
-				E0F709EE14E9261B380904FF25DD7576 /* ForgeNotifications.swift in Sources */,
-				1936AFB709992402033C5C9CC40CD1FA /* ForgeShortcuts.swift in Sources */,
-				C3997017F8C56E00FEBCB506A16EE63E /* ForgeSpotlight.swift in Sources */,
-				540B71CC916D8672A649CD9CA2FCD4D1 /* ForgeUpdater.swift in Sources */,
-				20904CCB93E89C7992C3CE4EA4166A83 /* GitHubAuth.swift in Sources */,
-				9021A7770B7ADCE783CACF6597AD2ADC /* KeychainStore.swift in Sources */,
-				E14667D9A4E12E02D1DFDB3FB5AC1F7C /* MenuBarController.swift in Sources */,
-				0AC6AFE509303821D0D48CFF3E4BD441 /* MenuBarMiniWindow.swift in Sources */,
-				6735A9DDEC06FB5F93BA736D4197A7B2 /* MissionControlFairQueueScheduler.swift in Sources */,
-				8E700DEBEF5CA12E8A12A6FD6981C58B /* MissionControlRoutedActionDebugFixture.swift in Sources */,
-				DDBC4E8072A9D44F5A80268203509E8B /* MissionControlRoutedEvidence.swift in Sources */,
-				C87F3C6197D635DAD4B55DDA005A2AF1 /* MissionControlRuntimeSupervisor.swift in Sources */,
-				63388E87B098316A33540171946EBA98 /* MissionControlTaskRoutingView.swift in Sources */,
-				8DFE1156BD80111A4EBCA13DD0948D61 /* MissionControlView.swift in Sources */,
-				7E9D3784B7233D84EBB30897D4BF911D /* Models.swift in Sources */,
-				3F2457F04253A8C1D3A1266809747072 /* OnboardingView.swift in Sources */,
-				E09436CC359AD897616512ED212D3235 /* PullRequestRefreshPolicy.swift in Sources */,
-				5992FF74C3E04A3C20B0FD56E5B30438 /* QuickCapture.swift in Sources */,
-				81CE44DE47540F49EAD4E2779006F033 /* RuntimeClient.swift in Sources */,
-				3498230F321160A432829293A2676907 /* SettingsView.swift in Sources */,
-				0DC80E1B367C88786952757461E6C415 /* SignInPanelController.swift in Sources */,
-				C452375DECE97237CD582AC8A671E44C /* SignInView.swift in Sources */,
-				484BE00F517275843D6054AA936B1C1E /* TaskShare.swift in Sources */,
-				A2C46C8E0E49848A210518F72B959E4E /* TaskTemplates.swift in Sources */,
-				C16E776348346D4B42CC00E965610E7E /* UpdateViews.swift in Sources */,
-				BA4B1E484D8C1C52C9D90AD2EEA9215A /* WorkspaceModel.swift in Sources */,
-				B8D6063FF66F2AAB9A5D236B6EFC8E82 /* WorkspaceView.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		8A6B744C730AFE7E264A7F13713D44D8 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				4F5DF4775C99B166700F3F43A289A2B6 /* MissionControlUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EBF950FFF7AD2B7C9C7A8E6F9E11B3C0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CC54DB4CEB8B5398DC7B5DF2FA10BF5D /* AppDelegate.swift in Sources */,
+				47BF2D978168409F8408D89B308DD0EC /* DebugWindowCapture.swift in Sources */,
+				6BD5B2B788357647CFFA2B2FED671823 /* ForgeApp.swift in Sources */,
+				FF038ECD2EE8D6180038E4531499DB5A /* ForgeNotifications.swift in Sources */,
+				496F5855C5411570DB4FEDA495F76A2B /* ForgeShortcuts.swift in Sources */,
+				B3F63D8508E50E8AEF361F7C6E5D707C /* ForgeSpotlight.swift in Sources */,
+				124629412C22B2226467D256D92A0D22 /* ForgeUpdater.swift in Sources */,
+				ADA1D8EC276147286EBA00974475C65E /* GitHubAuth.swift in Sources */,
+				ECE997DA4DB09DBE540B392A0676D3E0 /* KeychainStore.swift in Sources */,
+				F618BB19776C8742E4F6B33E76A49A4C /* MenuBarController.swift in Sources */,
+				42E6502E0EAA1E20CAD303777C705041 /* MenuBarMiniWindow.swift in Sources */,
+				B32FC758ACC771F2597BFEC7C13A68D2 /* MissionControlFairQueueScheduler.swift in Sources */,
+				8AF15FD0E7056D239B20F4302C8F3B9A /* MissionControlReconnectPolicy.swift in Sources */,
+				456E896F6039D5A6319506CACDB525D6 /* MissionControlRoutedActionDebugFixture.swift in Sources */,
+				FE129D9CF8BE576385C1CDBC8D1ECA82 /* MissionControlRoutedEvidence.swift in Sources */,
+				ED973292C686943342E19F52E51FB6A0 /* MissionControlRuntimeSupervisor.swift in Sources */,
+				83C066418EC7426277DC8139691135EA /* MissionControlTaskRoutingView.swift in Sources */,
+				BE121E4A51EF7F119D178211EC7CD645 /* MissionControlView.swift in Sources */,
+				0BF223E0ED9DCDC579F52BB7A055DB54 /* Models.swift in Sources */,
+				F3468379CFD3A8BC23BDC107225AD01B /* OnboardingView.swift in Sources */,
+				0E44EFCD8055A566D177605AA607EAFB /* PullRequestRefreshPolicy.swift in Sources */,
+				16442AB1072846227FFA7330E66F2CCE /* QuickCapture.swift in Sources */,
+				D15C7A6B610452A1F6D7DED80BBEADE2 /* RuntimeClient.swift in Sources */,
+				63870004860193E1E85046FE9167A063 /* SettingsView.swift in Sources */,
+				9D92ACFA0DF243AE61CE9BB3B0EAB338 /* SignInPanelController.swift in Sources */,
+				1B625D487F92F62AB02B128912AD02BF /* SignInView.swift in Sources */,
+				540CEE226F58E3CD61EBE3F9BF8931CC /* TaskShare.swift in Sources */,
+				7B4F3FF50660DA8455C39A20C16DC9D6 /* TaskTemplates.swift in Sources */,
+				585AC75ACE6C0120CEB242EF1629666B /* UpdateViews.swift in Sources */,
+				1763224C8C68939C0AAF6AFFAEA82F59 /* WorkspaceModel.swift in Sources */,
+				94B8CE08A800C17E0BF68FF5E814B964 /* WorkspaceView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -363,7 +367,7 @@
 		F6805182A317E0AB0A798263C74C6BCD /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = ForgeAppUIHost;
-			target = 3D709BE2A07E3CAAEDC9709C5952A5F0 /* ForgeAppUIHost */;
+			target = 37946EE3136DC135DB1D4EAC7534CF8A /* ForgeAppUIHost */;
 			targetProxy = 5034CDE1F92250EA950BF6A9576F9B7D /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -381,6 +385,31 @@
 				SDKROOT = macosx;
 				SWIFT_VERSION = 6.0;
 				TEST_TARGET_NAME = ForgeAppUIHost;
+			};
+			name = Debug;
+		};
+		5870A2D69FEFA63CB102E51D6966422B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 42;
+				ENABLE_HARDENED_RUNTIME = NO;
+				EXECUTABLE_NAME = ForgeApp;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Forge;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSHighResolutionCapable = YES;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.4.2;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.windorion.forge.uitest-host";
+				PRODUCT_NAME = Forge;
+				SDKROOT = macosx;
+				SWIFT_STRICT_CONCURRENCY = complete;
 			};
 			name = Debug;
 		};
@@ -461,56 +490,6 @@
 			};
 			name = Debug;
 		};
-		9CD6FB6580E1BC92EBB358C11554EED4 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_IDENTITY = "-";
-				CODE_SIGN_STYLE = Automatic;
-				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 42;
-				ENABLE_HARDENED_RUNTIME = NO;
-				EXECUTABLE_NAME = ForgeApp;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Forge;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
-				INFOPLIST_KEY_NSHighResolutionCapable = YES;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.4.2;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.windorion.forge.uitest-host";
-				PRODUCT_NAME = Forge;
-				SDKROOT = macosx;
-				SWIFT_STRICT_CONCURRENCY = complete;
-			};
-			name = Release;
-		};
-		B9268E3C5091F1F9D88C3087A7D39039 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_IDENTITY = "-";
-				CODE_SIGN_STYLE = Automatic;
-				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 42;
-				ENABLE_HARDENED_RUNTIME = NO;
-				EXECUTABLE_NAME = ForgeApp;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Forge;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
-				INFOPLIST_KEY_NSHighResolutionCapable = YES;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.4.2;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.windorion.forge.uitest-host";
-				PRODUCT_NAME = Forge;
-				SDKROOT = macosx;
-				SWIFT_STRICT_CONCURRENCY = complete;
-			};
-			name = Debug;
-		};
 		C890AFD60E100C000D8D2265B4C29006 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -566,14 +545,39 @@
 			};
 			name = Release;
 		};
+		EACCC6C97952B9E49B6BC29C606CF3B6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 42;
+				ENABLE_HARDENED_RUNTIME = NO;
+				EXECUTABLE_NAME = ForgeApp;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Forge;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSHighResolutionCapable = YES;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.4.2;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.windorion.forge.uitest-host";
+				PRODUCT_NAME = Forge;
+				SDKROOT = macosx;
+				SWIFT_STRICT_CONCURRENCY = complete;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		00D2DF4F32ADCB8F4A196F268505A632 /* Build configuration list for PBXNativeTarget "ForgeAppUIHost" */ = {
+		45B229A08273D75CED94B4D206310523 /* Build configuration list for PBXNativeTarget "ForgeAppUIHost" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				9CD6FB6580E1BC92EBB358C11554EED4 /* Release */,
-				B9268E3C5091F1F9D88C3087A7D39039 /* Debug */,
+				EACCC6C97952B9E49B6BC29C606CF3B6 /* Release */,
+				5870A2D69FEFA63CB102E51D6966422B /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

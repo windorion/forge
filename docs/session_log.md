@@ -6568,3 +6568,50 @@ Next:
   non-interactive hosted SwiftPM and XCUITest compile jobs remain green.
 - Run the action-level suite only in a user-approved unattended desktop window,
   and run the six-hour soak only under documented stable AC/sleep conditions.
+
+## 2026-08-09 23:45:00 +0200 (CEST)
+
+Conversation summary:
+
+- Audited the roadmap for missing Alpha/Beta/v1 exit gates and continued the
+  highest-value API-free supervision gap using code-only/background validation.
+
+Done:
+
+- Added Mission Control reconnect policy and session telemetry: capped
+  2/4/8/16/30-second backoff, exact-target owned-child relaunch, bounded failure
+  summaries, restart/recovery lineage, next-retry timing, repository footer
+  evidence, and copied runtime diagnostics.
+- Preserved the trust boundary: repository, mode, read-only, authorization, or
+  supervised-dispatch mismatches terminate the child, clear active access and
+  restart intent, and cannot be converted into access by retry behavior.
+- Added five reconnect-policy tests and one diagnostics test. The full SwiftPM
+  coverage run passed all 53 tests; the signing-disabled XCUITest host/bundle
+  build passed without running the app or any action-level UI automation.
+- Passed TypeScript check/build, all 21 runtime unit-test files, documentation
+  truth, whitespace validation, and the two-runtime fairness fixture with six
+  alternating grants, restart injection, startup hold, and stale-ID rejection.
+- Added a roadmap gap register with dependencies and exit proof for live-model
+  quality, safe tool breadth, multi-repository operations, migrations/retention,
+  performance budgets, security lifecycle, distribution, account/commercial
+  decisions, semantic retrieval, native workflow, and hosted collaboration.
+- Updated README, roadmap, project status, TODO, development, architecture,
+  security, macOS, and Mission Control verification notes. Supervision is now
+  estimated at 93-97%; reliability/evidence at 84-91%.
+
+Not done:
+
+- Process-level child termination/transport fault injection is not yet archived;
+  the current proof is policy, integration, fixture, and compile coverage.
+- The six-hour AC-powered soak, complete passing action-level XCUITest archive,
+  live-model public-repository corpus, signing/notarization, and founder account/
+  commercial decisions remain outstanding.
+
+Next:
+
+- Add a deterministic process-level supervisor fault-injection harness proving
+  cached visibility, exact authorization retention, bounded retries, and no
+  queue escape across child termination and recovery.
+- Then run the live-model Alpha corpus when provider credentials/cost budget are
+  available; keep foreground UI evidence deferred to an explicitly unattended
+  desktop window.

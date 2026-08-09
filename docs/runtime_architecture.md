@@ -180,6 +180,23 @@ session state; queued requests remain durable in their owning SQLite store, so
 a runtime restart fails closed to waiting rather than dispatching outside
 supervision.
 
+Supervisor connectivity is bounded rather than a fixed two-second hammer. A
+failed health/data refresh records repository-scoped telemetry and defers the
+next poll with a `2, 4, 8, 16, 30` second capped exponential schedule. A
+successful validated refresh resets only the consecutive-failure/backoff state
+and increments the recovery count while retaining cumulative failure and
+restart lineage. If a supervisor-owned child exits unexpectedly, Mission
+Control keeps the same in-memory desired mode and session authorization, waits
+for the same bounded deadline, and relaunches it; startup still cannot dispatch
+supervised queue work without a fresh grant. Repository, runtime-mode,
+read-only, authorization, or queue-dispatch identity mismatches remain hard
+failures: the child is terminated, authorization and automatic restart intent
+are cleared, and no reconnect policy can turn invalid evidence into access.
+The app exposes consecutive/total failures, restart attempts, successful
+recoveries, last connection, and next retry in its existing diagnostics and
+compact repository footer. These counters are session-only operational state,
+not durable user/task data.
+
 ### Agent Orchestrator
 
 Coordinates planning, execution, testing, review, and user approval states.

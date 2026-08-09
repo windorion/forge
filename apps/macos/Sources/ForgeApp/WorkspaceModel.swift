@@ -156,6 +156,7 @@ final class WorkspaceModel: ObservableObject {
                 sanitized.runtimeProcessID = nil
                 sanitized.observerReadOnly = nil
                 sanitized.runtimeAuthorizationID = nil
+                sanitized.reconnectTelemetry = nil
                 return sanitized
             }
         }
@@ -3045,6 +3046,26 @@ final class WorkspaceModel: ObservableObject {
             }
         }
 
+        let supervisedRepositories = missionControlRepositories.filter {
+            $0.path != missionControlCurrentRepositoryPath && $0.runtimeState != nil
+        }
+        if supervisedRepositories.isEmpty {
+            lines.append("Mission Control supervisors: None")
+        } else {
+            lines.append("Mission Control supervisors:")
+            for repository in supervisedRepositories {
+                let telemetry = repository.reconnectTelemetry ?? MissionControlReconnectTelemetry()
+                let nextRetry = telemetry.nextRetryAt.map(Self.diagnosticsDateFormatter.string(from:)) ?? "None"
+                let lastConnected = telemetry.lastConnectedAt.map(Self.diagnosticsDateFormatter.string(from:)) ?? "Never"
+                lines.append(
+                    "- \(repository.name): \(repository.runtimeState ?? "cached"), " +
+                    "failures \(telemetry.consecutiveFailures) consecutive/\(telemetry.totalFailures) total, " +
+                    "restart attempts \(telemetry.restartAttempts), recoveries \(telemetry.successfulRecoveries), " +
+                    "last connected \(lastConnected), next retry \(nextRetry)"
+                )
+            }
+        }
+
         lines.append("Loaded tasks in app: \(tasks.count)")
         return lines.joined(separator: "\n")
     }
@@ -3267,7 +3288,8 @@ final class WorkspaceModel: ObservableObject {
                 runtimePort: observation.port,
                 runtimeProcessID: observation.processID,
                 observerReadOnly: observation.health?.readOnly,
-                runtimeAuthorizationID: observation.health?.runtimeAuthorization?.id
+                runtimeAuthorizationID: observation.health?.runtimeAuthorization?.id,
+                reconnectTelemetry: observation.reconnectTelemetry
             )
             missionControlRepositories[index] = snapshot
             if let route = missionControlTaskRoute,
@@ -3336,6 +3358,7 @@ final class WorkspaceModel: ObservableObject {
             durable.runtimeProcessID = nil
             durable.observerReadOnly = nil
             durable.runtimeAuthorizationID = nil
+            durable.reconnectTelemetry = nil
             return durable
         }
         guard let data = try? JSONEncoder().encode(durableSnapshots) else { return }

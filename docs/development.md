@@ -118,6 +118,16 @@ grant count, and next/waiting status. The primary focused runtime retains its
 normal automatic one-repository queue; the Mission Control limit is explicitly
 for authorized background repositories.
 
+Mission Control connection failures use a repository-local capped exponential
+backoff of 2, 4, 8, 16, then 30 seconds. Transport failures pause polling until
+the deadline; unexpected supervisor-owned child exits use the same deadline
+before relaunch. A successful identity-validated refresh resets consecutive
+failures and records one recovery. Repository/mode/authorization/supervised-
+dispatch mismatches do not retry: they terminate the child and clear active
+authorization. General runtime diagnostics and the compact Mission Control
+footer expose consecutive/total failures, restart attempts, recovery count,
+last connection, and next retry without persisting this session telemetry.
+
 The Mission Control new-task flow now keeps explicit repository selection. A
 focused repository uses the primary client; an accepted background repository
 uses its own loopback client after the supervisor refreshes health and verifies
@@ -897,7 +907,7 @@ routing, Mission Control access-policy negatives, and SSE frame parsing:
 swift test --enable-code-coverage
 ```
 
-This remains an early native unit-test baseline. The 47 current tests include
+This remains an early native unit-test baseline. The 53 current tests include
 three focused GitHub Device Flow tests covering local Client ID configuration,
 GitHub `slow_down` interval handling, user validation before token persistence,
 connected-state restoration, and actionable HTTP failures. The broader suite
@@ -907,7 +917,8 @@ The suite also covers Mission Control supervised-runtime evidence, fair queue
 oldest-first/round-robin/eligibility/global-limit policy, and authorization
 placement for supervisor grants. It additionally covers routed background
 command/Git HTTP contracts and exact fail-closed Git request construction from
-reviewed evidence. `WorkspaceModel` now accepts an
+reviewed evidence, capped Mission Control reconnect timing/failure/recovery
+state, and reconnect telemetry in copied diagnostics. `WorkspaceModel` now accepts an
 isolated runtime and preferences store for tests; mock-runtime tests cover
 successful and failed health refreshes, task creation/upsert/selection,
 selection persistence, runtime-process start eligibility, validation-preset

@@ -60,3 +60,20 @@ the all-window hook.
 This evidence verifies the deterministic native state/capture entry and the
 runtime scheduling contract plus one passing action-level path. It is not a
 claim of a complete passing XCUITest archive or a completed six-hour soak.
+
+## Reconnect supervision checkpoint
+
+- Mission Control now retains the exact in-memory observer/authorized target
+  for an unexpectedly terminated app-owned runtime and retries it with capped
+  `2 → 4 → 8 → 16 → 30` second backoff. A repository identity, mode, read-only,
+  or authorization mismatch still fails closed and clears restart intent.
+- Session-only telemetry records consecutive/total failures, restart attempts,
+  successful recoveries, last connection/failure times, and the next retry.
+  Repository cards show cached-state/retry evidence and copied diagnostics
+  include the same counters without persisting repository content or secrets.
+- Five policy tests cover delay growth, retry boundaries, bounded failure
+  summaries, attempt lineage, and recovery reset. One workspace test covers
+  diagnostics output. The full SwiftPM suite passes all 53 tests.
+- This is policy, integration, and compile evidence. Process-level fault
+  injection that kills a supervised child and proves cached visibility,
+  retained authorization, and no queue escape remains an explicit follow-up.

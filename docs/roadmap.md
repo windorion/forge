@@ -105,9 +105,10 @@ Remaining Alpha evidence:
 
 - pinned public-repository tasks run with a live model under explicit budgets;
 - broader provider tool/patch choices and repeated successful recovery;
-- archive a full-duration restart-heavy supervision run and add action-level
-  UI automation beyond the implemented fair authorized task/detail/review
-  routing and configurable soak harness.
+- archive a full-duration restart-heavy supervision run and a complete passing
+  action-level UI archive for the implemented authorized task/detail/review
+  routing. Bounded reconnect backoff, crash restart, and supervisor telemetry
+  are implemented; process-level disconnect fault injection remains evidence.
 
 Proof point:
 
@@ -176,10 +177,38 @@ additive.
    token, cost, command, and mutation budgets.
 3. Use those failures to widen provider tool/patch/recovery behavior without
    weakening runtime ownership or human review.
-4. Archive full-duration Mission Control soak evidence and add true XCUITest
-   for the now-complete routed task/command/Git review and confirmation gates.
+4. Archive full-duration Mission Control soak evidence, add process-level
+   disconnect/reconnect fault injection, and capture the existing true
+   XCUITest suite in a user-approved unattended desktop window.
 5. Complete signed/notarized packaging, appcast install/relaunch, production
    diagnostics, and commercial decisions.
+
+## Roadmap Gap Register
+
+The milestone narrative previously under-specified several cross-cutting exit
+gates. This register makes the missing work, dependencies, and proof points
+explicit. Percentages remain in `docs/project_status.md`; this table controls
+sequence rather than inventing another score.
+
+| Gap | Horizon | Current evidence | Dependency / blocker | Exit proof |
+| --- | --- | --- | --- | --- |
+| Daily-use coding quality | Alpha | Deterministic local and mock-OpenAI protocol campaigns pass. | Live provider credentials and an explicit cost budget. | At least eight pinned public-repository tasks across four families, all budget-accounted, externally scored, and classified. |
+| Broader safe agent choices | Alpha | Read/search, reviewed Unified Diff, approved command, repair, and rerun actions exist. | Must be selected from corpus failures rather than intuition. | Measured improvement on the pinned corpus without unauthorized writes, raw shell, or weaker review gates. |
+| Multi-repository operational proof | Alpha | Fair supervised dispatch, 300-second/1,086-restart soak, one passing action-level UI path, exponential reconnect backoff, crash restart, and visible diagnostics. | Stable AC for six-hour evidence; unattended desktop window for XCUITest. | Six-hour report, process-level disconnect/reconnect fault injection, complete passing `.xcresult`, no authorization widening or queue escape. |
+| Runtime history, retention, and migrations | Beta | SQLite task persistence, transaction journals, restart recovery, bounded refresh-attempt history. | Product retention/privacy policy is not decided. | Versioned migration rehearsal, bounded history policy, export-before-purge path, and recovery from the prior shipped schema. |
+| Performance and resource budgets | Beta | Bounded tools/output and functional smoke campaigns. | Representative large repositories and signed-package profiling environment. | Launch, idle CPU/memory, index, diff, and agent-step budgets with repeatable regression thresholds. |
+| Security lifecycle | Beta | Explicit approvals, read-only observers, scoped authorization, Keychain secrets, redacted audit export. | Approval lifetime and audit-retention product decisions. | Approval expiry/revocation, audit purge/retention tests, broader secret scanning, and signed-build threat review. |
+| Signed Mac distribution | Beta | App-managed/bundled runtime path, onboarding, update/appcast UI. | Founder Developer ID, notarization credentials, and P6 signing work. | Clean-machine DMG install, Gatekeeper/notarization pass, signed appcast install/relaunch, rollback/recovery rehearsal. |
+| Account and commercial boundary | Beta | Honest local-only continuation; provider/GitHub credentials stay local. | Founder decision: local-only/open-core vs hosted account/team product. | Written decision plus matching UI, privacy/deletion behavior, packaging, pricing, entitlement, support, and launch evidence. |
+| Repository memory and semantic retrieval | v1 | Durable file/symbol/trigram indexes with live verification. | Evaluation corpus and privacy/resource budgets. | Hybrid retrieval beats text/symbol baseline on a versioned benchmark while remaining local, bounded, and inspectable. |
+| Complete native workflow | v1 | Menus, shortcuts, notifications, Spotlight, CLI, Mission Control, decision inbox, templates. | Signed package and final human-input checks. | Finder/IDE handoff, remappable shortcuts, Dock/menu/notification verification, signed WidgetKit or an explicit permanent descope. |
+| Hosted collaboration | v1 or later | No production service; intentionally local single-user today. | Account/team boundary and validated demand. | Either a scoped tenancy/sharing/sync plan with security/deletion proof, or an explicit roadmap removal. |
+
+This register exposes four roadmap omissions that should not hide behind broad
+milestone labels: data lifecycle/migrations, measurable performance budgets,
+approval/audit lifecycle, and the account/commercial decision gate. None should
+preempt the live-model Alpha corpus, but each must be resolved before claiming
+the corresponding Beta or v1 finish line.
 
 ## What Not To Optimize Next
 

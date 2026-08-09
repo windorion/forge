@@ -155,6 +155,14 @@ Implemented:
   unattended window. A completed multi-hour run also remains.
   A bounded 20-second local extension completed 79 restart cycles without
   unexpected dispatch, identity drift, task loss, or queue resurrection.
+- Mission Control supervisor disconnect handling is now bounded and visible.
+  Transport/data failures back off at 2/4/8/16/30 seconds; unexpected owned
+  child exits reuse the same deadline before relaunching the exact in-memory
+  observer/active target. Validated recovery resets consecutive failures while
+  preserving cumulative/restart lineage. Identity, mode, repository,
+  authorization, and supervised-dispatch mismatches remain terminal and clear
+  restart authority. Session-only telemetry appears in repository footers and
+  diagnostics; process-level disconnect fault injection remains to be archived.
 - Local TypeScript runtime.
 - Completed seven-phase runtime decomposition: the former 12,496-line
   `runtime/src/server.ts` is now a one-line packaged bootstrap over typed
@@ -163,7 +171,7 @@ Implemented:
   services. A second readability pass split Git workflow, agent orchestration,
   edit operations, validation/process execution, route groups, and composition
   into narrower modules; `createForgeRuntime.ts` is now 476 lines. The
-  59-route executable contract, all 20 smoke scripts, and all 47 Swift tests
+  59-route executable contract, all 20 smoke scripts, and all 53 Swift tests
   pass.
 - Task creation and task conversation.
 - Server-Sent Events from runtime to app.
@@ -440,7 +448,7 @@ use different denominators and must not be added together.
 | Full 43-screen handoff UI | 95-97% | 41 of 43 screens Verified with rendered-comparison evidence (docs/verification/). Remaining: 6a Partial (OAuth configuration, Device Flow, standards-compliant polling, Keychain persistence, and connected UI are implemented and unit-tested; a live grant still needs the founder GitHub OAuth Client ID with Device Flow enabled); 35a a documented platform-blocked widget-signing descope (P6). |
 | Useful developer alpha | 72-80% | Forge repeats the reviewed lifecycle across deterministic local-provider and mock-OpenAI adapter corpora, including Unified Diff, approved commands, repair/rerun, fork-aware PR supervision, repository-scoped background command/Git review, and fair restart-safe dispatch; it still needs broader autonomous tool use and repeated live-model success on pinned public repositories. |
 | Commercial beta | 20-25% | Needs signed installable packaging, production proof of the implemented onboarding and GitHub/provider setup, trust/operations polish, and repeated success on real repos. |
-| Polished v1 product | 27-33% | The real queue, local indexes, session-authorized runtimes, background task/command/Git review routing, fair supervised grants, reportable soak tooling, and a compiled action-level XCUITest harness exist; full-duration/passing evidence, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
+| Polished v1 product | 27-33% | The real queue, local indexes, session-authorized runtimes, background task/command/Git review routing, fair supervised grants, bounded reconnect/crash recovery telemetry, reportable soak tooling, and a compiled action-level XCUITest harness exist; full-duration/passing evidence, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
 
 ## Component Gap Matrix
 
@@ -460,8 +468,8 @@ finish line.
 | Edit, command, validation, and repair | 84-91% | 9-16% | Reviewed multi-file create/modify/delete, Unified Diff, rollback, approved commands, repair/rerun, and repository-scoped background command control. | Broader source transformations, command catalogs, revocable approval memory, and post-rollback validation. |
 | Repository understanding | 68-78% | 22-32% | Durable file metadata, lightweight symbols, trigram text index, bounded live verification. | Semantic/hybrid retrieval, dependency relationships, higher-fidelity parsing, ranking evaluation, and large-repo budgets. |
 | Git and GitHub workflow | 88-93% | 7-12% | Status/diff, guarded commit/branch/push, routed background preflights/actions, fork-aware PR publication, reviews/checks/mergeability evidence, bounded background refresh. | Live OAuth proof, hosted auth/network/branch-protection fixtures, richer provider portability, and merge/update policy decisions. |
-| Multi-task and multi-repository supervision | 92-96% | 4-8% | Persisted queues, observers, session authorization, routed task/command/Git review, serialized mutations, fair 1-2-slot grants, restart injection, two-repository isolation, a passing 300-second/1,086-restart soak, and an action-level UI-test path. | Full multi-hour and complete UI-test evidence, disconnect backoff, and telemetry. |
-| Reliability, evaluation, and test evidence | 83-90% | 10-17% | 21 runtime unit files, 20 smoke scripts, 47 Swift tests, 3 compiled XCUITest methods, one passing action path, fork/mock-GitHub E2E, two campaigns, two-runtime fixtures, and success/failure soak reports. | Live-model corpus, wider real repositories, hosted-network cases, a complete passing XCUITest archive, performance evidence, and a completed multi-hour soak. |
+| Multi-task and multi-repository supervision | 93-97% | 3-7% | Persisted queues, observers, session authorization, routed task/command/Git review, serialized mutations, fair grants, a passing 300-second/1,086-restart soak, one action-level UI path, capped reconnect backoff, owned-child relaunch, and visible session telemetry. | Full multi-hour/complete UI evidence and process-level disconnect fault injection proving cached visibility, authorization retention, and no queue escape. |
+| Reliability, evaluation, and test evidence | 84-91% | 9-16% | 21 runtime unit files, 20 smoke scripts, 53 Swift tests, 3 compiled XCUITest methods, one passing action path, fork/mock-GitHub E2E, two campaigns, two-runtime fixtures, reconnect policy coverage, and success/failure soak reports. | Live-model corpus, wider real repositories, hosted-network cases, complete UI/fault-injection archives, performance evidence, and a completed multi-hour soak. |
 | Distribution, updates, and operations | 25-35% | 65-75% | App-managed/bundled-runtime path, update UI/appcast client, diagnostics surfaces. | Developer ID, hardened runtime, notarization, DMG, signed appcast install/relaunch, crash reporting, release rehearsal. |
 | Account, sync, and collaboration services | 10-20% | 80-90% | Honest local-only continuation and GitHub/provider credentials in Keychain. | Decide whether accounts exist; if yes, build verified email identity, sync, sharing, tenancy, and deletion/privacy APIs. |
 | Pricing, packaging, and go-to-market | 20-30% | 70-80% | Product category, personas, positioning, and business-model hypotheses are documented. | Choose solo/team wedge, open-core boundary, packaging, price, entitlement/billing, support, and launch evidence. |
@@ -474,13 +482,14 @@ intuition.
 
 The API-free Mission Control verification milestone now includes versioned
 success/failure soak evidence, a passing bounded five-minute/1,086-restart run,
-and an authenticated true-XCUITest execution of all three methods. The slot and
+an authenticated true-XCUITest execution of all three methods, and implemented
+capped reconnect/crash-relaunch telemetry with six focused tests. The slot and
 card-navigation path passed; the other two produced actionable accessibility
-assertion fixes that compile. The strongest next API-free step is operational:
-archive the configured multi-hour soak under stable AC power and rerun the UI
-suite only in a user-approved unattended desktop window. That attacks the
-remaining 4-8% supervision gap without provider credentials or interrupting
-the user's work.
+assertion fixes that compile. The strongest next API-free step is evidence:
+add process-level disconnect fault injection, archive the configured multi-hour
+soak under stable AC power, and rerun the UI suite only in a user-approved
+unattended desktop window. That attacks the remaining 3-7% supervision gap
+without provider credentials or interrupting the user's work.
 
 ## Distance To "Finished"
 

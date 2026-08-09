@@ -25,6 +25,7 @@ struct MissionControlRepositorySnapshot: Identifiable, Codable, Hashable {
     var runtimeProcessID: Int32? = nil
     var observerReadOnly: Bool? = nil
     var runtimeAuthorizationID: String? = nil
+    var reconnectTelemetry: MissionControlReconnectTelemetry? = nil
 }
 
 struct MissionControlView: View {
@@ -306,7 +307,7 @@ struct MissionControlView: View {
     }
     private func observerLabel(_ repository: MissionControlRepositorySnapshot) -> String {
         switch repository.runtimeState {
-        case "STARTING", "CONNECTING": return "CONNECTING"
+        case "STARTING", "CONNECTING", "RECONNECTING", "RETRY WAIT": return "RETRYING"
         case "AUTHORIZING", "ACTIVATING": return "AUTHORIZING"
         case "RETURNING READ-ONLY": return "READ-ONLY"
         case "FAILED", "UNAVAILABLE", "STOPPED": return "OFFLINE"
@@ -317,13 +318,28 @@ struct MissionControlView: View {
         if isCurrent { return repository.footer }
         if isActiveRuntime(repository) {
             let authorization = repository.runtimeAuthorizationID.map { "auth \($0.prefix(8))" } ?? "authorization pending"
-            return "active · supervised queue · \(authorization) · \(repository.footer)"
+            return "active · supervised queue · \(authorization)\(recoverySuffix(repository)) · \(repository.footer)"
         }
-        if isLiveObserver(repository) { return "live read-only · \(repository.footer)" }
+        if isLiveObserver(repository) {
+            return "live read-only\(recoverySuffix(repository)) · \(repository.footer)"
+        }
+        if let telemetry = repository.reconnectTelemetry,
+           telemetry.consecutiveFailures > 0 {
+            let seconds = telemetry.nextRetryAt.map { max(0, Int($0.timeIntervalSinceNow.rounded(.up))) }
+            let retry = seconds.map { "retry in \($0)s" } ?? "retry pending"
+            return "\(retry) · \(telemetry.consecutiveFailures) consecutive / \(telemetry.totalFailures) total failures · showing last snapshot"
+        }
         if let error = repository.runtimeState, ["FAILED", "UNAVAILABLE", "STOPPED"].contains(error) {
             return "observer \(error.lowercased()) · showing last snapshot"
         }
         return "cached \(relativeDate(repository.capturedAt)) · observer connecting"
+    }
+
+    private func recoverySuffix(_ repository: MissionControlRepositorySnapshot) -> String {
+        guard let recoveries = repository.reconnectTelemetry?.successfulRecoveries,
+              recoveries > 0
+        else { return "" }
+        return " · recovered \(recoveries)x"
     }
 
     @ViewBuilder

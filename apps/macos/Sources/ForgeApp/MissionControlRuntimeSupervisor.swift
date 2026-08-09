@@ -69,6 +69,7 @@ struct MissionControlObservedRepository: Hashable {
     var queue: TaskQueueSnapshot?
     var gitStatus: GitStatusSnapshot?
     var refreshedAt: Date?
+    var reconnectTelemetry: MissionControlReconnectTelemetry? = nil
 }
 
 @MainActor
@@ -103,6 +104,8 @@ final class MissionControlRuntimeSupervisor {
     private var managed: [String: ManagedRuntime] = [:]
     private var snapshots: [String: MissionControlObservedRepository] = [:]
     private var pendingRuntimes: [String: PendingRuntime] = [:]
+    private var restartTargets: [String: PendingRuntime] = [:]
+    private var reconnectTelemetry: [String: MissionControlReconnectTelemetry] = [:]
     private var activeAuthorizations: [String: ActiveAuthorization] = [:]
     private var inFlightRouteKeys = Set<String>()
     private var refreshInProgress = false
@@ -135,11 +138,14 @@ final class MissionControlRuntimeSupervisor {
             managed[path]?.process.terminate()
             managed.removeValue(forKey: path)
             pendingRuntimes.removeValue(forKey: path)
+            restartTargets.removeValue(forKey: path)
+            reconnectTelemetry.removeValue(forKey: path)
             snapshots.removeValue(forKey: path)
         }
 
         guard let runtimeDirectory else {
             for path in observedPaths {
+                restartTargets.removeValue(forKey: path)
                 snapshots[path] = MissionControlObservedRepository(
                     path: path,
                     port: desired[path]?.port ?? 0,
@@ -154,18 +160,24 @@ final class MissionControlRuntimeSupervisor {
 
         for path in observedPaths {
             guard let target = desired[path] else { continue }
+            let pendingTarget = PendingRuntime(
+                port: target.port,
+                mode: target.mode,
+                runtimeDirectory: runtimeDirectory,
+                authorization: target.authorization
+            )
+            restartTargets[path] = pendingTarget
             if let running = managed[path],
                running.port == target.port,
                running.mode == target.mode,
                running.authorizationID == target.authorization?.id {
                 continue
             }
-            transition(path: path, to: PendingRuntime(
-                port: target.port,
-                mode: target.mode,
-                runtimeDirectory: runtimeDirectory,
-                authorization: target.authorization
-            ))
+            transition(
+                path: path,
+                to: pendingTarget,
+                resetBackoff: false
+            )
         }
 
         if observedPaths.isEmpty {
@@ -174,6 +186,7 @@ final class MissionControlRuntimeSupervisor {
         } else if monitorTask == nil {
             monitorTask = Task { [weak self] in
                 while !Task.isCancelled {
+                    self?.restartDueRuntimes()
                     await self?.refreshAll()
                     try? await Task.sleep(for: .seconds(2))
                 }
@@ -199,6 +212,7 @@ final class MissionControlRuntimeSupervisor {
             activeAuthorizations.removeValue(forKey: path)
         }
         guard let runtimeDirectory else {
+            restartTargets.removeValue(forKey: path)
             if isActive {
                 activeAuthorizations.removeValue(forKey: path)
                 snapshots[path]?.status = "UNAVAILABLE"
@@ -216,6 +230,7 @@ final class MissionControlRuntimeSupervisor {
             return
         }
         guard let port = managed[path]?.port ?? pendingRuntimes[path]?.port ?? snapshots[path]?.port else {
+            restartTargets.removeValue(forKey: path)
             if isActive {
                 activeAuthorizations.removeValue(forKey: path)
             }
@@ -479,13 +494,30 @@ final class MissionControlRuntimeSupervisor {
         }
         managed.removeAll()
         pendingRuntimes.removeAll()
+        restartTargets.removeAll()
+        reconnectTelemetry.removeAll()
         activeAuthorizations.removeAll()
         inFlightRouteKeys.removeAll()
         snapshots.removeAll()
         publish()
     }
 
-    private func transition(path: String, to target: PendingRuntime) {
+    private func transition(
+        path: String,
+        to target: PendingRuntime,
+        resetBackoff: Bool = true
+    ) {
+        restartTargets[path] = target
+        if resetBackoff {
+            reconnectTelemetry[path] = MissionControlReconnectPolicy.clearingBackoff(
+                reconnectTelemetry[path]
+            )
+        } else if !MissionControlReconnectPolicy.isRetryDue(reconnectTelemetry[path], at: Date()),
+                  managed[path] == nil {
+            snapshots[path]?.reconnectTelemetry = reconnectTelemetry[path]
+            publish()
+            return
+        }
         if let runtime = managed[path], runtime.process.isRunning {
             pendingRuntimes[path] = target
             snapshots[path]?.status = target.mode == .active ? "AUTHORIZING" : "RETURNING READ-ONLY"
@@ -495,22 +527,42 @@ final class MissionControlRuntimeSupervisor {
         }
         managed.removeValue(forKey: path)
         pendingRuntimes.removeValue(forKey: path)
-        startRuntime(path: path, target: target)
+        startRuntime(
+            path: path,
+            target: target,
+            isReconnectAttempt: (reconnectTelemetry[path]?.consecutiveFailures ?? 0) > 0
+        )
     }
 
-    private func startRuntime(path: String, target: PendingRuntime) {
+    private func startRuntime(
+        path: String,
+        target: PendingRuntime,
+        isReconnectAttempt: Bool = false
+    ) {
         let port = target.port
         let runtimeDirectory = target.runtimeDirectory
         let server = runtimeDirectory.appendingPathComponent("dist/server.js")
         guard FileManager.default.fileExists(atPath: server.path) else {
+            let telemetry = recordReconnectFailure(
+                path: path,
+                summary: "Mission Control runtime is not built at \(server.path)."
+            )
             snapshots[path] = MissionControlObservedRepository(
                 path: path,
                 port: port,
                 status: "UNAVAILABLE",
                 error: "Mission Control runtime is not built at \(server.path).",
-                tasks: []
+                tasks: [],
+                reconnectTelemetry: telemetry
             )
             return
+        }
+
+        if isReconnectAttempt {
+            let telemetry = MissionControlReconnectPolicy.recordingRestartAttempt(
+                reconnectTelemetry[path]
+            )
+            reconnectTelemetry[path] = telemetry
         }
 
         let process = Process()
@@ -550,8 +602,11 @@ final class MissionControlRuntimeSupervisor {
         snapshots[path] = MissionControlObservedRepository(
             path: path,
             port: port,
-            status: target.mode == .observer ? "STARTING" : "AUTHORIZING",
-            tasks: []
+            status: isReconnectAttempt
+                ? "RECONNECTING"
+                : (target.mode == .observer ? "STARTING" : "AUTHORIZING"),
+            tasks: [],
+            reconnectTelemetry: reconnectTelemetry[path]
         )
         do {
             try process.run()
@@ -564,9 +619,53 @@ final class MissionControlRuntimeSupervisor {
             snapshots[path]?.processID = process.processIdentifier
             snapshots[path]?.status = target.mode == .observer ? "CONNECTING" : "ACTIVATING"
         } catch {
-            snapshots[path]?.status = "FAILED"
+            let telemetry = recordReconnectFailure(path: path, summary: error.localizedDescription)
+            snapshots[path]?.status = "RETRY WAIT"
             snapshots[path]?.error = error.localizedDescription
+            snapshots[path]?.reconnectTelemetry = telemetry
         }
+    }
+
+    private func restartDueRuntimes(at now: Date = Date()) {
+        for path in restartTargets.keys.sorted() {
+            guard managed[path] == nil,
+                  pendingRuntimes[path] == nil,
+                  let target = restartTargets[path],
+                  (reconnectTelemetry[path]?.consecutiveFailures ?? 0) > 0,
+                  MissionControlReconnectPolicy.isRetryDue(reconnectTelemetry[path], at: now)
+            else { continue }
+            startRuntime(path: path, target: target, isReconnectAttempt: true)
+        }
+    }
+
+    @discardableResult
+    private func recordReconnectFailure(
+        path: String,
+        summary: String,
+        at now: Date = Date()
+    ) -> MissionControlReconnectTelemetry {
+        let telemetry = MissionControlReconnectPolicy.recordingFailure(
+            reconnectTelemetry[path],
+            at: now,
+            summary: summary
+        )
+        reconnectTelemetry[path] = telemetry
+        snapshots[path]?.reconnectTelemetry = telemetry
+        return telemetry
+    }
+
+    @discardableResult
+    private func recordReconnectSuccess(
+        path: String,
+        at now: Date = Date()
+    ) -> MissionControlReconnectTelemetry {
+        let telemetry = MissionControlReconnectPolicy.recordingSuccess(
+            reconnectTelemetry[path],
+            at: now
+        )
+        reconnectTelemetry[path] = telemetry
+        snapshots[path]?.reconnectTelemetry = telemetry
+        return telemetry
     }
 
     private func refreshAll() async {
@@ -577,6 +676,11 @@ final class MissionControlRuntimeSupervisor {
         for (path, runtime) in runtimes {
             guard runtime.process.isRunning,
                   let baseURL = URL(string: "http://127.0.0.1:\(runtime.port)") else { continue }
+            guard MissionControlReconnectPolicy.isRetryDue(reconnectTelemetry[path], at: Date()) else {
+                snapshots[path]?.status = "RETRY WAIT"
+                snapshots[path]?.reconnectTelemetry = reconnectTelemetry[path]
+                continue
+            }
             let client = RuntimeClient(baseURL: baseURL)
             do {
                 async let health = client.health()
@@ -588,6 +692,7 @@ final class MissionControlRuntimeSupervisor {
                     health: values.0,
                     expectation: accessExpectation(path: path, runtime: runtime, requireActive: false)
                 )
+                let telemetry = recordReconnectSuccess(path: path)
                 let mergedTasks = mergeTasks(values.1, preservingNewerFrom: snapshots[path]?.tasks ?? [])
                 snapshots[path] = MissionControlObservedRepository(
                     path: path,
@@ -599,16 +704,17 @@ final class MissionControlRuntimeSupervisor {
                     tasks: mergedTasks,
                     queue: values.2,
                     gitStatus: values.3,
-                    refreshedAt: Date()
+                    refreshedAt: Date(),
+                    reconnectTelemetry: telemetry
                 )
             } catch {
                 if let supervisorError = error as? MissionControlSupervisorError {
                     invalidateRuntime(path: path, runtime: runtime, error: supervisorError)
                 } else {
-                    snapshots[path]?.status = runtime.process.isRunning
-                        ? (runtime.mode == .observer ? "CONNECTING" : "ACTIVATING")
-                        : "STOPPED"
+                    let telemetry = recordReconnectFailure(path: path, summary: error.localizedDescription)
+                    snapshots[path]?.status = runtime.process.isRunning ? "RETRY WAIT" : "STOPPED"
                     snapshots[path]?.error = error.localizedDescription
+                    snapshots[path]?.reconnectTelemetry = telemetry
                 }
             }
         }
@@ -733,7 +839,17 @@ final class MissionControlRuntimeSupervisor {
         }
 
         let client = RuntimeClient(baseURL: baseURL)
-        let health = try await client.health()
+        let health: RuntimeHealth
+        do {
+            health = try await client.health()
+        } catch {
+            let telemetry = recordReconnectFailure(path: path, summary: error.localizedDescription)
+            snapshots[path]?.status = "RETRY WAIT"
+            snapshots[path]?.error = error.localizedDescription
+            snapshots[path]?.reconnectTelemetry = telemetry
+            publish()
+            throw error
+        }
         do {
             try MissionControlRuntimeAccessPolicy.validate(
                 health: health,
@@ -743,6 +859,7 @@ final class MissionControlRuntimeSupervisor {
             invalidateRuntime(path: path, runtime: runtime, error: error)
             throw error
         }
+        _ = recordReconnectSuccess(path: path)
         return client
     }
 
@@ -763,6 +880,7 @@ final class MissionControlRuntimeSupervisor {
     private func invalidateRuntime(path: String, runtime: ManagedRuntime, error: MissionControlSupervisorError) {
         managed.removeValue(forKey: path)
         pendingRuntimes.removeValue(forKey: path)
+        restartTargets.removeValue(forKey: path)
         activeAuthorizations.removeValue(forKey: path)
         snapshots[path]?.processID = nil
         snapshots[path]?.status = "FAILED"
@@ -802,13 +920,19 @@ final class MissionControlRuntimeSupervisor {
         guard managed[path]?.process.processIdentifier == processID else { return }
         managed.removeValue(forKey: path)
         if let pending = pendingRuntimes.removeValue(forKey: path) {
+            reconnectTelemetry[path] = MissionControlReconnectPolicy.clearingBackoff(
+                reconnectTelemetry[path]
+            )
             startRuntime(path: path, target: pending)
             publish()
             return
         }
+        let summary = "Mission Control runtime exited with status \(status)."
+        let telemetry = recordReconnectFailure(path: path, summary: summary)
         snapshots[path]?.processID = nil
-        snapshots[path]?.status = status == 0 || status == 143 ? "STOPPED" : "FAILED"
-        snapshots[path]?.error = status == 0 || status == 143 ? nil : "Mission Control runtime exited with status \(status)."
+        snapshots[path]?.status = "RETRY WAIT"
+        snapshots[path]?.error = summary
+        snapshots[path]?.reconnectTelemetry = telemetry
         publish()
     }
 

@@ -57,6 +57,13 @@ XCUITest takes foreground focus.
 The committed app host and UI-test bundle are also compile-gated in a separate
 macOS 15 GitHub Actions job with signing disabled; this is hosted toolchain
 evidence only and does not replace the interactive accessibility run.
+Supervisor-owned observer/active children now reconnect without fixed-rate
+polling: transport failures wait 2/4/8/16/30 seconds, unexpected exits relaunch
+the exact in-memory target after the deadline, and a validated refresh records
+recovery. The compact repository footer shows retry/failure/recovery evidence;
+the same counters and timestamps appear in copied diagnostics. Identity,
+authorization, repository, mode, and supervised-queue mismatches still fail
+closed and clear automatic restart intent.
 The final observer/active/queued/review capture set and repair notes live in
 `docs/verification/mission-control-fairness/`.
 

@@ -292,6 +292,15 @@ the core runtime smoke. Preserve these completed boundaries:
   rejection, no starvation, and empty final queues; it is not the six-hour
   acceptance run. The sandbox-negative run also proved failure artifact
   preservation.
+- [x] Add bounded Mission Control disconnect/reconnect behavior and lightweight
+  session telemetry. Health/data failures now defer polling on a capped
+  2/4/8/16/30-second schedule; unexpected supervisor-owned child exits retain
+  the in-memory desired mode/session authorization and relaunch only after that
+  deadline. Successful validated refreshes record recovery; identity, mode,
+  authorization, and supervised-dispatch mismatches still terminate and clear
+  restart authority. Repository footers and diagnostics expose bounded
+  consecutive/total failure, restart, recovery, last-connect, and next-retry
+  evidence. Six pure policy/diagnostic tests cover the state contract.
 - **Next API-free long task — archive full evidence and close exposed gaps:**
   - Run and archive the configured six-hour Mission Control soak under stable
     AC power with exact
@@ -301,8 +310,9 @@ the core runtime smoke. Preserve these completed boundaries:
     user-approved unattended desktop window. Do not run focus-stealing UI
     automation while the user is working. Keep the deterministic DEBUG driver
     and compile-only CI gate distinct from action-level XCUITest evidence.
-  - Add disconnect/reconnect/backoff scenarios and lightweight supervisor
-    telemetry only where the soak or XCUITest exposes a real blind spot.
+  - Add process-level disconnect/reconnect fault injection that proves the new
+    supervisor backoff/relaunch path retains cached visibility, never bypasses
+    session authorization, and never auto-dispatches supervised queued work.
 - Add Finder and broader "open in IDE" integrations beyond the current
   file/repository reveal actions.
 - Run final human-input verification for remappable shortcuts, native Dock/menu

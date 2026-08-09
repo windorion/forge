@@ -14,7 +14,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "3D709BE2A07E3CAAEDC9709C5952A5F0"
+               BlueprintIdentifier = "37946EE3136DC135DB1D4EAC7534CF8A"
                BuildableName = "ForgeAppUIHost.app"
                BlueprintName = "ForgeAppUIHost"
                ReferencedContainer = "container:ForgeApp.xcodeproj">
@@ -44,7 +44,7 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "3D709BE2A07E3CAAEDC9709C5952A5F0"
+            BlueprintIdentifier = "37946EE3136DC135DB1D4EAC7534CF8A"
             BuildableName = "ForgeAppUIHost.app"
             BlueprintName = "ForgeAppUIHost"
             ReferencedContainer = "container:ForgeApp.xcodeproj">
@@ -77,7 +77,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "3D709BE2A07E3CAAEDC9709C5952A5F0"
+            BlueprintIdentifier = "37946EE3136DC135DB1D4EAC7534CF8A"
             BuildableName = "ForgeAppUIHost.app"
             BlueprintName = "ForgeAppUIHost"
             ReferencedContainer = "container:ForgeApp.xcodeproj">
@@ -94,7 +94,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "3D709BE2A07E3CAAEDC9709C5952A5F0"
+            BlueprintIdentifier = "37946EE3136DC135DB1D4EAC7534CF8A"
             BuildableName = "ForgeAppUIHost.app"
             BlueprintName = "ForgeAppUIHost"
             ReferencedContainer = "container:ForgeApp.xcodeproj">

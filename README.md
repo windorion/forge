@@ -159,8 +159,12 @@ Implemented today:
   run executed all three methods and passed the slot/card-navigation path; it
   exposed two accessibility-query assertions, whose scoped fixes now pass
   `build-for-testing`. A fully passing archive remains for a user-approved
-  unattended window so UI automation does not interrupt desktop work. The
-  two-runtime routing fixture also proves command approval/run/cancel, retained
+  unattended window so UI automation does not interrupt desktop work.
+  Supervisor transport failures now back off at 2/4/8/16/30 seconds, unexpected
+  owned-child exits relaunch the same in-memory observer/active target after the
+  deadline, and diagnostics expose failure/restart/recovery/next-retry evidence.
+  Identity or authorization mismatches still clear access and restart intent.
+  The two-runtime routing fixture also proves command approval/run/cancel, retained
   cancelled output, repository-local status/diff/commit/branch actions, and
   honest remote-less publish/push/PR blockers for both repositories.
 - Explicit human review gates for plans and edits.
@@ -294,7 +298,7 @@ Product-readiness estimate:
 | Full handoff UI | 95-97% | 41 of 43 named screens/states are `Verified` (rendered comparison on real data, evidence in `docs/verification/`). The two remaining: `6a` GitHub is `Partial` (configuration UI, Device Flow, polling, Keychain persistence, and connected state are implemented and tested; live GitHub authorization still needs a founder-owned OAuth App Client ID with Device Flow enabled); `35a` Widget is a documented platform-blocked descope (hand-assembled ad-hoc-signed extension not discovered by pluginkit; unblocks with P6 signing). |
 | Useful developer alpha | 72-80% | Forge repeats the reviewed lifecycle across deterministic local-provider and mock-OpenAI adapter corpora, including Unified Diff, approved commands, repair/rerun, fork-aware PR supervision, repository-scoped background command/Git review, and fair restart-safe background dispatch; it still needs broader autonomous tool use and live-model success on pinned public repositories. |
 | Commercial beta | 20-25% | Needs signed installable packaging, production proof of the implemented onboarding and GitHub/provider setup, trust/operations polish, and repeated success on real repos. |
-| Polished v1 | 27-33% | Queueing, local indexes, session-authorized runtimes, background task/command/Git review routing, fair supervised grants, reportable soak tooling, and a compiled action-level XCUITest harness are real; full-duration/passing evidence, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
+| Polished v1 | 27-33% | Queueing, local indexes, session-authorized runtimes, background task/command/Git review routing, fair supervised grants, bounded reconnect/crash recovery telemetry, reportable soak tooling, and a compiled action-level XCUITest harness are real; full-duration/passing evidence, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
 
 Short version: V0 behavior is complete, but the entire 43-screen product design
 is not. Alpha is the next cumulative horizon, followed by beta and then v1;
@@ -306,9 +310,10 @@ Top priorities are tracked in `docs/todo.md`. Current post-V0 themes:
 
 - run a budgeted live-model corpus on pinned public repositories
 - use classified failures to widen safe provider tool/patch/recovery behavior
-- archive a full-duration supervision soak under stable AC power, capture the
-  implemented Mission Control XCUITest in an unattended window, and prepare
-  signed Mac distribution
+- add process-level disconnect/reconnect fault injection, archive a
+  full-duration supervision soak under stable AC power, capture the implemented
+  Mission Control XCUITest in an unattended window, and prepare signed Mac
+  distribution
 
 The subsystem-by-subsystem readiness and remaining-gap matrix lives in
 `docs/project_status.md` under **Component Gap Matrix**.

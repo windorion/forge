@@ -426,6 +426,43 @@ final class WorkspaceModelTests: XCTestCase {
         XCTAssertEqual(restored.missionControlFairQueueState.concurrencyLimit, 2)
     }
 
+    func testRuntimeDiagnosticsExposeMissionControlReconnectTelemetry() {
+        let defaults = makeUserDefaults()
+        defer { clear(defaults) }
+        let model = WorkspaceModel(userDefaults: defaults, githubTokenLoader: { nil })
+        model.runtimeRepositoryRoot = "/tmp/primary"
+        model.missionControlRepositories = [
+            MissionControlRepositorySnapshot(
+                path: "/tmp/background",
+                name: "fixtures/background",
+                state: "IDLE",
+                footer: "main · 0 changed",
+                capturedAt: Date(timeIntervalSince1970: 5_000),
+                tasks: [],
+                runtimeState: "RETRY WAIT",
+                runtimePort: 17_374,
+                reconnectTelemetry: MissionControlReconnectTelemetry(
+                    consecutiveFailures: 2,
+                    totalFailures: 4,
+                    restartAttempts: 1,
+                    successfulRecoveries: 1,
+                    successfulRefreshes: 8,
+                    lastConnectedAt: Date(timeIntervalSince1970: 4_990),
+                    lastFailureAt: Date(timeIntervalSince1970: 5_000),
+                    nextRetryAt: Date(timeIntervalSince1970: 5_004),
+                    lastFailureSummary: "connection refused"
+                )
+            )
+        ]
+
+        let diagnostics = model.runtimeDiagnosticsText()
+
+        XCTAssertTrue(diagnostics.contains("Mission Control supervisors:"))
+        XCTAssertTrue(diagnostics.contains("fixtures/background: RETRY WAIT"))
+        XCTAssertTrue(diagnostics.contains("failures 2 consecutive/4 total"))
+        XCTAssertTrue(diagnostics.contains("restart attempts 1, recoveries 1"))
+    }
+
     private func makeClient(
         handler: @escaping WorkspaceMockURLProtocol.Handler
     ) -> (RuntimeClient, URLSession) {
