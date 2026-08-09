@@ -6448,3 +6448,39 @@ Next:
   call CI repaired after the hosted runner passes.
 - Once green, add a hosted XCUITest `build-for-testing` compile gate or proceed
   to the full supervision soak without weakening the interactive test boundary.
+
+## 2026-08-09 20:05:28 +0200 (CEST)
+
+Conversation summary:
+
+- Continued after the Swift 6.1 CI repair to add the next API-free reliability
+  gate for the Mission Control macOS UI-test harness.
+
+Done:
+
+- Confirmed the actor-isolation repair on GitHub Actions: Swift Tests run
+  `31327891967` passed documentation truth, all 47 Swift tests with coverage,
+  and coverage reporting on the macOS 15 arm64 hosted runner.
+- Added an independent `Mission Control XCUITest build` GitHub Actions job. It
+  compiles the committed app host and three-method UI-test bundle with
+  `build-for-testing`, signing disabled, and a bounded 20-minute timeout.
+- Kept evidence boundaries explicit: the hosted job detects Xcode/project/app
+  host/UI-test compiler drift but does not claim the action-level accessibility
+  run that still requires an interactive authenticated macOS session.
+- Added documentation-truth assertions for the project, scheme, build action,
+  signing boundary, and hosted-toolchain documentation.
+- Passed workflow YAML parsing, documentation truth, whitespace validation,
+  and the exact local equivalent of the new hosted XCUITest build gate.
+
+Not done:
+
+- The new hosted XCUITest compile job still needs its first post-push result.
+- A passing action-level `.xcresult` and the six-hour supervision soak remain
+  separate interactive/long-duration evidence tasks.
+
+Next:
+
+- Push this gate and wait for both hosted SwiftPM and XCUITest-build jobs; fix
+  any hosted Xcode compatibility failure rather than weakening the job.
+- Then obtain the interactive action-level archive and run the reportable
+  six-hour two-runtime soak under documented power/sleep conditions.

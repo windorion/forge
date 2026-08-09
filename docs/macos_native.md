@@ -52,6 +52,9 @@ navigation, command actions, and Git confirmation cancellation. The bundle
 passes `build-for-testing`. Its first action-level launch reached XCTest Runner
 but macOS local authentication was cancelled before the methods executed, so a
 passing authenticated archive and signed-build automation pass remain.
+The committed app host and UI-test bundle are also compile-gated in a separate
+macOS 15 GitHub Actions job with signing disabled; this is hosted toolchain
+evidence only and does not replace the interactive accessibility run.
 The final observer/active/queued/review capture set and repair notes live in
 `docs/verification/mission-control-fairness/`.
 

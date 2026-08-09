@@ -184,6 +184,15 @@ check("documentation truth check is discoverable and runs in CI", () => {
   assert.equal(runtimePackage.scripts["check:docs"], "node ../script/check_documentation_truth.mjs");
 });
 
+check("Mission Control XCUITest has a compile-only hosted gate", () => {
+  assert.match(ciWorkflow, /Mission Control XCUITest build/);
+  assert.match(ciWorkflow, /-project ForgeApp\.xcodeproj/);
+  assert.match(ciWorkflow, /-scheme ForgeAppUI/);
+  assert.match(ciWorkflow, /build-for-testing/);
+  assert.match(ciWorkflow, /CODE_SIGNING_ALLOWED=NO/);
+  assert.match(development, /hosted toolchain|compiler\/toolchain drift/i);
+});
+
 check("PR review and check evidence is synchronized across code and current docs", () => {
   for (const source of [readme, projectStatus, todo, gitWorkflow]) {
     assert.match(source, /review/i);

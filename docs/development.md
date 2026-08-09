@@ -235,6 +235,13 @@ passed, while the first real run stopped at Runner initialization with Local
 Authentication code -2 (cancelled) before any method executed. Do not call
 that attempt a passing XCUITest run.
 
+GitHub Actions also builds the committed `ForgeAppUI` scheme in a separate
+`Mission Control XCUITest build` job on the macOS 15 arm64 image. It uses
+`CODE_SIGNING_ALLOWED=NO` and stops at `build-for-testing`: this catches app-host
+and UI-test compiler/toolchain drift, but deliberately does not claim an
+authenticated action-level run. Keep the local interactive `.xcresult` gate
+separate.
+
 The shell also includes a first usable `10a`-style full-screen diff review
 surface. It opens from the Diff tab or review state card, shows a file tree,
 main diff pane, why-this-change reasoning, validation evidence, and

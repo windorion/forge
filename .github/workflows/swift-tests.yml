@@ -43,3 +43,27 @@ jobs:
           xcrun llvm-cov report "$TEST_BINARY" \
             -instr-profile="$COVERAGE_PROFILE" \
             -ignore-filename-regex='(/Tests/|\.build/)'
+
+  mission-control-xcui-build:
+    name: Mission Control XCUITest build
+    runs-on: macos-15
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Show Xcode toolchain
+        run: xcodebuild -version
+
+      - name: Build app host and UI test bundle
+        run: |
+          xcodebuild \
+            -project ForgeApp.xcodeproj \
+            -scheme ForgeAppUI \
+            -configuration Debug \
+            -destination 'platform=macOS,arch=arm64' \
+            -derivedDataPath "$RUNNER_TEMP/forge-mission-control-xcui-derived" \
+            build-for-testing \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO
