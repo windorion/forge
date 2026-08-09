@@ -1,10 +1,15 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { arch, hostname, platform, release, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
+
+import {
+  buildMissionControlSoakReport,
+  renderMissionControlSoakMarkdown
+} from "./mission-control-soak-report.mjs";
 
 const runtimeRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const tempRoot = join(tmpdir(), `forge-fair-queue-${process.pid}-${Date.now()}`);
@@ -12,9 +17,22 @@ const basePort = 19980 + Math.floor(Math.random() * 120);
 const tasksPerRepository = boundedInteger(process.env.FORGE_FAIR_QUEUE_TASKS_PER_REPOSITORY, 3, 2, 20);
 const restartEveryGrants = boundedInteger(process.env.FORGE_FAIR_QUEUE_RESTART_EVERY_GRANTS, 2, 1, 20);
 const soakSeconds = boundedInteger(process.env.FORGE_FAIR_QUEUE_SOAK_SECONDS, 0, 0, 86_400);
+const reportDirectory = process.env.FORGE_FAIR_QUEUE_REPORT_DIR?.trim()
+  ? resolve(process.env.FORGE_FAIR_QUEUE_REPORT_DIR.trim())
+  : undefined;
+const preserveFailureArtifacts = process.env.FORGE_FAIR_QUEUE_PRESERVE_FAILURES !== "0";
 const repos = [repository("alpha", basePort), repository("beta", basePort + 1)];
 const runtimes = new Map();
 const grantOrder = [];
+const startedAt = new Date();
+let grantRestartCount = 0;
+let soakCycles = 0;
+let fixtureFailure;
+let reportWriteFailure;
+let finalRunning = 0;
+let finalQueued = 0;
+let soakStartedAtMs;
+let actualSoakSeconds = 0;
 
 try {
   await mkdir(tempRoot, { recursive: true });
@@ -71,6 +89,7 @@ try {
 
       if (grants % restartEveryGrants === 0 && (await queuedCount()) > 0) {
         await restartRuntime(repo);
+        grantRestartCount += 1;
         await sleep(650);
         const afterRestart = await get(repo, "/queue");
         assert(afterRestart.running.length === 0, `${repo.name} dispatched persisted work during supervised restart.`);
@@ -83,8 +102,8 @@ try {
   assert(grants === tasksPerRepository * repos.length, "Not every queued task received exactly one grant.");
   assertNoStarvation(grantOrder);
 
-  const soakDeadline = Date.now() + soakSeconds * 1_000;
-  let soakCycles = 0;
+  soakStartedAtMs = Date.now();
+  const soakDeadline = soakStartedAtMs + soakSeconds * 1_000;
   while (Date.now() < soakDeadline) {
     const repo = repos[soakCycles % repos.length];
     await restartRuntime(repo);
@@ -98,16 +117,86 @@ try {
     await sleep(150);
   }
 
+  const finalQueues = await Promise.all(repos.map((repo) => get(repo, "/queue")));
+  finalRunning = finalQueues.reduce((sum, queue) => sum + queue.running.length, 0);
+  finalQueued = finalQueues.reduce((sum, queue) => sum + queue.queued.length, 0);
+  assert(finalRunning === 0 && finalQueued === 0, "Final supervised queues were not drained.");
+  actualSoakSeconds = (Date.now() - soakStartedAtMs) / 1_000;
+
   console.log("Mission Control fair queue fixture passed.");
   console.log(`- Supervised hold: ${tasksPerRepository * repos.length} tasks stayed queued before grants`);
   console.log(`- Fair grants: ${grantOrder.join(" -> ")}`);
   console.log(`- Restart injection: every ${restartEveryGrants} grants; no startup auto-dispatch`);
   console.log("- Negative control: stale authorization rejected with 403");
   console.log(`- Optional soak: ${soakSeconds}s / ${soakCycles} restart cycles`);
+} catch (error) {
+  fixtureFailure = error instanceof Error ? error : new Error(String(error));
 } finally {
+  const runtimeOutputTails = Object.fromEntries(
+    [...runtimes.entries()].map(([name, handle]) => [name, handle.output])
+  );
   await Promise.all([...runtimes.values()].map(stopRuntime));
-  await rm(tempRoot, { recursive: true, force: true });
+  const preserveRoot = Boolean(fixtureFailure && preserveFailureArtifacts);
+  if (soakStartedAtMs !== undefined && actualSoakSeconds === 0) {
+    actualSoakSeconds = (Date.now() - soakStartedAtMs) / 1_000;
+  }
+  if (!preserveRoot) await rm(tempRoot, { recursive: true, force: true });
+
+  if (reportDirectory) {
+    try {
+      await mkdir(reportDirectory, { recursive: true });
+      const report = buildMissionControlSoakReport({
+        startedAt,
+        endedAt: new Date(),
+        requestedSoakSeconds: soakSeconds,
+        actualSoakSeconds,
+        tasksPerRepository,
+        repositoryCount: repos.length,
+        queue: {
+          heldBeforeFirstGrant: tasksPerRepository * repos.length,
+          finalRunning,
+          finalQueued
+        },
+        grants: { total: grantOrder.length, order: grantOrder },
+        restarts: {
+          everyGrants: restartEveryGrants,
+          duringGrantDrain: grantRestartCount,
+          duringSoak: soakCycles
+        },
+        negativeControls: {
+          staleAuthorizationRejected: grantOrder.length > 0,
+          startupAutoDispatchPrevented: grantOrder.length > 0,
+          starvationPrevented: grantOrder.length === tasksPerRepository * repos.length
+        },
+        environment: {
+          node: process.version,
+          platform: platform(),
+          release: release(),
+          architecture: arch(),
+          hostname: hostname(),
+          powerConditions: process.env.FORGE_SOAK_POWER_NOTES ?? "Not recorded"
+        },
+        command: `FORGE_FAIR_QUEUE_SOAK_SECONDS=${soakSeconds} node scripts/mission-control-fairness-fixtures.mjs`,
+        fixtureRoot: tempRoot,
+        failureArtifactsPreserved: preserveRoot,
+        runtimeOutputTails: fixtureFailure ? runtimeOutputTails : {},
+        failure: fixtureFailure
+      });
+      const jsonPath = join(reportDirectory, "mission-control-soak-report.json");
+      const markdownPath = join(reportDirectory, "mission-control-soak-report.md");
+      await writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+      await writeFile(markdownPath, renderMissionControlSoakMarkdown(report), "utf8");
+      console.log(`- JSON report: ${jsonPath}`);
+      console.log(`- Markdown report: ${markdownPath}`);
+      if (preserveRoot) console.log(`- Failure fixture preserved: ${tempRoot}`);
+    } catch (error) {
+      reportWriteFailure = error instanceof Error ? error : new Error(String(error));
+    }
+  }
 }
+
+if (reportWriteFailure) throw reportWriteFailure;
+if (fixtureFailure) throw fixtureFailure;
 
 function repository(name, port) {
   return {

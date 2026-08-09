@@ -167,12 +167,29 @@ or starvation. Increase the fixture without APIs through
 `FORGE_FAIR_QUEUE_TASKS_PER_REPOSITORY`,
 `FORGE_FAIR_QUEUE_RESTART_EVERY_GRANTS`, and
 `FORGE_FAIR_QUEUE_SOAK_SECONDS`. The convenience command below runs the same
-oracles for six hours:
+oracles for six hours and writes timestamped JSON/Markdown evidence under
+`build/mission-control-soak/`:
 
 ```bash
 cd runtime
 npm run soak:mission-control
 ```
+
+For a shorter diagnostic or an explicit archive location/power note, run:
+
+```bash
+script/run_mission_control_soak.sh 30 /tmp/forge-soak-proof \
+  "AC power; sleep disabled for this diagnostic"
+```
+
+The report records requested and actual soak duration, full fixture elapsed
+time, start/end timestamps, host/Node/OS/architecture, operator-supplied power
+conditions, held/granted/restarted/final queue totals, and all negative-control
+results. Failures include the stack and bounded runtime output tails and keep
+the temporary repositories by default (`FORGE_FAIR_QUEUE_PRESERVE_FAILURES=0`
+disables preservation). The 2026-08-09 three-second proof completed six fair
+grants, two drain-time restarts, 11 soak restarts, and empty final queues; it is
+a pipeline diagnostic, not the outstanding six-hour evidence.
 
 For native visual automation, run a DEBUG ForgeApp and use:
 
@@ -192,6 +209,31 @@ and the verification scripts capture the app's native view hierarchy without
 Screen Recording permission. The routed-action script proves a Commands -> Git
 -> Commands transition in the view that owns the real tab buttons. This is
 deterministic DEBUG native action/transition automation, not XCUITest.
+
+True Mission Control UI automation uses an explicit generated Xcode host and
+the real `XCUIApplication` API. Build the 3 test methods without launching
+UI automation:
+
+```bash
+FORGE_XCUI_BUILD_ONLY=1 script/test_mission_control_ui.sh
+```
+
+Run the action-level tests and retain the `.xcresult` plus log under the ignored
+`build/mission-control-xcui/` tree with:
+
+```bash
+script/test_mission_control_ui.sh
+```
+
+The suite covers observer authorization/revocation alerts, 1-to-2 background
+slot changes, review-card navigation, preset approval, active command cancel,
+and Git branch/commit confirmation cancellation. The script regenerates
+`ForgeApp.xcodeproj` deterministically from all app/UI-test Swift sources. On
+first use macOS may require local authentication before XCTest can control the
+UI; approve that system prompt and rerun. On 2026-08-09 `build-for-testing`
+passed, while the first real run stopped at Runner initialization with Local
+Authentication code -2 (cancelled) before any method executed. Do not call
+that attempt a passing XCUITest run.
 
 The shell also includes a first usable `10a`-style full-screen diff review
 surface. It opens from the Diff tab or review state card, shows a file tree,

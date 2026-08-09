@@ -177,6 +177,13 @@ struct WorkspaceView: View {
         .environmentObject(surfaceCoordinator)
         .task {
             AppDelegate.shared?.workspace = workspace
+            #if DEBUG
+            if let uiTestSurface = ProcessInfo.processInfo.environment["FORGE_UI_TEST_SURFACE"],
+               !uiTestSurface.isEmpty {
+                presentDebugSurface(uiTestSurface)
+                return
+            }
+            #endif
             MenuBarController.shared.activate(workspace: workspace)
             QuickCaptureController.shared.activate(workspace: workspace)
             workspace.restoreWorkspaceOnLaunch()

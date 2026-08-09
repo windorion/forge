@@ -45,8 +45,13 @@ hierarchies without Screen Recording permission. A second allowlisted DEBUG
 action channel drives the owning task-detail view through Commands -> Git ->
 Commands, and `script/verify_mission_control_routed_actions.sh` archives the
 three rendered states in `docs/verification/mission-control-routed-actions/`.
-This is native view/action-transition evidence, not XCUITest; accessibility-
-driven confirmation and a signed-build automation pass remain future work.
+This remains the fast native view/action-transition evidence, distinct from
+XCUITest. Forge now also has a generated `ForgeApp.xcodeproj` UI-test host and
+three real `XCUIApplication` methods for authorization/revocation, slots, card
+navigation, command actions, and Git confirmation cancellation. The bundle
+passes `build-for-testing`. Its first action-level launch reached XCTest Runner
+but macOS local authentication was cancelled before the methods executed, so a
+passing authenticated archive and signed-build automation pass remain.
 The final observer/active/queued/review capture set and repair notes live in
 `docs/verification/mission-control-fairness/`.
 

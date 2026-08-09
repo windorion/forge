@@ -148,7 +148,14 @@ Implemented today:
   later grants round-robin, and shows running/queued/next/grant evidence. A
   two-runtime fixture proves six alternating grants, stale-ID rejection,
   restart hold, and no starvation; a configurable six-hour local soak entry
-  and four-state DEBUG native capture driver are available without APIs. The
+  now emits versioned JSON/Markdown reports with exact timing, environment,
+  grant/restart/queue totals, and preserved failure artifacts. A three-second
+  diagnostic completed 11 restart cycles. The four-state DEBUG native capture
+  driver remains available without APIs. A generated Xcode project and three
+  real `XCUIApplication` test methods cover authorization/revocation, slot
+  changes, card navigation, command actions, and Git confirmation cancellation;
+  the test bundle compiles, while the first action-level run still needs the
+  local macOS UI-automation authentication prompt to be approved. The
   two-runtime routing fixture also proves command approval/run/cancel, retained
   cancelled output, repository-local status/diff/commit/branch actions, and
   honest remote-less publish/push/PR blockers for both repositories.
@@ -267,8 +274,8 @@ Beyond V0:
   current bounded loop and reviewed Unified Diff path.
 - Semantic or hybrid retrieval beyond the existing durable file, symbol, and
   trigram text indexes.
-- Full-duration supervision soak evidence and true action-level XCUITest for
-  authorization, slot changes, navigation, and mutation confirmation.
+- Full-duration supervision soak evidence and a passing action-level XCUITest
+  archive after local macOS UI-automation authentication.
 - Packaged, signed, notarized, auto-updating Mac distribution.
 
 ## Completion Estimate
@@ -283,7 +290,7 @@ Product-readiness estimate:
 | Full handoff UI | 95-97% | 41 of 43 named screens/states are `Verified` (rendered comparison on real data, evidence in `docs/verification/`). The two remaining: `6a` GitHub is `Partial` (configuration UI, Device Flow, polling, Keychain persistence, and connected state are implemented and tested; live GitHub authorization still needs a founder-owned OAuth App Client ID with Device Flow enabled); `35a` Widget is a documented platform-blocked descope (hand-assembled ad-hoc-signed extension not discovered by pluginkit; unblocks with P6 signing). |
 | Useful developer alpha | 72-80% | Forge repeats the reviewed lifecycle across deterministic local-provider and mock-OpenAI adapter corpora, including Unified Diff, approved commands, repair/rerun, fork-aware PR supervision, repository-scoped background command/Git review, and fair restart-safe background dispatch; it still needs broader autonomous tool use and live-model success on pinned public repositories. |
 | Commercial beta | 20-25% | Needs signed installable packaging, production proof of the implemented onboarding and GitHub/provider setup, trust/operations polish, and repeated success on real repos. |
-| Polished v1 | 26-32% | Queueing, local indexes, session-authorized runtimes, background task/command/Git review routing, and fair supervised background grants are real; full soak/XCUITest proof, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
+| Polished v1 | 27-33% | Queueing, local indexes, session-authorized runtimes, background task/command/Git review routing, fair supervised grants, reportable soak tooling, and a compiled action-level XCUITest harness are real; full-duration/passing evidence, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
 
 Short version: V0 behavior is complete, but the entire 43-screen product design
 is not. Alpha is the next cumulative horizon, followed by beta and then v1;
@@ -295,8 +302,8 @@ Top priorities are tracked in `docs/todo.md`. Current post-V0 themes:
 
 - run a budgeted live-model corpus on pinned public repositories
 - use classified failures to widen safe provider tool/patch/recovery behavior
-- archive a full-duration supervision soak, add true XCUITest for the routed
-  Mission Control gates, and prepare signed Mac distribution
+- archive a full-duration supervision soak, approve and archive the implemented
+  Mission Control XCUITest run, and prepare signed Mac distribution
 
 The subsystem-by-subsystem readiness and remaining-gap matrix lives in
 `docs/project_status.md` under **Component Gap Matrix**.

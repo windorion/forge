@@ -1162,6 +1162,20 @@ final class WorkspaceModel: ObservableObject {
             statusMessage = "The focused repository already uses the primary runtime."
             return
         }
+        #if DEBUG
+        if missionControlDebugFixtureActive,
+           let index = missionControlRepositories.firstIndex(where: { $0.path == path }) {
+            var repository = missionControlRepositories[index]
+            repository.runtimeState = isActive ? "ACTIVE RUNTIME" : "LIVE OBSERVER"
+            repository.observerReadOnly = !isActive
+            repository.runtimeAuthorizationID = isActive ? "debug-ui-test-authorization" : nil
+            missionControlRepositories[index] = repository
+            statusMessage = isActive
+                ? "Authorized deterministic UI-test runtime for \(repository.name)."
+                : "Returned deterministic UI-test runtime for \(repository.name) to read-only."
+            return
+        }
+        #endif
         missionControlSupervisor.setActiveAuthorization(
             path: path,
             isActive: isActive,
@@ -1175,6 +1189,13 @@ final class WorkspaceModel: ObservableObject {
     func setMissionControlFairQueueConcurrencyLimit(_ limit: Int) {
         let normalized = min(max(limit, 1), 2)
         userDefaults.set(normalized, forKey: Self.missionControlFairQueueLimitKey)
+        #if DEBUG
+        if missionControlDebugFixtureActive {
+            missionControlFairQueueState.concurrencyLimit = normalized
+            statusMessage = "Mission Control background concurrency set to \(normalized) in the deterministic UI fixture."
+            return
+        }
+        #endif
         missionControlSupervisor.setFairQueueConcurrencyLimit(normalized)
         statusMessage = "Mission Control background concurrency set to \(normalized). Repository writes remain serialized."
     }
@@ -1202,6 +1223,14 @@ final class WorkspaceModel: ObservableObject {
             selectedTaskID = taskID
             return
         }
+        #if DEBUG
+        if missionControlDebugFixtureActive,
+           path == "/tmp/forge-ui-alpha",
+           taskID == "ui-alpha-review" {
+            installMissionControlRoutedActionDebugFixture(initialTab: "commands")
+            return
+        }
+        #endif
         missionControlTaskRoute = MissionControlTaskRoute(repositoryPath: path, taskID: taskID)
         missionControlRoutedTask = nil
         missionControlRoutedEvidence = nil
@@ -1371,6 +1400,12 @@ final class WorkspaceModel: ObservableObject {
     }
 
     func approveMissionControlValidationPreset(_ presetID: ValidationPreset.ID) {
+        #if DEBUG
+        if missionControlDebugFixtureActive,
+           applyMissionControlDebugPresetApproval(presetID) {
+            return
+        }
+        #endif
         performMissionControlMutation { route in
             try await self.missionControlSupervisor.approveValidationPreset(
                 path: route.repositoryPath,
@@ -1391,6 +1426,12 @@ final class WorkspaceModel: ObservableObject {
     }
 
     func cancelMissionControlTaskCommand(_ taskCommandRunID: TaskCommandRun.ID) {
+        #if DEBUG
+        if missionControlDebugFixtureActive,
+           applyMissionControlDebugCommandCancellation(taskCommandRunID) {
+            return
+        }
+        #endif
         performMissionControlMutation { route in
             try await self.missionControlSupervisor.cancelTaskCommand(
                 path: route.repositoryPath,

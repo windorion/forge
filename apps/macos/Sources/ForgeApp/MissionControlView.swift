@@ -77,6 +77,7 @@ struct MissionControlView: View {
                 .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
             }
         }
+        .accessibilityIdentifier("mission-control-root")
         .onAppear { workspace.refreshMissionControl() }
         .onChange(of: workspace.missionControlTaskRoute) { _, route in
             if route != nil { showingTaskComposer = false }
@@ -125,7 +126,7 @@ struct MissionControlView: View {
                 Button("1 — safest") { workspace.setMissionControlFairQueueConcurrencyLimit(1) }
                 Button("2 — two repositories") { workspace.setMissionControlFairQueueConcurrencyLimit(2) }
             } label: {
-                Text("BG SLOTS \(workspace.missionControlFairQueueState.concurrencyLimit) ▾")
+                Text("BG SLOTS \(workspace.missionControlFairQueueState.concurrencyLimit)")
                     .font(ForgeDesign.mono(9.5, weight: .bold))
                     .foregroundStyle(ForgeDesign.ink)
                     .padding(.horizontal, 10)
@@ -134,6 +135,7 @@ struct MissionControlView: View {
                     .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
             }
             .menuStyle(.borderlessButton)
+            .accessibilityIdentifier("mission-control-slot-menu")
             .fixedSize()
             .help("Limit concurrently running Agent Loops across authorized background repositories.")
             Button("⏸ PAUSE ALL") { workspace.pauseAllMissionControlLoops() }
@@ -245,6 +247,7 @@ struct MissionControlView: View {
             .overlay(Rectangle().stroke(hasLiveData ? ForgeDesign.ink : ForgeDesign.divider, lineWidth: 1.5))
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("mission-control-task-\(task.taskID)")
     }
 
     private func emptyRepositoryColumn(index: Int) -> some View {
@@ -331,14 +334,22 @@ struct MissionControlView: View {
                 runtimePrompt = MissionControlRuntimePrompt(repository: repository, action: .authorize)
             }
             .buttonStyle(MissionRuntimeButtonStyle(fill: ForgeDesign.ink, foreground: ForgeDesign.accent))
+            .accessibilityIdentifier("mission-control-authorize-\(accessibilitySlug(repository.name))")
         } else if !isCurrent && isActiveRuntime(repository) {
             let hasRunningTask = repository.tasks.contains { $0.tag == "RUNNING" }
             Button(hasRunningTask ? "PAUSE BEFORE READ-ONLY" : "RETURN READ-ONLY") {
                 runtimePrompt = MissionControlRuntimePrompt(repository: repository, action: .revoke)
             }
             .buttonStyle(MissionRuntimeButtonStyle(fill: Color.white, foreground: ForgeDesign.ink))
+            .accessibilityIdentifier("mission-control-revoke-\(accessibilitySlug(repository.name))")
             .disabled(hasRunningTask)
         }
+    }
+
+    private func accessibilitySlug(_ value: String) -> String {
+        value.lowercased().map { $0.isLetter || $0.isNumber ? String($0) : "-" }
+            .joined()
+            .replacingOccurrences(of: "--", with: "-")
     }
 
     private func runtimeAuthorizationAlert(_ prompt: MissionControlRuntimePrompt) -> Alert {

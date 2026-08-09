@@ -236,6 +236,7 @@ struct MissionControlTaskDetailView: View {
         }
         .background(ForgeDesign.paper)
         .overlay(Rectangle().stroke(ForgeDesign.ink, lineWidth: 1.5))
+        .accessibilityIdentifier("mission-control-task-detail")
         .onAppear {
             #if DEBUG
             if let requestedTab = workspace.missionControlDebugDetailTab {
@@ -294,6 +295,7 @@ struct MissionControlTaskDetailView: View {
             ForEach(DetailTab.allCases) { item in
                 Button(item.rawValue) { tab = item }
                     .buttonStyle(MissionRouteTabButtonStyle(selected: tab == item))
+                    .accessibilityIdentifier("mission-control-tab-\(item.rawValue.lowercased())")
             }
             Button("FOCUS REPOSITORY", action: focusRepository)
                 .buttonStyle(MissionRouteSecondaryButtonStyle())
@@ -554,12 +556,14 @@ struct MissionControlTaskDetailView: View {
                                         workspace.approveMissionControlValidationPreset(permission.id)
                                     }
                                     .buttonStyle(MissionRouteSecondaryButtonStyle())
+                                    .accessibilityIdentifier("mission-control-approve-preset-\(permission.id)")
                                 }
                                 if permission.canRun && authorized {
                                     Button("RUN PRESET") {
                                         workspace.runMissionControlValidation(presetID: permission.id)
                                     }
                                     .buttonStyle(MissionRoutePrimaryButtonStyle())
+                                    .accessibilityIdentifier("mission-control-run-preset-\(permission.id)")
                                 }
                             }
                             Text(permission.preset.description)
@@ -598,6 +602,7 @@ struct MissionControlTaskDetailView: View {
                                             workspace.runMissionControlTaskCommand(permission.id)
                                         }
                                         .buttonStyle(MissionRoutePrimaryButtonStyle())
+                                        .accessibilityIdentifier("mission-control-run-command-\(permission.id)")
                                     }
                                 }
                                 Text(permission.command.command)
@@ -632,6 +637,7 @@ struct MissionControlTaskDetailView: View {
                                 workspace.cancelMissionControlTaskCommand(activeRun.id)
                             }
                             .buttonStyle(MissionRouteSecondaryButtonStyle())
+                            .accessibilityIdentifier("mission-control-cancel-command-\(activeRun.id)")
                             .disabled(workspace.missionControlRouteIsMutating)
                         }
                     }
@@ -651,6 +657,7 @@ struct MissionControlTaskDetailView: View {
                                 workspace.rerunMissionControlRepairCommand(readyEvidence.id)
                             }
                             .buttonStyle(MissionRoutePrimaryButtonStyle())
+                            .accessibilityIdentifier("mission-control-rerun-command-\(readyEvidence.id)")
                             .disabled(workspace.missionControlRouteIsMutating)
                         }
                     }
@@ -844,6 +851,7 @@ struct MissionControlTaskDetailView: View {
                     Spacer()
                     Button(actionLabel) { pendingGitAction = action }
                         .buttonStyle(MissionRoutePrimaryButtonStyle())
+                        .accessibilityIdentifier("mission-control-git-\(action.rawValue)")
                         .disabled(!authorized || workspace.missionControlRouteIsMutating)
                 }
             }

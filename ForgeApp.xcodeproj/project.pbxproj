@@ -1,0 +1,602 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0AC6AFE509303821D0D48CFF3E4BD441 /* MenuBarMiniWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4118CBC87A55A5F3A8112653B8EFDC71 /* MenuBarMiniWindow.swift */; };
+		0DC80E1B367C88786952757461E6C415 /* SignInPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D6F7B3379DD2620F16DD6904D642EEE /* SignInPanelController.swift */; };
+		1610448A0236B178928D29B503AD5933 /* appcast.xml in Resources */ = {isa = PBXBuildFile; fileRef = DB42DBADA4C43FBF902FCE691DCA49A9 /* appcast.xml */; };
+		1936AFB709992402033C5C9CC40CD1FA /* ForgeShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0269E03A0BF21CCF534914D8EC7CDE /* ForgeShortcuts.swift */; };
+		1FBB8232A4006F8974F1081DE38D730E /* ForgeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4721F798766B16F10DF4E19A6537321 /* ForgeApp.swift */; };
+		20904CCB93E89C7992C3CE4EA4166A83 /* GitHubAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1BC81479ACBC0FA46BB4A93C182584 /* GitHubAuth.swift */; };
+		3498230F321160A432829293A2676907 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A820D0A5B60BE3AD05F7341EF27B93B /* SettingsView.swift */; };
+		3F2457F04253A8C1D3A1266809747072 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53F2FB63D28DBC37AADD7F130BA812AB /* OnboardingView.swift */; };
+		484BE00F517275843D6054AA936B1C1E /* TaskShare.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF60E367C54B3E181D1CE837A66EF20E /* TaskShare.swift */; };
+		4F5DF4775C99B166700F3F43A289A2B6 /* MissionControlUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F2E3859FFBA36D8F7DB15996B63492B /* MissionControlUITests.swift */; };
+		540B71CC916D8672A649CD9CA2FCD4D1 /* ForgeUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4213DF184C97DB9F8E1495DA5EA400A0 /* ForgeUpdater.swift */; };
+		5992FF74C3E04A3C20B0FD56E5B30438 /* QuickCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECEBF8F7B3C833F4D1FD2E4B5BD1E72B /* QuickCapture.swift */; };
+		63388E87B098316A33540171946EBA98 /* MissionControlTaskRoutingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD245E2BDFB4EAF040A5DF6F8BC27B60 /* MissionControlTaskRoutingView.swift */; };
+		6735A9DDEC06FB5F93BA736D4197A7B2 /* MissionControlFairQueueScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0591FDAB1E9208DCBB3695E63FE1865A /* MissionControlFairQueueScheduler.swift */; };
+		795B5E547105C2FD8AE1479F6B99E29D /* OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = 863BAB18A96BEC9CE7DA194C30046D97 /* OFL.txt */; };
+		7A137E7E901CA863EF41CAC49C0DDDFB /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9B7BA9071DBA66B0628C21835B2180CF /* Cocoa.framework */; };
+		7E9D3784B7233D84EBB30897D4BF911D /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81970C1A97C98F7CE1EDA587B1B1C259 /* Models.swift */; };
+		81CE44DE47540F49EAD4E2779006F033 /* RuntimeClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 655368CDB358E0D493EB3479B51CFB70 /* RuntimeClient.swift */; };
+		8DFE1156BD80111A4EBCA13DD0948D61 /* MissionControlView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9902FD34A3CDA187312639CA44481362 /* MissionControlView.swift */; };
+		8E700DEBEF5CA12E8A12A6FD6981C58B /* MissionControlRoutedActionDebugFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6958CA490817756B40997337B4D57C3 /* MissionControlRoutedActionDebugFixture.swift */; };
+		9021A7770B7ADCE783CACF6597AD2ADC /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 684EC1DB56F98AF012F401D0638FB064 /* KeychainStore.swift */; };
+		A2C46C8E0E49848A210518F72B959E4E /* TaskTemplates.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA52D7F0DA6270924D527C896B496F40 /* TaskTemplates.swift */; };
+		AF4135D22464A2FE29E6AFF727D8E01B /* JetBrainsMono-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 128B8D0FBEB86AA4F301308E0875D7BF /* JetBrainsMono-Regular.ttf */; };
+		AFC8E7BB1D3E365E2207B3915B68EB5E /* JetBrainsMono-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 4028C663F4FD8180323CF643D67C919F /* JetBrainsMono-Bold.ttf */; };
+		B8D6063FF66F2AAB9A5D236B6EFC8E82 /* WorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7032D9BBD0AE64A6D26B52F5D65D6845 /* WorkspaceView.swift */; };
+		BA4B1E484D8C1C52C9D90AD2EEA9215A /* WorkspaceModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF58E01E4BAF7DD362C4F1C11BBF176D /* WorkspaceModel.swift */; };
+		BEEF69822FF9D45FB8F9F0BBB16F0D8E /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9B7BA9071DBA66B0628C21835B2180CF /* Cocoa.framework */; };
+		C16E776348346D4B42CC00E965610E7E /* UpdateViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C8109EE425F447F24079ED709E9CA91 /* UpdateViews.swift */; };
+		C3997017F8C56E00FEBCB506A16EE63E /* ForgeSpotlight.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC6C9F7F22FF3C98AEA22D0448F043FA /* ForgeSpotlight.swift */; };
+		C452375DECE97237CD582AC8A671E44C /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E448D9F76DB80B0432AF5A25CED8E252 /* SignInView.swift */; };
+		C87F3C6197D635DAD4B55DDA005A2AF1 /* MissionControlRuntimeSupervisor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18858212532961FA0C9F69FC28C08646 /* MissionControlRuntimeSupervisor.swift */; };
+		CD16D4762C31A1C9DABC4CDAAE7FBCC4 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96E03750538677D3F954E7676EB4297B /* AppDelegate.swift */; };
+		DDBC4E8072A9D44F5A80268203509E8B /* MissionControlRoutedEvidence.swift in Sources */ = {isa = PBXBuildFile; fileRef = B883240CD4F85718CA4833452FC334D8 /* MissionControlRoutedEvidence.swift */; };
+		E09436CC359AD897616512ED212D3235 /* PullRequestRefreshPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBA09AC213470FCB0E34C82E480BE497 /* PullRequestRefreshPolicy.swift */; };
+		E0F709EE14E9261B380904FF25DD7576 /* ForgeNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5BE6554F46A682B5171CE54FE36A9CE /* ForgeNotifications.swift */; };
+		E14667D9A4E12E02D1DFDB3FB5AC1F7C /* MenuBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 756D8775A2E6B22201D9F35ED3AF1C3A /* MenuBarController.swift */; };
+		EA9CAD4440E0B1A83DB8730D7589ABA5 /* forge-logo.png in Resources */ = {isa = PBXBuildFile; fileRef = 9704D692CE40363A6FED53D8EF4C9ED2 /* forge-logo.png */; };
+		EABBDE079B3207C1838472477718A81F /* DebugWindowCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CEEC0967BBAA5006D83F9E90FB26E1C /* DebugWindowCapture.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		5034CDE1F92250EA950BF6A9576F9B7D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C816F1CFB0D7D70FEC82A985204D6451 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 3D709BE2A07E3CAAEDC9709C5952A5F0;
+			remoteInfo = ForgeAppUIHost;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0591FDAB1E9208DCBB3695E63FE1865A /* MissionControlFairQueueScheduler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MissionControlFairQueueScheduler.swift; sourceTree = "<group>"; };
+		0CEEC0967BBAA5006D83F9E90FB26E1C /* DebugWindowCapture.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DebugWindowCapture.swift; sourceTree = "<group>"; };
+		0F1BC81479ACBC0FA46BB4A93C182584 /* GitHubAuth.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GitHubAuth.swift; sourceTree = "<group>"; };
+		0F2E3859FFBA36D8F7DB15996B63492B /* MissionControlUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MissionControlUITests.swift; sourceTree = "<group>"; };
+		128B8D0FBEB86AA4F301308E0875D7BF /* JetBrainsMono-Regular.ttf */ = {isa = PBXFileReference; includeInIndex = 1; name = "JetBrainsMono-Regular.ttf"; path = "apps/macos/Resources/Fonts/JetBrainsMono-Regular.ttf"; sourceTree = "<group>"; };
+		18858212532961FA0C9F69FC28C08646 /* MissionControlRuntimeSupervisor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MissionControlRuntimeSupervisor.swift; sourceTree = "<group>"; };
+		1A820D0A5B60BE3AD05F7341EF27B93B /* SettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		4028C663F4FD8180323CF643D67C919F /* JetBrainsMono-Bold.ttf */ = {isa = PBXFileReference; includeInIndex = 1; name = "JetBrainsMono-Bold.ttf"; path = "apps/macos/Resources/Fonts/JetBrainsMono-Bold.ttf"; sourceTree = "<group>"; };
+		4118CBC87A55A5F3A8112653B8EFDC71 /* MenuBarMiniWindow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MenuBarMiniWindow.swift; sourceTree = "<group>"; };
+		4213DF184C97DB9F8E1495DA5EA400A0 /* ForgeUpdater.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ForgeUpdater.swift; sourceTree = "<group>"; };
+		53F2FB63D28DBC37AADD7F130BA812AB /* OnboardingView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		5C0269E03A0BF21CCF534914D8EC7CDE /* ForgeShortcuts.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ForgeShortcuts.swift; sourceTree = "<group>"; };
+		655368CDB358E0D493EB3479B51CFB70 /* RuntimeClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RuntimeClient.swift; sourceTree = "<group>"; };
+		684EC1DB56F98AF012F401D0638FB064 /* KeychainStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		6C8109EE425F447F24079ED709E9CA91 /* UpdateViews.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = UpdateViews.swift; sourceTree = "<group>"; };
+		7032D9BBD0AE64A6D26B52F5D65D6845 /* WorkspaceView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkspaceView.swift; sourceTree = "<group>"; };
+		756D8775A2E6B22201D9F35ED3AF1C3A /* MenuBarController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MenuBarController.swift; sourceTree = "<group>"; };
+		81970C1A97C98F7CE1EDA587B1B1C259 /* Models.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		863BAB18A96BEC9CE7DA194C30046D97 /* OFL.txt */ = {isa = PBXFileReference; includeInIndex = 1; name = OFL.txt; path = apps/macos/Resources/Fonts/OFL.txt; sourceTree = "<group>"; };
+		96E03750538677D3F954E7676EB4297B /* AppDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		9704D692CE40363A6FED53D8EF4C9ED2 /* forge-logo.png */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = image.png; name = "forge-logo.png"; path = "design_handoff_forge/assets/forge-logo.png"; sourceTree = "<group>"; };
+		9902FD34A3CDA187312639CA44481362 /* MissionControlView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MissionControlView.swift; sourceTree = "<group>"; };
+		9B7BA9071DBA66B0628C21835B2180CF /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
+		9D6F7B3379DD2620F16DD6904D642EEE /* SignInPanelController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SignInPanelController.swift; sourceTree = "<group>"; };
+		B785BEF2F582CEEA55B8A8A6D7D0D439 /* ForgeAppUIHost.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ForgeAppUIHost.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B883240CD4F85718CA4833452FC334D8 /* MissionControlRoutedEvidence.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MissionControlRoutedEvidence.swift; sourceTree = "<group>"; };
+		BA52D7F0DA6270924D527C896B496F40 /* TaskTemplates.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskTemplates.swift; sourceTree = "<group>"; };
+		BBAF7916EB259E6AEB0FAE71D3EEBC56 /* ForgeAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ForgeAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		BD245E2BDFB4EAF040A5DF6F8BC27B60 /* MissionControlTaskRoutingView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MissionControlTaskRoutingView.swift; sourceTree = "<group>"; };
+		DB42DBADA4C43FBF902FCE691DCA49A9 /* appcast.xml */ = {isa = PBXFileReference; includeInIndex = 1; name = appcast.xml; path = apps/macos/Resources/appcast.xml; sourceTree = "<group>"; };
+		DBA09AC213470FCB0E34C82E480BE497 /* PullRequestRefreshPolicy.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PullRequestRefreshPolicy.swift; sourceTree = "<group>"; };
+		DF60E367C54B3E181D1CE837A66EF20E /* TaskShare.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TaskShare.swift; sourceTree = "<group>"; };
+		E448D9F76DB80B0432AF5A25CED8E252 /* SignInView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
+		E4721F798766B16F10DF4E19A6537321 /* ForgeApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ForgeApp.swift; sourceTree = "<group>"; };
+		E6958CA490817756B40997337B4D57C3 /* MissionControlRoutedActionDebugFixture.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MissionControlRoutedActionDebugFixture.swift; sourceTree = "<group>"; };
+		EC6C9F7F22FF3C98AEA22D0448F043FA /* ForgeSpotlight.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ForgeSpotlight.swift; sourceTree = "<group>"; };
+		ECEBF8F7B3C833F4D1FD2E4B5BD1E72B /* QuickCapture.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = QuickCapture.swift; sourceTree = "<group>"; };
+		F5BE6554F46A682B5171CE54FE36A9CE /* ForgeNotifications.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ForgeNotifications.swift; sourceTree = "<group>"; };
+		FF58E01E4BAF7DD362C4F1C11BBF176D /* WorkspaceModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkspaceModel.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		1C7EC8EC1E6D78120A55D2F88DDCD85E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7A137E7E901CA863EF41CAC49C0DDDFB /* Cocoa.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5D0C1627BCDA28408B13AE7E19B0059A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BEEF69822FF9D45FB8F9F0BBB16F0D8E /* Cocoa.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		3923D68D685D3CA55564F5CC21C7AD2C /* ForgeApp UI Tests */ = {
+			isa = PBXGroup;
+			children = (
+				0F2E3859FFBA36D8F7DB15996B63492B /* MissionControlUITests.swift */,
+			);
+			name = "ForgeApp UI Tests";
+			path = Tests/ForgeAppUITests;
+			sourceTree = "<group>";
+		};
+		664AA274C975F3BE2EB7FFC08F10E68F /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				B785BEF2F582CEEA55B8A8A6D7D0D439 /* ForgeAppUIHost.app */,
+				BBAF7916EB259E6AEB0FAE71D3EEBC56 /* ForgeAppUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		7045C91044301860634576F48D802B60 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				EB5EE496413C7D7F5A7BCBFE479BFB60 /* OS X */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		9C69A3085EC414C6E6E661A9F3F10C90 /* ForgeApp Resources */ = {
+			isa = PBXGroup;
+			children = (
+				9704D692CE40363A6FED53D8EF4C9ED2 /* forge-logo.png */,
+				DB42DBADA4C43FBF902FCE691DCA49A9 /* appcast.xml */,
+				128B8D0FBEB86AA4F301308E0875D7BF /* JetBrainsMono-Regular.ttf */,
+				4028C663F4FD8180323CF643D67C919F /* JetBrainsMono-Bold.ttf */,
+				863BAB18A96BEC9CE7DA194C30046D97 /* OFL.txt */,
+			);
+			name = "ForgeApp Resources";
+			sourceTree = "<group>";
+		};
+		CEE8C6DB0B0FB326054D74A0CB2DBDC7 = {
+			isa = PBXGroup;
+			children = (
+				664AA274C975F3BE2EB7FFC08F10E68F /* Products */,
+				7045C91044301860634576F48D802B60 /* Frameworks */,
+				D989362CAEF2C3AEEE02C82DD5971A1D /* ForgeApp Sources */,
+				3923D68D685D3CA55564F5CC21C7AD2C /* ForgeApp UI Tests */,
+				9C69A3085EC414C6E6E661A9F3F10C90 /* ForgeApp Resources */,
+			);
+			sourceTree = "<group>";
+		};
+		D989362CAEF2C3AEEE02C82DD5971A1D /* ForgeApp Sources */ = {
+			isa = PBXGroup;
+			children = (
+				96E03750538677D3F954E7676EB4297B /* AppDelegate.swift */,
+				0CEEC0967BBAA5006D83F9E90FB26E1C /* DebugWindowCapture.swift */,
+				E4721F798766B16F10DF4E19A6537321 /* ForgeApp.swift */,
+				F5BE6554F46A682B5171CE54FE36A9CE /* ForgeNotifications.swift */,
+				5C0269E03A0BF21CCF534914D8EC7CDE /* ForgeShortcuts.swift */,
+				EC6C9F7F22FF3C98AEA22D0448F043FA /* ForgeSpotlight.swift */,
+				4213DF184C97DB9F8E1495DA5EA400A0 /* ForgeUpdater.swift */,
+				0F1BC81479ACBC0FA46BB4A93C182584 /* GitHubAuth.swift */,
+				684EC1DB56F98AF012F401D0638FB064 /* KeychainStore.swift */,
+				756D8775A2E6B22201D9F35ED3AF1C3A /* MenuBarController.swift */,
+				4118CBC87A55A5F3A8112653B8EFDC71 /* MenuBarMiniWindow.swift */,
+				0591FDAB1E9208DCBB3695E63FE1865A /* MissionControlFairQueueScheduler.swift */,
+				E6958CA490817756B40997337B4D57C3 /* MissionControlRoutedActionDebugFixture.swift */,
+				B883240CD4F85718CA4833452FC334D8 /* MissionControlRoutedEvidence.swift */,
+				18858212532961FA0C9F69FC28C08646 /* MissionControlRuntimeSupervisor.swift */,
+				BD245E2BDFB4EAF040A5DF6F8BC27B60 /* MissionControlTaskRoutingView.swift */,
+				9902FD34A3CDA187312639CA44481362 /* MissionControlView.swift */,
+				81970C1A97C98F7CE1EDA587B1B1C259 /* Models.swift */,
+				53F2FB63D28DBC37AADD7F130BA812AB /* OnboardingView.swift */,
+				DBA09AC213470FCB0E34C82E480BE497 /* PullRequestRefreshPolicy.swift */,
+				ECEBF8F7B3C833F4D1FD2E4B5BD1E72B /* QuickCapture.swift */,
+				655368CDB358E0D493EB3479B51CFB70 /* RuntimeClient.swift */,
+				1A820D0A5B60BE3AD05F7341EF27B93B /* SettingsView.swift */,
+				9D6F7B3379DD2620F16DD6904D642EEE /* SignInPanelController.swift */,
+				E448D9F76DB80B0432AF5A25CED8E252 /* SignInView.swift */,
+				DF60E367C54B3E181D1CE837A66EF20E /* TaskShare.swift */,
+				BA52D7F0DA6270924D527C896B496F40 /* TaskTemplates.swift */,
+				6C8109EE425F447F24079ED709E9CA91 /* UpdateViews.swift */,
+				FF58E01E4BAF7DD362C4F1C11BBF176D /* WorkspaceModel.swift */,
+				7032D9BBD0AE64A6D26B52F5D65D6845 /* WorkspaceView.swift */,
+			);
+			name = "ForgeApp Sources";
+			path = apps/macos/Sources/ForgeApp;
+			sourceTree = "<group>";
+		};
+		EB5EE496413C7D7F5A7BCBFE479BFB60 /* OS X */ = {
+			isa = PBXGroup;
+			children = (
+				9B7BA9071DBA66B0628C21835B2180CF /* Cocoa.framework */,
+			);
+			name = "OS X";
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		3D709BE2A07E3CAAEDC9709C5952A5F0 /* ForgeAppUIHost */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 00D2DF4F32ADCB8F4A196F268505A632 /* Build configuration list for PBXNativeTarget "ForgeAppUIHost" */;
+			buildPhases = (
+				2AE589486978029BC12D5BBD88089796 /* Sources */,
+				1C7EC8EC1E6D78120A55D2F88DDCD85E /* Frameworks */,
+				3D5F1E1E1031BE66BBF7B8A325708725 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ForgeAppUIHost;
+			productName = ForgeAppUIHost;
+			productReference = B785BEF2F582CEEA55B8A8A6D7D0D439 /* ForgeAppUIHost.app */;
+			productType = "com.apple.product-type.application";
+		};
+		7DA7381DE3FAF978041BFB0E0A365277 /* ForgeAppUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 56E6F516FEA2EC0F8A70B57ECC48C7D6 /* Build configuration list for PBXNativeTarget "ForgeAppUITests" */;
+			buildPhases = (
+				8A6B744C730AFE7E264A7F13713D44D8 /* Sources */,
+				5D0C1627BCDA28408B13AE7E19B0059A /* Frameworks */,
+				F7173942E893FED729073C1B487AD3F7 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				F6805182A317E0AB0A798263C74C6BCD /* PBXTargetDependency */,
+			);
+			name = ForgeAppUITests;
+			productName = ForgeAppUITests;
+			productReference = BBAF7916EB259E6AEB0FAE71D3EEBC56 /* ForgeAppUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		C816F1CFB0D7D70FEC82A985204D6451 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					3D709BE2A07E3CAAEDC9709C5952A5F0 = {
+						CreatedOnToolsVersion = 26.2;
+					};
+					7DA7381DE3FAF978041BFB0E0A365277 = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = 3D709BE2A07E3CAAEDC9709C5952A5F0;
+					};
+				};
+			};
+			buildConfigurationList = ED07940F9DEA45FF0541DD181499C1D7 /* Build configuration list for PBXProject "ForgeApp" */;
+			compatibilityVersion = "Xcode 16.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = CEE8C6DB0B0FB326054D74A0CB2DBDC7;
+			productRefGroup = 664AA274C975F3BE2EB7FFC08F10E68F /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				3D709BE2A07E3CAAEDC9709C5952A5F0 /* ForgeAppUIHost */,
+				7DA7381DE3FAF978041BFB0E0A365277 /* ForgeAppUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		3D5F1E1E1031BE66BBF7B8A325708725 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EA9CAD4440E0B1A83DB8730D7589ABA5 /* forge-logo.png in Resources */,
+				1610448A0236B178928D29B503AD5933 /* appcast.xml in Resources */,
+				AF4135D22464A2FE29E6AFF727D8E01B /* JetBrainsMono-Regular.ttf in Resources */,
+				AFC8E7BB1D3E365E2207B3915B68EB5E /* JetBrainsMono-Bold.ttf in Resources */,
+				795B5E547105C2FD8AE1479F6B99E29D /* OFL.txt in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F7173942E893FED729073C1B487AD3F7 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		2AE589486978029BC12D5BBD88089796 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CD16D4762C31A1C9DABC4CDAAE7FBCC4 /* AppDelegate.swift in Sources */,
+				EABBDE079B3207C1838472477718A81F /* DebugWindowCapture.swift in Sources */,
+				1FBB8232A4006F8974F1081DE38D730E /* ForgeApp.swift in Sources */,
+				E0F709EE14E9261B380904FF25DD7576 /* ForgeNotifications.swift in Sources */,
+				1936AFB709992402033C5C9CC40CD1FA /* ForgeShortcuts.swift in Sources */,
+				C3997017F8C56E00FEBCB506A16EE63E /* ForgeSpotlight.swift in Sources */,
+				540B71CC916D8672A649CD9CA2FCD4D1 /* ForgeUpdater.swift in Sources */,
+				20904CCB93E89C7992C3CE4EA4166A83 /* GitHubAuth.swift in Sources */,
+				9021A7770B7ADCE783CACF6597AD2ADC /* KeychainStore.swift in Sources */,
+				E14667D9A4E12E02D1DFDB3FB5AC1F7C /* MenuBarController.swift in Sources */,
+				0AC6AFE509303821D0D48CFF3E4BD441 /* MenuBarMiniWindow.swift in Sources */,
+				6735A9DDEC06FB5F93BA736D4197A7B2 /* MissionControlFairQueueScheduler.swift in Sources */,
+				8E700DEBEF5CA12E8A12A6FD6981C58B /* MissionControlRoutedActionDebugFixture.swift in Sources */,
+				DDBC4E8072A9D44F5A80268203509E8B /* MissionControlRoutedEvidence.swift in Sources */,
+				C87F3C6197D635DAD4B55DDA005A2AF1 /* MissionControlRuntimeSupervisor.swift in Sources */,
+				63388E87B098316A33540171946EBA98 /* MissionControlTaskRoutingView.swift in Sources */,
+				8DFE1156BD80111A4EBCA13DD0948D61 /* MissionControlView.swift in Sources */,
+				7E9D3784B7233D84EBB30897D4BF911D /* Models.swift in Sources */,
+				3F2457F04253A8C1D3A1266809747072 /* OnboardingView.swift in Sources */,
+				E09436CC359AD897616512ED212D3235 /* PullRequestRefreshPolicy.swift in Sources */,
+				5992FF74C3E04A3C20B0FD56E5B30438 /* QuickCapture.swift in Sources */,
+				81CE44DE47540F49EAD4E2779006F033 /* RuntimeClient.swift in Sources */,
+				3498230F321160A432829293A2676907 /* SettingsView.swift in Sources */,
+				0DC80E1B367C88786952757461E6C415 /* SignInPanelController.swift in Sources */,
+				C452375DECE97237CD582AC8A671E44C /* SignInView.swift in Sources */,
+				484BE00F517275843D6054AA936B1C1E /* TaskShare.swift in Sources */,
+				A2C46C8E0E49848A210518F72B959E4E /* TaskTemplates.swift in Sources */,
+				C16E776348346D4B42CC00E965610E7E /* UpdateViews.swift in Sources */,
+				BA4B1E484D8C1C52C9D90AD2EEA9215A /* WorkspaceModel.swift in Sources */,
+				B8D6063FF66F2AAB9A5D236B6EFC8E82 /* WorkspaceView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8A6B744C730AFE7E264A7F13713D44D8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4F5DF4775C99B166700F3F43A289A2B6 /* MissionControlUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		F6805182A317E0AB0A798263C74C6BCD /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = ForgeAppUIHost;
+			target = 3D709BE2A07E3CAAEDC9709C5952A5F0 /* ForgeAppUIHost */;
+			targetProxy = 5034CDE1F92250EA950BF6A9576F9B7D /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		0957C05ED57AA8CA5F1BC6D2D9CA8C78 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.windorion.forge.ui-tests";
+				PRODUCT_NAME = ForgeAppUITests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+				TEST_TARGET_NAME = ForgeAppUIHost;
+			};
+			name = Debug;
+		};
+		5AE382823FFDC9D272E491AD54A27A7D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.windorion.forge.ui-tests";
+				PRODUCT_NAME = ForgeAppUITests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+				TEST_TARGET_NAME = ForgeAppUIHost;
+			};
+			name = Release;
+		};
+		8BFA930B78AA6C26D17C2458F6F48F7F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		9CD6FB6580E1BC92EBB358C11554EED4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 42;
+				ENABLE_HARDENED_RUNTIME = NO;
+				EXECUTABLE_NAME = ForgeApp;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Forge;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSHighResolutionCapable = YES;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.4.2;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.windorion.forge.uitest-host";
+				PRODUCT_NAME = Forge;
+				SDKROOT = macosx;
+				SWIFT_STRICT_CONCURRENCY = complete;
+			};
+			name = Release;
+		};
+		B9268E3C5091F1F9D88C3087A7D39039 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 42;
+				ENABLE_HARDENED_RUNTIME = NO;
+				EXECUTABLE_NAME = ForgeApp;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Forge;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
+				INFOPLIST_KEY_NSHighResolutionCapable = YES;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.4.2;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.windorion.forge.uitest-host";
+				PRODUCT_NAME = Forge;
+				SDKROOT = macosx;
+				SWIFT_STRICT_CONCURRENCY = complete;
+			};
+			name = Debug;
+		};
+		C890AFD60E100C000D8D2265B4C29006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		00D2DF4F32ADCB8F4A196F268505A632 /* Build configuration list for PBXNativeTarget "ForgeAppUIHost" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9CD6FB6580E1BC92EBB358C11554EED4 /* Release */,
+				B9268E3C5091F1F9D88C3087A7D39039 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		56E6F516FEA2EC0F8A70B57ECC48C7D6 /* Build configuration list for PBXNativeTarget "ForgeAppUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5AE382823FFDC9D272E491AD54A27A7D /* Release */,
+				0957C05ED57AA8CA5F1BC6D2D9CA8C78 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		ED07940F9DEA45FF0541DD181499C1D7 /* Build configuration list for PBXProject "ForgeApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8BFA930B78AA6C26D17C2458F6F48F7F /* Debug */,
+				C890AFD60E100C000D8D2265B4C29006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = C816F1CFB0D7D70FEC82A985204D6451 /* Project object */;
+}

@@ -274,14 +274,27 @@ the core runtime smoke. Preserve these completed boundaries:
   publish/push while PR publication stays in its focused Keychain workflow.
   Swift request-factory/client tests, a two-runtime HTTP fixture, and a DEBUG
   Commands -> Git -> Commands native capture sequence prove the slice.
-- **Next API-free long task — supervision soak and true XCUITest:**
+- [x] Build the true Mission Control XCUITest harness. A generated explicit
+  Xcode project hosts the existing SwiftUI sources and three `XCUIApplication`
+  methods cover observer authorization/revocation, 1/2 slot changes, review-card
+  navigation, preset approval, active-command cancellation, and Git branch/
+  commit confirmation cancellation. The project and test bundle compile via
+  `script/test_mission_control_ui.sh`; the first execution reached XCTest Runner
+  initialization but local macOS authentication was cancelled before methods
+  ran, so this is not yet passing action-level evidence.
+- [x] Make supervision soak runs independently auditable. The same two-runtime
+  fairness oracle now writes schema-versioned JSON/Markdown with requested and
+  actual duration, exact timestamps, environment/power notes, grant/restart/
+  queue totals, failure stacks/runtime output tails, and preserved failure
+  fixtures. A three-second diagnostic passed with 11 soak restart cycles; the
+  sandbox-negative run also proved failure artifact preservation.
+- **Next API-free long task — archive full evidence and close exposed gaps:**
   - Run and archive the configured six-hour Mission Control soak with exact
     command, environment, machine sleep/power conditions, start/end times,
     grant/restart/queue totals, and failure artifacts.
-  - Add XCUITest for observer authorization, 1/2 slot changes, background card
-    navigation, command approval/cancel, Git confirmation/cancel, and
-    revocation gates. Keep the deterministic DEBUG driver as a fast visual
-    check, but do not describe it as accessibility-driven XCUITest.
+  - Approve macOS local authentication and archive a passing run of the existing
+    three-method XCUITest suite. Keep the deterministic DEBUG driver as a fast
+    visual check and keep its evidence distinct from XCUITest.
   - Add disconnect/reconnect/backoff scenarios and lightweight supervisor
     telemetry only where the soak or XCUITest exposes a real blind spot.
 - Add Finder and broader "open in IDE" integrations beyond the current

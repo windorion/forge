@@ -352,5 +352,43 @@ extension WorkspaceModel {
             summary: "Bounded background diff loaded from fixtures/alpha."
         )
     }
+
+    func applyMissionControlDebugPresetApproval(_ presetID: ValidationPreset.ID) -> Bool {
+        guard var evidence = missionControlRoutedEvidence,
+              let index = evidence.validation.permissions.firstIndex(where: { $0.id == presetID })
+        else { return false }
+
+        var permission = evidence.validation.permissions[index]
+        permission.approvalState = "Approved"
+        permission.executionState = "Ready"
+        permission.canApprove = false
+        permission.canRun = true
+        permission.blockedReasons = []
+        permission.approval = ValidationPermissionApproval(
+            id: "ui-test-approval-\(presetID)",
+            decidedAt: "2026-08-09T10:00:00Z",
+            summary: "Approved by deterministic XCUITest fixture."
+        )
+        evidence.validation.permissions[index] = permission
+        missionControlRoutedEvidence = evidence
+        missionControlGitActionResult = "Approved \(permission.preset.name) in deterministic UI fixture."
+        return true
+    }
+
+    func applyMissionControlDebugCommandCancellation(_ taskCommandRunID: TaskCommandRun.ID) -> Bool {
+        guard var task = missionControlRoutedTask,
+              let index = task.taskCommandRuns.firstIndex(where: { $0.id == taskCommandRunID })
+        else { return false }
+
+        var run = task.taskCommandRuns[index]
+        run.status = "Cancelled"
+        run.outputSummary = "Cancelled by deterministic XCUITest fixture; no process was spawned."
+        run.exitCode = 143
+        run.endedAt = "2026-08-09T10:00:01Z"
+        task.taskCommandRuns[index] = run
+        missionControlRoutedTask = task
+        missionControlGitActionResult = "Cancelled \(run.name) in deterministic UI fixture."
+        return true
+    }
 }
 #endif

@@ -6343,3 +6343,69 @@ Next:
 - Run the pinned public-repository live-model corpus only after explicit
   provider/network/token/cost authorization, then use its measured failure
   taxonomy to choose the next agent/retrieval change.
+
+## 2026-08-09 10:18:30 +0200 (CEST)
+
+Conversation summary:
+
+- The founder asked Forge to continue the next long API-free task after
+  background command/Git routing, with documentation kept current.
+
+Done:
+
+- Added a deterministic generated `ForgeApp.xcodeproj` with a real macOS app
+  host, shared `ForgeAppUI` scheme, and `ForgeAppUITests` UI-test bundle. Three
+  `XCUIApplication` methods cover Mission Control observer authorization and
+  revocation, 1/2 slot changes, review-card navigation, preset approval,
+  active-command cancellation, and Git branch/commit confirmation cancellation.
+- Added stable accessibility identifiers and DEBUG launch-fixture side-effect
+  adapters. The tests traverse the real SwiftUI buttons, menus, alerts, task
+  detail tabs, and routed action cards; fixture adapters only avoid spawning
+  child runtimes/commands after the UI action reaches the shared workspace
+  model.
+- Added `script/test_mission_control_ui.sh`, deterministic Ruby project
+  generation, ignored result/log destinations, a build-only mode, and an
+  explicit first-use macOS authentication diagnostic. `build-for-testing`
+  passes for the complete app and all three UI-test methods. Three consecutive
+  regenerations produced byte-identical project and shared-scheme hashes.
+- Attempted the real UI test run. Xcode built and signed the app and Runner and
+  reached `ForgeAppUITests-Runner`; macOS Local Authentication was cancelled
+  before any method executed. This is recorded as Partial rather than a passing
+  XCUITest result.
+- Upgraded the two-runtime fair-queue soak into an evidence-producing runner.
+  Schema-v1 JSON/Markdown now records requested/actual duration, timestamps,
+  host/Node/OS/architecture and power notes, grant/restart/queue totals,
+  negative controls, failure stack/runtime tails, and whether the temporary
+  failure fixture was preserved. The package six-hour command uses the same
+  wrapper.
+- Proved both report paths. A sandbox loopback denial emitted a Failed report
+  and retained its fixture; an allowed three-second diagnostic then passed six
+  alternating grants, two drain-time restarts, 11 soak restarts, and empty
+  final queues. Added a focused report unit test; the runtime suite is now 21
+  unit-test files.
+- Updated README, project status/gap matrix, P5 TODO, development instructions,
+  macOS design, refactor gate counts, documentation truth assertions, and
+  verification notes. Directional readiness is now polished v1 27-33%, native
+  macOS 83-90%, multi-repository supervision 92-96%, and reliability evidence
+  83-90%.
+- Passed documentation truth, TypeScript build and all 21 runtime unit files,
+  all 20 runtime smoke scripts, all 47 Swift tests, shell/Ruby syntax checks,
+  whitespace validation, the short two-runtime soak, and the Xcode UI-test
+  `build-for-testing` gate.
+
+Not done:
+
+- A passing action-level XCUITest archive still requires approving the local
+  macOS UI-automation authentication prompt in an interactive session.
+- The six-hour soak is runnable and reportable but has not been allowed to run
+  for six hours in this conversation; only the three-second diagnostic is
+  archived. Disconnect/backoff telemetry remains evidence-driven follow-up.
+- Live-model corpus, live OAuth, signed distribution/notarization, WidgetKit,
+  semantic retrieval, accounts, and commercial validation remain separate.
+
+Next:
+
+- Approve and archive the existing three-method XCUITest suite, then run and
+  archive the six-hour supervision soak with explicit AC/sleep conditions.
+- Use any resulting failure to add only the necessary reconnect/backoff or
+  supervisor telemetry rather than speculative instrumentation.

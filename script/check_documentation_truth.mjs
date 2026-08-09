@@ -24,6 +24,7 @@ const [
   swiftWorkspaceModel,
   pullRequestRefreshPolicy,
   swiftTestSources,
+  swiftUITestSources,
   runtimePackageSource,
   routeManifest,
   repositoryBaselineSource,
@@ -44,6 +45,7 @@ const [
   read("apps/macos/Sources/ForgeApp/WorkspaceModel.swift"),
   read("apps/macos/Sources/ForgeApp/PullRequestRefreshPolicy.swift"),
   readSwiftTestSources(),
+  readSwiftUITestSources(),
   read("runtime/package.json"),
   read("runtime/src/http/routeManifest.ts"),
   read("docs/reliability/alpha-repository-baseline.json"),
@@ -126,10 +128,17 @@ check("route manifest count remains explicit", () => {
 const unitTestCount = (await readdir(resolve(repoRoot, "runtime", "scripts")))
   .filter((name) => name.endsWith("-test.mjs")).length;
 const swiftTestCount = [...swiftTestSources.matchAll(/^\s*func test[A-Z]\w*\s*\(/gm)].length;
+const swiftUITestCount = [...swiftUITestSources.matchAll(/^\s*func test[A-Z]\w*\s*\(/gm)].length;
 
 check("documented Swift test count matches the native test sources", () => {
   assert.match(development, new RegExp(`\\b${swiftTestCount} current tests\\b`));
   assert.match(projectStatus, new RegExp(`all ${swiftTestCount} Swift tests`));
+});
+
+check("current runtime and XCUITest counts are documented", () => {
+  assert.match(projectStatus, new RegExp(`\\b${unitTestCount} runtime unit files\\b`));
+  assert.match(projectStatus, new RegExp(`\\b${swiftUITestCount} compiled XCUITest methods\\b`));
+  assert.match(development, new RegExp(`\\b${swiftUITestCount} test methods\\b`));
 });
 
 check("known completed capabilities are not listed as future README work", () => {
@@ -204,6 +213,13 @@ console.log(`- Runtime: ${routeCount} routes, ${smokeCount} smoke scripts, ${uni
 
 async function readSwiftTestSources() {
   const directory = "Tests/ForgeAppTests";
+  const names = (await readdir(resolve(repoRoot, directory)))
+    .filter((name) => name.endsWith("Tests.swift"));
+  return (await Promise.all(names.map((name) => read(`${directory}/${name}`)))).join("\n");
+}
+
+async function readSwiftUITestSources() {
+  const directory = "Tests/ForgeAppUITests";
   const names = (await readdir(resolve(repoRoot, directory)))
     .filter((name) => name.endsWith("Tests.swift"));
   return (await Promise.all(names.map((name) => read(`${directory}/${name}`)))).join("\n");
