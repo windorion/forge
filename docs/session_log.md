@@ -6504,16 +6504,18 @@ Done:
 - Rebuilt the app host and UI-test bundle locally with signing disabled and the
   older Swift 6.1 isolation behavior explicitly enabled; `build-for-testing`
   passed.
+- Pushed the repair and confirmed workflow `31328377745` fully green: the
+  hosted Xcode 16.4 Mission Control XCUITest build and the 47-test SwiftPM
+  coverage job both passed in 1 minute 43 seconds.
 
 Not done:
 
-- The actor-isolated UI-test repair still needs a fresh hosted Xcode 16.4
-  result after push.
 - Interactive action-level XCUITest evidence and the six-hour soak remain
   separate follow-up gates.
 
 Next:
 
-- Push the focused UI-test repair and wait for both GitHub Actions jobs to pass.
-- Preserve the compile-only/authenticated-run distinction while continuing the
-  long-duration Mission Control reliability work.
+- Obtain the interactive action-level archive, then continue the long-duration
+  Mission Control reliability work with the reportable six-hour soak.
+- Preserve the compile-only/authenticated-run distinction when updating the
+  reliability evidence and completion estimates.
