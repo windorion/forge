@@ -6484,3 +6484,36 @@ Next:
   any hosted Xcode compatibility failure rather than weakening the job.
 - Then obtain the interactive action-level archive and run the reportable
   six-hour two-runtime soak under documented power/sleep conditions.
+
+## 2026-08-09 20:10:35 +0200 (CEST)
+
+Conversation summary:
+
+- Followed the first hosted XCUITest compile-gate result and repaired its Xcode
+  16.4 concurrency incompatibility.
+
+Done:
+
+- SwiftPM remained green in workflow `31328172867`, but the independent UI-test
+  bundle job failed before linking. Its complete log showed that Xcode 16.4's
+  XCUIAutomation queries and elements are MainActor-isolated while
+  `MissionControlUITests` was declared in a nonisolated context.
+- Marked the UI-test case `@MainActor`, matching the execution contract of all
+  three methods and their launch, query, alert, and assertion helpers. No
+  compiler flag, concurrency escape hatch, or CI weakening was committed.
+- Rebuilt the app host and UI-test bundle locally with signing disabled and the
+  older Swift 6.1 isolation behavior explicitly enabled; `build-for-testing`
+  passed.
+
+Not done:
+
+- The actor-isolated UI-test repair still needs a fresh hosted Xcode 16.4
+  result after push.
+- Interactive action-level XCUITest evidence and the six-hour soak remain
+  separate follow-up gates.
+
+Next:
+
+- Push the focused UI-test repair and wait for both GitHub Actions jobs to pass.
+- Preserve the compile-only/authenticated-run distinction while continuing the
+  long-duration Mission Control reliability work.
