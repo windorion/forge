@@ -39,7 +39,15 @@ retained plan, edit, command, validation, and event evidence is not deleted.
 Audit exports do not create a second persistence authority. The runtime builds
 versioned Markdown or JSON on demand from the current task snapshot, selects
 auditable metadata, omits proposal diff bodies/provider configuration, and
-redacts known credential patterns before returning the file envelope.
+redacts known credential patterns before returning the file envelope. The
+envelope now includes SHA-256 for the exported content and the exact source
+task snapshot plus its `updatedAt`, forming a revision-bound export receipt.
+
+Schema v5 adds `task_history_purges`, an append-only metadata table for
+explicit command-output purges. The receipt records task, scope, export time,
+source hash, purge time, affected-record count, removed-byte count, and the
+same bounded receipt JSON retained on the task snapshot. Task replacement and
+receipt insertion share one SQLite transaction.
 
 This is intentionally smaller than the full conceptual schema below. Future
 migrations should split runs, messages, tool calls, commands, file changes,
@@ -316,14 +324,45 @@ Do not embed secrets or ignored files.
 
 ## Retention Rules
 
-- Keep task history by default.
+- Keep task history by default. There is no timer, age threshold, background
+  cleanup, or startup purge while product retention policy is undecided.
+- Each task-command run is already bounded to at most 80 output chunks and
+  24,000 retained characters; each chunk is at most 4,000 characters.
+- `GET /tasks/:taskID/history-retention-preview` reports the current local
+  policy and exactly how many command/validation records, chunks, and bytes
+  can be removed.
+- `POST /tasks/:taskID/purge-history` supports only `CommandOutput` and only
+  for Completed, Failed, or Cancelled tasks. It requires the exact
+  `PurgeTaskHistory` confirmation, current task `updatedAt`, and a SHA-256
+  receipt from a current audit export. Stale or fabricated receipts fail
+  before mutation.
+- Command-output purge removes task-command chunks and command/validation
+  output summaries. It preserves task state, commands, statuses, exit codes,
+  timestamps, approvals, events, proposal evidence, and a durable purge
+  receipt. The macOS Audit surface unlocks the action only after the user has
+  actually saved the current export in that app session.
 - Allow users to delete workspace memory.
-- Allow users to purge command logs.
 - Respect `.gitignore` and future Forge ignore rules.
 - Do not retain sensitive command output forever without controls.
 
+Still undecided: default retention duration, workspace-wide purge, event/tool
+history compaction, export/purge of repository memory, and commercial privacy
+policy. The current implementation deliberately does not infer those choices.
+
 ## Migration Rules
 
-- Database migrations must be versioned.
+- Database migrations are ordered in `runtime/src/databaseMigrations.ts` and
+  recorded individually in `schema_migrations` only after their transaction
+  commits.
+- Writable primary runtimes migrate missing supported versions in order.
+  Immediately prior schema v4 is rehearsed in `task-store-test.mjs`: the v5
+  receipt table is recreated while the existing task payload survives.
+- Read-only observers never migrate. They reject an older database with an
+  actionable instruction to start the primary runtime first, then open the
+  migrated database normally.
+- A database with a newer schema or a mismatched recorded migration name fails
+  closed rather than guessing.
 - Migrations must be reversible when practical.
-- Backups should be considered before destructive migrations.
+- Backups are required before a future destructive schema migration. Schema v5
+  is additive; the only destructive data operation is the separately reviewed,
+  export-receipt-gated command-output purge.

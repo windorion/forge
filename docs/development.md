@@ -91,7 +91,27 @@ The full-page Audit Log's export control now fetches the runtime's read-only
 JSON. The exported record includes approvals, timeline, loop/tool/command/
 validation evidence, edit transaction metadata, and task cancellation
 dispositions; known credential patterns are redacted and the save panel asks
-the user to review the local file before sharing it.
+the user to review the local file before sharing it. Successful save records a
+revision-bound SHA-256 receipt in app memory. For terminal tasks, the Audit
+surface then enables a destructive confirmation that clears only exported
+task-command chunks and command/validation output summaries. A cancelled save,
+stale task revision, mismatched receipt, active task, or observer runtime cannot
+purge. Status, exit codes, timestamps, approvals, events, and a schema-v5 purge
+receipt remain.
+
+Exercise the API-free retention and prior-schema paths with:
+
+```bash
+cd runtime
+npm run smoke:task-retention
+npm run test:unit
+```
+
+The first command covers preview, forged receipt rejection, explicit purge,
+SQLite receipt persistence, and restart recovery through real HTTP. The unit
+suite rehearses schema v4 → v5 while preserving an existing task; a read-only
+observer intentionally refuses to migrate and becomes readable after a primary
+runtime upgrades the database.
 
 Mission Control (`⌘⇧M`) opens the exclusive handoff `4a` 1240px three-column
 surface while preserving the main task workspace state underneath. The primary column uses
@@ -907,7 +927,7 @@ routing, Mission Control access-policy negatives, and SSE frame parsing:
 swift test --enable-code-coverage
 ```
 
-This remains an early native test baseline. The 55 current tests include
+This remains an early native test baseline. The 56 current tests include
 three focused GitHub Device Flow tests covering local Client ID configuration,
 GitHub `slow_down` interval handling, user validation before token persistence,
 connected-state restoration, and actionable HTTP failures. The broader suite
@@ -964,7 +984,7 @@ cd runtime && npm run campaign:provider-reliability
 ```
 
 Before a release-shaped change, run every `smoke:*` script — the full suite is
-20 scripts and takes a few minutes. Both reliability campaigns are
+21 scripts and takes a few minutes. Both reliability campaigns are
 intentionally separate from `smoke:all`: each creates four isolated Git
 repositories and emits a staged scorecard. Use the corresponding `:baseline`
 variant only when intentionally refreshing durable evidence in
@@ -1055,8 +1075,11 @@ table, versioned reliability JSON, route manifest, and package scripts. See
   IDs, cancellation is limited to active runtime-owned task command runs by run
   id, and reviewed command-sourced self-fixes can be explicitly rerun through
   stored rerun evidence.
-- SQLite currently stores full task snapshots plus basic task index fields; the
-  full normalized runs/messages/tool-calls schema is still ahead.
+- SQLite schema v5 stores full task snapshots plus task/index fields and
+  append-only command-output purge receipts. Migrations are ordered and
+  transactional, and v4 → v5 recovery is rehearsed. The full normalized
+  runs/messages/tool-calls schema, workspace-wide retention policy, and
+  destructive-migration backup flow are still ahead.
 - Repository context remains bounded, but it now has durable file metadata,
   lightweight symbols, and trigram text indexes with live-scan verification.
   It still does not use Tree-sitter, embeddings, dependency graphs, or

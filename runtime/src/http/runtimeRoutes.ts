@@ -118,7 +118,7 @@ function rejectMutationOfCancelledTask(
 ): void {
   if (method !== "POST") return;
   const match = /^\/tasks\/([^/]+)\/([^/]+)$/.exec(pathname);
-  if (!match || match[2] === "cancel") return;
+  if (!match || match[2] === "cancel" || match[2] === "purge-history") return;
   let taskID: string;
   try {
     taskID = decodeURIComponent(match[1]);

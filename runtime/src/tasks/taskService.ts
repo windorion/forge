@@ -111,6 +111,7 @@ async function createTask(input: CreateTaskRequest): Promise<ForgeTask> {
     agentRunLoops: [],
     agentRunSteps: [],
     taskCommandRuns: [],
+    historyPurges: [],
     commandRerunEvidence: [],
     validationRuns: [],
     validationRepairBriefs: [],

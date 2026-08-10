@@ -491,6 +491,17 @@ export interface TaskCommandRun {
   endedAt?: string;
 }
 
+export interface TaskHistoryPurgeReceipt {
+  id: string;
+  scope: "CommandOutput";
+  exportedAt: string;
+  exportSourceSha256: string;
+  purgedAt: string;
+  recordsAffected: number;
+  bytesRemoved: number;
+  summary: string;
+}
+
 export interface CommandRerunEvidence {
   id: string;
   sourceTaskCommandRunID: string;
@@ -1063,6 +1074,7 @@ export interface ForgeTask {
   agentRunLoops: AgentRunLoop[];
   agentRunSteps: AgentRunStep[];
   taskCommandRuns: TaskCommandRun[];
+  historyPurges?: TaskHistoryPurgeReceipt[];
   commandRerunEvidence: CommandRerunEvidence[];
   validationRuns: ValidationRun[];
   validationRepairBriefs: ValidationRepairBrief[];
@@ -1195,6 +1207,17 @@ export interface CancelTaskCommandRequest {
 
 export interface CancelTaskRequest {
   note?: string;
+}
+
+export interface PurgeTaskHistoryRequest {
+  confirmation?: string;
+  expectedUpdatedAt?: string;
+  scope?: "CommandOutput";
+  exportReceipt?: {
+    generatedAt?: string;
+    sourceTaskUpdatedAt?: string;
+    sourceSha256?: string;
+  };
 }
 
 export interface RerunRepairCommandRequest {

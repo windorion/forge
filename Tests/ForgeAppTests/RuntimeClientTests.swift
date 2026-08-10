@@ -134,6 +134,9 @@ final class RuntimeClientTests: XCTestCase {
                   "contentType":"text/markdown",
                   "content":"# Forge Task Audit",
                   "generatedAt":"2026-08-08T12:00:00Z",
+                  "contentSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "sourceTaskUpdatedAt":"2026-08-08T11:59:00Z",
+                  "sourceSha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                   "redactionSummary":"Known credential patterns are redacted."
                 }
                 """
@@ -145,10 +148,63 @@ final class RuntimeClientTests: XCTestCase {
 
         XCTAssertEqual(export.filename, "forge-task-task-1-audit.md")
         XCTAssertEqual(export.content, "# Forge Task Audit")
+        XCTAssertEqual(export.sourceTaskUpdatedAt, "2026-08-08T11:59:00Z")
+        XCTAssertEqual(export.sourceSha256, String(repeating: "b", count: 64))
         let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(recorder.lastRequest?.url), resolvingAgainstBaseURL: false))
         XCTAssertEqual(components.path, "/api/tasks/task-1/audit-export")
         XCTAssertEqual(components.queryItems, [URLQueryItem(name: "format", value: "markdown")])
         XCTAssertEqual(recorder.lastRequest?.httpMethod, "GET")
+    }
+
+    func testHistoryRetentionPreviewAndPurgeKeepReceiptInPostBody() async throws {
+        let recorder = RequestRecorder()
+        let (client, session) = makeClient { request in
+            recorder.record(request)
+            if request.httpMethod == "GET" {
+                return Self.response(
+                    request,
+                    status: 200,
+                    body: """
+                    {
+                      "policy":{"taskHistory":"KeepByDefault","automaticPurge":false,"supportedScopes":["CommandOutput"],"exportRequired":true},
+                      "eligible":true,"taskID":"task-1","taskStatus":"Completed","taskUpdatedAt":"2026-08-08T11:59:00Z",
+                      "commandRunsWithOutput":1,"commandOutputChunks":2,"validationCommandsWithOutput":1,
+                      "removableBytes":1024,"priorPurges":0
+                    }
+                    """
+                )
+            }
+            return Self.response(request, status: 409, body: #"{"error":"contract probe"}"#)
+        }
+        defer { session.invalidateAndCancel() }
+
+        let preview = try await client.taskHistoryRetentionPreview(taskID: "task-1")
+        XCTAssertTrue(preview.eligible)
+        XCTAssertFalse(preview.policy.automaticPurge)
+        XCTAssertEqual(preview.removableBytes, 1024)
+        XCTAssertEqual(recorder.lastRequest?.url?.path, "/api/tasks/task-1/history-retention-preview")
+        XCTAssertEqual(recorder.lastRequest?.httpMethod, "GET")
+
+        let receipt = TaskHistoryPurgeRequest.ExportReceipt(
+            generatedAt: "2026-08-08T12:00:00Z",
+            sourceTaskUpdatedAt: preview.taskUpdatedAt,
+            sourceSha256: String(repeating: "a", count: 64)
+        )
+        _ = try? await client.purgeTaskHistory(
+            taskID: "task-1",
+            requestBody: .init(expectedUpdatedAt: preview.taskUpdatedAt, exportReceipt: receipt)
+        )
+        let request = try XCTUnwrap(recorder.lastRequest)
+        XCTAssertEqual(request.url?.path, "/api/tasks/task-1/purge-history")
+        XCTAssertNil(request.url?.query)
+        XCTAssertEqual(request.httpMethod, "POST")
+        let body = try jsonObject(try XCTUnwrap(recorder.lastBody))
+        XCTAssertEqual(body["confirmation"] as? String, "PurgeTaskHistory")
+        XCTAssertEqual(body["expectedUpdatedAt"] as? String, preview.taskUpdatedAt)
+        XCTAssertEqual(body["scope"] as? String, "CommandOutput")
+        let exportReceipt = try XCTUnwrap(body["exportReceipt"] as? [String: Any])
+        XCTAssertEqual(exportReceipt["sourceSha256"] as? String, String(repeating: "a", count: 64))
+        XCTAssertEqual(exportReceipt["sourceTaskUpdatedAt"] as? String, preview.taskUpdatedAt)
     }
 
     func testHTTPFailuresPreferJSONErrorThenPlainText() async throws {

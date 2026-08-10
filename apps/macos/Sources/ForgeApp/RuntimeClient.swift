@@ -47,6 +47,33 @@ struct RuntimeClient {
         return try JSONDecoder().decode(TaskAuditExportEnvelope.self, from: data)
     }
 
+    func taskHistoryRetentionPreview(taskID: ForgeTask.ID) async throws -> TaskHistoryRetentionPreview {
+        let url = baseURL
+            .appending(path: "tasks")
+            .appending(path: taskID)
+            .appending(path: "history-retention-preview")
+        let (data, response) = try await session.data(from: url)
+        try validate(response, data: data)
+        return try JSONDecoder().decode(TaskHistoryRetentionPreview.self, from: data)
+    }
+
+    func purgeTaskHistory(
+        taskID: ForgeTask.ID,
+        requestBody: TaskHistoryPurgeRequest
+    ) async throws -> TaskHistoryPurgeResult {
+        let url = baseURL
+            .appending(path: "tasks")
+            .appending(path: taskID)
+            .appending(path: "purge-history")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(requestBody)
+        let (data, response) = try await session.data(for: request)
+        try validate(response, data: data)
+        return try JSONDecoder().decode(TaskHistoryPurgeResult.self, from: data)
+    }
+
     /// Trigger a durable repository re-index (incremental) and return status.
     @discardableResult
     func rebuildIndex() async throws -> RuntimeIndexInfo {

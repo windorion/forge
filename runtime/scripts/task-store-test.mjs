@@ -19,6 +19,7 @@ try {
   const store = new SqliteTaskStore(dbPath);
   ok(store.loadTasks().length === 0, "new store is empty");
   ok(store.getIndexMeta().lastIndexedAt === null, "new index metadata is empty");
+  ok(store.schemaStatus().currentVersion === 5 && store.schemaStatus().migrations.length === 5, "new store applies all versioned migrations");
 
   const legacyTask = {
     id: "legacy",
@@ -57,6 +58,23 @@ try {
     editProposal: undefined
   });
   ok(store.loadTasks().map((task) => task.id).join(",") === "newer,legacy", "tasks load newest first");
+
+  const purgeReceipt = {
+    id: "purge-1",
+    scope: "CommandOutput",
+    exportedAt: "2026-07-31T11:30:00Z",
+    exportSourceSha256: "a".repeat(64),
+    purgedAt: "2026-07-31T11:31:00Z",
+    recordsAffected: 2,
+    bytesRemoved: 512,
+    summary: "Purged two command output records after export."
+  };
+  store.saveTaskWithHistoryPurge({
+    ...legacyTask,
+    updatedAt: purgeReceipt.purgedAt,
+    historyPurges: [purgeReceipt]
+  }, purgeReceipt);
+  ok(store.loadTaskHistoryPurgeReceipts("legacy")[0].bytesRemoved === 512, "task update and purge receipt persist atomically");
 
   store.replaceSymbolsForFile("src/a.ts", [
     { kind: "class", name: "Widget", line: 4 },
@@ -108,6 +126,27 @@ try {
   assert.throws(() => missingReadOnly.setIndexMeta({ lastIndexedAt: indexedAt, gitRoot: null }), /Repository index is read-only/);
   count += 1;
   missingReadOnly.close();
+
+  const priorSchemaPath = join(tempRoot, "prior-schema", "forge.sqlite");
+  const priorStore = new SqliteTaskStore(priorSchemaPath);
+  priorStore.saveTask({ ...legacyTask, id: "prior-v4", title: "Prior schema task" });
+  priorStore.close();
+  const priorRaw = new DatabaseSync(priorSchemaPath);
+  priorRaw.exec(`
+    DROP TABLE task_history_purges;
+    DELETE FROM schema_migrations WHERE version = 5;
+  `);
+  priorRaw.close();
+  assert.throws(
+    () => new SqliteTaskStore(priorSchemaPath, { readOnly: true }),
+    /requires migration 5.*primary runtime first/
+  );
+  count += 1;
+  const migratedPrior = new SqliteTaskStore(priorSchemaPath);
+  ok(migratedPrior.schemaStatus().currentVersion === 5, "writable runtime migrates the immediately prior schema to v5");
+  ok(migratedPrior.loadTasks()[0].id === "prior-v4", "prior-schema task payload survives migration");
+  ok(migratedPrior.loadTaskHistoryPurgeReceipts("prior-v4").length === 0, "new receipt table is readable after prior-schema recovery");
+  migratedPrior.close();
 
   const raw = new DatabaseSync(dbPath);
   raw.prepare("UPDATE tasks SET payload_json = ? WHERE id = ?").run(new Uint8Array([1, 2, 3]), "legacy");

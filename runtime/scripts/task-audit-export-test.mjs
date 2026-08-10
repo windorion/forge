@@ -58,6 +58,9 @@ const task = {
 const json = buildTaskAuditExport(task, "json", "2026-08-08T11:00:00.000Z");
 assert.equal(json.filename, "forge-task-task-audit-test-audit.json");
 assert.equal(json.contentType, "application/json");
+assert.match(json.contentSha256, /^[a-f0-9]{64}$/);
+assert.match(json.sourceSha256, /^[a-f0-9]{64}$/);
+assert.equal(json.sourceTaskUpdatedAt, task.updatedAt);
 assert(!json.content.includes(secret), "JSON export leaked a known token pattern.");
 const parsed = JSON.parse(json.content);
 assert.equal(parsed.schemaVersion, 1);
@@ -68,6 +71,8 @@ assert(parsed.toolCalls[0].input.includes("[REDACTED]"));
 
 const markdown = buildTaskAuditExport(task, "markdown", "2026-08-08T11:00:00.000Z");
 assert.equal(markdown.filename, "forge-task-task-audit-test-audit.md");
+assert.match(markdown.contentSha256, /^[a-f0-9]{64}$/);
+assert.equal(markdown.sourceSha256, json.sourceSha256);
 assert(markdown.content.includes("## Cancellation"));
 assert(markdown.content.includes("## Human Approvals"));
 assert(markdown.content.includes("## Event Timeline"));

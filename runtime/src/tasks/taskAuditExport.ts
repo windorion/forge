@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { ForgeTask } from "../types.js";
 
 export type TaskAuditExportFormat = "json" | "markdown";
@@ -7,6 +8,9 @@ export interface TaskAuditExportEnvelope {
   contentType: "application/json" | "text/markdown";
   content: string;
   generatedAt: string;
+  contentSha256: string;
+  sourceTaskUpdatedAt: string;
+  sourceSha256: string;
   redactionSummary: string;
 }
 
@@ -17,21 +21,23 @@ export function buildTaskAuditExport(
 ): TaskAuditExportEnvelope {
   const audit = buildAuditRecord(task, generatedAt);
   const stem = `forge-task-${safeFilenamePart(task.id)}-audit`;
-  return format === "markdown"
-    ? {
-        filename: `${stem}.md`,
-        contentType: "text/markdown",
-        content: renderAuditMarkdown(audit),
-        generatedAt,
-        redactionSummary: audit.redactionSummary
-      }
-    : {
-        filename: `${stem}.json`,
-        contentType: "application/json",
-        content: JSON.stringify(audit, null, 2),
-        generatedAt,
-        redactionSummary: audit.redactionSummary
-      };
+  const content = format === "markdown"
+    ? renderAuditMarkdown(audit)
+    : JSON.stringify(audit, null, 2);
+  return {
+    filename: `${stem}.${format === "markdown" ? "md" : "json"}`,
+    contentType: format === "markdown" ? "text/markdown" : "application/json",
+    content,
+    generatedAt,
+    contentSha256: sha256(content),
+    sourceTaskUpdatedAt: task.updatedAt,
+    sourceSha256: taskAuditSourceSha256(task),
+    redactionSummary: audit.redactionSummary
+  };
+}
+
+export function taskAuditSourceSha256(task: ForgeTask): string {
+  return sha256(JSON.stringify(task));
 }
 
 function buildAuditRecord(task: ForgeTask, generatedAt: string) {
@@ -71,6 +77,7 @@ function buildAuditRecord(task: ForgeTask, generatedAt: string) {
     agentRunSteps: task.agentRunSteps,
     toolCalls: task.toolCalls,
     taskCommandRuns: task.taskCommandRuns,
+    historyPurges: task.historyPurges ?? [],
     validationRuns: task.validationRuns,
     editProposals: task.editProposalRevisions.map((proposal) => ({
       id: proposal.id,
@@ -204,4 +211,8 @@ function redactText(value: string): string {
     .replace(/\bgh[pousr]_[A-Za-z0-9_]{12,}\b/g, "[REDACTED]")
     .replace(/\bsk-[A-Za-z0-9_-]{12,}\b/g, "[REDACTED]")
     .replace(/\b(api[_-]?key|access[_-]?token|password|secret)\s*[:=]\s*([^\s,;]+)/gi, "$1=[REDACTED]");
+}
+
+function sha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
 }

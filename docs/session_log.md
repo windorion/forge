@@ -6698,3 +6698,65 @@ Next:
 - Push the CI repair and watch both hosted jobs to completion.
 - Continue the roadmap with the six-hour API-free Mission Control soak while
   leaving action-level UI automation for an explicitly unattended desktop.
+
+## 2026-08-10 22:41:00 +0200 (CEST)
+
+Conversation summary:
+
+- Completed the roadmap's first runtime history/retention/migration exit slice
+  using background code and tests only, while a separate six-hour Mission
+  Control soak continued without foreground UI automation.
+
+Done:
+
+- Pushed the supervisor exit-evidence stabilization as `3b958c0`; hosted
+  GitHub Actions run `31428319626` passed after the prior transient-state test
+  failure.
+- Replaced implicit schema creation with five named, ordered SQLite migrations,
+  one transaction per version. Added fail-closed newer-schema detection and
+  required old read-only observers to wait for a primary runtime migration.
+- Added schema-v5 append-only task-history purge receipts and an atomic write
+  that persists the purged task snapshot and receipt together.
+- Rehearsed the prior shipped v4 schema: seeded a task, downgraded the fixture,
+  proved observer refusal, migrated through the primary runtime, and verified
+  task survival plus receipt-table recovery.
+- Added keep-by-default command-output retention with no automatic deletion.
+  Preview and purge APIs only allow terminal tasks, require exact confirmation,
+  current `updatedAt`, and a matching SHA-256 audit-export receipt. Purge removes
+  bounded output bodies while retaining status, exit code, timestamps, events,
+  approvals, and an auditable receipt.
+- Extended Markdown/JSON audit export envelopes with content/source SHA-256 and
+  source-revision evidence. The native Audit surface now previews retained
+  output and unlocks destructive confirmation only after a current export was
+  successfully saved by the user.
+- Added pure retention coverage, real HTTP/SQLite/restart fixtures, migration
+  tests, route-contract assertions, and Swift request-contract tests.
+- Passed documentation truth (61 routes, 21 smoke scripts, 22 runtime unit
+  files, 56 Swift tests), TypeScript check/build, all 22 unit files, all 21
+  smoke scripts, all 56 Swift tests, whitespace checks, and the signing-disabled
+  XCUITest `build-for-testing` gate. The build-only UI gate did not launch the
+  app or run UI actions.
+- Started the reportable 21,600-second Mission Control fairness soak under AC
+  power with system sleep disabled. The first sandboxed loopback attempt failed
+  before timing and was preserved as failure evidence; the permitted background
+  rerun remains active and silent as expected.
+- Updated README, roadmap, TODO, project status, database, runtime, security,
+  local-first, development, and server architecture documentation. Trust/runtime
+  foundation is now estimated at 92-96%; commercial beta at 22-27%.
+
+Not done:
+
+- The six-hour soak has not reached its duration yet, so no completion claim or
+  final report review is recorded. The complete action-level XCUITest archive
+  remains deferred because foreground desktop automation is not authorized.
+- Workspace/event/tool/memory retention duration, workspace-wide export/purge,
+  destructive-migration backup/restore, approval expiry, live-model corpus,
+  signed distribution, and account/commercial policy remain roadmap gaps.
+
+Next:
+
+- Let the six-hour soak finish, inspect its generated report, and record only
+  the measured result and power conditions.
+- Continue the API-free roadmap with destructive-migration backup/restore proof
+  or performance/resource budgets; reserve the live-model Alpha corpus for a
+  user-approved provider credential and explicit cost budget.

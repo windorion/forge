@@ -226,7 +226,60 @@ struct TaskAuditExportEnvelope: Codable, Hashable {
     var contentType: String
     var content: String
     var generatedAt: String
+    var contentSha256: String?
+    var sourceTaskUpdatedAt: String?
+    var sourceSha256: String?
     var redactionSummary: String
+}
+
+struct TaskHistoryRetentionPolicy: Codable, Hashable {
+    var taskHistory: String
+    var automaticPurge: Bool
+    var supportedScopes: [String]
+    var exportRequired: Bool
+}
+
+struct TaskHistoryRetentionPreview: Codable, Hashable {
+    var policy: TaskHistoryRetentionPolicy
+    var eligible: Bool
+    var blocker: String?
+    var taskID: String
+    var taskStatus: String
+    var taskUpdatedAt: String
+    var commandRunsWithOutput: Int
+    var commandOutputChunks: Int
+    var validationCommandsWithOutput: Int
+    var removableBytes: Int
+    var priorPurges: Int
+}
+
+struct TaskHistoryPurgeReceipt: Codable, Hashable, Identifiable {
+    var id: String
+    var scope: String
+    var exportedAt: String
+    var exportSourceSha256: String
+    var purgedAt: String
+    var recordsAffected: Int
+    var bytesRemoved: Int
+    var summary: String
+}
+
+struct TaskHistoryPurgeResult: Codable, Hashable {
+    var task: ForgeTask
+    var receipt: TaskHistoryPurgeReceipt
+}
+
+struct TaskHistoryPurgeRequest: Encodable {
+    struct ExportReceipt: Encodable {
+        var generatedAt: String
+        var sourceTaskUpdatedAt: String
+        var sourceSha256: String
+    }
+
+    var confirmation = "PurgeTaskHistory"
+    var expectedUpdatedAt: String
+    var scope = "CommandOutput"
+    var exportReceipt: ExportReceipt
 }
 
 struct TaskQueueEntry: Identifiable, Codable, Hashable {

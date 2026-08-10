@@ -1,11 +1,10 @@
 import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
-import type { ForgeTask } from "./types.js";
+import type { ForgeTask, TaskHistoryPurgeReceipt } from "./types.js";
 import type { IndexedFile } from "./repositoryIndex.js";
 import type { ExtractedSymbol } from "./symbolExtract.js";
-
-const SCHEMA_VERSION = 4;
+import { DATABASE_MIGRATIONS, DATABASE_SCHEMA_VERSION } from "./databaseMigrations.js";
 
 export type StoredSymbol = ExtractedSymbol & { path: string };
 
@@ -15,6 +14,7 @@ export class SqliteTaskStore {
   private readonly db: DatabaseSync;
   private readonly selectTasks: StatementSync;
   private readonly upsertTask?: StatementSync;
+  private readonly insertHistoryPurge?: StatementSync;
   private readonly readOnly: boolean;
 
   constructor(dbPath: string, options: { readOnly?: boolean } = {}) {
@@ -30,7 +30,14 @@ export class SqliteTaskStore {
       : this.readOnly
         ? new DatabaseSync(":memory:")
         : new DatabaseSync(dbPath);
-    if (!existingReadOnlyDatabase) {
+    if (existingReadOnlyDatabase) {
+      try {
+        this.validateSchema();
+      } catch (error) {
+        this.db.close();
+        throw error;
+      }
+    } else {
       this.applySchema();
     }
     this.selectTasks = this.db.prepare("SELECT payload_json FROM tasks ORDER BY updated_at DESC");
@@ -56,6 +63,12 @@ export class SqliteTaskStore {
           updated_at = excluded.updated_at,
           payload_json = excluded.payload_json
       `);
+      this.insertHistoryPurge = this.db.prepare(`
+        INSERT INTO task_history_purges (
+          id, task_id, scope, exported_at, export_source_sha256,
+          purged_at, records_affected, bytes_removed, details_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
     }
   }
 
@@ -67,7 +80,59 @@ export class SqliteTaskStore {
     if (!this.upsertTask) {
       throw new Error("Task store is read-only in observer runtime mode.");
     }
-    this.upsertTask.run(
+    this.runTaskUpsert(task);
+  }
+
+  saveTaskWithHistoryPurge(task: ForgeTask, receipt: TaskHistoryPurgeReceipt): void {
+    if (!this.upsertTask || !this.insertHistoryPurge) {
+      throw new Error("Task store is read-only in observer runtime mode.");
+    }
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.runTaskUpsert(task);
+      this.insertHistoryPurge.run(
+        receipt.id,
+        task.id,
+        receipt.scope,
+        receipt.exportedAt,
+        receipt.exportSourceSha256,
+        receipt.purgedAt,
+        receipt.recordsAffected,
+        receipt.bytesRemoved,
+        JSON.stringify(receipt)
+      );
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  loadTaskHistoryPurgeReceipts(taskID: string): TaskHistoryPurgeReceipt[] {
+    return this.db
+      .prepare("SELECT details_json FROM task_history_purges WHERE task_id = ? ORDER BY purged_at")
+      .all(taskID)
+      .map((row) => JSON.parse(String(row.details_json)) as TaskHistoryPurgeReceipt);
+  }
+
+  schemaStatus(): { currentVersion: number; expectedVersion: number; migrations: Array<{ version: number; name: string; appliedAt: string }> } {
+    const migrations = this.db
+      .prepare("SELECT version, name, applied_at FROM schema_migrations ORDER BY version")
+      .all()
+      .map((row) => ({
+        version: Number(row.version),
+        name: String(row.name),
+        appliedAt: String(row.applied_at)
+      }));
+    return {
+      currentVersion: migrations.at(-1)?.version ?? 0,
+      expectedVersion: DATABASE_SCHEMA_VERSION,
+      migrations
+    };
+  }
+
+  private runTaskUpsert(task: ForgeTask): void {
+    this.upsertTask!.run(
       task.id,
       task.title,
       task.objective,
@@ -87,70 +152,70 @@ export class SqliteTaskStore {
     this.db.exec(`
       PRAGMA journal_mode = WAL;
       PRAGMA foreign_keys = ON;
-
       CREATE TABLE IF NOT EXISTS schema_migrations (
         version INTEGER PRIMARY KEY,
         name TEXT NOT NULL,
         applied_at TEXT NOT NULL
       );
-
-      CREATE TABLE IF NOT EXISTS tasks (
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        objective TEXT NOT NULL,
-        status TEXT NOT NULL,
-        current_phase TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        payload_json TEXT NOT NULL
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_tasks_updated_at ON tasks(updated_at DESC);
-
-      CREATE TABLE IF NOT EXISTS repo_index (
-        path TEXT PRIMARY KEY,
-        language TEXT NOT NULL,
-        byte_size INTEGER NOT NULL,
-        line_count INTEGER NOT NULL,
-        content_hash TEXT NOT NULL,
-        indexed_at TEXT NOT NULL
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_repo_index_language ON repo_index(language);
-
-      CREATE TABLE IF NOT EXISTS repo_index_meta (
-        id INTEGER PRIMARY KEY CHECK (id = 1),
-        last_indexed_at TEXT,
-        git_root TEXT
-      );
-
-      CREATE TABLE IF NOT EXISTS repo_symbols (
-        path TEXT NOT NULL,
-        kind TEXT NOT NULL,
-        name TEXT NOT NULL,
-        line INTEGER NOT NULL
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_repo_symbols_name ON repo_symbols(name);
-      CREATE INDEX IF NOT EXISTS idx_repo_symbols_path ON repo_symbols(path);
-
-      CREATE TABLE IF NOT EXISTS repo_trigrams (
-        path TEXT NOT NULL,
-        trigram TEXT NOT NULL,
-        PRIMARY KEY (path, trigram)
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_repo_trigrams_trigram ON repo_trigrams(trigram);
-
-      INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
-      VALUES (1, 'create_task_store', datetime('now'));
-      INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
-      VALUES (2, 'create_repo_index', datetime('now'));
-      INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
-      VALUES (3, 'create_repo_symbols', datetime('now'));
-      INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
-      VALUES (4, 'create_repo_trigrams', datetime('now'));
     `);
+    const applied = new Map(
+      this.db.prepare("SELECT version, name FROM schema_migrations").all()
+        .map((row) => [Number(row.version), String(row.name)] as const)
+    );
+    const newestApplied = Math.max(0, ...applied.keys());
+    if (newestApplied > DATABASE_SCHEMA_VERSION) {
+      throw new Error(
+        `Forge database schema ${newestApplied} is newer than this runtime supports (${DATABASE_SCHEMA_VERSION}).`
+      );
+    }
+    for (const migration of DATABASE_MIGRATIONS) {
+      const appliedName = applied.get(migration.version);
+      if (appliedName && appliedName !== migration.name) {
+        throw new Error(
+          `Forge database migration ${migration.version} is recorded as ${appliedName}, expected ${migration.name}.`
+        );
+      }
+      if (appliedName) continue;
+      this.db.exec("BEGIN IMMEDIATE");
+      try {
+        this.db.exec(migration.sql);
+        this.db.prepare(`
+          INSERT INTO schema_migrations (version, name, applied_at)
+          VALUES (?, ?, datetime('now'))
+        `).run(migration.version, migration.name);
+        this.db.exec("COMMIT");
+      } catch (error) {
+        this.db.exec("ROLLBACK");
+        throw new Error(
+          `Forge database migration ${migration.version} (${migration.name}) failed: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }
+    this.validateSchema();
+  }
+
+  private validateSchema(): void {
+    let rows: Array<Record<string, unknown>>;
+    try {
+      rows = this.db.prepare("SELECT version, name FROM schema_migrations ORDER BY version").all();
+    } catch {
+      throw new Error("Forge database is missing versioned migration metadata.");
+    }
+    const applied = new Map(rows.map((row) => [Number(row.version), String(row.name)]));
+    const newestApplied = Math.max(0, ...applied.keys());
+    if (newestApplied > DATABASE_SCHEMA_VERSION) {
+      throw new Error(
+        `Forge database schema ${newestApplied} is newer than this runtime supports (${DATABASE_SCHEMA_VERSION}).`
+      );
+    }
+    for (const migration of DATABASE_MIGRATIONS) {
+      if (applied.get(migration.version) !== migration.name) {
+        const mode = this.readOnly ? " Read-only observers cannot migrate it; start the primary runtime first." : "";
+        throw new Error(
+          `Forge database requires migration ${migration.version} (${migration.name}).${mode}`
+        );
+      }
+    }
   }
 
   /** Replace all symbol rows for one file (called when the file is (re)indexed). */
@@ -347,6 +412,7 @@ function parseTaskPayload(payload: unknown): ForgeTask {
       ...run,
       outputChunks: run.outputChunks ?? []
     })),
+    historyPurges: parsed.historyPurges ?? [],
     commandRerunEvidence: parsed.commandRerunEvidence ?? [],
     validationRuns: (parsed.validationRuns ?? []).map((run) => ({
       ...run,

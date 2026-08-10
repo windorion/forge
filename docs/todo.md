@@ -207,8 +207,8 @@ the core runtime smoke. Preserve these completed boundaries:
 
 - [x] Execute the seven-phase, behavior-preserving `runtime/src/server.ts`
   decomposition in `docs/runtime_server_refactor.md`. The packaged entry is now
-  a one-line bootstrap; the current 59-route contracts, direct unit/coverage
-  gates, and all 20 smoke scripts pass without weakening approval or observer
+  a one-line bootstrap; the current 61-route contracts, direct unit/coverage
+  gates, and all 21 smoke scripts pass without weakening approval or observer
   boundaries.
 - [x] Complete the post-refactor readability pass: split Git workflow into five
   domain services, agent orchestration into queue/loop/step/inspection/recovery,
@@ -249,6 +249,18 @@ the core runtime smoke. Preserve these completed boundaries:
   patterns are recursively redacted. The macOS Audit surface now uses a native
   save panel for real `.md`/`.json` files instead of copying event lines while
   claiming to export.
+- [x] Implement the first runtime retention/migration exit slice. SQLite schema
+  v5 now applies ordered transactional migrations and records append-only
+  command-output purge receipts; a test downgrades an existing store to the
+  prior v4 schema, proves observer refusal, migrates it through a primary store,
+  and verifies the task survives. Audit exports carry content/source SHA-256
+  plus source `updatedAt`. Retention is keep-by-default and never automatic;
+  only terminal tasks with exact confirmation and a current saved-export
+  receipt can purge bounded task-command chunks and command/validation output
+  summaries. Metadata/events remain, the task + receipt write is atomic, the
+  native Audit surface exposes the flow, and `smoke:task-retention` proves
+  forged/stale rejection plus restart recovery. Remaining product work is the
+  workspace/event/tool/memory policy and destructive-migration backup proof.
 
 ## P5: Native macOS Product
 

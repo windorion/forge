@@ -2,9 +2,10 @@ import { HttpError } from "../httpError.js";
 import { readJson } from "../request.js";
 import { writeHtml, writeJson } from "../response.js";
 import { taskIDFromActionPath } from "../taskPath.js";
-import type { AgentRunLoopControlRequest, ApprovePlanAndRunRequest, ApprovePlanRequest, ApproveValidationPresetRequest, CancelTaskCommandRequest, CancelTaskRequest, CreateTaskMessageRequest, CreateTaskRequest, EditProposalDecisionRequest, EditProposalFileReviewRequest, GitBranchPublishRequest, GitBranchRequest, GitConflictResolutionRequest, GitCreateCommitRequest, GitPullRequestPublishRequest, GitPullRequestStatusRequest, GitPushRequest, ModelProviderSettingsUpdateRequest, RerunRepairCommandRequest, RunAgentLoopRequest, RunAgentStepRequest, RunTaskCommandRequest, RunValidationRequest, TaskQueueReorderRequest, TaskQueueSettingsRequest } from "../../types.js";
+import type { AgentRunLoopControlRequest, ApprovePlanAndRunRequest, ApprovePlanRequest, ApproveValidationPresetRequest, CancelTaskCommandRequest, CancelTaskRequest, CreateTaskMessageRequest, CreateTaskRequest, EditProposalDecisionRequest, EditProposalFileReviewRequest, GitBranchPublishRequest, GitBranchRequest, GitConflictResolutionRequest, GitCreateCommitRequest, GitPullRequestPublishRequest, GitPullRequestStatusRequest, GitPushRequest, ModelProviderSettingsUpdateRequest, PurgeTaskHistoryRequest, RerunRepairCommandRequest, RunAgentLoopRequest, RunAgentStepRequest, RunTaskCommandRequest, RunValidationRequest, TaskQueueReorderRequest, TaskQueueSettingsRequest } from "../../types.js";
 import type { RuntimeRouteGroup, RuntimeRouteOptions } from "../runtimeRoutes.js";
 import { buildTaskAuditExport, type TaskAuditExportFormat } from "../../tasks/taskAuditExport.js";
+import { buildTaskHistoryRetentionPreview, purgeTaskHistory } from "../../tasks/taskHistoryRetention.js";
 
 export function createTaskRoutes(options: RuntimeRouteOptions): RuntimeRouteGroup {
   const {
@@ -57,6 +58,29 @@ export function createTaskRoutes(options: RuntimeRouteOptions): RuntimeRouteGrou
             throw new HttpError(400, "Audit export format must be json or markdown.");
           }
           writeJson(response, 200, buildTaskAuditExport(task, rawFormat as TaskAuditExportFormat));
+          return true;
+        }
+
+    const retentionPreviewTaskID = taskIDFromActionPath(url.pathname, "history-retention-preview");
+    if (request.method === "GET" && retentionPreviewTaskID) {
+          reloadObserverTasks();
+          const task = tasks.get(retentionPreviewTaskID);
+          if (!task) throw new HttpError(404, `Task not found: ${retentionPreviewTaskID}`);
+          writeJson(response, 200, buildTaskHistoryRetentionPreview(task));
+          return true;
+        }
+
+    const purgeHistoryTaskID = taskIDFromActionPath(url.pathname, "purge-history");
+    if (request.method === "POST" && purgeHistoryTaskID) {
+          const task = tasks.get(purgeHistoryTaskID);
+          if (!task) throw new HttpError(404, `Task not found: ${purgeHistoryTaskID}`);
+          const input = await readJson<PurgeTaskHistoryRequest>(request);
+          const result = purgeTaskHistory(task, input);
+          taskStore.saveTaskWithHistoryPurge(result.task, result.receipt);
+          tasks.set(result.task.id, result.task);
+          emit("task.history.purged", { taskID: result.task.id, receipt: result.receipt, task: result.task });
+          emit("task.updated", { taskID: result.task.id, task: result.task });
+          writeJson(response, 200, result);
           return true;
         }
 

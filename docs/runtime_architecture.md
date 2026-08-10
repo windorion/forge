@@ -124,7 +124,9 @@ Mission Control may launch up to two additional runtimes with
 separate read-only capability boundary:
 
 - existing SQLite task stores open with the SQLite read-only flag; a repository
-  without a task store receives an in-memory empty schema
+  without a task store receives an in-memory empty schema; an observer refuses
+  an older schema and asks the primary runtime to complete the ordered
+  migration first
 - startup Agent Loop and edit-transaction recovery do not run
 - persisted queue requests do not dispatch
 - every non-GET HTTP request is rejected with `403 observer_read_only`
@@ -569,7 +571,7 @@ system output chunk, emits `task.command.cancel.requested` and
 `task.command.cancelled`, and marks the run `Cancelled` instead of `Failed`.
 Cancelled commands return to human review and do not generate repair briefs.
 
-### Task Cancellation And Audit Export
+### Task Cancellation, Audit Export, And Retention
 
 `POST /tasks/:taskID/cancel` is the composed task-level emergency control. It
 persists one idempotent cancellation record before stopping work, then removes
@@ -598,7 +600,24 @@ bounded command output, validation results, context-file metadata, file-change
 metadata, and edit transaction evidence. It intentionally omits proposal diff
 content and provider configuration, then recursively redacts known Bearer,
 GitHub/OpenAI token, API-key, password, and secret assignment patterns. The
-macOS Audit surface writes either format through a native save panel.
+macOS Audit surface writes either format through a native save panel. Export
+envelopes include content/source SHA-256 and source `updatedAt` receipts.
+
+Retention remains keep-by-default with no automatic purge. `GET
+/tasks/:taskID/history-retention-preview` reports the bounded command-output
+surface and is observer-readable. The primary-only `POST
+/tasks/:taskID/purge-history` accepts one terminal task, the exact current
+revision, `CommandOutput` scope, explicit confirmation, and a matching audit
+export receipt. It clears only task-command chunks and command/validation
+output summaries, retains execution metadata and an event, and atomically
+saves the task with an append-only schema-v5 purge receipt. `smoke:task-retention`
+proves forged receipt rejection, the retained boundary, atomic persistence,
+and restart recovery.
+
+SQLite schema changes now run from an ordered migration registry, one
+transaction per missing version. Schema v5 is additive. Unit coverage
+rehearses v4 → v5 with an existing task, rejects migration from a read-only
+observer, and verifies the recovered task plus new receipt table.
 
 ### Agent Run Step
 

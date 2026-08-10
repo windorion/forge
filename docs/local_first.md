@@ -26,6 +26,14 @@ Data that should be local by default:
 - embeddings when practical
 - context cache
 
+Task history is keep-by-default and has no automatic age-based cleanup. The
+first explicit retention control is local command-output purge for terminal
+tasks: Forge requires a successfully saved current audit export, exact source
+revision/hash receipt, and destructive confirmation. It keeps execution
+metadata, events, and an atomic SQLite purge receipt. Workspace-wide retention,
+memory deletion, and commercial privacy periods remain product decisions rather
+than inferred defaults.
+
 ## Repository Indexing
 
 Indexer should collect:

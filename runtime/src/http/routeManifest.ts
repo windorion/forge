@@ -39,6 +39,8 @@ export const runtimeRouteManifest: readonly RuntimeRouteContract[] = [
   get("/tasks"),
   get("/tasks/:taskID"),
   get("/tasks/:taskID/audit-export"),
+  get("/tasks/:taskID/history-retention-preview"),
+  post("/tasks/:taskID/purge-history"),
   get("/index"),
   post("/index/rebuild"),
   get("/index/symbols"),

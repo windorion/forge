@@ -1636,6 +1636,7 @@ private struct TaskHistoryView: View {
 
 private struct TaskAuditLogView: View {
     @EnvironmentObject private var workspace: WorkspaceModel
+    @State private var showingPurgeConfirmation = false
     var task: ForgeTask
 
     var body: some View {
@@ -1663,6 +1664,8 @@ private struct TaskAuditLogView: View {
             .overlay(alignment: .bottom) {
                 Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
             }
+
+            retentionBar
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
@@ -1699,6 +1702,65 @@ private struct TaskAuditLogView: View {
             .overlay(alignment: .top) {
                 Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
             }
+        }
+        .onAppear {
+            workspace.refreshAuditRetention(for: task.id)
+        }
+        .alert("Purge exported command output?", isPresented: $showingPurgeConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Purge Output", role: .destructive) {
+                workspace.purgeExportedCommandOutput(for: task)
+            }
+        } message: {
+            Text("Forge will remove retained command-output text only. Status, timestamps, exit codes, approvals, events, and a schema-v5 purge receipt remain local. This cannot be undone inside Forge; use the audit file you just saved if the output is needed later.")
+        }
+    }
+
+    @ViewBuilder
+    private var retentionBar: some View {
+        HStack(spacing: 12) {
+            Text("HISTORY")
+                .font(.custom("JetBrains Mono", fixedSize: 10).weight(.bold))
+                .foregroundStyle(ForgeDesign.muted)
+            if workspace.isLoadingAuditRetention(taskID: task.id) {
+                ProgressView().controlSize(.small)
+                Text("checking retained command output…")
+            } else if let preview = workspace.auditRetentionPreview(for: task.id) {
+                Text(preview.policy.automaticPurge ? "AUTOMATIC PURGE" : "KEEP BY DEFAULT")
+                    .fontWeight(.heavy)
+                    .foregroundStyle(ForgeDesign.success)
+                Text("\(preview.commandRunsWithOutput + preview.validationCommandsWithOutput) records · \(preview.commandOutputChunks) chunks · \(ByteCountFormatter.string(fromByteCount: Int64(preview.removableBytes), countStyle: .file))")
+                if preview.priorPurges > 0 {
+                    Text("\(preview.priorPurges) prior purge receipt(s)")
+                        .foregroundStyle(ForgeDesign.muted)
+                }
+                Spacer()
+                Button(workspace.isPurgingAuditHistory(taskID: task.id) ? "PURGING…" : "PURGE EXPORTED OUTPUT") {
+                    showingPurgeConfirmation = true
+                }
+                .buttonStyle(ForgePrimaryButtonStyle(fill: ForgeDesign.danger, foreground: Color.white))
+                .disabled(
+                    workspace.isPurgingAuditHistory(taskID: task.id)
+                        || !workspace.canPurgeExportedCommandOutput(for: task)
+                )
+                .help(
+                    workspace.canPurgeExportedCommandOutput(for: task)
+                        ? "Purge command-output bodies after confirmation."
+                        : (preview.blocker ?? "Save a current Markdown or JSON audit export to unlock this action.")
+                )
+            } else {
+                Text("retention evidence unavailable")
+            }
+            if workspace.auditRetentionPreview(for: task.id) == nil {
+                Spacer()
+            }
+        }
+        .font(.custom("JetBrains Mono", fixedSize: 10))
+        .padding(.horizontal, 24)
+        .frame(height: 44)
+        .background(Color(red: 247 / 255, green: 247 / 255, blue: 244 / 255))
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(ForgeDesign.ink).frame(height: 1)
         }
     }
 

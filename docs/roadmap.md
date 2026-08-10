@@ -196,7 +196,7 @@ sequence rather than inventing another score.
 | Daily-use coding quality | Alpha | Deterministic local and mock-OpenAI protocol campaigns pass. | Live provider credentials and an explicit cost budget. | At least eight pinned public-repository tasks across four families, all budget-accounted, externally scored, and classified. |
 | Broader safe agent choices | Alpha | Read/search, reviewed Unified Diff, approved command, repair, and rerun actions exist. | Must be selected from corpus failures rather than intuition. | Measured improvement on the pinned corpus without unauthorized writes, raw shell, or weaker review gates. |
 | Multi-repository operational proof | Alpha | Fair supervised dispatch, 300-second/1,086-restart soak, one passing action-level UI path, exponential reconnect backoff, visible diagnostics, and a passing process-level transport/termination/relaunch fixture with no authorization widening or queue escape. | Stable AC for six-hour evidence; unattended desktop window for XCUITest. | Six-hour report and complete passing `.xcresult` with documented power/desktop conditions. |
-| Runtime history, retention, and migrations | Beta | SQLite task persistence, transaction journals, restart recovery, bounded refresh-attempt history. | Product retention/privacy policy is not decided. | Versioned migration rehearsal, bounded history policy, export-before-purge path, and recovery from the prior shipped schema. |
+| Runtime history, retention, and migrations | Beta | SQLite schema v5 now runs ordered transactional migrations; v4 → v5 recovery preserves an existing task; command output is per-run bounded and keep-by-default; current audit-export SHA receipts gate an explicit terminal-task purge whose metadata is atomically retained. Native Audit requires a successfully saved current export before confirmation. | Default duration, workspace/event/tool/memory retention, and commercial privacy policy are not decided. Future destructive schema changes still need backup/restore rehearsal. | The first exit slice passes: versioned prior-schema migration, command-output policy, export-before-purge, observer refusal, and restart recovery. Full exit still requires the broader retention decision, workspace export/purge, and destructive-migration backup proof. |
 | Performance and resource budgets | Beta | Bounded tools/output and functional smoke campaigns. | Representative large repositories and signed-package profiling environment. | Launch, idle CPU/memory, index, diff, and agent-step budgets with repeatable regression thresholds. |
 | Security lifecycle | Beta | Explicit approvals, read-only observers, scoped authorization, Keychain secrets, redacted audit export. | Approval lifetime and audit-retention product decisions. | Approval expiry/revocation, audit purge/retention tests, broader secret scanning, and signed-build threat review. |
 | Signed Mac distribution | Beta | App-managed/bundled runtime path, onboarding, update/appcast UI. | Founder Developer ID, notarization credentials, and P6 signing work. | Clean-machine DMG install, Gatekeeper/notarization pass, signed appcast install/relaunch, rollback/recovery rehearsal. |
@@ -205,11 +205,13 @@ sequence rather than inventing another score.
 | Complete native workflow | v1 | Menus, shortcuts, notifications, Spotlight, CLI, Mission Control, decision inbox, templates. | Signed package and final human-input checks. | Finder/IDE handoff, remappable shortcuts, Dock/menu/notification verification, signed WidgetKit or an explicit permanent descope. |
 | Hosted collaboration | v1 or later | No production service; intentionally local single-user today. | Account/team boundary and validated demand. | Either a scoped tenancy/sharing/sync plan with security/deletion proof, or an explicit roadmap removal. |
 
-This register exposes four roadmap omissions that should not hide behind broad
-milestone labels: data lifecycle/migrations, measurable performance budgets,
-approval/audit lifecycle, and the account/commercial decision gate. None should
-preempt the live-model Alpha corpus, but each must be resolved before claiming
-the corresponding Beta or v1 finish line.
+This register originally exposed four omissions that should not hide behind
+broad milestone labels: data lifecycle/migrations, measurable performance
+budgets, approval/audit lifecycle, and the account/commercial decision gate.
+The first data-lifecycle slice is now implemented, but its workspace-wide
+policy and destructive-migration backup proof remain. None should preempt the
+live-model Alpha corpus, and each remaining exit condition must be resolved
+before claiming the corresponding Beta or v1 finish line.
 
 ## What Not To Optimize Next
 

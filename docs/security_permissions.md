@@ -210,7 +210,20 @@ fields rather than serializing process configuration or provider settings,
 omits proposal diff bodies, and recursively replaces known credential patterns
 with `[REDACTED]`. This is defense in depth, not a guarantee that arbitrary
 private customer data is safe to share; the native save panel warns the user
-to review the local Markdown or JSON file before distribution.
+to review the local Markdown or JSON file before distribution. Each envelope
+also returns content SHA-256, source-task SHA-256, and source `updatedAt`.
+
+Command-output purge is a separate destructive local action, not a side effect
+of export. Forge keeps task history by default and schedules no automatic
+cleanup. Purge is limited to a terminal task and the `CommandOutput` scope,
+requires exact `PurgeTaskHistory` confirmation plus a matching current export
+receipt, and rejects stale or fabricated evidence before saving. The native
+Audit surface stores that receipt in memory only after the save panel has
+successfully written the current export. Purge clears bounded task-command
+chunks and command/validation output summaries while preserving command
+identity, status, exit code, timestamps, approvals, events, and an atomic
+schema-v5 receipt. Observer runtimes may preview retention but reject purge as
+they do every POST.
 
 Mission Control observer runtimes add visibility, not authority. They use
 unique loopback ports, remove remote-provider secrets from their child
@@ -447,7 +460,8 @@ The user should be able to:
 - revoke workspace access
 - disable tools
 - purge memory
-- clear command logs
+- clear command logs only after current audit export and destructive
+  confirmation
 - remove integrations
 
 ## Product Promise

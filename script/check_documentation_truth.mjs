@@ -122,7 +122,7 @@ check("documented smoke count matches package scripts", () => {
 
 const routeCount = [...routeManifest.matchAll(/^\s*(?:get|post|options)\("/gm)].length;
 check("route manifest count remains explicit", () => {
-  assert.equal(routeCount, 59);
+  assert.equal(routeCount, 61);
 });
 
 const unitTestCount = (await readdir(resolve(repoRoot, "runtime", "scripts")))

@@ -86,6 +86,10 @@ final class WorkspaceModel: ObservableObject {
     @Published private var cancellingTaskCommandRunIDs = Set<TaskCommandRun.ID>()
     @Published private var cancellingTaskIDs = Set<ForgeTask.ID>()
     @Published private var exportingAuditTaskIDs = Set<ForgeTask.ID>()
+    @Published private var loadingAuditRetentionTaskIDs = Set<ForgeTask.ID>()
+    @Published private var purgingAuditHistoryTaskIDs = Set<ForgeTask.ID>()
+    @Published private var auditRetentionPreviews: [ForgeTask.ID: TaskHistoryRetentionPreview] = [:]
+    @Published private var savedAuditExportReceipts: [ForgeTask.ID: TaskHistoryPurgeRequest.ExportReceipt] = [:]
     @Published private var approvingValidationPresetTaskIDs = Set<String>()
     @Published private var refreshingGitStatus = false
     @Published private var loadingGitDiffPaths = Set<String>()
@@ -1846,7 +1850,16 @@ final class WorkspaceModel: ObservableObject {
                 panel.message = "Known credential patterns are redacted. Review the local audit file before sharing it."
                 if panel.runModal() == .OK, let url = panel.url {
                     try export.content.write(to: url, atomically: true, encoding: .utf8)
+                    if let sourceTaskUpdatedAt = export.sourceTaskUpdatedAt,
+                       let sourceSha256 = export.sourceSha256 {
+                        savedAuditExportReceipts[task.id] = .init(
+                            generatedAt: export.generatedAt,
+                            sourceTaskUpdatedAt: sourceTaskUpdatedAt,
+                            sourceSha256: sourceSha256
+                        )
+                    }
                     statusMessage = "Audit exported to \(url.lastPathComponent)."
+                    refreshAuditRetention(for: task.id)
                 } else {
                     statusMessage = "Audit export cancelled."
                 }
@@ -1859,6 +1872,66 @@ final class WorkspaceModel: ObservableObject {
 
     func isExportingAudit(taskID: ForgeTask.ID) -> Bool {
         exportingAuditTaskIDs.contains(taskID)
+    }
+
+    func auditRetentionPreview(for taskID: ForgeTask.ID) -> TaskHistoryRetentionPreview? {
+        auditRetentionPreviews[taskID]
+    }
+
+    func refreshAuditRetention(for taskID: ForgeTask.ID) {
+        guard !loadingAuditRetentionTaskIDs.contains(taskID) else { return }
+        loadingAuditRetentionTaskIDs.insert(taskID)
+        Task {
+            do {
+                auditRetentionPreviews[taskID] = try await runtime.taskHistoryRetentionPreview(taskID: taskID)
+            } catch {
+                statusMessage = "Load history retention failed: \(error.localizedDescription)"
+            }
+            loadingAuditRetentionTaskIDs.remove(taskID)
+        }
+    }
+
+    func isLoadingAuditRetention(taskID: ForgeTask.ID) -> Bool {
+        loadingAuditRetentionTaskIDs.contains(taskID)
+    }
+
+    func canPurgeExportedCommandOutput(for task: ForgeTask) -> Bool {
+        guard let preview = auditRetentionPreviews[task.id], preview.eligible,
+              let receipt = savedAuditExportReceipts[task.id]
+        else { return false }
+        return receipt.sourceTaskUpdatedAt == task.updatedAt
+            && receipt.sourceTaskUpdatedAt == preview.taskUpdatedAt
+    }
+
+    func purgeExportedCommandOutput(for task: ForgeTask) {
+        guard !purgingAuditHistoryTaskIDs.contains(task.id),
+              canPurgeExportedCommandOutput(for: task),
+              let receipt = savedAuditExportReceipts[task.id]
+        else { return }
+        purgingAuditHistoryTaskIDs.insert(task.id)
+        Task {
+            do {
+                let result = try await runtime.purgeTaskHistory(
+                    taskID: task.id,
+                    requestBody: .init(
+                        expectedUpdatedAt: task.updatedAt,
+                        exportReceipt: receipt
+                    )
+                )
+                upsert(result.task)
+                savedAuditExportReceipts.removeValue(forKey: task.id)
+                auditRetentionPreviews[task.id] = try await runtime.taskHistoryRetentionPreview(taskID: task.id)
+                statusMessage = "Purged \(result.receipt.recordsAffected) exported command-output record(s); metadata and receipt retained."
+            } catch {
+                statusMessage = "Purge command output failed: \(error.localizedDescription)"
+                refreshAuditRetention(for: task.id)
+            }
+            purgingAuditHistoryTaskIDs.remove(task.id)
+        }
+    }
+
+    func isPurgingAuditHistory(taskID: ForgeTask.ID) -> Bool {
+        purgingAuditHistoryTaskIDs.contains(taskID)
     }
 
     func validationPermissions(for taskID: ForgeTask.ID) -> [ValidationPresetPermission] {
