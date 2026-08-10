@@ -75,5 +75,25 @@ claim of a complete passing XCUITest archive or a completed six-hour soak.
   summaries, attempt lineage, and recovery reset. One workspace test covers
   diagnostics output. The full SwiftPM suite passes all 53 tests.
 - This is policy, integration, and compile evidence. Process-level fault
-  injection that kills a supervised child and proves cached visibility,
-  retained authorization, and no queue escape remains an explicit follow-up.
+  injection is recorded below; the six-hour soak and complete action-level UI
+  archive remain explicit follow-ups.
+
+## Process-level reconnect evidence
+
+- SwiftPM bundles a minimal Node runtime and launches it through the production
+  supervisor `Process` path on a random loopback port and temporary repository.
+- A control file closes the listener for 350 ms and restores it on the same PID.
+  The supervisor enters retry wait, retains cached `fixture-main` Git status,
+  one running/one queued entry, and the active authorization, then records a
+  recovery without a restart attempt.
+- The test then sends `SIGKILL` to that exact observed fixture PID. The retry
+  snapshot keeps the same cached evidence and authorization; relaunch produces
+  a different PID with the same authorization and `supervised` dispatch mode,
+  plus incremented restart and recovery counters.
+- The fixture rejects mutations and its JSONL request log contains no POST or
+  queue-dispatch request. A running entry deliberately consumes the one global
+  slot while a second entry remains queued, proving recovery does not escape
+  the scheduler boundary.
+- The integration test passed once in the full 55-test coverage suite and five
+  additional `--skip-build` stability repetitions (about 1.1 seconds each).
+  It is headless and did not launch Forge or use desktop/UI automation.

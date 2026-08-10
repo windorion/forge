@@ -39,7 +39,7 @@ should no longer feel like a generic workflow dashboard.
 
 ## Current Status
 
-Last updated: 2026-08-09
+Last updated: 2026-08-10
 
 The trust/runtime foundation is strong and the Coding-Agent Demo V0 functional
 acceptance path is complete. All five primary handoff screens are rendered and
@@ -164,6 +164,10 @@ Implemented today:
   owned-child exits relaunch the same in-memory observer/active target after the
   deadline, and diagnostics expose failure/restart/recovery/next-retry evidence.
   Identity or authorization mismatches still clear access and restart intent.
+  A bundled process-level integration fixture now pauses and restores loopback
+  transport on the same PID, kills the supervisor-owned child, observes a new
+  PID, and proves cached Git/queue visibility, exact authorization retention,
+  supervised mode, recovery telemetry, and zero POST/queue-dispatch requests.
   The two-runtime routing fixture also proves command approval/run/cancel, retained
   cancelled output, repository-local status/diff/commit/branch actions, and
   honest remote-less publish/push/PR blockers for both repositories.
@@ -310,10 +314,9 @@ Top priorities are tracked in `docs/todo.md`. Current post-V0 themes:
 
 - run a budgeted live-model corpus on pinned public repositories
 - use classified failures to widen safe provider tool/patch/recovery behavior
-- add process-level disconnect/reconnect fault injection, archive a
-  full-duration supervision soak under stable AC power, capture the implemented
-  Mission Control XCUITest in an unattended window, and prepare signed Mac
-  distribution
+- archive a full-duration supervision soak under stable AC power, capture the
+  implemented Mission Control XCUITest in an unattended window, and prepare
+  signed Mac distribution
 
 The subsystem-by-subsystem readiness and remaining-gap matrix lives in
 `docs/project_status.md` under **Component Gap Matrix**.

@@ -197,6 +197,17 @@ recoveries, last connection, and next retry in its existing diagnostics and
 compact repository footer. These counters are session-only operational state,
 not durable user/task data.
 
+The Swift supervisor process boundary is now covered by a bundled headless Node
+fixture. SwiftPM starts it through the same `Process`, environment, loopback,
+health, task, queue, and Git paths used by production supervision. The fixture
+first drops and restores its listener without changing PID, then the test sends
+`SIGKILL` to the observed supervisor-owned PID. Assertions cover cached state
+during both retry windows, same-session authorization, supervised queue mode,
+new-PID relaunch, retry/restart/recovery telemetry, and an event log containing
+no POST or queue-dispatch request. Production defaults remain the fixed 17374+
+ports, two-second monitor interval, and 2/4/8/16/30-second retry schedule; only
+the test configuration accelerates time and selects a random loopback port.
+
 ### Agent Orchestrator
 
 Coordinates planning, execution, testing, review, and user approval states.

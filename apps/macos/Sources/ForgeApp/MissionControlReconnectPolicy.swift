@@ -15,8 +15,15 @@ struct MissionControlReconnectTelemetry: Codable, Equatable, Hashable {
 enum MissionControlReconnectPolicy {
     static let maximumDelay: TimeInterval = 30
 
-    static func delay(forConsecutiveFailureCount failureCount: Int) -> TimeInterval {
+    static func delay(
+        forConsecutiveFailureCount failureCount: Int,
+        schedule: [TimeInterval]? = nil
+    ) -> TimeInterval {
         guard failureCount > 0 else { return 0 }
+        if let schedule, !schedule.isEmpty {
+            let index = min(failureCount - 1, schedule.count - 1)
+            return max(0, schedule[index])
+        }
         let exponent = min(failureCount - 1, 4)
         return min(pow(2, Double(exponent + 1)), maximumDelay)
     }
@@ -24,7 +31,8 @@ enum MissionControlReconnectPolicy {
     static func recordingFailure(
         _ current: MissionControlReconnectTelemetry?,
         at now: Date,
-        summary: String
+        summary: String,
+        delaySchedule: [TimeInterval]? = nil
     ) -> MissionControlReconnectTelemetry {
         var telemetry = current ?? MissionControlReconnectTelemetry()
         telemetry.consecutiveFailures += 1
@@ -32,7 +40,10 @@ enum MissionControlReconnectPolicy {
         telemetry.lastFailureAt = now
         telemetry.lastFailureSummary = String(summary.prefix(240))
         telemetry.nextRetryAt = now.addingTimeInterval(
-            delay(forConsecutiveFailureCount: telemetry.consecutiveFailures)
+            delay(
+                forConsecutiveFailureCount: telemetry.consecutiveFailures,
+                schedule: delaySchedule
+            )
         )
         return telemetry
     }

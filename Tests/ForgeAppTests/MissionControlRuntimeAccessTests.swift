@@ -105,8 +105,22 @@ final class MissionControlRuntimeAccessTests: XCTestCase {
 
     func testReconnectBackoffGrowsExponentiallyAndCapsAtThirtySeconds() {
         XCTAssertEqual(
-            (0...7).map(MissionControlReconnectPolicy.delay(forConsecutiveFailureCount:)),
+            (0...7).map {
+                MissionControlReconnectPolicy.delay(forConsecutiveFailureCount: $0)
+            },
             [0, 2, 4, 8, 16, 30, 30, 30]
+        )
+    }
+
+    func testReconnectBackoffAcceptsABoundedIntegrationSchedule() {
+        XCTAssertEqual(
+            (0...5).map {
+                MissionControlReconnectPolicy.delay(
+                    forConsecutiveFailureCount: $0,
+                    schedule: [0.08, 0.16, 0.24]
+                )
+            },
+            [0, 0.08, 0.16, 0.24, 0.24, 0.24]
         )
     }
 

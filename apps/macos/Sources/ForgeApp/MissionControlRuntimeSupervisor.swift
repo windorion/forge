@@ -74,6 +74,12 @@ struct MissionControlObservedRepository: Hashable {
 
 @MainActor
 final class MissionControlRuntimeSupervisor {
+    struct Configuration: Sendable {
+        var portBase = 17_374
+        var monitorInterval: Duration = .seconds(2)
+        var reconnectDelaySchedule: [TimeInterval] = [2, 4, 8, 16, 30]
+    }
+
     var onUpdate: (([String: MissionControlObservedRepository]) -> Void)?
     var onFairQueueUpdate: ((MissionControlFairQueueState) -> Void)?
 
@@ -114,6 +120,11 @@ final class MissionControlRuntimeSupervisor {
     private var fairQueueGrantCount = 0
     private var fairQueueDispatchInProgress = false
     private var monitorTask: Task<Void, Never>?
+    private let configuration: Configuration
+
+    init(configuration: Configuration = Configuration()) {
+        self.configuration = configuration
+    }
 
     deinit {
         monitorTask?.cancel()
@@ -127,7 +138,7 @@ final class MissionControlRuntimeSupervisor {
         activeAuthorizations = activeAuthorizations.filter { observedPaths.contains($0.key) }
         let desired = Dictionary(uniqueKeysWithValues: observedPaths.enumerated().map { index, path in
             (path, (
-                port: 17_374 + index,
+                port: configuration.portBase + index,
                 mode: activeAuthorizations[path] == nil ? RuntimeMode.observer : .active,
                 authorization: activeAuthorizations[path]
             ))
@@ -188,7 +199,7 @@ final class MissionControlRuntimeSupervisor {
                 while !Task.isCancelled {
                     self?.restartDueRuntimes()
                     await self?.refreshAll()
-                    try? await Task.sleep(for: .seconds(2))
+                    try? await Task.sleep(for: self?.configuration.monitorInterval ?? .seconds(2))
                 }
             }
         }
@@ -647,7 +658,8 @@ final class MissionControlRuntimeSupervisor {
         let telemetry = MissionControlReconnectPolicy.recordingFailure(
             reconnectTelemetry[path],
             at: now,
-            summary: summary
+            summary: summary,
+            delaySchedule: configuration.reconnectDelaySchedule
         )
         reconnectTelemetry[path] = telemetry
         snapshots[path]?.reconnectTelemetry = telemetry

@@ -64,6 +64,11 @@ recovery. The compact repository footer shows retry/failure/recovery evidence;
 the same counters and timestamps appear in copied diagnostics. Identity,
 authorization, repository, mode, and supervised-queue mismatches still fail
 closed and clear automatic restart intent.
+The SwiftPM process-level fixture now exercises both transport loss on a live
+PID and `SIGKILL` of the app-owned child. It verifies cached Git/queue evidence
+during retry, same-session authorization and supervised mode after recovery,
+a new PID after relaunch, and no mutation or queue-dispatch request. This is a
+headless loopback test and does not launch Forge or control the desktop.
 The final observer/active/queued/review capture set and repair notes live in
 `docs/verification/mission-control-fairness/`.
 

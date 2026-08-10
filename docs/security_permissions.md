@@ -258,6 +258,14 @@ active authorization instead of retrying. Telemetry stores bounded error
 summaries and counters only; it does not capture tokens, child environments,
 command output, repository content, or authorization secrets.
 
+The process-level reconnect test does not add a product process-control route.
+It obtains the PID only from the supervisor's existing in-memory observation
+inside `@testable` SwiftPM code and sends `SIGKILL` to the temporary fixture
+child it just created. Its temporary repository event log proves all observed
+HTTP traffic remains GET-only while one running entry consumes the global slot
+and a second entry stays queued. The fixture directory and its session-only
+authorization evidence are deleted during test cleanup.
+
 Background task routing does not convert cached visibility into authority.
 Task detail uses the observer-safe `GET /tasks/:taskID` route after fresh health
 identity validation. The same validated child supplies the validation

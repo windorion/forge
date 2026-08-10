@@ -907,7 +907,7 @@ routing, Mission Control access-policy negatives, and SSE frame parsing:
 swift test --enable-code-coverage
 ```
 
-This remains an early native unit-test baseline. The 53 current tests include
+This remains an early native test baseline. The 55 current tests include
 three focused GitHub Device Flow tests covering local Client ID configuration,
 GitHub `slow_down` interval handling, user validation before token persistence,
 connected-state restoration, and actionable HTTP failures. The broader suite
@@ -918,7 +918,14 @@ oldest-first/round-robin/eligibility/global-limit policy, and authorization
 placement for supervisor grants. It additionally covers routed background
 command/Git HTTP contracts and exact fail-closed Git request construction from
 reviewed evidence, capped Mission Control reconnect timing/failure/recovery
-state, and reconnect telemetry in copied diagnostics. `WorkspaceModel` now accepts an
+state, and reconnect telemetry in copied diagnostics. One process-level
+integration test bundles a minimal Node runtime fixture, uses a temporary
+repository and random loopback port, pauses/restores transport on the same PID,
+then sends `SIGKILL` only to the supervisor-owned fixture child. It verifies a
+new PID, exact authorization/supervised-mode retention, cached Git/queue state,
+recovery counters, and zero POST/dispatch requests. The fixture and event log
+are removed with the temporary directory after the test; it never launches the
+app or uses UI automation. `WorkspaceModel` now accepts an
 isolated runtime and preferences store for tests; mock-runtime tests cover
 successful and failed health refreshes, task creation/upsert/selection,
 selection persistence, runtime-process start eligibility, validation-preset

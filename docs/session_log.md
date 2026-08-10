@@ -6615,3 +6615,53 @@ Next:
 - Then run the live-model Alpha corpus when provider credentials/cost budget are
   available; keep foreground UI evidence deferred to an explicitly unattended
   desktop window.
+
+## 2026-08-10 21:59:40 +0200 (CEST)
+
+Conversation summary:
+
+- Completed the next API-free long task: deterministic process-level Mission
+  Control supervisor fault injection, using code and background tests only.
+
+Done:
+
+- Added an internal supervisor configuration for port base, monitor interval,
+  and reconnect schedule. Production defaults remain ports 17374+, a two-second
+  monitor, and 2/4/8/16/30-second backoff; tests can use a random loopback port
+  and accelerated timing without changing product behavior.
+- Bundled a minimal Node runtime fixture as a SwiftPM test resource. It exposes
+  the production health/tasks/queue/Git read contract, holds one running and one
+  queued entry, rejects every mutation, and records a temporary JSONL event log.
+- Added a headless `@MainActor` integration test that promotes observer to an
+  authorized supervised runtime, closes/restores transport on the same PID,
+  then sends `SIGKILL` only to the observed supervisor-owned fixture child.
+- Proved cached Git/queue state during both retry windows, exact authorization
+  retention, same-PID transport recovery, new-PID process relaunch, supervised
+  dispatch mode, incremented failure/restart/recovery telemetry, and zero POST
+  or queue-dispatch requests.
+- Added custom reconnect-schedule coverage. The integration path passed its
+  first narrow run, five additional stability repetitions, and the full 55-test
+  Swift coverage suite.
+- Passed `swift build`, TypeScript check/build, all 21 runtime unit-test files,
+  the two-runtime fairness smoke, documentation truth, whitespace checks, Node
+  fixture syntax, and the signing-disabled XCUITest `build-for-testing` gate.
+  No App or action-level UI automation was launched.
+- Updated README, status/TODO/roadmap, development, macOS, architecture,
+  security, handoff date, and verification evidence. Multi-repository
+  supervision is now estimated at 94-97%; reliability/evidence at 85-92%.
+
+Not done:
+
+- The six-hour soak still needs stable AC/sleep conditions, and the complete
+  action-level XCUITest archive still needs a user-approved unattended desktop
+  window.
+- The live-model public-repository corpus, signed distribution, semantic
+  retrieval, and account/commercial decisions remain larger roadmap gaps.
+
+Next:
+
+- With no API or foreground window, the next productive code task is a bounded
+  runtime history/retention/migration policy and versioned migration rehearsal.
+- When provider credentials and a cost budget are available, prioritize the
+  pinned public-repository live-model corpus because it remains the largest
+  Alpha product-quality uncertainty.

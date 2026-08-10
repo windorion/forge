@@ -3,7 +3,7 @@
 Document role: maintain the active backlog, priority order, and next concrete
 engineering tasks for Forge.
 
-Last updated: 2026-08-09
+Last updated: 2026-08-10
 
 ## Rule
 
@@ -301,6 +301,13 @@ the core runtime smoke. Preserve these completed boundaries:
   restart authority. Repository footers and diagnostics expose bounded
   consecutive/total failure, restart, recovery, last-connect, and next-retry
   evidence. Six pure policy/diagnostic tests cover the state contract.
+- [x] Add process-level disconnect/reconnect fault injection. A bundled minimal
+  Node fixture runs through the real Swift supervisor `Process` and loopback
+  paths on a random test port. It drops/restores transport on the same PID,
+  then receives `SIGKILL`; the test observes cached Git/queue visibility during
+  retry, exact session authorization and supervised mode after recovery, a new
+  PID after relaunch, restart/recovery telemetry, and zero POST/queue-dispatch
+  requests. Five repeated narrow runs and the full 55-test coverage suite pass.
 - **Next API-free long task — archive full evidence and close exposed gaps:**
   - Run and archive the configured six-hour Mission Control soak under stable
     AC power with exact
@@ -310,9 +317,6 @@ the core runtime smoke. Preserve these completed boundaries:
     user-approved unattended desktop window. Do not run focus-stealing UI
     automation while the user is working. Keep the deterministic DEBUG driver
     and compile-only CI gate distinct from action-level XCUITest evidence.
-  - Add process-level disconnect/reconnect fault injection that proves the new
-    supervisor backoff/relaunch path retains cached visibility, never bypasses
-    session authorization, and never auto-dispatches supervised queued work.
 - Add Finder and broader "open in IDE" integrations beyond the current
   file/repository reveal actions.
 - Run final human-input verification for remappable shortcuts, native Dock/menu

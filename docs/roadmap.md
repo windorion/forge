@@ -3,7 +3,7 @@
 Document role: record sequencing, milestones, proof points, and what should
 not be built too early.
 
-Last updated: 2026-08-09
+Last updated: 2026-08-10
 
 ## Direction Reset
 
@@ -108,7 +108,9 @@ Remaining Alpha evidence:
 - archive a full-duration restart-heavy supervision run and a complete passing
   action-level UI archive for the implemented authorized task/detail/review
   routing. Bounded reconnect backoff, crash restart, and supervisor telemetry
-  are implemented; process-level disconnect fault injection remains evidence.
+  are implemented. A headless process fixture now proves transport recovery,
+  owned-child relaunch, cached visibility, authorization retention, and no
+  mutation/dispatch request.
 
 Proof point:
 
@@ -177,9 +179,8 @@ additive.
    token, cost, command, and mutation budgets.
 3. Use those failures to widen provider tool/patch/recovery behavior without
    weakening runtime ownership or human review.
-4. Archive full-duration Mission Control soak evidence, add process-level
-   disconnect/reconnect fault injection, and capture the existing true
-   XCUITest suite in a user-approved unattended desktop window.
+4. Archive full-duration Mission Control soak evidence and capture the existing
+   true XCUITest suite in a user-approved unattended desktop window.
 5. Complete signed/notarized packaging, appcast install/relaunch, production
    diagnostics, and commercial decisions.
 
@@ -194,7 +195,7 @@ sequence rather than inventing another score.
 | --- | --- | --- | --- | --- |
 | Daily-use coding quality | Alpha | Deterministic local and mock-OpenAI protocol campaigns pass. | Live provider credentials and an explicit cost budget. | At least eight pinned public-repository tasks across four families, all budget-accounted, externally scored, and classified. |
 | Broader safe agent choices | Alpha | Read/search, reviewed Unified Diff, approved command, repair, and rerun actions exist. | Must be selected from corpus failures rather than intuition. | Measured improvement on the pinned corpus without unauthorized writes, raw shell, or weaker review gates. |
-| Multi-repository operational proof | Alpha | Fair supervised dispatch, 300-second/1,086-restart soak, one passing action-level UI path, exponential reconnect backoff, crash restart, and visible diagnostics. | Stable AC for six-hour evidence; unattended desktop window for XCUITest. | Six-hour report, process-level disconnect/reconnect fault injection, complete passing `.xcresult`, no authorization widening or queue escape. |
+| Multi-repository operational proof | Alpha | Fair supervised dispatch, 300-second/1,086-restart soak, one passing action-level UI path, exponential reconnect backoff, visible diagnostics, and a passing process-level transport/termination/relaunch fixture with no authorization widening or queue escape. | Stable AC for six-hour evidence; unattended desktop window for XCUITest. | Six-hour report and complete passing `.xcresult` with documented power/desktop conditions. |
 | Runtime history, retention, and migrations | Beta | SQLite task persistence, transaction journals, restart recovery, bounded refresh-attempt history. | Product retention/privacy policy is not decided. | Versioned migration rehearsal, bounded history policy, export-before-purge path, and recovery from the prior shipped schema. |
 | Performance and resource budgets | Beta | Bounded tools/output and functional smoke campaigns. | Representative large repositories and signed-package profiling environment. | Launch, idle CPU/memory, index, diff, and agent-step budgets with repeatable regression thresholds. |
 | Security lifecycle | Beta | Explicit approvals, read-only observers, scoped authorization, Keychain secrets, redacted audit export. | Approval lifetime and audit-retention product decisions. | Approval expiry/revocation, audit purge/retention tests, broader secret scanning, and signed-build threat review. |

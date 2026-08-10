@@ -28,7 +28,10 @@ let package = Package(
         .testTarget(
             name: "ForgeAppTests",
             dependencies: ["ForgeApp"],
-            path: "Tests/ForgeAppTests"
+            path: "Tests/ForgeAppTests",
+            resources: [
+                .copy("Fixtures")
+            ]
         )
     ]
 )
