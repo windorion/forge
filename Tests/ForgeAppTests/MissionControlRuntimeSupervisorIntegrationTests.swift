@@ -34,7 +34,13 @@ final class MissionControlRuntimeSupervisorIntegrationTests: XCTestCase {
             reconnectDelaySchedule: [0.08, 0.16, 0.24]
         ))
         var snapshots: [String: MissionControlObservedRepository] = [:]
-        supervisor.onUpdate = { snapshots = $0 }
+        var publishedSnapshots: [String: [MissionControlObservedRepository]] = [:]
+        supervisor.onUpdate = { update in
+            snapshots = update
+            for (path, snapshot) in update {
+                publishedSnapshots[path, default: []].append(snapshot)
+            }
+        }
         defer {
             supervisor.stopAll()
             try? fileManager.removeItem(at: fixtureRoot)
@@ -102,12 +108,21 @@ final class MissionControlRuntimeSupervisorIntegrationTests: XCTestCase {
         XCTAssertEqual(Darwin.kill(firstProcessID, SIGKILL), 0)
 
         try await waitUntil("owned-child termination retry wait") {
-            guard let snapshot = snapshots[repositoryPath] else { return false }
-            return snapshot.status == "RETRY WAIT"
-                && snapshot.processID == nil
-                && (snapshot.reconnectTelemetry?.totalFailures ?? 0) > beforeTermination.totalFailures
+            publishedSnapshots[repositoryPath]?.contains { snapshot in
+                snapshot.status == "RETRY WAIT"
+                    && snapshot.processID == nil
+                    && (snapshot.reconnectTelemetry?.totalFailures ?? 0)
+                        > beforeTermination.totalFailures
+            } == true
         }
-        let terminated = try XCTUnwrap(snapshots[repositoryPath])
+        let terminated = try XCTUnwrap(
+            publishedSnapshots[repositoryPath]?.last { snapshot in
+                snapshot.status == "RETRY WAIT"
+                    && snapshot.processID == nil
+                    && (snapshot.reconnectTelemetry?.totalFailures ?? 0)
+                        > beforeTermination.totalFailures
+            }
+        )
         XCTAssertEqual(terminated.gitStatus?.branch, "fixture-main")
         XCTAssertEqual(terminated.queue?.queued.map(\.taskID), ["fixture-queued"])
         XCTAssertEqual(terminated.health?.runtimeAuthorization?.id, authorizationID)

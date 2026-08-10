@@ -6665,3 +6665,36 @@ Next:
 - When provider credentials and a cost budget are available, prioritize the
   pinned public-repository live-model corpus because it remains the largest
   Alpha product-quality uncertainty.
+
+## 2026-08-10 22:17:07 +0200 (CEST)
+
+Conversation summary:
+
+- Diagnosed and repaired the hosted SwiftPM failure from the newly added
+  Mission Control process-level integration test without running foreground UI
+  automation.
+
+Done:
+
+- Read the failed GitHub Actions log. Documentation truth and the XCUITest
+  build-only job passed; 54 of 55 Swift tests passed, with the new integration
+  test timing out while polling a short-lived owned-child retry state.
+- Preserved every supervisor-published snapshot in the integration test and
+  changed the exit assertion to inspect that lossless history. This keeps the
+  strict `RETRY WAIT`, nil PID, incremented failure, cached queue/Git, exact
+  authorization, new PID, restart/recovery, and zero-mutation assertions while
+  removing dependence on when the test task next reads the latest snapshot.
+- Passed the focused process integration test and the CI-equivalent full Swift
+  coverage run: 55 tests, zero failures.
+
+Not done:
+
+- The repair still needs to be pushed and proven by a fresh hosted CI run.
+- Six-hour Mission Control soak evidence, a complete action-level XCUITest
+  archive, live-model corpus, signing, and product policy decisions remain.
+
+Next:
+
+- Push the CI repair and watch both hosted jobs to completion.
+- Continue the roadmap with the six-hour API-free Mission Control soak while
+  leaving action-level UI automation for an explicitly unattended desktop.
