@@ -619,6 +619,22 @@ transaction per missing version. Schema v5 is additive. Unit coverage
 rehearses v4 → v5 with an existing task, rejects migration from a read-only
 observer, and verifies the recovered task plus new receipt table.
 
+Each migration also declares `Additive` or `Destructive`. Writable task stores
+hold an owner-only single-writer lease while still allowing observer reads. A
+destructive migration calls the backup service before `BEGIN IMMEDIATE`; SQLite
+`VACUUM INTO` produces a consistent snapshot and the service verifies integrity,
+schema, task count, bytes, and SHA-256 before writing its manifest. Failure to
+create or verify that artifact stops before migration SQL. Failed migration SQL
+rolls back while retaining the backup.
+
+Restore is deliberately offline rather than an HTTP action. The CLI requires
+the exact manifest target and `RestoreForgeDatabaseBackup`, refuses active
+writer leases and non-empty WAL, verifies a prepared same-directory copy,
+atomically displaces the current database, verifies the restored file, and
+writes a receipt. The displaced database remains available as rescue evidence.
+The destructive v6 used by unit/smoke coverage is fixture-only; production
+schema remains v5.
+
 ### Agent Run Step
 
 Agent Run Step v0 is the first provider-driven normal run path. The endpoint

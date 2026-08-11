@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { databaseWriterLeasePath } from "../dist/databaseWriterLease.js";
 import { SqliteTaskStore } from "../dist/taskStore.js";
 
 let count = 0;
@@ -37,6 +39,11 @@ try {
     editProposal: { id: "proposal-current" }
   };
   store.saveTask(legacyTask);
+  assert.throws(() => new SqliteTaskStore(dbPath), /active writer lease/);
+  count += 1;
+  const concurrentObserver = new SqliteTaskStore(dbPath, { readOnly: true });
+  ok(concurrentObserver.loadTasks()[0].id === "legacy", "read-only observer may coexist with the sole writer");
+  concurrentObserver.close();
   const restoredLegacy = store.loadTasks()[0];
   ok(restoredLegacy.approvals.length === 0 && restoredLegacy.agentRunSteps.length === 0, "missing task arrays receive compatibility defaults");
   ok(restoredLegacy.taskCommandRuns[0].outputChunks.length === 0, "legacy command output chunks default empty");
@@ -112,6 +119,20 @@ try {
   store.setIndexMeta({ lastIndexedAt: indexedAt, gitRoot: "/tmp/repo" });
   ok(store.getIndexMeta().lastIndexedAt === indexedAt && store.getIndexMeta().gitRoot === "/tmp/repo", "index metadata round-trips");
   store.close();
+  ok(!existsSync(databaseWriterLeasePath(dbPath)), "clean writer close releases the database lease");
+
+  const staleLeasePath = join(tempRoot, "nested", "stale.sqlite");
+  await writeFile(databaseWriterLeasePath(staleLeasePath), JSON.stringify({
+    version: 1,
+    id: "stale-writer",
+    pid: 999_999_999,
+    acquiredAt: "2026-08-10T00:00:00.000Z",
+    databasePath: staleLeasePath
+  }), "utf8");
+  const staleRecovered = new SqliteTaskStore(staleLeasePath);
+  staleRecovered.close();
+  const staleArtifacts = await readdir(join(tempRoot, "nested"));
+  ok(staleArtifacts.some((name) => name.startsWith("stale.sqlite.forge-writer-lock.stale-")), "startup preserves and replaces a stale writer lease");
 
   const readOnly = new SqliteTaskStore(dbPath, { readOnly: true });
   ok(readOnly.loadTasks().length === 2 && readOnly.countTrigramFiles() === 1, "read-only store loads persisted task and index state");

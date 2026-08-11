@@ -354,6 +354,9 @@ policy. The current implementation deliberately does not infer those choices.
 - Database migrations are ordered in `runtime/src/databaseMigrations.ts` and
   recorded individually in `schema_migrations` only after their transaction
   commits.
+- Every migration must declare `safety: Additive` or `safety: Destructive`.
+  The registry must be contiguous from version 1; missing safety, gaps,
+  mismatched recorded names, and newer unsupported versions fail closed.
 - Writable primary runtimes migrate missing supported versions in order.
   Immediately prior schema v4 is rehearsed in `task-store-test.mjs`: the v5
   receipt table is recreated while the existing task payload survives.
@@ -362,7 +365,31 @@ policy. The current implementation deliberately does not infer those choices.
   migrated database normally.
 - A database with a newer schema or a mismatched recorded migration name fails
   closed rather than guessing.
-- Migrations must be reversible when practical.
-- Backups are required before a future destructive schema migration. Schema v5
-  is additive; the only destructive data operation is the separately reviewed,
-  export-receipt-gated command-output purge.
+- Writable stores hold one owner-only writer lease beside the database.
+  Concurrent read-only observers remain supported, but a second writer fails
+  before opening SQLite. Clean shutdown releases the lease; startup preserves
+  a stale lease as evidence before replacing it.
+- Before any migration classified `Destructive`, the runner uses parameterized
+  SQLite `VACUUM INTO` to create a transactionally consistent snapshot under
+  `database-backups/`. It verifies source and backup integrity, schema version,
+  task count, byte count, SHA-256, and the actual `PRAGMA database_list` source
+  path, then writes an owner-only versioned JSON manifest. Backup failure means
+  the destructive transaction is never begun.
+- Each migration still runs in its own `BEGIN IMMEDIATE` transaction. A failed
+  destructive transaction rolls back its SQL and leaves the verified backup
+  manifest available for diagnosis.
+- Offline recovery uses `npm run database:restore -- <manifest> <database>
+  RestoreForgeDatabaseBackup`. Restore rejects the wrong target, confirmation,
+  missing/corrupt manifest or backup, live writer lease, and non-empty WAL. It
+  prepares and verifies a same-directory copy before atomically replacing the
+  target, preserves the displaced database as a rescue artifact, verifies the
+  final database again, and writes a restore receipt.
+- Schema v5 remains additive; the destructive v6 used by tests is an isolated
+  fixture, not a shipped product migration. `database-backup-test.mjs` covers
+  the failure matrix, and `smoke:database-recovery` exercises the actual CLI.
+- Migrations must remain reversible when practical even though verified backup
+  is mandatory for every destructive classification.
+- Migration backups, stale writer-lease evidence, displaced databases, and
+  restore receipts are not automatically deleted while workspace retention is
+  undecided. They can contain complete private task history and require an
+  explicit future retention/cleanup policy.

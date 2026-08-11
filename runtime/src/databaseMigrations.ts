@@ -1,6 +1,7 @@
 export interface DatabaseMigration {
   version: number;
   name: string;
+  safety: "Additive" | "Destructive";
   sql: string;
 }
 
@@ -10,6 +11,7 @@ export const DATABASE_MIGRATIONS: readonly DatabaseMigration[] = [
   {
     version: 1,
     name: "create_task_store",
+    safety: "Additive",
     sql: `
       CREATE TABLE IF NOT EXISTS tasks (
         id TEXT PRIMARY KEY,
@@ -28,6 +30,7 @@ export const DATABASE_MIGRATIONS: readonly DatabaseMigration[] = [
   {
     version: 2,
     name: "create_repo_index",
+    safety: "Additive",
     sql: `
       CREATE TABLE IF NOT EXISTS repo_index (
         path TEXT PRIMARY KEY,
@@ -50,6 +53,7 @@ export const DATABASE_MIGRATIONS: readonly DatabaseMigration[] = [
   {
     version: 3,
     name: "create_repo_symbols",
+    safety: "Additive",
     sql: `
       CREATE TABLE IF NOT EXISTS repo_symbols (
         path TEXT NOT NULL,
@@ -65,6 +69,7 @@ export const DATABASE_MIGRATIONS: readonly DatabaseMigration[] = [
   {
     version: 4,
     name: "create_repo_trigrams",
+    safety: "Additive",
     sql: `
       CREATE TABLE IF NOT EXISTS repo_trigrams (
         path TEXT NOT NULL,
@@ -78,6 +83,7 @@ export const DATABASE_MIGRATIONS: readonly DatabaseMigration[] = [
   {
     version: 5,
     name: "create_task_history_purge_receipts",
+    safety: "Additive",
     sql: `
       CREATE TABLE IF NOT EXISTS task_history_purges (
         id TEXT PRIMARY KEY,

@@ -104,14 +104,33 @@ Exercise the API-free retention and prior-schema paths with:
 ```bash
 cd runtime
 npm run smoke:task-retention
+npm run smoke:database-recovery
 npm run test:unit
 ```
 
-The first command covers preview, forged receipt rejection, explicit purge,
-SQLite receipt persistence, and restart recovery through real HTTP. The unit
-suite rehearses schema v4 → v5 while preserving an existing task; a read-only
-observer intentionally refuses to migrate and becomes readable after a primary
-runtime upgrades the database.
+The retention smoke covers preview, forged receipt rejection, explicit purge,
+SQLite receipt persistence, and restart recovery through real HTTP. The
+database recovery smoke creates a real v5 task store, applies an isolated
+destructive-v6 fixture only after a verified backup, rejects an incorrect CLI
+confirmation, then restores the removed data and task through the production
+offline command. The unit suite covers v4 → v5, writer-lease exclusion, stale
+lease recovery, backup failure before SQL, transaction rollback, corrupt and
+mismatched artifacts, WAL/live-writer refusal, displaced-database rescue, and
+restore receipts.
+
+For a real offline restore, stop every Forge runtime using the target database,
+confirm no non-empty SQLite WAL remains, then use the exact manifest source path:
+
+```bash
+cd runtime
+npm run database:restore -- \
+  /absolute/path/to/forge.sqlite...manifest.json \
+  /absolute/path/to/forge.sqlite \
+  RestoreForgeDatabaseBackup
+```
+
+Do not delete the manifest, backup, displaced database, or restore receipt until
+the recovered workspace has been independently reviewed.
 
 Mission Control (`⌘⇧M`) opens the exclusive handoff `4a` 1240px three-column
 surface while preserving the main task workspace state underneath. The primary column uses
@@ -984,7 +1003,7 @@ cd runtime && npm run campaign:provider-reliability
 ```
 
 Before a release-shaped change, run every `smoke:*` script — the full suite is
-21 scripts and takes a few minutes. Both reliability campaigns are
+22 scripts and takes a few minutes. Both reliability campaigns are
 intentionally separate from `smoke:all`: each creates four isolated Git
 repositories and emits a staged scorecard. Use the corresponding `:baseline`
 variant only when intentionally refreshing durable evidence in
@@ -1077,9 +1096,10 @@ table, versioned reliability JSON, route manifest, and package scripts. See
   stored rerun evidence.
 - SQLite schema v5 stores full task snapshots plus task/index fields and
   append-only command-output purge receipts. Migrations are ordered and
-  transactional, and v4 → v5 recovery is rehearsed. The full normalized
-  runs/messages/tool-calls schema, workspace-wide retention policy, and
-  destructive-migration backup flow are still ahead.
+  transactional, v4 → v5 recovery is rehearsed, and destructive migrations are
+  safety-classified behind verified snapshot manifests plus an offline restore
+  CLI. The full normalized runs/messages/tool-calls schema and workspace-wide
+  retention policy are still ahead.
 - Repository context remains bounded, but it now has durable file metadata,
   lightweight symbols, and trigram text indexes with live-scan verification.
   It still does not use Tree-sitter, embeddings, dependency graphs, or

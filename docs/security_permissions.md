@@ -225,6 +225,22 @@ identity, status, exit code, timestamps, approvals, events, and an atomic
 schema-v5 receipt. Observer runtimes may preview retention but reject purge as
 they do every POST.
 
+Database schema destruction has a separate startup/offline boundary. Every
+migration declares whether it is additive or destructive. A destructive
+migration cannot start until Forge has produced and verified an owner-only
+SQLite snapshot plus manifest containing source/target schema, task count,
+bytes, integrity, and SHA-256. Backup creation failure executes no destructive
+SQL; migration failure rolls back its transaction and keeps the backup.
+
+Writable runtimes hold an owner-only database writer lease. Read-only observers
+may coexist, but a second writer fails closed. Offline restore is not exposed
+over HTTP or to model tools: the operator must stop the runtime, provide the
+exact manifest/database paths and `RestoreForgeDatabaseBackup`, and have a
+checkpointed database. Hash/schema/task mismatches, unreadable or live leases,
+and non-empty WAL fail before replacement. Forge preserves the displaced
+database and writes a restore receipt; these artifacts can contain private task
+history and must remain local with owner-only permissions.
+
 Mission Control observer runtimes add visibility, not authority. They use
 unique loopback ports, remove remote-provider secrets from their child
 environment, open existing task SQLite files read-only, skip all startup

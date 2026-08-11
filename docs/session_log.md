@@ -6760,3 +6760,71 @@ Next:
 - Continue the API-free roadmap with destructive-migration backup/restore proof
   or performance/resource budgets; reserve the live-model Alpha corpus for a
   user-approved provider credential and explicit cost budget.
+
+## 2026-08-11 20:42:50 +0200 (CEST)
+
+Conversation summary:
+
+- Completed the roadmap's destructive-database-migration backup and offline
+  restore proof using only background code, temporary SQLite files, and tests.
+
+Done:
+
+- Classified the prior six-hour Mission Control attempt honestly: its durable
+  report directory is empty and the prior terminal session no longer exists,
+  so the attempt was interrupted and provides no completion evidence.
+- Added mandatory `Additive`/`Destructive` safety classification and contiguous
+  version validation to the migration registry. Recorded-name mismatches,
+  history gaps, and newer schemas remain fail-closed.
+- Extracted an ordered migration runner. Every missing version still gets one
+  `BEGIN IMMEDIATE` transaction; a destructive version must complete a verified
+  backup before its transaction can begin.
+- Added a single-writer database lease. Concurrent observer reads remain
+  supported, a second writable store fails before SQLite opens, clean shutdown
+  releases the lease, and startup preserves stale lease evidence before
+  replacing it.
+- Added parameterized SQLite `VACUUM INTO` migration snapshots with canonical
+  source-path identity, owner-only file permissions, integrity/schema/task/
+  byte/SHA-256 verification, and an owner-only versioned manifest. Backup
+  failure executes zero destructive SQL; transaction failure rolls back and
+  retains the backup.
+- Added an offline restore service and `database:restore` CLI. It requires the
+  exact source target and `RestoreForgeDatabaseBackup`, rejects live or
+  unreadable writer leases, non-empty WAL, corrupt/missing/mismatched artifacts,
+  and wrong confirmation, verifies a same-directory prepared copy, atomically
+  displaces the current database, verifies the restored file, preserves the
+  displaced database, and writes a restore receipt.
+- Added 36 focused backup/restore assertions covering corruption, path identity,
+  writer/WAL gates, schema/task/hash evidence, backup failure before SQL,
+  destructive transaction rollback, rescue artifacts, and successful recovery.
+  Expanded task-store coverage to 42 assertions for sole-writer, observer
+  coexistence, clean release, and stale-lease recovery.
+- Added `smoke:database-recovery`: a real v5 task store receives a fixture-only
+  destructive v6 that deletes private data, rejects a wrong CLI confirmation,
+  then restores schema v5, the task, and deleted data while retaining the v6
+  rescue database and receipt. Production schema remains v5.
+- Passed TypeScript check/build, documentation truth, all 23 runtime unit files,
+  unit coverage, all 22 runtime smoke scripts, and all 56 Swift tests. New line
+  coverage is approximately 84% for backup, 93% for the migration runner, and
+  97% for the writer lease. No App or foreground UI automation was launched.
+- Updated README, database/development/local-first/runtime/security docs,
+  roadmap, TODO, project status, server refactor record, and synchronized
+  document dates. Trust/runtime is now estimated at 93-96%, runtime/recovery at
+  95-97%, reliability evidence at 87-93%, and commercial beta at 24-29%.
+
+Not done:
+
+- Workspace/event/tool/memory retention duration, workspace-wide export/purge,
+  and cleanup rules for backups/stale leases/displaced databases still require
+  product decisions. Recovery artifacts are deliberately never auto-deleted.
+- The full six-hour Mission Control report remains outstanding; the interrupted
+  attempt is not counted. Foreground XCUITest archives, live-model corpus,
+  performance budgets, signing, approval expiry, and account/commercial policy
+  also remain.
+
+Next:
+
+- Commit and push this migration-recovery slice, then verify hosted CI.
+- The next API-free roadmap implementation should establish repeatable runtime
+  performance/resource budgets; the live-model corpus remains higher Alpha
+  leverage once credentials and a cost budget are explicitly available.

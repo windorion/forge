@@ -3,7 +3,7 @@
 Document role: track implementation and exact visual/interaction verification
 for every named screen in `design_handoff_forge/Forge App States.dc.html`.
 
-Last updated: 2026-08-10
+Last updated: 2026-08-11
 
 ## Completion Rule
 

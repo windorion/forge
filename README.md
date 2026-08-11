@@ -39,7 +39,7 @@ should no longer feel like a generic workflow dashboard.
 
 ## Current Status
 
-Last updated: 2026-08-10
+Last updated: 2026-08-11
 
 The trust/runtime foundation is strong and the Coding-Agent Demo V0 functional
 acceptance path is complete. All five primary handoff screens are rendered and
@@ -216,7 +216,13 @@ Implemented today:
   receipt can purge bounded task-command chunks and command/validation output
   summaries. Execution metadata, events, and an atomic schema-v5 receipt remain.
   SQLite migrations now run in ordered transactions, v4 → v5 recovery is
-  rehearsed, and read-only observers refuse to migrate older stores.
+  rehearsed, and read-only observers refuse to migrate older stores. Every
+  migration declares `Additive` or `Destructive`; a destructive version cannot
+  start until `VACUUM INTO` produces a permission-restricted snapshot whose
+  SHA-256, integrity, schema version, and task count match its manifest.
+  Offline restore requires the runtime writer lease to be released, an exact
+  target/confirmation, and a checkpointed database; it preserves the displaced
+  database and writes a restore receipt.
 - A repeatable Alpha repository reliability campaign now runs three applied
   TypeScript/Python/Markdown tasks and one guarded ambiguity control through
   isolated Git repositories, separate runtimes, review/apply, Git evidence,
@@ -303,12 +309,12 @@ Product-readiness estimate:
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| Trust/runtime foundation | 92-96% | Local runtime, task state, ordered SQLite migrations, keep-by-default retention, export-before-purge, review gates, restricted edits, validation, composed cancellation, redacted audit export, guarded git/PR actions, bounded refresh audit, fail-closed supervised queue grants, repository-scoped background command/Git routing, diagnostics, and separate local/provider protocol reliability baselines are real. |
+| Trust/runtime foundation | 93-96% | Local runtime, task state, safety-classified SQLite migrations, verified destructive-migration backup/offline restore, keep-by-default retention, export-before-purge, review gates, restricted edits, validation, composed cancellation, redacted audit export, guarded git/PR actions, fail-closed supervised queue grants, repository-scoped background routing, diagnostics, and reliability baselines are real. |
 | Coding-agent demo V0 behavior | 100% | The documented functional acceptance path is implemented and smoke-covered. |
 | Primary V0 handoff UI | 100% | The five primary screens are `Verified` with rendered-comparison evidence in `docs/verification/`. |
 | Full handoff UI | 95-97% | 41 of 43 named screens/states are `Verified` (rendered comparison on real data, evidence in `docs/verification/`). The two remaining: `6a` GitHub is `Partial` (configuration UI, Device Flow, polling, Keychain persistence, and connected state are implemented and tested; live GitHub authorization still needs a founder-owned OAuth App Client ID with Device Flow enabled); `35a` Widget is a documented platform-blocked descope (hand-assembled ad-hoc-signed extension not discovered by pluginkit; unblocks with P6 signing). |
 | Useful developer alpha | 72-80% | Forge repeats the reviewed lifecycle across deterministic local-provider and mock-OpenAI adapter corpora, including Unified Diff, approved commands, repair/rerun, fork-aware PR supervision, repository-scoped background command/Git review, and fair restart-safe background dispatch; it still needs broader autonomous tool use and live-model success on pinned public repositories. |
-| Commercial beta | 22-27% | The first migration/retention exit slice exists; Forge still needs signed installable packaging, production proof of onboarding/GitHub/provider setup, broader data-lifecycle policy, trust/operations polish, and repeated success on real repos. |
+| Commercial beta | 24-29% | Versioned migration, verified pre-destructive backup/offline restore, and the first retention slice exist; Forge still needs signed packaging, production onboarding/GitHub/provider proof, broader data-lifecycle policy, operations polish, and repeated real-repository success. |
 | Polished v1 | 27-33% | Queueing, local indexes, session-authorized runtimes, background task/command/Git review routing, fair supervised grants, bounded reconnect/crash recovery telemetry, reportable soak tooling, and a compiled action-level XCUITest harness are real; full-duration/passing evidence, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
 
 Short version: V0 behavior is complete, but the entire 43-screen product design

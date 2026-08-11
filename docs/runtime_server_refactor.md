@@ -171,7 +171,7 @@ containing only the services needed by that route group.
 
 | Phase | State | Evidence |
 | --- | --- | --- |
-| 0. Freeze observable behavior | Complete | The frozen refactor baseline had 55 routes; the current manifest has 61 after task cancellation/audit export/retention, task detail, and supervised queue grants, with HTTP/SSE, build, unit, coverage, and 21 smoke scripts passing |
+| 0. Freeze observable behavior | Complete | The frozen refactor baseline had 55 routes; the current manifest has 61 after task cancellation/audit export/retention, task detail, and supervised queue grants, with HTTP/SSE, build, unit, coverage, and 22 smoke scripts passing |
 | 1. Bootstrap and HTTP primitives | Complete | Runtime config, HTTP handler/primitives, event bus, and lifecycle extracted; full gate passes |
 | 2. Pure policy and parsing | Complete | Unified diff, text patch, edit paths, Git parsers/failure classes, validation normalization/ranking extracted and directly tested |
 | 3. Git vertical slice | Complete | No-shell command adapter plus status, diff, conflict, branch, commit, push, and PR workflow services extracted; Git smokes pass |
@@ -190,13 +190,13 @@ settings, HTTP primitives, and lifecycle behavior are owned by focused module
 groups. Domain services import the runtime error contract rather than the HTTP
 layer, and no module imports `server.ts`.
 
-Final verification on 2026-08-01:
+Current verification on 2026-08-11:
 
 - `runtime/src/server.ts`: 1 line (target: below 300)
-- executable manifest: 59 current routes, including observer availability
-- direct Node unit suite: 20 scripts, all passing
+- executable manifest: 61 current routes, including observer availability
+- direct Node unit suite: 23 scripts, all passing
 - TypeScript check, build, and Node coverage gate: passing
-- compatibility suite: 21 smoke scripts, all passing
+- compatibility suite: 22 smoke scripts, all passing
 
 ### Phase 0: Freeze Observable Behavior
 
@@ -446,7 +446,7 @@ without changing the public runtime contract:
   defaults; `createForgeRuntime.ts` fell from 932 to 476 lines while the
   packaged `server.ts` remains one line.
 
-The current compatibility gate passes TypeScript check/build, 22 unit scripts,
-unit coverage, all 21 runtime smoke scripts, and 56 Swift tests. The recorded
+The current compatibility gate passes TypeScript check/build, 23 unit scripts,
+unit coverage, all 22 runtime smoke scripts, and 56 Swift tests. The recorded
 unit coverage aggregate is 56.94% lines, 88.42% branches, and 67.29%
 functions.

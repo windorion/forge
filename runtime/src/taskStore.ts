@@ -5,17 +5,24 @@ import type { ForgeTask, TaskHistoryPurgeReceipt } from "./types.js";
 import type { IndexedFile } from "./repositoryIndex.js";
 import type { ExtractedSymbol } from "./symbolExtract.js";
 import { DATABASE_MIGRATIONS, DATABASE_SCHEMA_VERSION } from "./databaseMigrations.js";
+import { applyDatabaseMigrations, validateDatabaseSchema } from "./databaseMigrationRunner.js";
+import {
+  acquireDatabaseWriterLease,
+  releaseDatabaseWriterLease,
+  type DatabaseWriterLease
+} from "./databaseWriterLease.js";
 
 export type StoredSymbol = ExtractedSymbol & { path: string };
 
 export class SqliteTaskStore {
   readonly dbPath: string;
 
-  private readonly db: DatabaseSync;
+  private readonly db!: DatabaseSync;
   private readonly selectTasks: StatementSync;
   private readonly upsertTask?: StatementSync;
   private readonly insertHistoryPurge?: StatementSync;
   private readonly readOnly: boolean;
+  private readonly writerLease?: DatabaseWriterLease;
 
   constructor(dbPath: string, options: { readOnly?: boolean } = {}) {
     this.dbPath = dbPath;
@@ -24,25 +31,21 @@ export class SqliteTaskStore {
     if (!this.readOnly) {
       mkdirSync(path.dirname(dbPath), { recursive: true });
     }
-
-    this.db = existingReadOnlyDatabase
-      ? new DatabaseSync(dbPath, { readOnly: true })
-      : this.readOnly
-        ? new DatabaseSync(":memory:")
-        : new DatabaseSync(dbPath);
-    if (existingReadOnlyDatabase) {
-      try {
+    this.writerLease = this.readOnly ? undefined : acquireDatabaseWriterLease(dbPath);
+    try {
+      this.db = existingReadOnlyDatabase
+        ? new DatabaseSync(dbPath, { readOnly: true })
+        : this.readOnly
+          ? new DatabaseSync(":memory:")
+          : new DatabaseSync(dbPath);
+      if (existingReadOnlyDatabase) {
         this.validateSchema();
-      } catch (error) {
-        this.db.close();
-        throw error;
+      } else {
+        this.applySchema();
       }
-    } else {
-      this.applySchema();
-    }
-    this.selectTasks = this.db.prepare("SELECT payload_json FROM tasks ORDER BY updated_at DESC");
-    if (!this.readOnly) {
-      this.upsertTask = this.db.prepare(`
+      this.selectTasks = this.db.prepare("SELECT payload_json FROM tasks ORDER BY updated_at DESC");
+      if (!this.readOnly) {
+        this.upsertTask = this.db.prepare(`
         INSERT INTO tasks (
           id,
           title,
@@ -63,12 +66,17 @@ export class SqliteTaskStore {
           updated_at = excluded.updated_at,
           payload_json = excluded.payload_json
       `);
-      this.insertHistoryPurge = this.db.prepare(`
+        this.insertHistoryPurge = this.db.prepare(`
         INSERT INTO task_history_purges (
           id, task_id, scope, exported_at, export_source_sha256,
           purged_at, records_affected, bytes_removed, details_json
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
+        `);
+      }
+    } catch (error) {
+      this.db?.close();
+      releaseDatabaseWriterLease(this.writerLease);
+      throw error;
     }
   }
 
@@ -145,77 +153,20 @@ export class SqliteTaskStore {
   }
 
   close(): void {
-    this.db.close();
+    try {
+      this.db.close();
+    } finally {
+      releaseDatabaseWriterLease(this.writerLease);
+    }
   }
 
   private applySchema(): void {
-    this.db.exec(`
-      PRAGMA journal_mode = WAL;
-      PRAGMA foreign_keys = ON;
-      CREATE TABLE IF NOT EXISTS schema_migrations (
-        version INTEGER PRIMARY KEY,
-        name TEXT NOT NULL,
-        applied_at TEXT NOT NULL
-      );
-    `);
-    const applied = new Map(
-      this.db.prepare("SELECT version, name FROM schema_migrations").all()
-        .map((row) => [Number(row.version), String(row.name)] as const)
-    );
-    const newestApplied = Math.max(0, ...applied.keys());
-    if (newestApplied > DATABASE_SCHEMA_VERSION) {
-      throw new Error(
-        `Forge database schema ${newestApplied} is newer than this runtime supports (${DATABASE_SCHEMA_VERSION}).`
-      );
-    }
-    for (const migration of DATABASE_MIGRATIONS) {
-      const appliedName = applied.get(migration.version);
-      if (appliedName && appliedName !== migration.name) {
-        throw new Error(
-          `Forge database migration ${migration.version} is recorded as ${appliedName}, expected ${migration.name}.`
-        );
-      }
-      if (appliedName) continue;
-      this.db.exec("BEGIN IMMEDIATE");
-      try {
-        this.db.exec(migration.sql);
-        this.db.prepare(`
-          INSERT INTO schema_migrations (version, name, applied_at)
-          VALUES (?, ?, datetime('now'))
-        `).run(migration.version, migration.name);
-        this.db.exec("COMMIT");
-      } catch (error) {
-        this.db.exec("ROLLBACK");
-        throw new Error(
-          `Forge database migration ${migration.version} (${migration.name}) failed: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
-    }
+    applyDatabaseMigrations(this.db, this.dbPath);
     this.validateSchema();
   }
 
   private validateSchema(): void {
-    let rows: Array<Record<string, unknown>>;
-    try {
-      rows = this.db.prepare("SELECT version, name FROM schema_migrations ORDER BY version").all();
-    } catch {
-      throw new Error("Forge database is missing versioned migration metadata.");
-    }
-    const applied = new Map(rows.map((row) => [Number(row.version), String(row.name)]));
-    const newestApplied = Math.max(0, ...applied.keys());
-    if (newestApplied > DATABASE_SCHEMA_VERSION) {
-      throw new Error(
-        `Forge database schema ${newestApplied} is newer than this runtime supports (${DATABASE_SCHEMA_VERSION}).`
-      );
-    }
-    for (const migration of DATABASE_MIGRATIONS) {
-      if (applied.get(migration.version) !== migration.name) {
-        const mode = this.readOnly ? " Read-only observers cannot migrate it; start the primary runtime first." : "";
-        throw new Error(
-          `Forge database requires migration ${migration.version} (${migration.name}).${mode}`
-        );
-      }
-    }
+    validateDatabaseSchema(this.db, DATABASE_MIGRATIONS, { readOnly: this.readOnly });
   }
 
   /** Replace all symbol rows for one file (called when the file is (re)indexed). */

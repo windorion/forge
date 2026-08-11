@@ -34,6 +34,13 @@ metadata, events, and an atomic SQLite purge receipt. Workspace-wide retention,
 memory deletion, and commercial privacy periods remain product decisions rather
 than inferred defaults.
 
+Migration recovery remains local as well. Destructive migrations create an
+owner-only SQLite snapshot and JSON manifest beside the local database; no
+backup data is uploaded. Offline restore validates the local SHA-256, schema,
+task count, writer lease, WAL state, and exact target before replacement, keeps
+the displaced database, and writes a local receipt. These artifacts may include
+the complete private task history and inherit the same non-sharing boundary.
+
 ## Repository Indexing
 
 Indexer should collect:

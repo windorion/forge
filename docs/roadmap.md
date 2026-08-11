@@ -3,7 +3,7 @@
 Document role: record sequencing, milestones, proof points, and what should
 not be built too early.
 
-Last updated: 2026-08-10
+Last updated: 2026-08-11
 
 ## Direction Reset
 
@@ -196,7 +196,7 @@ sequence rather than inventing another score.
 | Daily-use coding quality | Alpha | Deterministic local and mock-OpenAI protocol campaigns pass. | Live provider credentials and an explicit cost budget. | At least eight pinned public-repository tasks across four families, all budget-accounted, externally scored, and classified. |
 | Broader safe agent choices | Alpha | Read/search, reviewed Unified Diff, approved command, repair, and rerun actions exist. | Must be selected from corpus failures rather than intuition. | Measured improvement on the pinned corpus without unauthorized writes, raw shell, or weaker review gates. |
 | Multi-repository operational proof | Alpha | Fair supervised dispatch, 300-second/1,086-restart soak, one passing action-level UI path, exponential reconnect backoff, visible diagnostics, and a passing process-level transport/termination/relaunch fixture with no authorization widening or queue escape. | Stable AC for six-hour evidence; unattended desktop window for XCUITest. | Six-hour report and complete passing `.xcresult` with documented power/desktop conditions. |
-| Runtime history, retention, and migrations | Beta | SQLite schema v5 now runs ordered transactional migrations; v4 → v5 recovery preserves an existing task; command output is per-run bounded and keep-by-default; current audit-export SHA receipts gate an explicit terminal-task purge whose metadata is atomically retained. Native Audit requires a successfully saved current export before confirmation. | Default duration, workspace/event/tool/memory retention, and commercial privacy policy are not decided. Future destructive schema changes still need backup/restore rehearsal. | The first exit slice passes: versioned prior-schema migration, command-output policy, export-before-purge, observer refusal, and restart recovery. Full exit still requires the broader retention decision, workspace export/purge, and destructive-migration backup proof. |
+| Runtime history, retention, and migrations | Beta | SQLite schema v5 runs ordered safety-classified migrations; v4 → v5 preserves tasks; fixture destructive v6 cannot start without a verified owner-only `VACUUM INTO` manifest, and the offline CLI restores removed data while preserving the displaced database and a receipt. Command output remains bounded, keep-by-default, and export-before-purge. | Default duration, workspace/event/tool/memory retention, workspace export/purge, and commercial privacy policy are not decided. | Migration and command-output slices pass: prior-schema upgrade, observer refusal, single-writer lease, pre-destructive backup, corruption/live-writer/WAL gates, offline recovery, export-before-purge, and restart recovery. Full exit now requires the broader workspace retention/export/purge decision. |
 | Performance and resource budgets | Beta | Bounded tools/output and functional smoke campaigns. | Representative large repositories and signed-package profiling environment. | Launch, idle CPU/memory, index, diff, and agent-step budgets with repeatable regression thresholds. |
 | Security lifecycle | Beta | Explicit approvals, read-only observers, scoped authorization, Keychain secrets, redacted audit export. | Approval lifetime and audit-retention product decisions. | Approval expiry/revocation, audit purge/retention tests, broader secret scanning, and signed-build threat review. |
 | Signed Mac distribution | Beta | App-managed/bundled runtime path, onboarding, update/appcast UI. | Founder Developer ID, notarization credentials, and P6 signing work. | Clean-machine DMG install, Gatekeeper/notarization pass, signed appcast install/relaunch, rollback/recovery rehearsal. |
@@ -208,8 +208,8 @@ sequence rather than inventing another score.
 This register originally exposed four omissions that should not hide behind
 broad milestone labels: data lifecycle/migrations, measurable performance
 budgets, approval/audit lifecycle, and the account/commercial decision gate.
-The first data-lifecycle slice is now implemented, but its workspace-wide
-policy and destructive-migration backup proof remain. None should preempt the
+The migration and command-output data-lifecycle slices are now implemented, but
+the workspace-wide policy/export/purge decision remains. None should preempt the
 live-model Alpha corpus, and each remaining exit condition must be resolved
 before claiming the corresponding Beta or v1 finish line.
 

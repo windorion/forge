@@ -3,7 +3,7 @@
 Document role: maintain the active backlog, priority order, and next concrete
 engineering tasks for Forge.
 
-Last updated: 2026-08-10
+Last updated: 2026-08-11
 
 ## Rule
 
@@ -208,7 +208,7 @@ the core runtime smoke. Preserve these completed boundaries:
 - [x] Execute the seven-phase, behavior-preserving `runtime/src/server.ts`
   decomposition in `docs/runtime_server_refactor.md`. The packaged entry is now
   a one-line bootstrap; the current 61-route contracts, direct unit/coverage
-  gates, and all 21 smoke scripts pass without weakening approval or observer
+  gates, and all 22 smoke scripts pass without weakening approval or observer
   boundaries.
 - [x] Complete the post-refactor readability pass: split Git workflow into five
   domain services, agent orchestration into queue/loop/step/inspection/recovery,
@@ -260,7 +260,18 @@ the core runtime smoke. Preserve these completed boundaries:
   summaries. Metadata/events remain, the task + receipt write is atomic, the
   native Audit surface exposes the flow, and `smoke:task-retention` proves
   forged/stale rejection plus restart recovery. Remaining product work is the
-  workspace/event/tool/memory policy and destructive-migration backup proof.
+  workspace/event/tool/memory policy.
+- [x] Complete destructive-migration backup/offline-restore proof. Every
+  migration is explicitly `Additive` or `Destructive`; the registry is
+  contiguous and recorded-name checked. Writable stores enforce one writer
+  lease while observers remain read-only. Before destructive SQL, parameterized
+  `VACUUM INTO` must produce an owner-only backup whose integrity, schema, task
+  count, bytes, and SHA-256 match its manifest; failure performs zero migration
+  SQL. Offline restore requires the stopped-runtime boundary, checkpointed WAL,
+  exact target and `RestoreForgeDatabaseBackup`, preserves the displaced
+  database, verifies the final file, and writes a receipt. Unit coverage proves
+  backup/corruption/lease/WAL/rollback failures; `smoke:database-recovery`
+  executes the real CLI against an isolated fixture-only destructive v6.
 
 ## P5: Native macOS Product
 
