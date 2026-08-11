@@ -19,6 +19,9 @@ const [
   roadmap,
   gitWorkflow,
   ciWorkflow,
+  performanceGuide,
+  performanceWorkflow,
+  performanceBudgetSource,
   taskTypes,
   swiftModels,
   swiftWorkspaceModel,
@@ -40,6 +43,9 @@ const [
   read("docs/roadmap.md"),
   read("docs/git_workflow.md"),
   read(".github/workflows/swift-tests.yml"),
+  read("docs/performance_budgets.md"),
+  read(".github/workflows/runtime-performance.yml"),
+  read("runtime/performance-budgets.json"),
   read("runtime/src/types.ts"),
   read("apps/macos/Sources/ForgeApp/Models.swift"),
   read("apps/macos/Sources/ForgeApp/WorkspaceModel.swift"),
@@ -53,6 +59,7 @@ const [
 ]);
 
 const runtimePackage = JSON.parse(runtimePackageSource);
+const performanceBudget = JSON.parse(performanceBudgetSource);
 const repositoryBaseline = JSON.parse(repositoryBaselineSource);
 const providerBaseline = JSON.parse(providerBaselineSource);
 const failures = [];
@@ -182,6 +189,25 @@ check("documentation truth check is discoverable and runs in CI", () => {
   assert.match(development, /`npm run check:docs`/);
   assert.match(ciWorkflow, /node script\/check_documentation_truth\.mjs/);
   assert.equal(runtimePackage.scripts["check:docs"], "node ../script/check_documentation_truth.mjs");
+});
+
+check("runtime performance budgets are versioned, documented, and enforced in CI", () => {
+  assert.equal(performanceBudget.schemaVersion, 1);
+  assert.deepEqual(Object.keys(performanceBudget.profiles), ["smoke", "standard", "large"]);
+  for (const profile of Object.values(performanceBudget.profiles)) {
+    assert(profile.fileCount > 0);
+    assert(profile.taskCount > 0);
+    assert(profile.budgets.some((budget) => budget.metricID === "runtime.cold_start"));
+    assert(profile.budgets.some((budget) => budget.metricID === "repository.index_cold"));
+    assert(profile.budgets.some((budget) => budget.metricID === "agent.step"));
+  }
+  assert.match(performanceGuide, /runtime\.cold_start/);
+  assert.match(performanceGuide, /noise floor/i);
+  assert.equal(runtimePackage.scripts["performance:smoke"], "npm run build && node scripts/performance-campaign.mjs --profile smoke --enforce");
+  assert.match(performanceWorkflow, /npm run performance:smoke/);
+  assert.match(performanceWorkflow, /upload-artifact/);
+  assert.match(projectStatus, /Versioned runtime performance/);
+  assert.match(roadmap, /Versioned smoke\/standard\/large runtime profiles/);
 });
 
 check("Mission Control XCUITest has a compile-only hosted gate", () => {

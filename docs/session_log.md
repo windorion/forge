@@ -6828,3 +6828,69 @@ Next:
 - The next API-free roadmap implementation should establish repeatable runtime
   performance/resource budgets; the live-model corpus remains higher Alpha
   leverage once credentials and a cost budget are explicitly available.
+
+## 2026-08-11 21:40:29 +0200 (CEST)
+
+Conversation summary:
+
+- Completed the first roadmap performance and resource budget system without
+  external APIs, app launch, browser control, or foreground UI automation.
+
+Done:
+
+- Added a pure versioned performance policy/reporting module with bounded raw
+  samples, min/mean/p50/p95/max summaries, hard and advisory gates,
+  deterministic nearest-rank percentiles, and same-profile baseline comparison
+  that requires both percentage and absolute-noise regressions.
+- Made baseline comparison fail closed across profile, platform, architecture,
+  or Node-major mismatches. Reports include fixture/environment identity, Git
+  commit, exact metric context, budget evaluations, and JSON/Markdown output.
+- Added authoritative smoke, standard, and large profiles. Fresh temporary Git
+  repositories and SQLite stores measure cold runtime health, idle child
+  CPU/RSS, retained-task HTTP listing, cold/unchanged indexing, Git status and
+  bounded diff retrieval, and a prepared deterministic local Agent Run Step.
+  The large fixture also records the runtime-owned 400-file repository scan
+  ceiling rather than claiming all 600 synthetic modules are indexed.
+- Added dependency-free evaluator coverage for invalid/missing samples,
+  percentiles, hard/advisory behavior, baseline noise, report status, and
+  Markdown evidence. Runtime unit-file count is now 24.
+- Added `performance:smoke`, `performance:standard`, and `performance:large`
+  commands plus a dedicated hosted macOS/Node 22 workflow that uploads the
+  report and exact budget snapshot even when the gate fails. CI never rewrites
+  a baseline implicitly.
+- Passed all three local profiles. The final smoke result recorded cold start
+  69.67 ms, idle RSS 61.45 MiB, retained-task list p95 24.62 ms, cold index
+  63.77 ms, warm index p95 17.98 ms, Git status p95 47.86 ms, Git diff p95
+  46.22 ms, and local agent step 4.05 ms. Standard (200 modules/100 tasks) and
+  large (600 modules/400 tasks, bounded to 400 indexed files) passed every hard
+  budget. A second smoke run passed same-profile baseline comparison.
+- Passed TypeScript check/build, documentation truth, all 24 runtime unit files,
+  unit coverage, all 22 smoke scripts, both four-case reliability campaigns,
+  and all 56 Swift tests. The first full-smoke attempt overlapped with a second
+  tool-started run and transiently collided in smoke-core's temporary source
+  fixture; after proving no residual process, the isolated core and a single
+  serial full suite both passed.
+- Added `docs/performance_budgets.md` and updated README, documentation map,
+  development, runtime architecture, server refactor status, project status,
+  roadmap gap register, TODO, and automated documentation truth checks.
+  Commercial-beta readiness is now estimated at 25-30%; reliability/test
+  evidence at 89-94%.
+
+Not done:
+
+- Hosted GitHub Actions for the new workflow has not run until this change is
+  committed and pushed.
+- Synthetic runtime evidence does not yet prove pinned real-repository
+  behavior, signed app/runtime launch, combined app/runtime memory, energy
+  impact, or interactive SwiftUI performance.
+- Live-model corpus, full-duration Mission Control soak, complete unattended
+  XCUITest archive, approval expiry/revocation, signed distribution, broader
+  retention policy, and account/commercial decisions remain.
+
+Next:
+
+- Commit and push the performance-budget slice, then verify both the existing
+  Swift workflow and the new Runtime Performance artifact workflow.
+- Continue the next code-only roadmap task with approval lifetime, expiry, and
+  revocation across validation/task-command permissions, restart, audit, and
+  Swift permission-envelope decoding.

@@ -223,6 +223,13 @@ Implemented today:
   Offline restore requires the runtime writer lease to be released, an exact
   target/confirmation, and a checkpointed database; it preserves the displaced
   database and writes a restore receipt.
+- Versioned runtime performance and resource budgets. Dependency-free
+  smoke/standard/large synthetic profiles measure cold startup, idle child
+  CPU/RSS, retained-task listing, cold/unchanged repository indexing, Git
+  status/diff, and a prepared deterministic local Agent Run Step. Hard and
+  advisory ceilings, noise-aware same-profile comparison, JSON/Markdown
+  evidence, evaluator tests, and an artifact-producing hosted macOS smoke gate
+  are real. Signed-package/native and pinned real-repository profiling remain.
 - A repeatable Alpha repository reliability campaign now runs three applied
   TypeScript/Python/Markdown tasks and one guarded ambiguity control through
   isolated Git repositories, separate runtimes, review/apply, Git evidence,
@@ -314,7 +321,7 @@ Product-readiness estimate:
 | Primary V0 handoff UI | 100% | The five primary screens are `Verified` with rendered-comparison evidence in `docs/verification/`. |
 | Full handoff UI | 95-97% | 41 of 43 named screens/states are `Verified` (rendered comparison on real data, evidence in `docs/verification/`). The two remaining: `6a` GitHub is `Partial` (configuration UI, Device Flow, polling, Keychain persistence, and connected state are implemented and tested; live GitHub authorization still needs a founder-owned OAuth App Client ID with Device Flow enabled); `35a` Widget is a documented platform-blocked descope (hand-assembled ad-hoc-signed extension not discovered by pluginkit; unblocks with P6 signing). |
 | Useful developer alpha | 72-80% | Forge repeats the reviewed lifecycle across deterministic local-provider and mock-OpenAI adapter corpora, including Unified Diff, approved commands, repair/rerun, fork-aware PR supervision, repository-scoped background command/Git review, and fair restart-safe background dispatch; it still needs broader autonomous tool use and live-model success on pinned public repositories. |
-| Commercial beta | 24-29% | Versioned migration, verified pre-destructive backup/offline restore, and the first retention slice exist; Forge still needs signed packaging, production onboarding/GitHub/provider proof, broader data-lifecycle policy, operations polish, and repeated real-repository success. |
+| Commercial beta | 25-30% | Versioned migration, verified pre-destructive backup/offline restore, the first retention slice, and an artifact-producing runtime performance gate exist; Forge still needs signed packaging, production onboarding/GitHub/provider proof, broader data-lifecycle policy, packaged-app profiling, operations polish, and repeated real-repository success. |
 | Polished v1 | 27-33% | Queueing, local indexes, session-authorized runtimes, background task/command/Git review routing, fair supervised grants, bounded reconnect/crash recovery telemetry, reportable soak tooling, and a compiled action-level XCUITest harness are real; full-duration/passing evidence, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
 
 Short version: V0 behavior is complete, but the entire 43-screen product design
@@ -372,6 +379,7 @@ Key implementation docs:
 - `docs/model_providers.md`
 - `docs/edit_proposals.md`
 - `docs/validation_presets.md`
+- `docs/performance_budgets.md`
 - `docs/database.md`
 - `docs/security_permissions.md`
 
@@ -423,6 +431,7 @@ Runtime and engineering:
 - `docs/model_providers.md`
 - `docs/edit_proposals.md`
 - `docs/validation_presets.md`
+- `docs/performance_budgets.md`
 - `docs/local_first.md`
 - `docs/database.md`
 - `docs/git_workflow.md`

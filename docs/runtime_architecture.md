@@ -85,6 +85,26 @@ For the current code-level object graph, dependency wiring, UML component
 model, startup/request pipeline, and task/Agent/edit/validation/Git sequence
 diagrams, see `docs/runtime_server_architecture.md`.
 
+### Performance Budget Runner
+
+`runtime/scripts/performance-campaign.mjs` measures the assembled production
+runtime through its loopback HTTP boundary rather than benchmarking replacement
+implementations. A fresh synthetic Git repository and SQLite store cover cold
+startup, retained-task listing, cold/unchanged indexing, Git status/diff, and a
+prepared deterministic local Agent Run Step. The runner also samples the child
+process's idle resident memory and CPU after startup work decays.
+
+`runtime/src/performanceBudget.ts` is the pure reporting/policy boundary. It
+calculates deterministic min/mean/p50/p95/max summaries, evaluates hard and
+advisory ceilings, compares same-profile reports using both percentage and
+absolute noise thresholds, and renders versioned JSON/Markdown evidence. The
+authoritative smoke/standard/large profiles live in
+`runtime/performance-budgets.json`; profile and environment metadata travel
+with every report. No remote provider, external network, UI automation, or
+Forge-worktree mutation is part of the campaign. The hosted smoke gate uploads
+evidence instead of silently refreshing a baseline. Detailed operation and
+limitations are in `docs/performance_budgets.md`.
+
 ### Task Queue
 
 Stores pending, running, completed, and failed tasks. The current scheduler

@@ -1000,6 +1000,7 @@ cd runtime && npm run smoke:git-remote
 cd runtime && npm run smoke:mission-control-fairness
 cd runtime && npm run campaign:reliability
 cd runtime && npm run campaign:provider-reliability
+cd runtime && npm run performance:smoke
 ```
 
 Before a release-shaped change, run every `smoke:*` script — the full suite is
@@ -1014,6 +1015,35 @@ to an external API and incurs no API cost.
 `npm run check:docs` validates duplicated headline facts against the handoff
 table, versioned reliability JSON, route manifest, and package scripts. See
 `docs/documentation_truth.md` for the authority and branch-publication rules.
+
+## Runtime Performance Budgets
+
+The dependency-free performance campaign uses fresh temporary Git repositories,
+SQLite stores, random loopback ports, and the local deterministic provider. It
+does not use OpenAI/GitHub, mutate the Forge worktree, or launch the macOS app:
+
+```bash
+cd runtime
+npm run performance:smoke     # hosted-CI safety ceiling
+npm run performance:standard  # routine developer baseline
+npm run performance:large     # manual stress profile
+```
+
+It measures runtime cold start, idle child CPU/RSS, retained-task list latency,
+cold and unchanged repository indexing, Git status/diff, and one prepared local
+agent step. Reports contain versioned JSON, Markdown, the exact environment and
+fixture description, p50/p95/max summaries, hard/advisory evaluations, and an
+exact budget snapshot. By default they land under the ignored
+`.forge/performance-results/` directory; pass `--output <directory>` to retain
+them elsewhere.
+
+The separate `Runtime Performance` workflow runs the `smoke` profile with Node
+22 on hosted macOS and uploads its reports on success or failure. Hard limits
+are broad cross-machine guardrails; narrower idle resource targets remain
+advisory. Optional comparisons require both a percentage regression and an
+absolute noise-floor increase, and only compare matching profiles. See
+`docs/performance_budgets.md` for the metric definitions, policy, limitations,
+and follow-up real-repository/signed-package work.
 
 ## Current Limitations
 

@@ -194,6 +194,16 @@ Implemented:
   into narrower modules; `createForgeRuntime.ts` is now 476 lines. The
   61-route executable contract, all 22 smoke scripts, and all 56 Swift tests
   pass.
+- Versioned runtime performance and resource budgets. Fresh synthetic
+  smoke/standard/large profiles measure cold startup, idle child CPU/RSS,
+  retained-task list latency, cold/unchanged repository indexing, Git status/
+  diff, and a prepared deterministic local Agent Run Step. A pure evaluator
+  provides min/mean/p50/p95/max summaries, hard/advisory ceilings, and
+  noise-aware same-profile comparisons. Reports include exact fixture,
+  environment, budget snapshot, JSON, and Markdown evidence; a hosted macOS
+  workflow runs the smoke gate and uploads artifacts without rewriting a
+  baseline. Local smoke and standard profiles pass their hard gates; signed
+  package/native and pinned real-repository performance remain.
 - Task creation and task conversation.
 - Server-Sent Events from runtime to app.
 - SQLite task persistence.
@@ -468,7 +478,7 @@ use different denominators and must not be added together.
 | Primary V0 handoff UI | 100% | All five primary screens are `Verified` with rendered-comparison evidence in `docs/verification/`. |
 | Full 43-screen handoff UI | 95-97% | 41 of 43 screens Verified with rendered-comparison evidence (docs/verification/). Remaining: 6a Partial (OAuth configuration, Device Flow, standards-compliant polling, Keychain persistence, and connected UI are implemented and unit-tested; a live grant still needs the founder GitHub OAuth Client ID with Device Flow enabled); 35a a documented platform-blocked widget-signing descope (P6). |
 | Useful developer alpha | 72-80% | Forge repeats the reviewed lifecycle across deterministic local-provider and mock-OpenAI adapter corpora, including Unified Diff, approved commands, repair/rerun, fork-aware PR supervision, repository-scoped background command/Git review, and fair restart-safe dispatch; it still needs broader autonomous tool use and repeated live-model success on pinned public repositories. |
-| Commercial beta | 24-29% | Versioned migration, verified pre-destructive backup/offline restore, and explicit command-output retention now exist; Forge still needs signed packaging, production onboarding/GitHub/provider proof, broader workspace data-lifecycle policy, operations polish, and repeated real-repository success. |
+| Commercial beta | 25-30% | Versioned migration, verified pre-destructive backup/offline restore, explicit command-output retention, and the first artifact-producing runtime performance gate now exist; Forge still needs signed packaging, production onboarding/GitHub/provider proof, broader workspace data-lifecycle policy, packaged-app profiling, operations polish, and repeated real-repository success. |
 | Polished v1 product | 27-33% | The real queue, local indexes, session-authorized runtimes, background task/command/Git review routing, fair supervised grants, bounded reconnect/crash recovery telemetry, reportable soak tooling, and a compiled action-level XCUITest harness exist; full-duration/passing evidence, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
 
 ## Component Gap Matrix
@@ -490,7 +500,7 @@ finish line.
 | Repository understanding | 68-78% | 22-32% | Durable file metadata, lightweight symbols, trigram text index, bounded live verification. | Semantic/hybrid retrieval, dependency relationships, higher-fidelity parsing, ranking evaluation, and large-repo budgets. |
 | Git and GitHub workflow | 88-93% | 7-12% | Status/diff, guarded commit/branch/push, routed background preflights/actions, fork-aware PR publication, reviews/checks/mergeability evidence, bounded background refresh. | Live OAuth proof, hosted auth/network/branch-protection fixtures, richer provider portability, and merge/update policy decisions. |
 | Multi-task and multi-repository supervision | 94-97% | 3-6% | Persisted queues, observers, session authorization, routed task/command/Git review, serialized mutations, fair grants, a passing 300-second/1,086-restart soak, one action-level UI path, capped reconnect backoff, and a passing process-level transport/termination/relaunch fixture with zero mutation requests. | Full six-hour soak and complete passing UI evidence under appropriate unattended/power conditions. |
-| Reliability, evaluation, and test evidence | 87-93% | 7-13% | 23 runtime unit files, 22 smoke scripts, 56 Swift tests, 3 compiled XCUITest methods, one passing action path, destructive-migration backup/CLI recovery, retention/restart E2E, fork/mock-GitHub E2E, two campaigns, two-runtime fixtures, process reconnect coverage, and soak reports. | Live-model corpus, wider real repositories, hosted-network cases, complete UI archives, performance evidence, and a completed multi-hour soak. |
+| Reliability, evaluation, and test evidence | 89-94% | 6-11% | 24 runtime unit files, 22 smoke scripts, 56 Swift tests, 3 compiled XCUITest methods, one passing action path, destructive-migration backup/CLI recovery, retention/restart E2E, fork/mock-GitHub E2E, two reliability campaigns, versioned runtime performance profiles with a hosted artifact gate, two-runtime fixtures, process reconnect coverage, and soak reports. | Live-model corpus, wider real repositories, hosted-network cases, complete UI archives, signed-app/real-repository performance evidence, and a completed multi-hour soak. |
 | Distribution, updates, and operations | 25-35% | 65-75% | App-managed/bundled-runtime path, update UI/appcast client, diagnostics surfaces. | Developer ID, hardened runtime, notarization, DMG, signed appcast install/relaunch, crash reporting, release rehearsal. |
 | Account, sync, and collaboration services | 10-20% | 80-90% | Honest local-only continuation and GitHub/provider credentials in Keychain. | Decide whether accounts exist; if yes, build verified email identity, sync, sharing, tenancy, and deletion/privacy APIs. |
 | Pricing, packaging, and go-to-market | 20-30% | 70-80% | Product category, personas, positioning, and business-model hypotheses are documented. | Choose solo/team wedge, open-core boundary, packaging, price, entitlement/billing, support, and launch evidence. |

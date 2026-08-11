@@ -272,6 +272,24 @@ the core runtime smoke. Preserve these completed boundaries:
   database, verifies the final file, and writes a receipt. Unit coverage proves
   backup/corruption/lease/WAL/rollback failures; `smoke:database-recovery`
   executes the real CLI against an isolated fixture-only destructive v6.
+- [x] Establish the first performance and resource budget system. A versioned
+  local campaign now measures runtime cold start, idle child CPU/RSS,
+  retained-task list latency, cold/unchanged repository indexing, Git status/
+  diff, and a prepared deterministic Agent Run Step across smoke, standard,
+  and large synthetic profiles. Hard/advisory ceilings, noise-aware
+  same-profile comparisons, evaluator unit tests, JSON/Markdown reports, exact
+  budget snapshots, and an artifact-producing hosted macOS CI gate are real.
+  Remaining performance work is pinned real-repository evidence plus signed
+  app/runtime launch, combined memory/energy, and native interaction budgets.
+- **Next code-only runtime task — approval lifecycle:**
+  - Define task-, repository-, and session-scoped approval lifetimes without
+    weakening the existing explicit plan/edit/Git/PR gates.
+  - Add expiry and explicit revocation evidence to command/preset approvals;
+    stale permissions must fail before process creation.
+  - Preserve append-only audit records while ensuring restart cannot revive an
+    expired or revoked permission.
+  - Cover clock boundaries, restart, active-command behavior, and macOS
+    permission-envelope decoding without UI automation or external services.
 
 ## P5: Native macOS Product
 

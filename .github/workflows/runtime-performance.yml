@@ -1,0 +1,49 @@
+name: Runtime Performance
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-performance-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  performance-smoke:
+    name: Runtime performance smoke
+    runs-on: macos-15
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: runtime/package-lock.json
+
+      - name: Install runtime dependencies
+        run: npm ci
+        working-directory: runtime
+
+      - name: Run versioned performance guardrails
+        run: npm run performance:smoke -- --output "$RUNNER_TEMP/forge-runtime-performance"
+        working-directory: runtime
+
+      - name: Upload performance evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: runtime-performance-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/forge-runtime-performance
+          if-no-files-found: error
+          retention-days: 14

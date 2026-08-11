@@ -446,7 +446,7 @@ without changing the public runtime contract:
   defaults; `createForgeRuntime.ts` fell from 932 to 476 lines while the
   packaged `server.ts` remains one line.
 
-The current compatibility gate passes TypeScript check/build, 23 unit scripts,
+The current compatibility gate passes TypeScript check/build, 24 unit scripts,
 unit coverage, all 22 runtime smoke scripts, and 56 Swift tests. The recorded
 unit coverage aggregate is 56.94% lines, 88.42% branches, and 67.29%
 functions.

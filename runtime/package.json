@@ -39,7 +39,10 @@
     "campaign:reliability": "npm run build && node scripts/reliability-campaign.mjs",
     "campaign:reliability:baseline": "npm run build && node scripts/reliability-campaign.mjs --write-baseline",
     "campaign:provider-reliability": "npm run build && node scripts/provider-reliability-campaign.mjs",
-    "campaign:provider-reliability:baseline": "npm run build && node scripts/provider-reliability-campaign.mjs --write-baseline"
+    "campaign:provider-reliability:baseline": "npm run build && node scripts/provider-reliability-campaign.mjs --write-baseline",
+    "performance:smoke": "npm run build && node scripts/performance-campaign.mjs --profile smoke --enforce",
+    "performance:standard": "npm run build && node scripts/performance-campaign.mjs --profile standard --enforce",
+    "performance:large": "npm run build && node scripts/performance-campaign.mjs --profile large"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

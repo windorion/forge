@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "baselinePolicy": {
+    "statistic": "p95",
+    "allowedRegressionPercent": 20,
+    "noiseFloor": 15
+  },
+  "profiles": {
+    "smoke": {
+      "description": "Fast CI guardrail over a small but non-trivial synthetic repository.",
+      "fileCount": 40,
+      "linesPerFile": 24,
+      "taskCount": 20,
+      "requestSamples": 5,
+      "warmIndexSamples": 2,
+      "agentStepSamples": 1,
+      "idleSampleCount": 4,
+      "idleSampleIntervalMs": 100,
+      "budgets": [
+        { "metricID": "runtime.cold_start", "statistic": "max", "max": 5000, "severity": "hard", "rationale": "A local runtime must become healthy within the app's actionable startup window." },
+        { "metricID": "runtime.idle_rss", "statistic": "max", "max": 300, "severity": "hard", "rationale": "Catch runaway runtime memory before packaging; this is intentionally broad across CI hosts." },
+        { "metricID": "runtime.idle_cpu", "statistic": "p95", "max": 25, "severity": "advisory", "rationale": "Detect obvious idle polling regressions without making heterogeneous CI hosts a hard gate." },
+        { "metricID": "database.task_list", "statistic": "p95", "max": 1200, "severity": "hard", "rationale": "Task history must remain interactive with retained task snapshots." },
+        { "metricID": "repository.index_cold", "statistic": "max", "max": 15000, "severity": "hard", "rationale": "A bounded fixture index must complete rather than stall or grow without limit." },
+        { "metricID": "repository.index_warm", "statistic": "p95", "max": 4000, "severity": "hard", "rationale": "An unchanged incremental index must be materially bounded." },
+        { "metricID": "git.status", "statistic": "p95", "max": 1500, "severity": "hard", "rationale": "Working-tree review must remain responsive on the CI fixture." },
+        { "metricID": "git.diff", "statistic": "p95", "max": 1500, "severity": "hard", "rationale": "Bounded single-file diff review must remain responsive on the CI fixture." },
+        { "metricID": "agent.step", "statistic": "p95", "max": 10000, "severity": "hard", "rationale": "The deterministic local agent step must reach a safe checkpoint without hanging." }
+      ]
+    },
+    "standard": {
+      "description": "Developer baseline for routine regression comparison.",
+      "fileCount": 200,
+      "linesPerFile": 48,
+      "taskCount": 100,
+      "requestSamples": 12,
+      "warmIndexSamples": 4,
+      "agentStepSamples": 3,
+      "idleSampleCount": 8,
+      "idleSampleIntervalMs": 150,
+      "budgets": [
+        { "metricID": "runtime.cold_start", "statistic": "max", "max": 4000, "severity": "hard", "rationale": "Developer runtime startup safety ceiling." },
+        { "metricID": "runtime.idle_rss", "statistic": "max", "max": 260, "severity": "advisory", "rationale": "Optimization target until signed-package profiling provides a stable host." },
+        { "metricID": "runtime.idle_cpu", "statistic": "p95", "max": 10, "severity": "advisory", "rationale": "Idle runtime CPU optimization target; signed-package profiling will refine it." },
+        { "metricID": "database.task_list", "statistic": "p95", "max": 500, "severity": "hard", "rationale": "Retained task history should remain interactive." },
+        { "metricID": "repository.index_cold", "statistic": "max", "max": 30000, "severity": "hard", "rationale": "Initial local indexing must finish within a bounded background-operation window." },
+        { "metricID": "repository.index_warm", "statistic": "p95", "max": 5000, "severity": "hard", "rationale": "Unchanged re-index should avoid full index work." },
+        { "metricID": "git.status", "statistic": "p95", "max": 750, "severity": "hard", "rationale": "Git review should remain interactive." },
+        { "metricID": "git.diff", "statistic": "p95", "max": 750, "severity": "hard", "rationale": "Bounded diff retrieval should remain interactive." },
+        { "metricID": "agent.step", "statistic": "p95", "max": 8000, "severity": "hard", "rationale": "A deterministic provider step should finish well inside stuck-work thresholds." }
+      ]
+    },
+    "large": {
+      "description": "Manual stress profile for large-repository trend discovery; not a heterogeneous CI gate.",
+      "fileCount": 600,
+      "linesPerFile": 80,
+      "taskCount": 400,
+      "requestSamples": 20,
+      "warmIndexSamples": 5,
+      "agentStepSamples": 5,
+      "idleSampleCount": 10,
+      "idleSampleIntervalMs": 200,
+      "budgets": [
+        { "metricID": "runtime.cold_start", "statistic": "max", "max": 6000, "severity": "hard", "rationale": "Large retained state must still start within a bounded window." },
+        { "metricID": "runtime.idle_rss", "statistic": "max", "max": 400, "severity": "advisory", "rationale": "Large-profile memory target pending signed-package profiling." },
+        { "metricID": "runtime.idle_cpu", "statistic": "p95", "max": 10, "severity": "advisory", "rationale": "Idle CPU optimization target under the manual stress profile." },
+        { "metricID": "database.task_list", "statistic": "p95", "max": 1200, "severity": "hard", "rationale": "Large retained history should remain usable." },
+        { "metricID": "repository.index_cold", "statistic": "max", "max": 120000, "severity": "hard", "rationale": "Stress indexing must terminate within a declared manual-run ceiling." },
+        { "metricID": "repository.index_warm", "statistic": "p95", "max": 12000, "severity": "hard", "rationale": "Warm indexing must remain bounded at the stress profile." },
+        { "metricID": "git.status", "statistic": "p95", "max": 1500, "severity": "hard", "rationale": "Git status must remain usable on the stress fixture." },
+        { "metricID": "git.diff", "statistic": "p95", "max": 1500, "severity": "hard", "rationale": "Single-file review must remain usable on the stress fixture." },
+        { "metricID": "agent.step", "statistic": "p95", "max": 15000, "severity": "hard", "rationale": "Deterministic steps must not approach live stuck-work deadlines." }
+      ]
+    }
+  }
+}

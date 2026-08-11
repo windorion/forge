@@ -73,6 +73,8 @@ Runtime and engineering:
   and restricted edit operations.
 - `docs/validation_presets.md`: validation preset registry, workspace config,
   approvals, and command boundaries.
+- `docs/performance_budgets.md`: runtime performance profiles, hard/advisory
+  budgets, report evidence, regression comparison, and CI boundaries.
 - `docs/local_first.md`: local indexing, privacy, memory, and offline
   behavior.
 - `docs/database.md`: SQLite responsibilities, conceptual schema, and
@@ -95,6 +97,9 @@ Runtime and engineering:
   `docs/security_permissions.md`, then runtime types/server and Swift models.
 - Validation command work: read `docs/validation_presets.md`,
   `docs/security_permissions.md`, then runtime validation code and Review UI.
+- Performance/resource work: read `docs/performance_budgets.md`,
+  `docs/runtime_architecture.md`, and `docs/development.md`, then the runtime
+  benchmark/reporting code and CI workflow.
 - Database/persistence work: read `docs/database.md`,
   `docs/local_first.md`, then `runtime/src/taskStore.ts`.
 - Git workflow work: read `docs/git_workflow.md`,
