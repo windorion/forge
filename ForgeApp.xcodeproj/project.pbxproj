@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0BF223E0ED9DCDC579F52BB7A055DB54 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7D5FCAEC40D071761FD633F01279517 /* Models.swift */; };
 		0E44EFCD8055A566D177605AA607EAFB /* PullRequestRefreshPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9700D81F7BA583D837C398DA326FC81 /* PullRequestRefreshPolicy.swift */; };
+		A1E100000000000000000001 /* SecretRedaction.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1E100000000000000000002 /* SecretRedaction.swift */; };
 		124629412C22B2226467D256D92A0D22 /* ForgeUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFDF7B4CB729A1B12CF599E0094DF9B0 /* ForgeUpdater.swift */; };
 		16442AB1072846227FFA7330E66F2CCE /* QuickCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A0E5ECE71E8FF3F4760EBD9C415160E /* QuickCapture.swift */; };
 		1763224C8C68939C0AAF6AFFAEA82F59 /* WorkspaceModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 282CCCB1CC03CB3FE5A810B515304B36 /* WorkspaceModel.swift */; };
@@ -83,6 +84,7 @@
 		863BAB18A96BEC9CE7DA194C30046D97 /* OFL.txt */ = {isa = PBXFileReference; includeInIndex = 1; name = OFL.txt; path = apps/macos/Resources/Fonts/OFL.txt; sourceTree = "<group>"; };
 		882B5A67CCBA9B4527504D3578CD6524 /* ForgeSpotlight.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ForgeSpotlight.swift; sourceTree = "<group>"; };
 		9704D692CE40363A6FED53D8EF4C9ED2 /* forge-logo.png */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = image.png; name = "forge-logo.png"; path = "design_handoff_forge/assets/forge-logo.png"; sourceTree = "<group>"; };
+		A1E100000000000000000002 /* SecretRedaction.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SecretRedaction.swift; sourceTree = "<group>"; };
 		9B7BA9071DBA66B0628C21835B2180CF /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 		A44002404DD1B59A8343FEF18B1622EF /* AppDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		B158E3F7E5B128725C284D7CF9161465 /* OnboardingView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
@@ -173,6 +175,7 @@
 				E9700D81F7BA583D837C398DA326FC81 /* PullRequestRefreshPolicy.swift */,
 				4A0E5ECE71E8FF3F4760EBD9C415160E /* QuickCapture.swift */,
 				F7A439422C3B58C23244A40E0B4BC2C8 /* RuntimeClient.swift */,
+				A1E100000000000000000002 /* SecretRedaction.swift */,
 				51BB76690E0AC027FF0A8641A8D4BA40 /* SettingsView.swift */,
 				B51BB1ADBC1967519672137C8E6EE48F /* SignInPanelController.swift */,
 				CFDB597E6CB49D913CA0C67974A1B1D6 /* SignInView.swift */,
@@ -350,6 +353,7 @@
 				0E44EFCD8055A566D177605AA607EAFB /* PullRequestRefreshPolicy.swift in Sources */,
 				16442AB1072846227FFA7330E66F2CCE /* QuickCapture.swift in Sources */,
 				D15C7A6B610452A1F6D7DED80BBEADE2 /* RuntimeClient.swift in Sources */,
+				A1E100000000000000000001 /* SecretRedaction.swift in Sources */,
 				63870004860193E1E85046FE9167A063 /* SettingsView.swift in Sources */,
 				9D92ACFA0DF243AE61CE9BB3B0EAB338 /* SignInPanelController.swift in Sources */,
 				1B625D487F92F62AB02B128912AD02BF /* SignInView.swift in Sources */,

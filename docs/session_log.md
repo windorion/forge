@@ -7000,6 +7000,10 @@ Done:
   collections during sanitization and left a command-run reference stale. The
   implementation was corrected to sanitize evidence in place without replacing
   run objects; the isolated fixture then passed through completion and restart.
+- The first hosted XCUITest build exposed that the hand-maintained Xcode
+  project did not include the new native source even though SwiftPM discovered
+  it automatically. Added `SecretRedaction.swift` to the app target and made
+  documentation truth assert that the Xcode source phase retains it.
 - Passed TypeScript check/build, documentation truth, all 26 Runtime unit files
   (33 Node subtests), coverage (78.06% lines overall; Secret Redaction 86.84%),
   all 24 smoke scripts in one serial run, and all 61 Swift tests.
@@ -7015,13 +7019,15 @@ Not done:
   objectives/messages and reviewed patch bodies remain private task content;
   their lifetime still depends on the undecided workspace retention/export/
   purge policy.
-- Hosted CI has not run for this change until it is committed and pushed.
+- The first hosted Runtime Security and Runtime Performance runs passed. The
+  follow-up Swift workflow rerun for the corrected Xcode source list is pending
+  at this entry's handoff point.
 - Signed-build threat review, live-model corpus, full-duration Mission Control
   soak, signed distribution, and account/commercial decisions remain.
 
 Next:
 
-- Commit and push the Secret Redaction slice, then verify Runtime Security,
+- Commit and push the Xcode-project follow-up, then verify Runtime Security,
   Runtime Performance, and Swift Tests on the final commit.
 - The next API-free security/data-lifecycle task is versioned workspace
   retention and export/purge behavior for events, tool calls, task messages,

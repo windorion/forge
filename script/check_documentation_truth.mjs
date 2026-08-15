@@ -32,6 +32,7 @@ const [
   swiftModels,
   swiftWorkspaceModel,
   swiftSecretRedaction,
+  xcodeProject,
   pullRequestRefreshPolicy,
   swiftTestSources,
   swiftUITestSources,
@@ -63,6 +64,7 @@ const [
   read("apps/macos/Sources/ForgeApp/Models.swift"),
   read("apps/macos/Sources/ForgeApp/WorkspaceModel.swift"),
   read("apps/macos/Sources/ForgeApp/SecretRedaction.swift"),
+  read("ForgeApp.xcodeproj/project.pbxproj"),
   read("apps/macos/Sources/ForgeApp/PullRequestRefreshPolicy.swift"),
   readSwiftTestSources(),
   readSwiftUITestSources(),
@@ -172,6 +174,7 @@ check("secret redaction policy is versioned, cross-layer, and enforced in CI", (
   assert.match(auditExportSource, /redactionPolicy/);
   assert.match(swiftSecretRedaction, /policyID = "forge-secret-redaction"/);
   assert.match(swiftWorkspaceModel, /Secret redaction policy:/);
+  assert.match(xcodeProject, /SecretRedaction\.swift in Sources/);
   assert.match(securityGuide, /classification evidence contains only kind and count/);
   assert.match(runtimeSecurityWorkflow, /npm run smoke:secret-redaction/);
 });
