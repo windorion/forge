@@ -6938,11 +6938,13 @@ Done:
   documentation truth automation, and synchronized status dates. Current
   estimates are trust/runtime 94-97%, security/permissions/audit 95-97%,
   commercial beta 27-32%, and reliability evidence 91-95%.
+- Committed as `ce9a110` and pushed to `origin/main`. Hosted Runtime
+  Performance passed, the new Runtime Security lifecycle job passed every step
+  in 33 seconds, and Swift Tests passed both the 58-test coverage job and the
+  Mission Control XCUITest `build-for-testing` job.
 
 Not done:
 
-- Hosted GitHub Actions for the new Runtime Security workflow have not run
-  until this change is committed and pushed.
 - Repository-wide or session-only validation grants are deliberately not
   implemented; they need product evidence and a correctly scoped store rather
   than widening task records by convenience.
@@ -6952,8 +6954,6 @@ Not done:
 
 Next:
 
-- Commit and push the approval-lifecycle slice, then verify Swift Tests,
-  Runtime Performance, and Runtime Security hosted workflows.
 - The next API-free roadmap task is broader secret detection and centralized
   redaction across audit, command output, diagnostics, provider failures, and
   persistence-facing summaries with false-positive controls.
