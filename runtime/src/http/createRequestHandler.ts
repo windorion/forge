@@ -1,6 +1,7 @@
 import type { IncomingMessage, RequestListener, ServerResponse } from "node:http";
 import { URL } from "node:url";
 
+import { safeErrorMessage } from "../security/secretRedaction.js";
 import { HttpError } from "./httpError.js";
 import { applyCors, writeJson } from "./response.js";
 
@@ -41,7 +42,7 @@ export function createRequestHandler(options: RequestHandlerOptions): RequestLis
       const status = error instanceof HttpError ? error.status : 500;
       writeJson(response, status, {
         error: "runtime_error",
-        message: error instanceof Error ? error.message : String(error)
+        message: safeErrorMessage(error)
       });
     }
   };

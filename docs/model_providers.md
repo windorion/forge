@@ -110,7 +110,10 @@ can be retried once with a concise validation error and the same strict schema.
 The runtime records successful recovery metadata on the step. If correction is
 still malformed, it stores a failed safe-wait step and stops before any tool,
 command, or file action. HTTP, network, and timeout errors are not automatically
-retried.
+retried. Provider HTTP bodies, structured-output validation errors, and refusal
+text pass through Secret Redaction policy v1 before they can enter task/error
+evidence or an HTTP response; the matched credential is never logged as
+classification evidence.
 
 ## Configuration
 
@@ -141,6 +144,9 @@ Runtime-editable settings:
   settings file path.
 
 The runtime never writes API keys into `.forge/model-provider-settings.json`.
+Provider base-URL updates accept only HTTP(S) URLs without username/password
+userinfo. Public configuration and copied diagnostics additionally redact
+userinfo from legacy or environment-supplied values.
 When the macOS app saves an OpenAI API key, it stores the key in macOS
 Keychain and sends it to the runtime settings endpoint so the current runtime
 process can use it in memory. After a runtime restart, the key must come from

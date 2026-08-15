@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 
 import { HttpError } from "../runtime/runtimeError.js";
+import { safeErrorMessage } from "../security/secretRedaction.js";
 import type {
   ForgeTask,
   TaskCommandPermission,
@@ -259,7 +260,7 @@ async function loadWorkspaceValidationPresets(): Promise<{
       return { status, presets: [] };
     }
 
-    status.issues.push(error instanceof Error ? error.message : String(error));
+    status.issues.push(safeErrorMessage(error));
     return { status, presets: [] };
   }
 
@@ -267,7 +268,7 @@ async function loadWorkspaceValidationPresets(): Promise<{
   try {
     parsed = JSON.parse(rawConfig);
   } catch (error) {
-    status.issues.push(`Invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
+    status.issues.push(`Invalid JSON: ${safeErrorMessage(error)}`);
     return { status, presets: [] };
   }
 

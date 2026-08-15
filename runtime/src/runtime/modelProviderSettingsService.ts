@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { HttpError } from "../runtime/runtimeError.js";
+import { redactSensitiveText, safeErrorMessage } from "../security/secretRedaction.js";
 import {
   createModelProvider,
   defaultModelProviderRuntimeSettings,
@@ -56,7 +57,7 @@ function loadModelProviderRuntimeSettings(): ModelProviderRuntimeSettings {
       return applyModelProviderLock(defaults);
     }
 
-    console.warn(`Forge model provider settings ignored: ${error instanceof Error ? error.message : String(error)}`);
+    console.warn(`Forge model provider settings ignored: ${safeErrorMessage(error)}`);
     return applyModelProviderLock(defaults);
   }
 
@@ -169,7 +170,7 @@ function publicModelProviderRuntimeSettings(
   return {
     providerID: providerIDForPublicSettings(settings.providerID),
     modelName: settings.modelName,
-    openAIBaseURL: settings.openAIBaseURL,
+    openAIBaseURL: settings.openAIBaseURL ? redactSensitiveText(settings.openAIBaseURL).text : undefined,
     openAITimeoutMs: settings.openAITimeoutMs,
     openAIMaxOutputTokens: settings.openAIMaxOutputTokens,
     hasOpenAIAPIKey: Boolean(settings.openAIAPIKey?.trim()),
@@ -266,6 +267,9 @@ function optionalURLString(value: unknown, fieldName: string): string | undefine
 
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new HttpError(400, `${fieldName} must use http or https.`);
+  }
+  if (parsed.username || parsed.password) {
+    throw new HttpError(400, `${fieldName} must not contain URL credentials.`);
   }
 
   return trimmed.replace(/\/+$/, "");

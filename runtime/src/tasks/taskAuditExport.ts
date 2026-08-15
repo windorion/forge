@@ -1,4 +1,9 @@
 import { createHash } from "node:crypto";
+import {
+  SECRET_REDACTION_POLICY,
+  redactSensitiveText,
+  redactSensitiveValue
+} from "../security/secretRedaction.js";
 import type { ForgeTask } from "../types.js";
 
 export type TaskAuditExportFormat = "json" | "markdown";
@@ -41,10 +46,15 @@ export function taskAuditSourceSha256(task: ForgeTask): string {
 }
 
 function buildAuditRecord(task: ForgeTask, generatedAt: string) {
-  return redactDeep({
+  return redactSensitiveValue({
     schemaVersion: 1,
     generatedAt,
-    redactionSummary: "Known credential patterns are replaced with [REDACTED]. Provider keys and GitHub tokens are never persisted by Forge and are not export fields.",
+    redactionPolicy: {
+      id: SECRET_REDACTION_POLICY.id,
+      version: SECRET_REDACTION_POLICY.version,
+      replacement: SECRET_REDACTION_POLICY.replacement
+    },
+    redactionSummary: `${SECRET_REDACTION_POLICY.summary} Provider keys and GitHub tokens are not export fields.`,
     task: {
       id: task.id,
       title: task.title,
@@ -196,27 +206,8 @@ function safeFilenamePart(value: string): string {
   return value.replace(/[^A-Za-z0-9._-]+/g, "-").slice(0, 80) || "task";
 }
 
-function redactDeep<T>(value: T): T {
-  if (typeof value === "string") return redactText(value) as T;
-  if (Array.isArray(value)) return value.map(redactDeep) as T;
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [key, redactDeep(item)])
-    ) as T;
-  }
-  return value;
-}
-
 export function redactAuditText(value: string): string {
-  return redactText(value);
-}
-
-function redactText(value: string): string {
-  return value
-    .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, "Bearer [REDACTED]")
-    .replace(/\bgh[pousr]_[A-Za-z0-9_]{12,}\b/g, "[REDACTED]")
-    .replace(/\bsk-[A-Za-z0-9_-]{12,}\b/g, "[REDACTED]")
-    .replace(/\b(api[_-]?key|access[_-]?token|password|secret)\s*[:=]\s*([^\s,;]+)/gi, "$1=[REDACTED]");
+  return redactSensitiveText(value).text;
 }
 
 function sha256(value: string): string {

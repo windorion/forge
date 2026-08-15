@@ -76,6 +76,11 @@ assert.equal(json.sourceTaskUpdatedAt, task.updatedAt);
 assert(!json.content.includes(secret), "JSON export leaked a known token pattern.");
 const parsed = JSON.parse(json.content);
 assert.equal(parsed.schemaVersion, 1);
+assert.deepEqual(parsed.redactionPolicy, {
+  id: "forge-secret-redaction",
+  version: 1,
+  replacement: "[REDACTED]"
+});
 assert.equal(parsed.task.status, "Cancelled");
 assert.equal(parsed.task.cancellation.agentLoopDisposition, "AbortRequested");
 assert.equal(parsed.approvals[0].expiresAt, "2026-08-08T11:00:20.000Z");

@@ -90,6 +90,15 @@ export function createValidationDomainDefaults(options: {
         cwd: "runtime",
         executable: "node",
         args: ["-e", "setTimeout(() => console.log('forge smoke long command done'), 5000)"]
+      }, {
+        id: "smoke-secret-output-command",
+        name: "Smoke secret output command",
+        command: "node -e \"process.stdout.write(process.env.FORGE_SECRET_REDACTION_FIXTURE || '')\"",
+        kind: "ProjectCommand",
+        riskLevel: "Medium",
+        cwd: "runtime",
+        executable: "node",
+        args: ["-e", "process.stdout.write(process.env.FORGE_SECRET_REDACTION_FIXTURE || '')"]
       }]
     : [];
   const projectValidationCommands: InternalValidationCommand[] = [

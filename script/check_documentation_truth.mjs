@@ -24,10 +24,14 @@ const [
   performanceBudgetSource,
   runtimeSecurityWorkflow,
   approvalLifecycleSource,
+  secretRedactionSource,
+  auditExportSource,
   validationGuide,
+  securityGuide,
   taskTypes,
   swiftModels,
   swiftWorkspaceModel,
+  swiftSecretRedaction,
   pullRequestRefreshPolicy,
   swiftTestSources,
   swiftUITestSources,
@@ -51,10 +55,14 @@ const [
   read("runtime/performance-budgets.json"),
   read(".github/workflows/runtime-security.yml"),
   read("runtime/src/validation/approvalLifecycle.ts"),
+  read("runtime/src/security/secretRedaction.ts"),
+  read("runtime/src/tasks/taskAuditExport.ts"),
   read("docs/validation_presets.md"),
+  read("docs/security_permissions.md"),
   read("runtime/src/types.ts"),
   read("apps/macos/Sources/ForgeApp/Models.swift"),
   read("apps/macos/Sources/ForgeApp/WorkspaceModel.swift"),
+  read("apps/macos/Sources/ForgeApp/SecretRedaction.swift"),
   read("apps/macos/Sources/ForgeApp/PullRequestRefreshPolicy.swift"),
   readSwiftTestSources(),
   readSwiftUITestSources(),
@@ -150,6 +158,22 @@ check("validation approval lifecycle is bounded, documented, and enforced in CI"
   assert.match(validationGuide, /Legacy approval records without/);
   assert.match(runtimeSecurityWorkflow, /npm run smoke:approval-lifecycle/);
   assert.match(runtimeSecurityWorkflow, /npm run test:unit/);
+});
+
+check("secret redaction policy is versioned, cross-layer, and enforced in CI", () => {
+  assert.equal(
+    runtimePackage.scripts["smoke:secret-redaction"],
+    "npm run build && node scripts/secret-redaction-fixtures.mjs"
+  );
+  assert.match(secretRedactionSource, /id: "forge-secret-redaction"/);
+  assert.match(secretRedactionSource, /version: 1/);
+  assert.match(secretRedactionSource, /encoded_secret/);
+  assert.match(secretRedactionSource, /redactTaskPersistenceSurfaces/);
+  assert.match(auditExportSource, /redactionPolicy/);
+  assert.match(swiftSecretRedaction, /policyID = "forge-secret-redaction"/);
+  assert.match(swiftWorkspaceModel, /Secret redaction policy:/);
+  assert.match(securityGuide, /classification evidence contains only kind and count/);
+  assert.match(runtimeSecurityWorkflow, /npm run smoke:secret-redaction/);
 });
 
 const unitTestCount = (await readdir(resolve(repoRoot, "runtime", "scripts")))

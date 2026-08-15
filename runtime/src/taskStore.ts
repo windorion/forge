@@ -6,6 +6,7 @@ import type { IndexedFile } from "./repositoryIndex.js";
 import type { ExtractedSymbol } from "./symbolExtract.js";
 import { DATABASE_MIGRATIONS, DATABASE_SCHEMA_VERSION } from "./databaseMigrations.js";
 import { applyDatabaseMigrations, validateDatabaseSchema } from "./databaseMigrationRunner.js";
+import { redactTaskPersistenceSurfaces } from "./security/secretRedaction.js";
 import {
   acquireDatabaseWriterLease,
   releaseDatabaseWriterLease,
@@ -140,15 +141,16 @@ export class SqliteTaskStore {
   }
 
   private runTaskUpsert(task: ForgeTask): void {
+    const persistedTask = redactTaskPersistenceSurfaces(task);
     this.upsertTask!.run(
-      task.id,
-      task.title,
-      task.objective,
-      task.status,
-      task.currentPhase,
-      task.createdAt,
-      task.updatedAt,
-      JSON.stringify(task)
+      persistedTask.id,
+      persistedTask.title,
+      persistedTask.objective,
+      persistedTask.status,
+      persistedTask.currentPhase,
+      persistedTask.createdAt,
+      persistedTask.updatedAt,
+      JSON.stringify(persistedTask)
     );
   }
 

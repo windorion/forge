@@ -462,7 +462,33 @@ Forge must avoid exposing:
 - SSH keys
 - environment files
 
-The context builder should respect ignore rules and future secret detection.
+The context builder respects repository skip rules. Retained operational
+evidence additionally passes through the versioned `forge-secret-redaction`
+policy v1. It recognizes authorization headers; GitHub, OpenAI, GitLab, Slack,
+AWS, and JWT token shapes; structured API-key/access-token/password/secret
+fields; private-key blocks; credential-bearing URLs; and percent/base64-encoded
+values whose decoded printable content contains a known credential pattern.
+
+Redaction happens at the earliest durable boundary:
+
+- task-command output is line-buffered so a credential split across transport
+  chunks is still classified, then redacted before SSE broadcast and SQLite save;
+- task-command and validation summaries, Git output summaries, runtime/HTTP
+  errors, Provider failure bodies, public Provider diagnostics, task evidence
+  fields, and audit exports use the same Runtime policy;
+- copied macOS Runtime diagnostics use a native implementation with the same
+  policy ID/version and fixtures;
+- audit JSON includes policy ID, version, and replacement marker;
+- classification evidence contains only kind and count. Forge does not retain
+  the match, a hash of the match, nearby context, or reconstructable offsets.
+
+The policy is intentionally conservative about false positives. Configuration
+states such as `Configured`/`Missing`, environment placeholders, public OAuth
+Client IDs, SHA-256 values, and prose such as “secret detection” remain
+visible. Persisted task evidence is cloned and sanitized without altering an
+executable reviewed patch body; rewriting an approved proposal during save
+would violate review integrity. Secret Redaction is defense in depth, not a
+general DLP claim and not permission to share arbitrary private task content.
 
 Remote model provider rule:
 
@@ -476,6 +502,9 @@ Remote model provider rule:
   return secret values.
 - Runtime model-provider settings persist only non-secret values in
   `.forge/model-provider-settings.json`.
+- Provider base-URL updates reject URL userinfo. A legacy/environment base URL
+  containing userinfo is redacted before it appears in public settings or
+  copied diagnostics.
 - The macOS app stores OpenAI API keys in macOS Keychain and syncs them into
   runtime memory through `POST /settings/model-provider`; the runtime does not
   persist API keys to disk.

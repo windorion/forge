@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { withStructuredRecovery, type StructuredRecoveryResult } from "./providerRecovery.js";
+import { redactSensitiveText, redactSensitiveValue, safeErrorMessage } from "./security/secretRedaction.js";
 import type {
   AgentRunStepDecision,
   CommandRerunEvidence,
@@ -241,7 +242,7 @@ export function getModelProviderConfiguration(settings: ModelProviderRuntimeSett
         modelProviderConfigItem("provider", "Provider", provider.id),
         modelProviderConfigItem("model", "Model", provider.model),
         modelProviderConfigItem("mode", "Mode", provider.mode),
-        modelProviderConfigItem("base-url", "Base URL", baseURL),
+        modelProviderConfigItem("base-url", "Base URL", redactSensitiveText(baseURL).text),
         modelProviderConfigItem("api-key", "API Key", hasAPIKey ? "Configured" : "Missing", true),
         modelProviderConfigItem("timeout", "Timeout", `${positiveNumber(settings.openAITimeoutMs, 30_000)} ms`),
         modelProviderConfigItem("max-output", "Max Output", `${positiveNumber(settings.openAIMaxOutputTokens, 1800)} tokens`)
@@ -639,7 +640,7 @@ class OpenAIResponsesModelProvider implements ModelProvider {
 
       const raw = await response.text();
       if (!response.ok) {
-        throw new Error(`OpenAI Responses request failed (${response.status}): ${raw.slice(0, 500)}`);
+        throw new Error(`OpenAI Responses request failed (${response.status}): ${redactSensitiveText(raw.slice(0, 500)).text}`);
       }
 
       try {
@@ -1202,10 +1203,7 @@ function normalizeAgentRunStepStringList(value: unknown, limit: number, itemLimi
 }
 
 function compactProviderError(error: unknown): string {
-  return (error instanceof Error ? error.message : String(error))
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 240) || "Unknown structured output validation error.";
+  return safeErrorMessage(error, 240) || "Unknown structured output validation error.";
 }
 
 function normalizeAgentRunStepAction(value: unknown): AgentRunStepDecision["action"] | undefined {
@@ -1439,7 +1437,7 @@ function extractOpenAIOutputText(response: unknown): string {
   }
 
   if (isRecord(response.error)) {
-    throw new Error(`OpenAI Responses error: ${JSON.stringify(response.error).slice(0, 500)}`);
+    throw new Error(`OpenAI Responses error: ${redactSensitiveText(JSON.stringify(response.error).slice(0, 500)).text}`);
   }
 
   if (response.status && response.status !== "completed") {
@@ -1460,7 +1458,7 @@ function extractOpenAIOutputText(response: unknown): string {
       }
 
       if (part.type === "refusal" || typeof part.refusal === "string") {
-        throw new Error(`OpenAI model refused the request: ${String(part.refusal ?? "refusal")}`);
+        throw new Error(`OpenAI model refused the request: ${redactSensitiveText(String(part.refusal ?? "refusal")).text}`);
       }
 
       if (part.type === "output_text" && typeof part.text === "string") {
@@ -1770,9 +1768,9 @@ function validationRepairRequestContext(request: ValidationRepairBriefRequest): 
         }
       : { kind: "Unknown" };
 
-  return JSON.stringify({
+  return JSON.stringify(redactSensitiveValue({
     validationRepairRequest: source
-  }, null, 2);
+  }), null, 2);
 }
 
 function validationRepairSourceSummary(request: ValidationRepairBriefRequest): string {

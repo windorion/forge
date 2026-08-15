@@ -1,6 +1,7 @@
 import path from "node:path";
 
 import { HttpError } from "../runtime/runtimeError.js";
+import { redactSensitiveText } from "../security/secretRedaction.js";
 import type { GitFileChange } from "../types.js";
 
 export function parseGitUpstream(
@@ -16,7 +17,7 @@ export function parseGitUpstream(
 }
 
 export function summarizeGitCommandOutput(output: string): string {
-  return output.replace(/\s+/g, " ").trim().slice(0, 800) || "git command completed.";
+  return redactSensitiveText(output).text.replace(/\s+/g, " ").trim().slice(0, 800) || "git command completed.";
 }
 
 export function classifyGitPushFailure(output: string): { kind: string; summary: string } {

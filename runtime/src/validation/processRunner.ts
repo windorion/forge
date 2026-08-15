@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 
 import { HttpError } from "../runtime/runtimeError.js";
+import { SecretRedactionStream, redactSensitiveText, safeErrorMessage } from "../security/secretRedaction.js";
 import type { CancelTaskCommandRequest, ForgeTask, TaskCommandOutputChunk, TaskCommandRun, ValidationCommandResult } from "../types.js";
 import type { InternalValidationCommand, ValidationServiceOptions } from "./validationServiceTypes.js";
 
@@ -172,7 +173,7 @@ async function runBuiltInTaskCommand(
   const outputSummary = await runBuiltInValidationCommand(command, task);
   appendTaskCommandOutputChunk(task, commandRun, "system", `${outputSummary.outputSummary}\n`);
   return {
-    outputSummary: outputSummary.outputSummary,
+    outputSummary: redactSensitiveText(outputSummary.outputSummary).text,
     exitCode: outputSummary.exitCode ?? 0
   };
 }
@@ -224,16 +225,25 @@ function runSpawnedTaskCommand(
     activeTaskCommands.set(commandRun.id, active);
 
     let output = "";
+    const outputRedactors = new Map<TaskCommandOutputChunk["stream"], SecretRedactionStream>();
     let timedOut = false;
     let timeoutMessage = "";
     let settled = false;
-    const appendOutput = (stream: TaskCommandOutputChunk["stream"], chunk: Buffer) => {
-      const text = chunk.toString("utf8");
+    const appendSafeOutput = (stream: TaskCommandOutputChunk["stream"], text: string) => {
+      if (!text) return;
       output += text;
       if (output.length > 12_000) {
         output = output.slice(output.length - 12_000);
       }
       appendTaskCommandOutputChunk(task, commandRun, stream, text);
+    };
+    const appendOutput = (stream: TaskCommandOutputChunk["stream"], chunk: Buffer) => {
+      const redactor = outputRedactors.get(stream) ?? new SecretRedactionStream();
+      outputRedactors.set(stream, redactor);
+      appendSafeOutput(stream, redactor.push(chunk.toString("utf8")));
+    };
+    const flushOutput = () => {
+      for (const [stream, redactor] of outputRedactors) appendSafeOutput(stream, redactor.flush());
     };
 
     const timeout = setTimeout(() => {
@@ -260,6 +270,7 @@ function runSpawnedTaskCommand(
       }
       settled = true;
       clearActiveCommand();
+      flushOutput();
       reject(error);
     });
     child.on("close", (code: number | null) => {
@@ -268,6 +279,7 @@ function runSpawnedTaskCommand(
       }
       settled = true;
       clearActiveCommand();
+      flushOutput();
       const cancelled = active.cancelled;
       resolve({
         exitCode: cancelled ? 130 : timedOut ? 124 : code ?? 1,
@@ -290,10 +302,11 @@ function appendTaskCommandOutputChunk(
   }
 
   const createdAt = new Date().toISOString();
+  const safeText = redactSensitiveText(text).text;
   const chunk: TaskCommandOutputChunk = {
     id: randomUUID(),
     stream,
-    text: text.length > taskCommandChunkTextLimit ? text.slice(text.length - taskCommandChunkTextLimit) : text,
+    text: safeText.length > taskCommandChunkTextLimit ? safeText.slice(safeText.length - taskCommandChunkTextLimit) : safeText,
     createdAt
   };
 
@@ -359,12 +372,12 @@ async function runValidationCommand(
     const output: { outputSummary: string; exitCode?: number; cancelled?: boolean } = command.kind === "BuiltIn"
       ? await runBuiltInValidationCommand(command, task)
       : await runProjectValidationCommand(command, task, validationRunID, result.id);
-    result.outputSummary = output.outputSummary;
+    result.outputSummary = redactSensitiveText(output.outputSummary).text;
     result.exitCode = output.exitCode;
     result.status = output.cancelled ? "Cancelled" : output.exitCode === 0 ? "Passed" : "Failed";
   } catch (error) {
     result.status = "Failed";
-    result.outputSummary = error instanceof Error ? error.message : String(error);
+    result.outputSummary = safeErrorMessage(error);
   }
 
   result.endedAt = new Date().toISOString();
@@ -380,7 +393,7 @@ async function runBuiltInValidationCommand(
   }
 
   return {
-    outputSummary: await command.executeBuiltIn(task),
+    outputSummary: redactSensitiveText(await command.executeBuiltIn(task)).text,
     exitCode: 0
   };
 }
@@ -440,11 +453,21 @@ function runSpawnedValidationCommand(
     }
 
     let output = "";
-    const appendOutput = (chunk: Buffer) => {
-      output += chunk.toString("utf8");
+    const outputRedactors = new Map<"stdout" | "stderr", SecretRedactionStream>();
+    const appendSafeOutput = (text: string) => {
+      if (!text) return;
+      output += text;
       if (output.length > 12_000) {
         output = output.slice(output.length - 12_000);
       }
+    };
+    const appendOutput = (stream: "stdout" | "stderr", chunk: Buffer) => {
+      const redactor = outputRedactors.get(stream) ?? new SecretRedactionStream();
+      outputRedactors.set(stream, redactor);
+      appendSafeOutput(redactor.push(chunk.toString("utf8")));
+    };
+    const flushOutput = () => {
+      for (const redactor of outputRedactors.values()) appendSafeOutput(redactor.flush());
     };
 
     const timeout = setTimeout(() => {
@@ -460,21 +483,23 @@ function runSpawnedValidationCommand(
       activeValidationCommands.delete(validationCommandResultID);
     };
 
-    child.stdout.on("data", appendOutput);
-    child.stderr.on("data", appendOutput);
+    child.stdout.on("data", (chunk: Buffer) => appendOutput("stdout", chunk));
+    child.stderr.on("data", (chunk: Buffer) => appendOutput("stderr", chunk));
     child.on("error", (error) => {
       clearActiveCommand();
+      flushOutput();
       reject(error);
     });
     child.on("close", (code) => {
       clearActiveCommand();
+      flushOutput();
       resolve({ exitCode: active.cancelled ? 130 : code ?? 1, output, cancelled: active.cancelled });
     });
   });
 }
 
 function summarizeCommandOutput(command: string, exitCode: number, output: string): string {
-  const trimmed = output.replace(/\s+$/g, "").trim();
+  const trimmed = redactSensitiveText(output).text.replace(/\s+$/g, "").trim();
   const tail = trimmed.length > 1_800 ? trimmed.slice(trimmed.length - 1_800) : trimmed;
   return [`${command} exited with code ${exitCode}.`, tail].filter(Boolean).join("\n");
 }

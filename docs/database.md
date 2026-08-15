@@ -43,6 +43,15 @@ redacts known credential patterns before returning the file envelope. The
 envelope now includes SHA-256 for the exported content and the exact source
 task snapshot plus its `updatedAt`, forming a revision-bound export receipt.
 
+Task upsert also applies Secret Redaction policy v1 to persistence-facing
+evidence fields before JSON serialization. Command chunks/summaries are already
+sanitized before entering live task state; the store adds defense in depth for
+events, approvals, tool/run/repair summaries, cancellation notes, and PR
+refresh summaries. It intentionally does not rewrite task objectives/messages
+or executable reviewed proposal bodies: the former remain private task content
+covered by retention/export policy, and mutating the latter would invalidate
+human review and restart correctness.
+
 Schema v5 adds `task_history_purges`, an append-only metadata table for
 explicit command-output purges. The receipt records task, scope, export time,
 source hash, purge time, affected-record count, removed-byte count, and the
@@ -344,6 +353,8 @@ Do not embed secrets or ignored files.
 - Allow users to delete workspace memory.
 - Respect `.gitignore` and future Forge ignore rules.
 - Do not retain sensitive command output forever without controls.
+- Secret Redaction v1 reduces credential exposure before retention, but does
+  not replace workspace-wide retention, deletion, or private-content policy.
 
 Still undecided: default retention duration, workspace-wide purge, event/tool
 history compaction, export/purge of repository memory, and commercial privacy

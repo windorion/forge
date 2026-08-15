@@ -951,7 +951,7 @@ routing, Mission Control access-policy negatives, and SSE frame parsing:
 swift test --enable-code-coverage
 ```
 
-This remains an early native test baseline. The 58 current tests include
+This remains an early native test baseline. The 61 current tests include
 three focused GitHub Device Flow tests covering local Client ID configuration,
 GitHub `slow_down` interval handling, user validation before token persistence,
 connected-state restoration, and actionable HTTP failures. The broader suite
@@ -1003,13 +1003,14 @@ cd runtime && npm run smoke:core
 cd runtime && npm run smoke:git-conflicts
 cd runtime && npm run smoke:git-remote
 cd runtime && npm run smoke:mission-control-fairness
+cd runtime && npm run smoke:secret-redaction
 cd runtime && npm run campaign:reliability
 cd runtime && npm run campaign:provider-reliability
 cd runtime && npm run performance:smoke
 ```
 
 Before a release-shaped change, run every `smoke:*` script — the full suite is
-23 scripts and takes a few minutes. Both reliability campaigns are
+24 scripts and takes a few minutes. Both reliability campaigns are
 intentionally separate from `smoke:all`: each creates four isolated Git
 repositories and emits a staged scorecard. Use the corresponding `:baseline`
 variant only when intentionally refreshing durable evidence in
@@ -1020,6 +1021,15 @@ to an external API and incurs no API cost.
 `npm run check:docs` validates duplicated headline facts against the handoff
 table, versioned reliability JSON, route manifest, and package scripts. See
 `docs/documentation_truth.md` for the authority and branch-publication rules.
+
+`npm run smoke:secret-redaction` requires no remote API. It launches one
+isolated loopback Runtime and proves Provider-setting diagnostics, HTTP error
+envelopes, task-command chunks/summaries, audit policy evidence, raw SQLite
+payloads, and restart state contain the replacement marker without the fixture
+credential. `scripts/secret-redaction-test.mjs` separately covers direct,
+structured, private-key, URL, percent/base64, idempotence, false-positive, and
+proposal-integrity behavior. Runtime Security CI runs this fixture alongside
+the bounded approval lifecycle.
 
 ## Runtime Performance Budgets
 

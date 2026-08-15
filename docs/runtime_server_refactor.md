@@ -171,7 +171,7 @@ containing only the services needed by that route group.
 
 | Phase | State | Evidence |
 | --- | --- | --- |
-| 0. Freeze observable behavior | Complete | The frozen refactor baseline had 55 routes; the current manifest has 62 after task cancellation/audit export/retention, task detail, supervised queue grants, and validation-approval revocation, with HTTP/SSE, build, unit, coverage, and 23 smoke scripts passing |
+| 0. Freeze observable behavior | Complete | The frozen refactor baseline had 55 routes; the current manifest has 62 after task cancellation/audit export/retention, task detail, supervised queue grants, and validation-approval revocation, with HTTP/SSE, build, unit, coverage, and 24 smoke scripts passing |
 | 1. Bootstrap and HTTP primitives | Complete | Runtime config, HTTP handler/primitives, event bus, and lifecycle extracted; full gate passes |
 | 2. Pure policy and parsing | Complete | Unified diff, text patch, edit paths, Git parsers/failure classes, validation normalization/ranking extracted and directly tested |
 | 3. Git vertical slice | Complete | No-shell command adapter plus status, diff, conflict, branch, commit, push, and PR workflow services extracted; Git smokes pass |
@@ -193,10 +193,10 @@ layer, and no module imports `server.ts`.
 Current verification on 2026-08-11:
 
 - `runtime/src/server.ts`: 1 line (target: below 300)
-- executable manifest: 61 current routes, including observer availability
-- direct Node unit suite: 23 scripts, all passing
+- executable manifest: 62 current routes, including observer availability
+- direct Node unit suite: 26 scripts, all passing
 - TypeScript check, build, and Node coverage gate: passing
-- compatibility suite: 23 smoke scripts, all passing
+- compatibility suite: 24 smoke scripts, all passing
 
 ### Phase 0: Freeze Observable Behavior
 
@@ -446,7 +446,7 @@ without changing the public runtime contract:
   defaults; `createForgeRuntime.ts` fell from 932 to 476 lines while the
   packaged `server.ts` remains one line.
 
-The current compatibility gate passes TypeScript check/build, 24 unit scripts,
-unit coverage, all 23 runtime smoke scripts, and 58 Swift tests. The recorded
-unit coverage aggregate is 56.94% lines, 88.42% branches, and 67.29%
-functions.
+The current compatibility gate passes TypeScript check/build, 26 unit scripts,
+unit coverage, all 24 runtime smoke scripts, and 61 Swift tests. The current
+unit coverage aggregate is 78.06% lines, 79.98% branches, and 85.97%
+functions; Secret Redaction is 86.84% line-covered.

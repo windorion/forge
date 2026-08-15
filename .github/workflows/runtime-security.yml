@@ -15,8 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  approval-lifecycle:
-    name: Approval lifecycle
+  runtime-security:
+    name: Runtime security boundaries
     runs-on: macos-15
     timeout-minutes: 15
 
@@ -48,4 +48,8 @@ jobs:
 
       - name: Verify approval expiry, revocation, active process, and restart boundaries
         run: npm run smoke:approval-lifecycle
+        working-directory: runtime
+
+      - name: Verify secret redaction across diagnostics, errors, output, audit, and persistence
+        run: npm run smoke:secret-redaction
         working-directory: runtime

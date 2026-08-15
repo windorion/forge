@@ -2733,7 +2733,7 @@ final class WorkspaceModel: ObservableObject {
     }
 
     private func appendRuntimeProcessOutput(_ text: String, label: String) {
-        let stamped = "[\(label)] \(text)"
+        let stamped = "[\(label)] \(SecretRedaction.redact(text))"
         let combined = "\(runtimeProcessLastOutput ?? "")\(stamped)"
         if combined.count > Self.runtimeProcessOutputLimit {
             runtimeProcessLastOutput = String(combined.suffix(Self.runtimeProcessOutputLimit))
@@ -3048,11 +3048,12 @@ final class WorkspaceModel: ObservableObject {
         .filter { !$0.isEmpty }
         .joined(separator: "\n\n")
 
-        if output.count > runtimeProcessOutputLimit {
-            return String(output.suffix(runtimeProcessOutputLimit))
+        let safeOutput = SecretRedaction.redact(output)
+        if safeOutput.count > runtimeProcessOutputLimit {
+            return String(safeOutput.suffix(runtimeProcessOutputLimit))
         }
 
-        return output
+        return safeOutput
     }
 
     func runtimeDiagnosticsText() -> String {
@@ -3173,8 +3174,9 @@ final class WorkspaceModel: ObservableObject {
             }
         }
 
+        lines.append("Secret redaction policy: \(SecretRedaction.policyID) v\(SecretRedaction.policyVersion)")
         lines.append("Loaded tasks in app: \(tasks.count)")
-        return lines.joined(separator: "\n")
+        return SecretRedaction.redact(lines.joined(separator: "\n"))
     }
 
     private func startEventStream() {

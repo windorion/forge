@@ -1,4 +1,5 @@
 import type { RuntimeEventBus } from "../events/runtimeEventBus.js";
+import { redactSensitiveText, redactTaskEvidenceInPlace } from "../security/secretRedaction.js";
 import type { SqliteTaskStore } from "../taskStore.js";
 import type { AgentState, ForgeTask, PlanStep, RuntimeEvent } from "../types.js";
 
@@ -22,20 +23,23 @@ export function createTaskState(options: {
   }
 
   function saveTask(task: ForgeTask): void {
+    redactTaskEvidenceInPlace(task);
     taskStore.saveTask(task);
   }
 
   function saveAndBroadcast(task: ForgeTask, runtimeEvent: RuntimeEvent): void {
-    task.events.push(runtimeEvent);
-    task.updatedAt = runtimeEvent.createdAt;
+    const safeEvent = { ...runtimeEvent, message: redactSensitiveText(runtimeEvent.message).text };
+    task.events.push(safeEvent);
+    task.updatedAt = safeEvent.createdAt;
+    redactTaskEvidenceInPlace(task);
     tasks.set(task.id, task);
     saveTask(task);
-    emit(runtimeEvent.type, { taskID: task.id, message: runtimeEvent.message, task });
+    emit(safeEvent.type, { taskID: task.id, message: safeEvent.message, task });
     emit("task.updated", { taskID: task.id, task });
   }
 
   function event(type: string, message: string): RuntimeEvent {
-    return { type, message, createdAt: new Date().toISOString() };
+    return { type, message: redactSensitiveText(message).text, createdAt: new Date().toISOString() };
   }
 
   function cloneAgents(agents: AgentState[]): AgentState[] {
@@ -55,9 +59,9 @@ export function createTaskState(options: {
     const agent = task.agentStates.find((candidate) => candidate.role === role);
     if (agent) {
       agent.status = status;
-      agent.summary = summary;
+      agent.summary = redactSensitiveText(summary).text;
     } else {
-      task.agentStates.push({ role, status, summary });
+      task.agentStates.push({ role, status, summary: redactSensitiveText(summary).text });
     }
   }
 
@@ -65,14 +69,15 @@ export function createTaskState(options: {
     const step = task.planSteps.find((candidate) => candidate.id === stepID);
     if (step) {
       step.status = status;
-      step.summary = summary;
+      step.summary = redactSensitiveText(summary).text;
     }
   }
 
   function upsertPlanStep(task: ForgeTask, planStep: PlanStep): void {
+    const safePlanStep = { ...planStep, summary: redactSensitiveText(planStep.summary).text };
     const index = task.planSteps.findIndex((candidate) => candidate.id === planStep.id);
-    if (index >= 0) task.planSteps[index] = planStep;
-    else task.planSteps.push(planStep);
+    if (index >= 0) task.planSteps[index] = safePlanStep;
+    else task.planSteps.push(safePlanStep);
   }
 
   return {

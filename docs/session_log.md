@@ -6957,3 +6957,73 @@ Next:
 - The next API-free roadmap task is broader secret detection and centralized
   redaction across audit, command output, diagnostics, provider failures, and
   persistence-facing summaries with false-positive controls.
+
+## 2026-08-15 19:51:39 +0200 (CEST)
+
+Conversation summary:
+
+- Completed the next code-only roadmap security task: centralized, versioned
+  Secret detection and redaction across Runtime and native diagnostic evidence,
+  without external APIs or desktop/browser automation.
+
+Done:
+
+- Added `runtime/src/security/secretRedaction.ts` with
+  `forge-secret-redaction` policy v1. It classifies authorization headers,
+  GitHub/OpenAI/GitLab/Slack/AWS/JWT token shapes, structured secret fields,
+  private keys, credential-bearing URLs, and printable percent/base64-encoded
+  known credentials. Public findings contain kind/count only; they never carry
+  the match, its hash, context, or reconstructable offsets.
+- Moved audit export from private regexes to the shared policy and added policy
+  identity/version to JSON evidence. Command output is now redacted before
+  accumulation, SSE, task state, and SQLite. Validation/Git summaries,
+  Provider HTTP/refusal/format failures, Runtime HTTP errors, public Provider
+  diagnostics, validation-config errors, and persistence-facing task evidence
+  use the same safe helpers.
+- Added a targeted SQLite persistence projection that sanitizes events,
+  approvals, tools, loops/steps, commands, validation/repair, cancellation, and
+  PR-refresh summaries while deliberately preserving executable reviewed
+  proposal bodies. Provider base-URL updates reject URL userinfo; public legacy
+  or environment URL evidence is redacted.
+- Added native `SecretRedaction.swift`; app-managed build/runtime output is
+  sanitized on capture, and copied Runtime diagnostics apply the policy again
+  and disclose the policy ID/version.
+- Added pure TypeScript and Swift direct/structured/encoded/idempotence/
+  false-positive/proposal-integrity tests. Added an isolated loopback Runtime
+  fixture proving diagnostic settings, HTTP errors, command chunks/summaries,
+  audit metadata, raw SQLite payload, and restart contain no fixture Secret.
+  Runtime Security CI now runs both approval lifecycle and Secret Redaction.
+- Added a line-buffered process-output redactor so transport chunk boundaries
+  cannot split one credential into separately retained fragments; pure coverage
+  includes a split token and a multi-line private-key block.
+- Regression testing caught an early implementation that replaced live task
+  collections during sanitization and left a command-run reference stale. The
+  implementation was corrected to sanitize evidence in place without replacing
+  run objects; the isolated fixture then passed through completion and restart.
+- Passed TypeScript check/build, documentation truth, all 26 Runtime unit files
+  (33 Node subtests), coverage (78.06% lines overall; Secret Redaction 86.84%),
+  all 24 smoke scripts in one serial run, and all 61 Swift tests.
+- Updated README, Runtime README, security/model-provider/database/runtime
+  architecture/development/refactor docs, roadmap gap register, TODO, project
+  status, Runtime Security workflow, and documentation-truth automation.
+  Estimates now read trust/runtime 95-98%, security/permissions/audit 97-99%,
+  commercial beta 29-34%, polished v1 28-34%, and reliability evidence 92-96%.
+
+Not done:
+
+- Secret Redaction is defense in depth, not general DLP. User-authored task
+  objectives/messages and reviewed patch bodies remain private task content;
+  their lifetime still depends on the undecided workspace retention/export/
+  purge policy.
+- Hosted CI has not run for this change until it is committed and pushed.
+- Signed-build threat review, live-model corpus, full-duration Mission Control
+  soak, signed distribution, and account/commercial decisions remain.
+
+Next:
+
+- Commit and push the Secret Redaction slice, then verify Runtime Security,
+  Runtime Performance, and Swift Tests on the final commit.
+- The next API-free security/data-lifecycle task is versioned workspace
+  retention and export/purge behavior for events, tool calls, task messages,
+  and repository-memory indexes, without automatic deletion before policy is
+  explicit.

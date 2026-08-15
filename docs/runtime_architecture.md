@@ -632,7 +632,19 @@ metadata, and edit transaction evidence. It intentionally omits proposal diff
 content and provider configuration, then recursively redacts known Bearer,
 GitHub/OpenAI token, API-key, password, and secret assignment patterns. The
 macOS Audit surface writes either format through a native save panel. Export
-envelopes include content/source SHA-256 and source `updatedAt` receipts.
+envelopes include content/source SHA-256 and source `updatedAt` receipts. The
+record also identifies `forge-secret-redaction` policy v1; audit export now
+consumes the shared Runtime classifier instead of owning private regexes.
+
+`security/secretRedaction.ts` is the central retained-evidence boundary. It
+returns sanitized text plus non-reconstructable kind/count metadata and has a
+separate task-persistence projection that redacts events, approvals, run/tool
+summaries, command chunks, validation/repair evidence, cancellation, and PR
+refresh summaries while leaving executable proposal operations intact.
+`ProcessRunner` redacts spawned output before accumulation, SSE, and save;
+Provider/HTTP/Git/config paths use the same safe error/text helpers. The native
+`SecretRedaction.swift` counterpart protects app-managed build/runtime output
+and the final copied diagnostics envelope under the same policy ID/version.
 
 Retention remains keep-by-default with no automatic purge. `GET
 /tasks/:taskID/history-retention-preview` reports the bounded command-output

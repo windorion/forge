@@ -167,6 +167,41 @@ try {
   globalThis.fetch = originalFetch;
 }
 
+const providerFailureToken = ["sk", "providerfailure1234567890"].join("-");
+try {
+  globalThis.fetch = async () => new Response(
+    JSON.stringify({ error: { message: `upstream echoed Bearer ${providerFailureToken}` } }),
+    { status: 401, headers: { "content-type": "application/json" } }
+  );
+  const failingProvider = createModelProvider({
+    providerID: "openai",
+    openAIBaseURL: "https://provider.test/v1",
+    openAIAPIKey: "fixture-key"
+  });
+  let providerFailure;
+  try {
+    await failingProvider.createIntentBrief({
+      task: {
+        ...establishedTask,
+        title: "Provider failure redaction",
+        status: "Planning",
+        currentPhase: "Intent",
+        planSteps: [],
+        validationRepairBriefs: [],
+        agentRunSteps: []
+      },
+      latestUserMessage: followUpMessage
+    });
+  } catch (error) {
+    providerFailure = error;
+  }
+  ok(providerFailure instanceof Error, "provider HTTP failure remains actionable");
+  ok(!providerFailure.message.includes(providerFailureToken), "provider HTTP failure redacts echoed credentials");
+  ok(providerFailure.message.includes("[REDACTED]"), "provider HTTP failure retains explicit redaction evidence");
+} finally {
+  globalThis.fetch = originalFetch;
+}
+
 const openAIMissing = getModelProviderConfiguration({
   providerID: "openai",
   modelName: " ",
@@ -180,6 +215,13 @@ ok(openAIMissing.provider.model === "gpt-5.5" && openAIMissing.sendsRemoteContex
 ok(openAIMissing.settings.some((item) => item.id === "base-url" && item.value === "https://example.test/v1"), "base URL trailing slashes normalized");
 ok(openAIMissing.settings.some((item) => item.id === "timeout" && item.value === "30000 ms"), "invalid timeout falls back");
 ok(openAIMissing.settings.some((item) => item.id === "max-output" && item.value === "1800 tokens"), "invalid output limit falls back");
+
+const credentialURLConfig = getModelProviderConfiguration({
+  providerID: "openai",
+  openAIBaseURL: "https://forge:provider-password@example.test/v1"
+});
+const publicCredentialURL = credentialURLConfig.settings.find((item) => item.id === "base-url")?.value ?? "";
+ok(!publicCredentialURL.includes("provider-password") && publicCredentialURL.includes("[REDACTED]"), "public provider configuration redacts URL credentials");
 
 const openAIReady = getModelProviderConfiguration({ providerID: "OPENAI", openAIAPIKey: " test-key " });
 ok(openAIReady.status === "Ready" && openAIReady.issues.length === 0, "configured OpenAI provider is ready");

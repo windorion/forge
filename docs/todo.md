@@ -208,7 +208,7 @@ the core runtime smoke. Preserve these completed boundaries:
 - [x] Execute the seven-phase, behavior-preserving `runtime/src/server.ts`
   decomposition in `docs/runtime_server_refactor.md`. The packaged entry is now
   a one-line bootstrap; the current 62-route contracts, direct unit/coverage
-  gates, and all 23 smoke scripts pass without weakening approval or observer
+  gates, and all 24 smoke scripts pass without weakening approval or observer
   boundaries.
 - [x] Complete the post-refactor readability pass: split Git workflow into five
   domain services, agent orchestration into queue/loop/step/inspection/recovery,
@@ -290,13 +290,28 @@ the core runtime smoke. Preserve these completed boundaries:
     expired or revoked permission.
   - Cover clock boundaries, restart, active-command behavior, and macOS
     permission-envelope decoding without UI automation or external services.
-- **Next code-only security task — broader secret detection:**
-  - Centralize redaction/classification across audit exports, command output,
-    diagnostics, provider failures, and persistence-facing summaries.
-  - Add encoded/structured credential fixtures, false-positive controls, and a
-    versioned policy without logging the matched secret.
-  - Keep live provider/GitHub checks out of scope; prove the boundary with pure
-    and isolated runtime fixtures first.
+- [x] Complete broader Secret detection and centralized redaction:
+  - Added `forge-secret-redaction` policy v1 for authorization headers,
+    GitHub/OpenAI/GitLab/Slack/AWS token shapes, JWTs, structured secret fields,
+    private keys, credential-bearing URLs, and percent/base64-encoded known
+    credentials. Findings contain kind/count only and never matched values,
+    hashes, context, or reconstructable offsets.
+  - Applied the policy before task-command chunks/summaries reach SSE or
+    SQLite, to validation/Git summaries, Provider and HTTP failures, public
+    Provider diagnostics, audit exports, persistence-facing evidence fields,
+    and copied native Runtime diagnostics. Persistence redaction deliberately
+    leaves executable reviewed proposal bodies unchanged.
+  - Added pure TypeScript and Swift known/encoded/structured/false-positive
+    fixtures plus isolated Runtime evidence for command output, HTTP errors,
+    diagnostic settings, audit metadata, raw SQLite inspection, and restart.
+    Runtime Security CI now runs both approval lifecycle and Secret Redaction.
+- **Next code-only security/data-lifecycle task — workspace retention:**
+  - Define versioned default retention and export/purge behavior for task
+    events, tool-call evidence, task messages, and repository-memory indexes.
+  - Extend the current export-receipt and offline/restart safeguards without
+    introducing automatic deletion before policy is explicit and reviewable.
+  - Keep account/cloud deletion and commercial privacy promises out of scope
+    until the founder chooses the local-only versus hosted product boundary.
 
 ## P5: Native macOS Product
 

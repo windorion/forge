@@ -108,7 +108,18 @@ await unexpectedErrorHandler(fakeRequest("GET", "/health"), unexpectedErrorRespo
 assert.equal(unexpectedErrorResponse.status, 500);
 assert.equal(JSON.parse(unexpectedErrorResponse.body).message, "unexpected");
 
-console.log("HTTP primitives test passed: 29 assertions.");
+const errorToken = ["ghp", "httperror1234567890abcdef"].join("_");
+const secretErrorHandler = createRequestHandler({
+  observerMode: false,
+  async handle() { throw new HttpError(400, `Unsupported provider ${errorToken}`); }
+});
+const secretErrorResponse = new FakeResponse();
+await secretErrorHandler(fakeRequest("POST", "/settings/model-provider"), secretErrorResponse);
+assert.equal(secretErrorResponse.status, 400);
+assert(!secretErrorResponse.body.includes(errorToken));
+assert.match(JSON.parse(secretErrorResponse.body).message, /\[REDACTED\]/);
+
+console.log("HTTP primitives test passed: 32 assertions.");
 
 function fakeRequest(method, url) {
   const request = Readable.from([]);

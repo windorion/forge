@@ -210,6 +210,15 @@ Implemented today:
   after restart. Revocation blocks future starts without silently terminating
   a process already authorized at spawn; the explicit cancel action remains
   the in-flight control.
+- Versioned Secret Redaction policy v1 is enforced before sensitive runtime
+  evidence is retained or copied. Known provider/GitHub/cloud tokens,
+  authorization headers, structured password/secret fields, private keys,
+  credential-bearing URLs, and percent/base64-encoded known credentials are
+  removed from command chunks and summaries, provider/HTTP failures, Git
+  summaries, audit exports, SQLite evidence fields, and copied macOS runtime
+  diagnostics. Classification exposes only kind/count metadata, never matched
+  text or hashes; explicit false-positive fixtures preserve configuration
+  prose, public OAuth Client IDs, environment placeholders, and SHA-256 values.
 - Composed task-level cancellation and portable audit export. One confirmed
   `POST /tasks/:taskID/cancel` request removes queued work, aborts an active
   Agent Loop at a safe checkpoint, stops runtime-owned task-command and
@@ -324,13 +333,13 @@ Product-readiness estimate:
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| Trust/runtime foundation | 94-97% | Local runtime, task state, safety-classified SQLite migrations, verified destructive-migration backup/offline restore, keep-by-default retention, export-before-purge, bounded/revocable command approvals, review gates, restricted edits, validation, composed cancellation, redacted audit export, guarded git/PR actions, fail-closed supervised queue grants, repository-scoped background routing, diagnostics, and reliability baselines are real. |
+| Trust/runtime foundation | 95-98% | Local runtime, task state, safety-classified SQLite migrations, verified destructive-migration backup/offline restore, keep-by-default retention, export-before-purge, bounded/revocable command approvals, centralized pre-persistence Secret Redaction, review gates, restricted edits, validation, composed cancellation, guarded git/PR actions, fail-closed supervised queue grants, repository-scoped background routing, diagnostics, and reliability baselines are real. |
 | Coding-agent demo V0 behavior | 100% | The documented functional acceptance path is implemented and smoke-covered. |
 | Primary V0 handoff UI | 100% | The five primary screens are `Verified` with rendered-comparison evidence in `docs/verification/`. |
 | Full handoff UI | 95-97% | 41 of 43 named screens/states are `Verified` (rendered comparison on real data, evidence in `docs/verification/`). The two remaining: `6a` GitHub is `Partial` (configuration UI, Device Flow, polling, Keychain persistence, and connected state are implemented and tested; live GitHub authorization still needs a founder-owned OAuth App Client ID with Device Flow enabled); `35a` Widget is a documented platform-blocked descope (hand-assembled ad-hoc-signed extension not discovered by pluginkit; unblocks with P6 signing). |
 | Useful developer alpha | 72-80% | Forge repeats the reviewed lifecycle across deterministic local-provider and mock-OpenAI adapter corpora, including Unified Diff, approved commands, repair/rerun, fork-aware PR supervision, repository-scoped background command/Git review, and fair restart-safe background dispatch; it still needs broader autonomous tool use and live-model success on pinned public repositories. |
-| Commercial beta | 27-32% | Versioned migration, verified pre-destructive backup/offline restore, the first retention slice, bounded/revocable command approvals, and artifact-producing runtime performance/security gates exist; Forge still needs signed packaging, production onboarding/GitHub/provider proof, broader data-lifecycle policy, packaged-app profiling, operations polish, and repeated real-repository success. |
-| Polished v1 | 27-33% | Queueing, local indexes, session-authorized runtimes, background task/command/Git review routing, fair supervised grants, bounded reconnect/crash recovery telemetry, reportable soak tooling, and a compiled action-level XCUITest harness are real; full-duration/passing evidence, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
+| Commercial beta | 29-34% | Versioned migration, verified pre-destructive backup/offline restore, the first retention slice, bounded/revocable command approvals, centralized Secret Redaction, and artifact-producing runtime performance/security gates exist; Forge still needs signed packaging, production onboarding/GitHub/provider proof, workspace-wide data-lifecycle policy, packaged-app profiling, operations polish, and repeated real-repository success. |
+| Polished v1 | 28-34% | Queueing, local indexes, session-authorized runtimes, background task/command/Git review routing, fair supervised grants, bounded reconnect/crash recovery telemetry, reportable soak tooling, centralized Secret Redaction, and a compiled action-level XCUITest harness are real; full-duration/passing evidence, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
 
 Short version: V0 behavior is complete, but the entire 43-screen product design
 is not. Alpha is the next cumulative horizon, followed by beta and then v1;

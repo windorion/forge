@@ -312,7 +312,14 @@ Set `FORGE_MODEL_PROVIDER_SETTINGS_PATH` to use a different non-secret
 settings file. The runtime never persists API keys to that file. API keys can
 come from `OPENAI_API_KEY` at startup or be sent to the settings endpoint for
 the current runtime process. The macOS app stores the OpenAI key in Keychain
-and syncs it into runtime memory.
+and syncs it into runtime memory. Provider base-URL updates reject embedded URL
+credentials.
+
+Retained operational evidence uses versioned `forge-secret-redaction` policy
+v1. Command output is sanitized before SSE/SQLite, and the same policy covers
+Provider/HTTP/Git errors, public diagnostics, persistence-facing summaries,
+and audit export. Run `npm run smoke:secret-redaction` for the isolated
+diagnostic/output/audit/SQLite/restart boundary fixture; no API is required.
 
 The OpenAI provider uses Responses API Structured Outputs for model-provider
 artifacts. It receives compact task and context summaries, not whole

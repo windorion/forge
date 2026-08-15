@@ -36,6 +36,7 @@
     "smoke:task-cancel": "npm run build && node scripts/task-cancellation-fixtures.mjs",
     "smoke:task-retention": "npm run build && node scripts/task-history-retention-fixtures.mjs",
     "smoke:approval-lifecycle": "npm run build && node scripts/approval-lifecycle-fixtures.mjs",
+    "smoke:secret-redaction": "npm run build && node scripts/secret-redaction-fixtures.mjs",
     "smoke:database-recovery": "npm run build && node scripts/database-recovery-fixtures.mjs",
     "campaign:reliability": "npm run build && node scripts/reliability-campaign.mjs",
     "campaign:reliability:baseline": "npm run build && node scripts/reliability-campaign.mjs --write-baseline",
