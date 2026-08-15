@@ -6061,6 +6061,14 @@ private struct AgentTestsTab: View {
                 .foregroundStyle(ForgeDesign.muted)
             Spacer()
 
+            if activeRun == nil, let permissionToRevoke {
+                Button(workspace.isRevokingValidationPresetApproval(taskID: task.id, presetID: permissionToRevoke.id) ? "REVOKING…" : "REVOKE \(permissionToRevoke.preset.name)") {
+                    workspace.revokeValidationPresetApproval(for: task, presetID: permissionToRevoke.id)
+                }
+                .buttonStyle(ForgeSecondaryButtonStyle())
+                .disabled(workspace.isRevokingValidationPresetApproval(taskID: task.id, presetID: permissionToRevoke.id))
+            }
+
             if let activeRun {
                 Button(workspace.isCancellingTaskCommand(runID: activeRun.id) ? "CANCELLING…" : "✕ CANCEL COMMAND") {
                     workspace.cancelTaskCommand(for: task, run: activeRun)
@@ -6113,6 +6121,10 @@ private struct AgentTestsTab: View {
 
     private var permissionToApprove: ValidationPresetPermission? {
         workspace.validationPermissions(for: task.id).first { $0.canApprove }
+    }
+
+    private var permissionToRevoke: ValidationPresetPermission? {
+        workspace.validationPermissions(for: task.id).first { $0.canRevoke == true }
     }
 
     private var runnableCommand: TaskCommandPermission? {

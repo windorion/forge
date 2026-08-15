@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { HttpError } from "../runtime/runtimeError.js";
-import type { ApprovalRecord, ApproveValidationPresetRequest, ForgeTask, RerunRepairCommandRequest, RunTaskCommandRequest, TaskCommandRun } from "../types.js";
+import type { ApproveValidationPresetRequest, ForgeTask, RerunRepairCommandRequest, RevokeValidationPresetApprovalRequest, RunTaskCommandRequest, TaskCommandRun } from "../types.js";
+import {
+  hasValidationPresetApproval,
+  resolveValidationApprovalDuration,
+  resolveValidationApprovalScope,
+  resolveValidationPresetApproval
+} from "./approvalLifecycle.js";
 import type { InternalValidationCommand, InternalValidationPreset, ValidationServiceOptions } from "./validationServiceTypes.js";
 import type { createProcessRunner } from "./processRunner.js";
 import type { createRepairEvidenceService } from "./repairEvidenceService.js";
@@ -43,7 +49,18 @@ async function approveValidationPreset(taskID: string, input: ApproveValidationP
     throw new HttpError(409, `Validation preset already approved: ${preset.id}`);
   }
 
-  const now = new Date().toISOString();
+  let durationSeconds: number;
+  let scope: "Task";
+  try {
+    durationSeconds = resolveValidationApprovalDuration(input.durationSeconds);
+    scope = resolveValidationApprovalScope(input.scope);
+  } catch (error) {
+    throw new HttpError(400, error instanceof Error ? error.message : String(error));
+  }
+
+  const nowDate = new Date();
+  const now = nowDate.toISOString();
+  const expiresAt = new Date(nowDate.getTime() + durationSeconds * 1_000).toISOString();
   task.approvals.push({
     id: randomUUID(),
     action: "Approve Validation Preset",
@@ -51,20 +68,79 @@ async function approveValidationPreset(taskID: string, input: ApproveValidationP
     summary: `Approved validation preset "${preset.name}".`,
     targetID: preset.id,
     decidedAt: now,
-    userNote: input.note?.trim() || undefined
+    userNote: input.note?.trim() || undefined,
+    scope,
+    expiresAt
   });
-  task.reviewSummary = `Validation preset approved: ${preset.name}.`;
-  setAgent(task, "Tester", "Ready", `Validation preset approved: ${preset.name}.`);
+  task.reviewSummary = `Validation preset approved until ${expiresAt}: ${preset.name}.`;
+  setAgent(task, "Tester", "Ready", `Validation preset approved until ${expiresAt}: ${preset.name}.`);
   upsertPlanStep(task, {
     id: `approve-validation-preset-${preset.id}`,
     title: "Approve validation preset",
     status: "Done",
-    summary: `${preset.name} can now run for this task.`
+    summary: `${preset.name} can run for this task until ${expiresAt}.`
   });
 
   const approved = event("validation.preset.approved", `Validation preset approved: ${preset.name}.`);
   approved.createdAt = now;
   saveAndBroadcast(task, approved);
+  return task;
+}
+
+async function revokeValidationPresetApproval(
+  taskID: string,
+  input: RevokeValidationPresetApprovalRequest
+): Promise<ForgeTask> {
+  const task = tasks.get(taskID);
+  if (!task) {
+    throw new HttpError(404, `Task not found: ${taskID}`);
+  }
+
+  const preset = await findValidationPreset(input.presetID);
+  if (!preset.requiresApproval) {
+    throw new HttpError(409, `Validation preset does not require approval: ${preset.id}`);
+  }
+
+  const resolution = resolveValidationPresetApproval(task, preset.id);
+  if (resolution.state !== "Approved" || !resolution.approval) {
+    throw new HttpError(409, `Validation preset has no active approval to revoke: ${preset.id}`);
+  }
+
+  const now = new Date().toISOString();
+  const activeExecution = hasRunningTaskCommandRun(task) || hasRunningValidationRun(task);
+  task.approvals.push({
+    id: randomUUID(),
+    action: "Revoke Validation Preset Approval",
+    decision: "Revoked",
+    summary: activeExecution
+      ? `Revoked future use of validation preset "${preset.name}"; the already-running process was not terminated.`
+      : `Revoked validation preset approval "${preset.name}".`,
+    targetID: preset.id,
+    revokedApprovalID: resolution.approval.id,
+    decidedAt: now,
+    userNote: input.note?.trim() || undefined,
+    scope: "Task"
+  });
+
+  if (!activeExecution) {
+    task.reviewSummary = `Validation preset approval revoked: ${preset.name}.`;
+    setAgent(task, "Tester", "Blocked", `Validation preset requires a new approval: ${preset.name}.`);
+    upsertPlanStep(task, {
+      id: `approve-validation-preset-${preset.id}`,
+      title: "Approve validation preset",
+      status: "Blocked",
+      summary: `${preset.name} approval was revoked and must be approved again before another command starts.`
+    });
+  }
+
+  const revoked = event(
+    "validation.preset.approval.revoked",
+    activeExecution
+      ? `Validation preset approval revoked for future starts; active execution continues: ${preset.name}.`
+      : `Validation preset approval revoked: ${preset.name}.`
+  );
+  revoked.createdAt = now;
+  saveAndBroadcast(task, revoked);
   return task;
 }
 
@@ -378,19 +454,6 @@ async function findValidationPreset(presetID: string): Promise<InternalValidatio
   return preset;
 }
 
-function hasValidationPresetApproval(task: ForgeTask, presetID: string): boolean {
-  return findValidationPresetApproval(task, presetID) !== undefined;
-}
-
-function findValidationPresetApproval(task: ForgeTask, presetID: string): ApprovalRecord | undefined {
-  return task.approvals.find(
-    (approval) =>
-      approval.action === "Approve Validation Preset" &&
-      approval.decision === "Approved" &&
-      approval.targetID === presetID
-  );
-}
-
 function hasRunningValidationRun(task: ForgeTask): boolean {
   return task.validationRuns.some((run) => run.status === "Running");
 }
@@ -399,5 +462,5 @@ function hasRunningTaskCommandRun(task: ForgeTask): boolean {
   return task.taskCommandRuns.some((run) => run.status === "Running");
 }
 
-return { approveValidationPreset, rerunRepairCommand, runTaskCommand };
+return { approveValidationPreset, revokeValidationPresetApproval, rerunRepairCommand, runTaskCommand };
 }

@@ -30,6 +30,7 @@ export interface ApprovalRecord {
     | "Reject Edit Proposal"
     | "Review Edit Proposal File"
     | "Approve Validation Preset"
+    | "Revoke Validation Preset Approval"
     | "Cancel Task Command"
     | "Cancel Task"
     | "Pause Agent Loop"
@@ -40,12 +41,17 @@ export interface ApprovalRecord {
     | "Switch Git Branch"
     | "Publish Git Branch"
     | "Publish Pull Request";
-  decision: "Approved" | "Rejected";
+  decision: "Approved" | "Rejected" | "Revoked";
   summary: string;
   decidedAt: string;
   targetID?: string;
   userNote?: string;
+  scope?: ApprovalScope;
+  expiresAt?: string;
+  revokedApprovalID?: string;
 }
+
+export type ApprovalScope = "Task" | "Repository" | "Session";
 
 export interface PlanStep {
   id: string;
@@ -567,13 +573,19 @@ export interface ValidationPreset {
   commands: ValidationCommandDefinition[];
 }
 
-export type ValidationPresetApprovalState = "NotRequired" | "NeedsApproval" | "Approved";
+export type ValidationPresetApprovalState = "NotRequired" | "NeedsApproval" | "Approved" | "Expired" | "Revoked";
 export type ValidationPresetExecutionState = "Blocked" | "NeedsApproval" | "Ready" | "Running";
 
 export interface ValidationPermissionApproval {
   id: string;
   decidedAt: string;
   summary: string;
+  scope?: ApprovalScope;
+  expiresAt?: string;
+  state: "Approved" | "Expired" | "Revoked";
+  revokedAt?: string;
+  revocationID?: string;
+  revocationNote?: string;
 }
 
 export interface ValidationPermissionLastRun {
@@ -589,6 +601,7 @@ export interface ValidationPresetPermission {
   approvalState: ValidationPresetApprovalState;
   executionState: ValidationPresetExecutionState;
   canApprove: boolean;
+  canRevoke: boolean;
   canRun: boolean;
   blockedReasons: string[];
   approval?: ValidationPermissionApproval;
@@ -612,6 +625,7 @@ export interface TaskCommandPermission {
   approvalState: ValidationPresetApprovalState;
   executionState: ValidationPresetExecutionState;
   canRun: boolean;
+  canRevoke: boolean;
   blockedReasons: string[];
   approval?: ValidationPermissionApproval;
   lastRun?: TaskCommandPermissionLastRun;
@@ -623,6 +637,21 @@ export interface ValidationPermissionEnvelope {
   currentPhase: string;
   permissions: ValidationPresetPermission[];
   taskCommands: TaskCommandPermission[];
+  approvalPolicy: ValidationApprovalPolicy;
+}
+
+export interface ValidationApprovalScopePolicy {
+  scope: ApprovalScope;
+  grantable: boolean;
+  persistence: "TaskRecord" | "RepositoryRecord" | "RuntimeMemory";
+  summary: string;
+}
+
+export interface ValidationApprovalPolicy {
+  defaultDurationSeconds: number;
+  maxDurationSeconds: number;
+  supportedDurationSeconds: number[];
+  scopes: ValidationApprovalScopePolicy[];
 }
 
 export interface GitFileChange {
@@ -1173,6 +1202,13 @@ export interface ApprovePlanAndRunRequest extends ApprovePlanRequest {
 }
 
 export interface ApproveValidationPresetRequest {
+  presetID: string;
+  note?: string;
+  scope?: ApprovalScope;
+  durationSeconds?: number;
+}
+
+export interface RevokeValidationPresetApprovalRequest {
   presetID: string;
   note?: string;
 }

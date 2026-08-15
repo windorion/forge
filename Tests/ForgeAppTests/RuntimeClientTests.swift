@@ -355,6 +355,18 @@ final class RuntimeClientTests: XCTestCase {
         body = try jsonObject(try XCTUnwrap(recorder.lastBody))
         XCTAssertEqual(body["presetID"] as? String, "swift-tests")
         XCTAssertEqual(body["note"] as? String, "Approved command")
+        XCTAssertEqual(body["scope"] as? String, "Task")
+        XCTAssertEqual(body["durationSeconds"] as? Int, 3_600)
+
+        _ = try await client.revokeValidationPresetApproval(
+            taskID: "task-1",
+            presetID: "swift-tests",
+            note: "Stop future command starts"
+        )
+        XCTAssertEqual(recorder.lastRequest?.url?.path, "/api/tasks/task-1/revoke-validation-preset-approval")
+        body = try jsonObject(try XCTUnwrap(recorder.lastBody))
+        XCTAssertEqual(body["presetID"] as? String, "swift-tests")
+        XCTAssertEqual(body["note"] as? String, "Stop future command starts")
 
         _ = try await client.runValidation(taskID: "task-1", presetID: "swift-tests")
         XCTAssertEqual(recorder.lastRequest?.url?.path, "/api/tasks/task-1/run-validation")
@@ -475,6 +487,40 @@ final class RuntimeClientTests: XCTestCase {
         body = try jsonObject(try XCTUnwrap(recorder.lastBody))
         XCTAssertEqual(body["taskID"] as? String, "task-bg")
         XCTAssertEqual(body["confirmation"] as? String, "CreateLocalCommit")
+    }
+
+    func testValidationPermissionEnvelopeDecodesApprovalLifecycleEvidence() async throws {
+        let (client, session) = makeClient { request in
+            XCTAssertEqual(request.url?.path, "/api/tasks/task-1/validation-permissions")
+            let json = """
+            {
+              "taskID":"task-1","taskStatus":"Human Review","currentPhase":"Command Review",
+              "permissions":[{
+                "preset":{"id":"swift-tests","name":"Swift tests","description":"Run checks.","source":"BuiltIn","riskLevel":"Medium","requiresApproval":true,"commands":[]},
+                "approvalState":"Revoked","executionState":"NeedsApproval","canApprove":true,"canRevoke":false,"canRun":false,
+                "blockedReasons":["Approval was revoked."],
+                "approval":{"id":"approval-1","decidedAt":"2026-08-15T10:00:00Z","summary":"Approved.","scope":"Task","expiresAt":"2026-08-15T11:00:00Z","state":"Revoked","revokedAt":"2026-08-15T10:30:00Z","revocationID":"revocation-1","revocationNote":"Stop future starts"}
+              }],
+              "taskCommands":[],
+              "approvalPolicy":{"defaultDurationSeconds":3600,"maxDurationSeconds":86400,"supportedDurationSeconds":[900,3600,14400,28800,86400],"scopes":[
+                {"scope":"Task","grantable":true,"persistence":"TaskRecord","summary":"Bound to one task."},
+                {"scope":"Repository","grantable":false,"persistence":"RepositoryRecord","summary":"Reserved."},
+                {"scope":"Session","grantable":false,"persistence":"RuntimeMemory","summary":"Memory only."}
+              ]}
+            }
+            """
+            return Self.response(request, status: 200, data: Data(json.utf8))
+        }
+        defer { session.invalidateAndCancel() }
+
+        let envelope = try await client.validationPermissions(taskID: "task-1")
+
+        XCTAssertEqual(envelope.permissions.first?.approvalState, "Revoked")
+        XCTAssertEqual(envelope.permissions.first?.canRevoke, false)
+        XCTAssertEqual(envelope.permissions.first?.approval?.expiresAt, "2026-08-15T11:00:00Z")
+        XCTAssertEqual(envelope.permissions.first?.approval?.revocationID, "revocation-1")
+        XCTAssertEqual(envelope.approvalPolicy?.defaultDurationSeconds, 3_600)
+        XCTAssertEqual(envelope.approvalPolicy?.scopes.map(\.scope), ["Task", "Repository", "Session"])
     }
 
     func testEventsUsesInjectedSessionAndParsesSSEFrames() async throws {

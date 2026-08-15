@@ -39,6 +39,7 @@ This first slice is intentionally small:
 - `POST /tasks/:taskID/rollback-edit-proposal`
 - `POST /tasks/:taskID/reject-edit-proposal`
 - `POST /tasks/:taskID/approve-validation-preset`
+- `POST /tasks/:taskID/revoke-validation-preset-approval`
 - `POST /tasks/:taskID/run-validation`
 - `POST /tasks/:taskID/run-task-command`
 - `POST /tasks/:taskID/rerun-repair-command`
@@ -255,7 +256,11 @@ Project validation commands are allowlisted by the runtime, run without a
 shell, use repo-local cwd values, and record exit code plus output summary.
 `GET /tasks/:taskID/validation-permissions` returns a task-specific permission
 snapshot for each preset, including approval state, execution state, blocked
-reasons, command execution mode, and the last run for that preset.
+reasons, command execution mode, the last run for that preset, bounded
+scope/expiry/revocation evidence, and the authoritative lifecycle policy.
+Validation approvals default to one hour and accept fixed durations up to 24
+hours. Only task scope is grantable. Expired, revoked, or legacy-unbounded
+records do not authorize a process, including after runtime restart.
 
 Task state is persisted locally in SQLite. By default the runtime stores task
 snapshots in:
@@ -435,7 +440,10 @@ curl http://127.0.0.1:17373/validation-presets
 curl http://127.0.0.1:17373/tasks/<task-id>/validation-permissions
 curl -X POST http://127.0.0.1:17373/tasks/<task-id>/approve-validation-preset \
   -H 'Content-Type: application/json' \
-  -d '{"presetID":"runtime-typescript"}'
+  -d '{"presetID":"runtime-typescript","scope":"Task","durationSeconds":3600}'
+curl -X POST http://127.0.0.1:17373/tasks/<task-id>/revoke-validation-preset-approval \
+  -H 'Content-Type: application/json' \
+  -d '{"presetID":"runtime-typescript","note":"Stop future command starts"}'
 curl -X POST http://127.0.0.1:17373/tasks/<task-id>/run-validation \
   -H 'Content-Type: application/json' \
   -d '{"presetID":"runtime-typescript"}'

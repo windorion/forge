@@ -89,6 +89,7 @@ export const runtimeRouteManifest: readonly RuntimeRouteContract[] = [
   post("/tasks/:taskID/rollback-edit-proposal"),
   post("/tasks/:taskID/reject-edit-proposal"),
   post("/tasks/:taskID/approve-validation-preset"),
+  post("/tasks/:taskID/revoke-validation-preset-approval"),
   post("/tasks/:taskID/run-validation"),
   post("/tasks/:taskID/run-task-command"),
   post("/tasks/:taskID/rerun-repair-command"),

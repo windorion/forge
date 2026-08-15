@@ -22,6 +22,9 @@ const [
   performanceGuide,
   performanceWorkflow,
   performanceBudgetSource,
+  runtimeSecurityWorkflow,
+  approvalLifecycleSource,
+  validationGuide,
   taskTypes,
   swiftModels,
   swiftWorkspaceModel,
@@ -46,6 +49,9 @@ const [
   read("docs/performance_budgets.md"),
   read(".github/workflows/runtime-performance.yml"),
   read("runtime/performance-budgets.json"),
+  read(".github/workflows/runtime-security.yml"),
+  read("runtime/src/validation/approvalLifecycle.ts"),
+  read("docs/validation_presets.md"),
   read("runtime/src/types.ts"),
   read("apps/macos/Sources/ForgeApp/Models.swift"),
   read("apps/macos/Sources/ForgeApp/WorkspaceModel.swift"),
@@ -129,7 +135,21 @@ check("documented smoke count matches package scripts", () => {
 
 const routeCount = [...routeManifest.matchAll(/^\s*(?:get|post|options)\("/gm)].length;
 check("route manifest count remains explicit", () => {
-  assert.equal(routeCount, 61);
+  assert.equal(routeCount, 62);
+});
+
+check("validation approval lifecycle is bounded, documented, and enforced in CI", () => {
+  assert.equal(runtimePackage.scripts["smoke:approval-lifecycle"], "npm run build && node scripts/approval-lifecycle-fixtures.mjs");
+  assert.match(routeManifest, /revoke-validation-preset-approval/);
+  assert.match(approvalLifecycleSource, /validationApprovalDefaultDurationSeconds = 60 \* 60/);
+  assert.match(approvalLifecycleSource, /validationApprovalMaxDurationSeconds = 24 \* 60 \* 60/);
+  assert.match(approvalLifecycleSource, /candidate\.revokedApprovalID === approval\.id/);
+  assert.match(taskTypes, /"Expired" \| "Revoked"/);
+  assert.match(swiftModels, /revokedApprovalID/);
+  assert.match(swiftWorkspaceModel, /revokeValidationPresetApproval/);
+  assert.match(validationGuide, /Legacy approval records without/);
+  assert.match(runtimeSecurityWorkflow, /npm run smoke:approval-lifecycle/);
+  assert.match(runtimeSecurityWorkflow, /npm run test:unit/);
 });
 
 const unitTestCount = (await readdir(resolve(repoRoot, "runtime", "scripts")))

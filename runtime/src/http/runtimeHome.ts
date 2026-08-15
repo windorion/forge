@@ -84,6 +84,7 @@ export function renderRuntimeHome(): string {
       <li><code>POST /tasks/:taskID/rollback-edit-proposal</code></li>
       <li><code>POST /tasks/:taskID/reject-edit-proposal</code></li>
       <li><code>POST /tasks/:taskID/approve-validation-preset</code></li>
+      <li><code>POST /tasks/:taskID/revoke-validation-preset-approval</code></li>
       <li><code>POST /tasks/:taskID/run-validation</code></li>
       <li><code>POST /tasks/:taskID/run-task-command</code></li>
       <li><code>POST /tasks/:taskID/rerun-repair-command</code></li>

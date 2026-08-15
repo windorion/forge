@@ -1,0 +1,51 @@
+name: Runtime Security
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  approval-lifecycle:
+    name: Approval lifecycle
+    runs-on: macos-15
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: runtime/package-lock.json
+
+      - name: Install runtime dependencies
+        run: npm ci
+        working-directory: runtime
+
+      - name: Check documentation truth
+        run: node script/check_documentation_truth.mjs
+
+      - name: Type-check runtime
+        run: npm run check
+        working-directory: runtime
+
+      - name: Run runtime unit tests
+        run: npm run test:unit
+        working-directory: runtime
+
+      - name: Verify approval expiry, revocation, active process, and restart boundaries
+        run: npm run smoke:approval-lifecycle
+        working-directory: runtime

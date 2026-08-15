@@ -131,6 +131,9 @@ struct ApprovalRecord: Identifiable, Codable, Hashable {
     var decidedAt: String
     var targetID: String?
     var userNote: String?
+    var scope: String?
+    var expiresAt: String?
+    var revokedApprovalID: String?
 }
 
 struct ToolCall: Identifiable, Codable, Hashable {
@@ -433,6 +436,7 @@ struct ValidationPresetPermission: Identifiable, Codable, Hashable {
     var approvalState: String
     var executionState: String
     var canApprove: Bool
+    var canRevoke: Bool?
     var canRun: Bool
     var blockedReasons: [String]
     var approval: ValidationPermissionApproval?
@@ -443,6 +447,12 @@ struct ValidationPermissionApproval: Identifiable, Codable, Hashable {
     var id: String
     var decidedAt: String
     var summary: String
+    var scope: String?
+    var expiresAt: String?
+    var state: String?
+    var revokedAt: String?
+    var revocationID: String?
+    var revocationNote: String?
 }
 
 struct ValidationPermissionLastRun: Identifiable, Codable, Hashable {
@@ -471,6 +481,7 @@ struct TaskCommandPermission: Identifiable, Codable, Hashable {
     var approvalState: String
     var executionState: String
     var canRun: Bool
+    var canRevoke: Bool?
     var blockedReasons: [String]
     var approval: ValidationPermissionApproval?
     var lastRun: TaskCommandPermissionLastRun?
@@ -482,6 +493,21 @@ struct ValidationPermissionEnvelope: Codable, Hashable {
     var currentPhase: String
     var permissions: [ValidationPresetPermission]
     var taskCommands: [TaskCommandPermission]
+    var approvalPolicy: ValidationApprovalPolicy?
+}
+
+struct ValidationApprovalScopePolicy: Codable, Hashable {
+    var scope: String
+    var grantable: Bool
+    var persistence: String
+    var summary: String
+}
+
+struct ValidationApprovalPolicy: Codable, Hashable {
+    var defaultDurationSeconds: Int
+    var maxDurationSeconds: Int
+    var supportedDurationSeconds: [Int]
+    var scopes: [ValidationApprovalScopePolicy]
 }
 
 struct GitFileChange: Identifiable, Codable, Hashable {
@@ -1318,6 +1344,13 @@ struct EditProposalFileReviewRequest: Encodable {
 }
 
 struct ApproveValidationPresetRequest: Encodable {
+    var presetID: String
+    var note: String?
+    var scope: String?
+    var durationSeconds: Int?
+}
+
+struct RevokeValidationPresetApprovalRequest: Encodable {
     var presetID: String
     var note: String?
 }

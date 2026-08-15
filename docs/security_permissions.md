@@ -135,6 +135,23 @@ The Review panel now presents these commands as task-specific permission
 requests with approval state, blocked reasons, command boundary, and last-run
 metadata before the user approves or runs them.
 
+Validation-preset permission is now a bounded capability, not a permanent
+boolean. New grants are `Task` scoped, default to one hour, accept only fixed
+durations up to 24 hours, and persist their expiry. Repository and session
+scope semantics are advertised but cannot be granted by the task endpoint;
+this prevents accidental cross-task widening and prevents a supposed
+session-only grant from surviving restart. Legacy records without a task scope
+and valid expiry fail closed.
+
+Explicit revocation appends a `Revoke Validation Preset Approval` record with
+the original approval ID. The original approval is retained for audit export.
+Permission snapshots expose `Expired`/`Revoked`, and the runtime checks current
+state before task-command spawn and before each validation child. A restart
+therefore cannot revive stale evidence. Revocation affects future process
+starts; an already-authorized active child continues until it exits or the user
+uses the separate explicit cancellation boundary. JSON and Markdown audit
+exports retain scope, expiry, and revocation linkage.
+
 Current task-scoped command execution reuses the same command catalog and
 approval records, but runs a single command by ID as part of the live task
 session instead of only as post-apply validation. `POST

@@ -1,4 +1,5 @@
-import type { ApprovalRecord, ForgeTask, PlanRevision, TaskCommandPermission, TaskCommandRun, TaskMessage, ValidationPermissionLastRun, ValidationRepairBrief, ValidationRun } from "../types.js";
+import type { ForgeTask, PlanRevision, TaskCommandPermission, TaskCommandRun, TaskMessage, ValidationPermissionLastRun, ValidationRepairBrief, ValidationRun } from "../types.js";
+import { findValidationPresetApproval, hasValidationPresetApproval } from "./approvalLifecycle.js";
 import type { ValidationServiceOptions } from "./validationServiceTypes.js";
 
 export function createRepairEvidenceService(options: ValidationServiceOptions) {
@@ -149,19 +150,6 @@ function hasPlanApproval(task: ForgeTask, planRevisionID: string | undefined): b
       approval.action === "Approve Plan" &&
       approval.decision === "Approved" &&
       approval.targetID === planRevisionID
-  );
-}
-
-function hasValidationPresetApproval(task: ForgeTask, presetID: string): boolean {
-  return findValidationPresetApproval(task, presetID) !== undefined;
-}
-
-function findValidationPresetApproval(task: ForgeTask, presetID: string): ApprovalRecord | undefined {
-  return task.approvals.find(
-    (approval) =>
-      approval.action === "Approve Validation Preset" &&
-      approval.decision === "Approved" &&
-      approval.targetID === presetID
   );
 }
 

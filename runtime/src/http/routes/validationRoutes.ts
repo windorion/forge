@@ -2,7 +2,7 @@ import { HttpError } from "../httpError.js";
 import { readJson } from "../request.js";
 import { writeHtml, writeJson } from "../response.js";
 import { taskIDFromActionPath } from "../taskPath.js";
-import type { AgentRunLoopControlRequest, ApprovePlanAndRunRequest, ApprovePlanRequest, ApproveValidationPresetRequest, CancelTaskCommandRequest, CreateTaskMessageRequest, CreateTaskRequest, EditProposalDecisionRequest, EditProposalFileReviewRequest, GitBranchPublishRequest, GitBranchRequest, GitConflictResolutionRequest, GitCreateCommitRequest, GitPullRequestPublishRequest, GitPullRequestStatusRequest, GitPushRequest, ModelProviderSettingsUpdateRequest, RerunRepairCommandRequest, RunAgentLoopRequest, RunAgentStepRequest, RunTaskCommandRequest, RunValidationRequest, TaskQueueReorderRequest, TaskQueueSettingsRequest } from "../../types.js";
+import type { AgentRunLoopControlRequest, ApprovePlanAndRunRequest, ApprovePlanRequest, ApproveValidationPresetRequest, CancelTaskCommandRequest, CreateTaskMessageRequest, CreateTaskRequest, EditProposalDecisionRequest, EditProposalFileReviewRequest, GitBranchPublishRequest, GitBranchRequest, GitConflictResolutionRequest, GitCreateCommitRequest, GitPullRequestPublishRequest, GitPullRequestStatusRequest, GitPushRequest, ModelProviderSettingsUpdateRequest, RerunRepairCommandRequest, RevokeValidationPresetApprovalRequest, RunAgentLoopRequest, RunAgentStepRequest, RunTaskCommandRequest, RunValidationRequest, TaskQueueReorderRequest, TaskQueueSettingsRequest } from "../../types.js";
 import type { RuntimeRouteGroup, RuntimeRouteOptions } from "../runtimeRoutes.js";
 
 export function createValidationRoutes(options: RuntimeRouteOptions): RuntimeRouteGroup {
@@ -25,7 +25,7 @@ export function createValidationRoutes(options: RuntimeRouteOptions): RuntimeRou
   runAgentLoopV0, requestAgentRunLoopControl, resumeAgentRunLoop,
   generateEditProposal, reviseEditProposal, generateValidationRepairProposal,
   validateEditProposal, applyEditProposal, rollbackEditProposal,
-  reviewEditProposalFile, rejectEditProposal, approveValidationPreset,
+  reviewEditProposalFile, rejectEditProposal, approveValidationPreset, revokeValidationPresetApproval,
   runValidation, runTaskCommand, rerunRepairCommand, cancelTaskCommand,
   emit
 } = options;
@@ -49,6 +49,14 @@ export function createValidationRoutes(options: RuntimeRouteOptions): RuntimeRou
     if (request.method === "POST" && approveValidationPresetTaskID) {
           const input = await readJson<ApproveValidationPresetRequest>(request);
           const task = await approveValidationPreset(approveValidationPresetTaskID, input);
+          writeJson(response, 200, task);
+          return true;
+        }
+
+    const revokeValidationPresetApprovalTaskID = taskIDFromActionPath(url.pathname, "revoke-validation-preset-approval");
+    if (request.method === "POST" && revokeValidationPresetApprovalTaskID) {
+          const input = await readJson<RevokeValidationPresetApprovalRequest>(request);
+          const task = await revokeValidationPresetApproval(revokeValidationPresetApprovalTaskID, input);
           writeJson(response, 200, task);
           return true;
         }

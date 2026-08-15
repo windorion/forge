@@ -91,6 +91,7 @@ final class WorkspaceModel: ObservableObject {
     @Published private var auditRetentionPreviews: [ForgeTask.ID: TaskHistoryRetentionPreview] = [:]
     @Published private var savedAuditExportReceipts: [ForgeTask.ID: TaskHistoryPurgeRequest.ExportReceipt] = [:]
     @Published private var approvingValidationPresetTaskIDs = Set<String>()
+    @Published private var revokingValidationPresetTaskIDs = Set<String>()
     @Published private var refreshingGitStatus = false
     @Published private var loadingGitDiffPaths = Set<String>()
     @Published private var resolvingGitConflictPaths = Set<String>()
@@ -864,6 +865,29 @@ final class WorkspaceModel: ObservableObject {
         approvingValidationPresetTaskIDs.contains(validationPresetActionKey(taskID: taskID, presetID: presetID))
     }
 
+    func revokeValidationPresetApproval(for task: ForgeTask, presetID: ValidationPreset.ID) {
+        let key = validationPresetActionKey(taskID: task.id, presetID: presetID)
+        revokingValidationPresetTaskIDs.insert(key)
+
+        Task {
+            do {
+                let updatedTask = try await runtime.revokeValidationPresetApproval(taskID: task.id, presetID: presetID)
+                upsert(updatedTask)
+                selectedTaskID = updatedTask.id
+                statusMessage = "Validation preset approval revoked."
+                await refreshValidationPermissionSnapshotIfPossible(for: updatedTask.id)
+                startEventStream()
+            } catch {
+                statusMessage = "Revoke validation preset approval failed: \(error.localizedDescription)"
+            }
+            revokingValidationPresetTaskIDs.remove(key)
+        }
+    }
+
+    func isRevokingValidationPresetApproval(taskID: ForgeTask.ID, presetID: ValidationPreset.ID) -> Bool {
+        revokingValidationPresetTaskIDs.contains(validationPresetActionKey(taskID: taskID, presetID: presetID))
+    }
+
     func runValidation(for task: ForgeTask, presetID: ValidationPreset.ID? = nil) {
         let key = validationPresetActionKey(taskID: task.id, presetID: presetID ?? "forge-post-apply")
         runningValidationTaskIDs.insert(key)
@@ -1413,6 +1437,16 @@ final class WorkspaceModel: ObservableObject {
         #endif
         performMissionControlMutation { route in
             try await self.missionControlSupervisor.approveValidationPreset(
+                path: route.repositoryPath,
+                taskID: route.taskID,
+                presetID: presetID
+            )
+        }
+    }
+
+    func revokeMissionControlValidationPresetApproval(_ presetID: ValidationPreset.ID) {
+        performMissionControlMutation { route in
+            try await self.missionControlSupervisor.revokeValidationPresetApproval(
                 path: route.repositoryPath,
                 taskID: route.taskID,
                 presetID: presetID

@@ -70,7 +70,6 @@ export function assembleValidationRuntime(options: {
   service: Omit<ValidationServiceOptions, "loadValidationPresetRegistry">;
   catalog: Omit<
     ValidationCatalogOptions,
-    | "findValidationPresetApproval"
     | "hasRunningValidationRun"
     | "hasRunningTaskCommandRun"
     | "findLastValidationRun"
@@ -84,7 +83,6 @@ export function assembleValidationRuntime(options: {
   });
   validationCatalogService = createValidationCatalogService({
     ...options.catalog,
-    findValidationPresetApproval: validationService.findValidationPresetApproval,
     hasRunningValidationRun: validationService.hasRunningValidationRun,
     hasRunningTaskCommandRun: validationService.hasRunningTaskCommandRun,
     findLastValidationRun: validationService.findLastValidationRun,

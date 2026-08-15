@@ -743,7 +743,12 @@ Medium-risk validation presets require task-level approval through
 `POST /tasks/:taskID/approve-validation-preset` before they can run. The Review
 panel shows command permission requests with source, approval state, execution
 state, blocked reasons, command manifest, cwd, risk level, approval button, and
-run button. The runtime provides the task-specific permission state through
+run button. Approval requests send `scope: "Task"` and a fixed bounded
+`durationSeconds` (the native client currently uses the one-hour default).
+`POST /tasks/:taskID/revoke-validation-preset-approval` appends revocation
+evidence and the Tests action rail exposes it next to runnable commands. The
+runtime provides expiry/revocation state and the authoritative scope/duration
+policy through
 `GET /tasks/:taskID/validation-permissions`. The Settings window shows the
 active provider status, editable provider settings, loaded workspace
 validation config path, and any config issues.
@@ -946,7 +951,7 @@ routing, Mission Control access-policy negatives, and SSE frame parsing:
 swift test --enable-code-coverage
 ```
 
-This remains an early native test baseline. The 56 current tests include
+This remains an early native test baseline. The 58 current tests include
 three focused GitHub Device Flow tests covering local Client ID configuration,
 GitHub `slow_down` interval handling, user validation before token persistence,
 connected-state restoration, and actionable HTTP failures. The broader suite
@@ -1004,7 +1009,7 @@ cd runtime && npm run performance:smoke
 ```
 
 Before a release-shaped change, run every `smoke:*` script — the full suite is
-22 scripts and takes a few minutes. Both reliability campaigns are
+23 scripts and takes a few minutes. Both reliability campaigns are
 intentionally separate from `smoke:all`: each creates four isolated Git
 repositories and emits a staged scorecard. Use the corresponding `:baseline`
 variant only when intentionally refreshing durable evidence in

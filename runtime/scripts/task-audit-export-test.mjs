@@ -26,10 +26,22 @@ const task = {
     summary: "Agent Loop and command stopped."
   },
   planRevisions: [],
-  approvals: [{
-    id: "approval-1", action: "Cancel Task", decision: "Approved",
-    summary: "Cancel task", decidedAt: "2026-08-08T10:00:30.000Z"
-  }],
+  approvals: [
+    {
+      id: "validation-approval-1", action: "Approve Validation Preset", decision: "Approved",
+      summary: "Approve checks", decidedAt: "2026-08-08T10:00:20.000Z", targetID: "runtime-typescript",
+      scope: "Task", expiresAt: "2026-08-08T11:00:20.000Z"
+    },
+    {
+      id: "validation-revocation-1", action: "Revoke Validation Preset Approval", decision: "Revoked",
+      summary: "Revoke checks", decidedAt: "2026-08-08T10:00:25.000Z", targetID: "runtime-typescript",
+      scope: "Task", revokedApprovalID: "validation-approval-1"
+    },
+    {
+      id: "approval-1", action: "Cancel Task", decision: "Approved",
+      summary: "Cancel task", decidedAt: "2026-08-08T10:00:30.000Z"
+    }
+  ],
   events: [
     { type: "task.cancel.requested", message: "Cancellation requested.", createdAt: "2026-08-08T10:00:30.000Z" },
     { type: "task.cancelled", message: "Cancellation completed.", createdAt: "2026-08-08T10:01:00.000Z" }
@@ -66,6 +78,8 @@ const parsed = JSON.parse(json.content);
 assert.equal(parsed.schemaVersion, 1);
 assert.equal(parsed.task.status, "Cancelled");
 assert.equal(parsed.task.cancellation.agentLoopDisposition, "AbortRequested");
+assert.equal(parsed.approvals[0].expiresAt, "2026-08-08T11:00:20.000Z");
+assert.equal(parsed.approvals[1].revokedApprovalID, "validation-approval-1");
 assert.equal(parsed.taskCommandRuns[0].status, "Cancelled");
 assert(parsed.toolCalls[0].input.includes("[REDACTED]"));
 
@@ -75,6 +89,8 @@ assert.match(markdown.contentSha256, /^[a-f0-9]{64}$/);
 assert.equal(markdown.sourceSha256, json.sourceSha256);
 assert(markdown.content.includes("## Cancellation"));
 assert(markdown.content.includes("## Human Approvals"));
+assert(markdown.content.includes("2026-08-08T11:00:20.000Z"));
+assert(markdown.content.includes("validation-approval-1"));
 assert(markdown.content.includes("## Event Timeline"));
 assert(markdown.content.includes("UserAborted"));
 assert(!markdown.content.includes(secret), "Markdown export leaked a known token pattern.");

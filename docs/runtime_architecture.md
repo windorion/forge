@@ -525,10 +525,21 @@ cwd values, and preserve exit code plus output summary.
 
 The runtime also exposes task-specific validation permission snapshots through
 `GET /tasks/:taskID/validation-permissions`. The snapshot includes approval
-state, execution state, blocked reasons, command execution mode, and last run
-metadata so the app can show permission requests without guessing runtime
-policy locally. Approval can be granted before an edit proposal is applied;
+state (including expired/revoked), execution state, blocked reasons, command
+execution mode, last-run metadata, bounded approval evidence, and the runtime's
+scope/duration policy so the app can show permission requests without guessing
+runtime policy locally. Approval can be granted before an edit proposal is applied;
 running a validation preset still requires the normal applied-proposal gate.
+
+Validation command approval is resolved by one shared lifecycle module. New
+grants are persisted as task-scoped records with a fixed duration (one-hour
+default, 24-hour maximum). Revocation appends a linked record rather than
+mutating history. Legacy/unbounded, expired, revoked, repository-scoped, and
+session-scoped records do not authorize this path. The command runner checks
+immediately before spawn; the validation runner also checks between child
+commands. Runtime restart recomputes validity from persisted evidence and the
+current clock. Revoking while a child is active blocks later starts but leaves
+termination to the explicit cancellation service.
 
 Tasks enter `Testing` after apply and only move to `Completed` after
 validation passes. Failed validation moves the task to `Failed` with command
@@ -763,6 +774,9 @@ For validation presets, it derives `Blocked`, `NeedsApproval`, `Ready`, or
 `Running` from task state, preset risk, approval records, active validation
 runs, and the applied-proposal gate for validation execution. Task command
 execution uses the same approval records but has its own run state.
+The approval dimension separately reports `NotRequired`, `NeedsApproval`,
+`Approved`, `Expired`, or `Revoked`; an execution state can remain `Running`
+while its permission has been revoked for all future starts.
 
 ### Sandbox Manager
 

@@ -147,8 +147,14 @@ function renderAuditMarkdown(audit: ReturnType<typeof buildAuditRecord>): string
     );
   }
 
-  appendTable(lines, "Human Approvals", ["Time", "Action", "Decision", "Summary"], audit.approvals.map((approval) => [
-    approval.decidedAt, approval.action, approval.decision, approval.summary
+  appendTable(lines, "Human Approvals", ["Time", "Action", "Decision", "Scope", "Expires", "Revokes", "Summary"], audit.approvals.map((approval) => [
+    approval.decidedAt,
+    approval.action,
+    approval.decision,
+    approval.scope ?? "—",
+    approval.expiresAt ?? "—",
+    approval.revokedApprovalID ?? "—",
+    approval.summary
   ]));
   appendTable(lines, "Event Timeline", ["Time", "Type", "Message"], audit.events.map((event) => [
     event.createdAt, event.type, event.message

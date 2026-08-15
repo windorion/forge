@@ -3,7 +3,7 @@
 Document role: maintain the active backlog, priority order, and next concrete
 engineering tasks for Forge.
 
-Last updated: 2026-08-11
+Last updated: 2026-08-15
 
 ## Rule
 
@@ -207,8 +207,8 @@ the core runtime smoke. Preserve these completed boundaries:
 
 - [x] Execute the seven-phase, behavior-preserving `runtime/src/server.ts`
   decomposition in `docs/runtime_server_refactor.md`. The packaged entry is now
-  a one-line bootstrap; the current 61-route contracts, direct unit/coverage
-  gates, and all 22 smoke scripts pass without weakening approval or observer
+  a one-line bootstrap; the current 62-route contracts, direct unit/coverage
+  gates, and all 23 smoke scripts pass without weakening approval or observer
   boundaries.
 - [x] Complete the post-refactor readability pass: split Git workflow into five
   domain services, agent orchestration into queue/loop/step/inspection/recovery,
@@ -281,7 +281,7 @@ the core runtime smoke. Preserve these completed boundaries:
   budget snapshots, and an artifact-producing hosted macOS CI gate are real.
   Remaining performance work is pinned real-repository evidence plus signed
   app/runtime launch, combined memory/energy, and native interaction budgets.
-- **Next code-only runtime task — approval lifecycle:**
+- [x] Complete the command/preset approval lifecycle:
   - Define task-, repository-, and session-scoped approval lifetimes without
     weakening the existing explicit plan/edit/Git/PR gates.
   - Add expiry and explicit revocation evidence to command/preset approvals;
@@ -290,6 +290,13 @@ the core runtime smoke. Preserve these completed boundaries:
     expired or revoked permission.
   - Cover clock boundaries, restart, active-command behavior, and macOS
     permission-envelope decoding without UI automation or external services.
+- **Next code-only security task — broader secret detection:**
+  - Centralize redaction/classification across audit exports, command output,
+    diagnostics, provider failures, and persistence-facing summaries.
+  - Add encoded/structured credential fixtures, false-positive controls, and a
+    versioned policy without logging the matched secret.
+  - Keep live provider/GitHub checks out of scope; prove the boundary with pure
+    and isolated runtime fixtures first.
 
 ## P5: Native macOS Product
 

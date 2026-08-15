@@ -6894,3 +6894,66 @@ Next:
 - Continue the next code-only roadmap task with approval lifetime, expiry, and
   revocation across validation/task-command permissions, restart, audit, and
   Swift permission-envelope decoding.
+
+## 2026-08-15 15:54:07 +0200 (CEST)
+
+Conversation summary:
+
+- Completed the roadmap approval-lifecycle task without external APIs,
+  foreground app launch, browser control, or desktop UI automation.
+
+Done:
+
+- Replaced permanent validation-preset approval lookup with one shared
+  fail-closed lifecycle policy. New grants are task-scoped, default to one
+  hour, accept fixed 15-minute/1-hour/4-hour/8-hour/24-hour choices, and persist
+  exact scope and expiry. Repository/session semantics are explicit but not
+  grantable from a task record; legacy, malformed, wrong-scope, and expired
+  records do not authorize execution.
+- Added append-only `Revoke Validation Preset Approval` evidence and the 62nd
+  runtime route. Revocation links to the original grant, retains both records
+  in JSON/Markdown audit exports, permits explicit bounded reapproval, and
+  blocks future command starts without silently terminating a process already
+  authorized at spawn.
+- Rechecked approval immediately before task-command execution and before each
+  validation child. A permission that expires or is revoked between commands
+  stops the remaining validation commands before process creation. SQLite
+  restart recomputes current validity and cannot revive stale evidence.
+- Expanded the runtime permission envelope with Expired/Revoked states,
+  can-revoke state, lifecycle evidence, and authoritative scope/duration
+  policy. Updated Swift models/client, WorkspaceModel, Tests action rail, and
+  Mission Control supervisor contracts, including a native revoke action.
+- Added pure clock/scope/duration/reapproval tests, a real loopback lifecycle
+  fixture covering revocation, active-process behavior, invalid requests, and
+  restart expiry, plus Swift request/decode/model tests. Added a dedicated
+  hosted Runtime Security workflow with docs, type, unit, and lifecycle gates.
+- Passed TypeScript check/build, documentation truth, all 25 runtime unit
+  files, unit coverage (approval lifecycle 93.91% line coverage), all 23 smoke
+  scripts in one serial run, and all 58 Swift tests. The first smoke attempts
+  exposed an intentional 61-to-62 route assertion update and one tool-induced
+  concurrent fixture collision; after updating the explicit contract and
+  ensuring one managed session, the complete suite passed cleanly.
+- Updated README, validation/security/development/runtime architecture,
+  refactor/route architecture, roadmap, TODO, project status, runtime README,
+  documentation truth automation, and synchronized status dates. Current
+  estimates are trust/runtime 94-97%, security/permissions/audit 95-97%,
+  commercial beta 27-32%, and reliability evidence 91-95%.
+
+Not done:
+
+- Hosted GitHub Actions for the new Runtime Security workflow have not run
+  until this change is committed and pushed.
+- Repository-wide or session-only validation grants are deliberately not
+  implemented; they need product evidence and a correctly scoped store rather
+  than widening task records by convenience.
+- Broader secret detection, workspace/event/tool retention policy, signed
+  build threat review, live-model corpus, full-duration Mission Control soak,
+  signed distribution, and account/commercial decisions remain.
+
+Next:
+
+- Commit and push the approval-lifecycle slice, then verify Swift Tests,
+  Runtime Performance, and Runtime Security hosted workflows.
+- The next API-free roadmap task is broader secret detection and centralized
+  redaction across audit, command output, diagnostics, provider failures, and
+  persistence-facing summaries with false-positive controls.

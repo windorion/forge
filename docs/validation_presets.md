@@ -79,11 +79,15 @@ GET /tasks/:taskID/validation-permissions
 Each permission snapshot includes:
 
 - preset source and risk level
-- approval state: `NotRequired`, `NeedsApproval`, or `Approved`
+- approval state: `NotRequired`, `NeedsApproval`, `Approved`, `Expired`, or
+  `Revoked`
 - execution state: `Blocked`, `NeedsApproval`, `Ready`, or `Running`
 - blocked reasons
 - command execution mode and boundary
 - last validation run for the preset, if one exists
+- active or most-recent approval evidence: scope, decision time, expiry,
+  lifecycle state, and linked revocation metadata
+- the authoritative duration/scope policy used by the runtime
 
 The macOS Review panel uses this endpoint to show command permission requests.
 The macOS session action rail also uses the same envelope's task-command list
@@ -97,6 +101,31 @@ preset can be approved before an edit proposal is applied. Running a full
 validation preset still requires the applied-proposal validation gate, while a
 task-scoped command run can reuse the same approval to run one command by ID
 inside the live task session.
+
+## Approval Lifetime And Revocation
+
+`POST /tasks/:taskID/approve-validation-preset` creates a bounded `Task` grant.
+The default lifetime is 3,600 seconds. Callers may request only one of 900,
+3,600, 14,400, 28,800, or 86,400 seconds; arbitrary or longer durations fail
+with `400`. The approval record persists `scope`, `decidedAt`, and `expiresAt`.
+Repository and session scope semantics are included in the permission policy,
+but are not grantable here: a task record cannot silently widen into a shared
+repository grant, and a future session grant must live only in runtime memory.
+
+`POST /tasks/:taskID/revoke-validation-preset-approval` appends a separate
+`Revoked` approval record linked by `revokedApprovalID`. It never rewrites or
+deletes the original grant. An expired or revoked preset may be explicitly
+approved again, producing a new bounded record. Legacy approval records without
+both `Task` scope and a valid expiry fail closed as `Expired` after upgrade.
+
+The runtime checks lifecycle state when building permission snapshots and again
+before every process start. A multi-command validation run checks again between
+commands, so expiry or revocation prevents the next child from being created.
+Revoking while one process is already running does not implicitly kill that
+already-authorized child; it blocks future starts, and the existing command or
+task cancellation endpoint remains the explicit control for in-flight work.
+SQLite restart reloads the same append-only evidence and current wall clock, so
+restart cannot revive an expired or revoked grant.
 
 ## Task-Scoped Command Runs
 
@@ -151,6 +180,8 @@ refreshes both task state and the permission envelope after completion.
 - Project commands run with `spawn`, `shell: false`.
 - Command cwd values are runtime-owned and must resolve inside the repo.
 - Permission cards show command boundaries before approval or execution.
+- Permission cards expose bounded expiry/revocation evidence and a native
+  revoke action; they do not calculate a separate local policy.
 - The task-command chooser is derived from runtime permission state and sends
   command IDs only.
 - Exit code and output summary are recorded for every command.

@@ -3,7 +3,7 @@
 Document role: record sequencing, milestones, proof points, and what should
 not be built too early.
 
-Last updated: 2026-08-11
+Last updated: 2026-08-15
 
 ## Direction Reset
 
@@ -198,7 +198,7 @@ sequence rather than inventing another score.
 | Multi-repository operational proof | Alpha | Fair supervised dispatch, 300-second/1,086-restart soak, one passing action-level UI path, exponential reconnect backoff, visible diagnostics, and a passing process-level transport/termination/relaunch fixture with no authorization widening or queue escape. | Stable AC for six-hour evidence; unattended desktop window for XCUITest. | Six-hour report and complete passing `.xcresult` with documented power/desktop conditions. |
 | Runtime history, retention, and migrations | Beta | SQLite schema v5 runs ordered safety-classified migrations; v4 → v5 preserves tasks; fixture destructive v6 cannot start without a verified owner-only `VACUUM INTO` manifest, and the offline CLI restores removed data while preserving the displaced database and a receipt. Command output remains bounded, keep-by-default, and export-before-purge. | Default duration, workspace/event/tool/memory retention, workspace export/purge, and commercial privacy policy are not decided. | Migration and command-output slices pass: prior-schema upgrade, observer refusal, single-writer lease, pre-destructive backup, corruption/live-writer/WAL gates, offline recovery, export-before-purge, and restart recovery. Full exit now requires the broader workspace retention/export/purge decision. |
 | Performance and resource budgets | Beta | Versioned smoke/standard/large runtime profiles now measure cold start, idle CPU/RSS, retained-task listing, cold/warm index, Git status/diff, and deterministic agent-step latency. Hard/advisory budgets, noise-aware same-profile comparisons, direct evaluator tests, and a hosted macOS artifact-producing CI gate are real. | Representative real large repositories and a signed-package profiling environment. | Synthetic runtime regression gate remains green; then add pinned real-repository index/Git evidence plus signed app/runtime launch, combined RSS, energy, and interactive native budgets. |
-| Security lifecycle | Beta | Explicit approvals, read-only observers, scoped authorization, Keychain secrets, redacted audit export. | Approval lifetime and audit-retention product decisions. | Approval expiry/revocation, audit purge/retention tests, broader secret scanning, and signed-build threat review. |
+| Security lifecycle | Beta | Explicit approvals, read-only observers, scoped authorization, Keychain secrets, redacted audit export, and bounded task-command grants with one-hour default/fixed durations, append-only revocation, pre-spawn and between-command checks, restart proof, native decoding, and a hosted security workflow. | Workspace-wide retention and signed-build threat-review decisions; repository/session validation grants remain deliberately unimplemented until evidence requires them. | Keep expiry/revocation regression green, then complete workspace audit purge/retention policy, broader secret scanning, and signed-build threat review. |
 | Signed Mac distribution | Beta | App-managed/bundled runtime path, onboarding, update/appcast UI. | Founder Developer ID, notarization credentials, and P6 signing work. | Clean-machine DMG install, Gatekeeper/notarization pass, signed appcast install/relaunch, rollback/recovery rehearsal. |
 | Account and commercial boundary | Beta | Honest local-only continuation; provider/GitHub credentials stay local. | Founder decision: local-only/open-core vs hosted account/team product. | Written decision plus matching UI, privacy/deletion behavior, packaging, pricing, entitlement, support, and launch evidence. |
 | Repository memory and semantic retrieval | v1 | Durable file/symbol/trigram indexes with live verification. | Evaluation corpus and privacy/resource budgets. | Hybrid retrieval beats text/symbol baseline on a versioned benchmark while remaining local, bounded, and inspectable. |
@@ -208,8 +208,9 @@ sequence rather than inventing another score.
 This register originally exposed four omissions that should not hide behind
 broad milestone labels: data lifecycle/migrations, measurable performance
 budgets, approval/audit lifecycle, and the account/commercial decision gate.
-The migration and command-output data-lifecycle slices are now implemented, but
-the workspace-wide policy/export/purge decision remains. None should preempt the
+The migration, command-output data-lifecycle, performance-budget, and bounded
+task-approval lifecycle slices are now implemented, but the workspace-wide
+policy/export/purge and broader secret-detection decisions remain. None should preempt the
 live-model Alpha corpus, and each remaining exit condition must be resolved
 before claiming the corresponding Beta or v1 finish line.
 

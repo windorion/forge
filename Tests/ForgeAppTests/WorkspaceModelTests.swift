@@ -158,6 +158,45 @@ final class WorkspaceModelTests: XCTestCase {
         XCTAssertTrue(recorder.paths.contains("GET /api/tasks/task-1/validation-permissions"))
     }
 
+    func testRevokeValidationPresetApprovalRefreshesTaskAndPermissionEnvelope() async throws {
+        let defaults = makeUserDefaults()
+        defer { clear(defaults) }
+        let recorder = WorkspaceRequestRecorder()
+        let revokedTaskJSON = Self.taskJSON.replacingOccurrences(
+            of: #""title":"Coverage""#,
+            with: #""title":"Preset Revoked""#
+        )
+        let (client, session) = makeClient { request in
+            recorder.record(request)
+            switch (request.httpMethod, request.url?.path) {
+            case ("POST", "/api/tasks/task-1/revoke-validation-preset-approval"):
+                return Self.response(request, status: 200, body: revokedTaskJSON)
+            case ("GET", "/api/tasks/task-1/validation-permissions"):
+                return Self.response(request, status: 200, body: Self.validationPermissionsJSON)
+            case ("GET", "/api/events"), ("GET", "/api/health"):
+                return Self.response(request, status: 503, body: #"{"error":"stream closed by test"}"#)
+            default:
+                return Self.response(request, status: 404, body: #"{"error":"unexpected test route"}"#)
+            }
+        }
+        defer { session.invalidateAndCancel() }
+        let model = WorkspaceModel(runtime: client, userDefaults: defaults)
+        let task = try decode(ForgeTask.self, from: Self.taskJSON)
+        model.tasks = [task]
+        model.selectedTaskID = task.id
+
+        model.revokeValidationPresetApproval(for: task, presetID: "swift-tests")
+
+        XCTAssertTrue(model.isRevokingValidationPresetApproval(taskID: task.id, presetID: "swift-tests"))
+        let completed = await eventually {
+            !model.isRevokingValidationPresetApproval(taskID: task.id, presetID: "swift-tests") &&
+                model.selectedTask?.title == "Preset Revoked"
+        }
+        XCTAssertTrue(completed)
+        XCTAssertTrue(recorder.paths.contains("POST /api/tasks/task-1/revoke-validation-preset-approval"))
+        XCTAssertTrue(recorder.paths.contains("GET /api/tasks/task-1/validation-permissions"))
+    }
+
     func testRunValidationFailureClearsLoadingAndKeepsTheExistingTask() async throws {
         let defaults = makeUserDefaults()
         defer { clear(defaults) }

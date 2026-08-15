@@ -3,7 +3,7 @@
 Document role: record the current product state, objective completion estimate,
 major gaps, and what "finished" means at each product horizon.
 
-Last updated: 2026-08-11
+Last updated: 2026-08-15
 
 ## One-Line Status
 
@@ -192,7 +192,7 @@ Implemented:
   services. A second readability pass split Git workflow, agent orchestration,
   edit operations, validation/process execution, route groups, and composition
   into narrower modules; `createForgeRuntime.ts` is now 476 lines. The
-  61-route executable contract, all 22 smoke scripts, and all 56 Swift tests
+  62-route executable contract, all 23 smoke scripts, and all 58 Swift tests
   pass.
 - Versioned runtime performance and resource budgets. Fresh synthetic
   smoke/standard/large profiles measure cold startup, idle child CPU/RSS,
@@ -319,6 +319,15 @@ Implemented:
   `spawn` and `shell:false`, streams stdout/stderr chunks over SSE, records
   bounded output chunks plus exit code in task state, and exposes recorded
   runs and repair evidence in the macOS Tests tab.
+- Command/preset approval lifecycle is fail-closed and auditable. New
+  approvals are task-scoped bounded grants (one-hour default; fixed choices up
+  to 24 hours), while repository and session scopes are described but not
+  grantable by this endpoint. Expiry and append-only revocation appear in the
+  runtime permission envelope and native contract/UI, are checked immediately
+  before command start and between validation commands, and remain invalid
+  across SQLite restart. Legacy approvals without scope/expiry are treated as
+  expired. Revoking during an active process blocks future starts without
+  turning revocation into implicit cancellation.
 - The validation permission envelope now includes a task-command chooser model.
   The macOS action rail shows runtime-known project commands, their approval/
   readiness state, command boundary, and last-run status, then runs the
@@ -473,12 +482,12 @@ use different denominators and must not be added together.
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| Trust/runtime foundation | 93-96% | Local runtime, task state, safety-classified migrations, verified pre-destructive backup/offline restore, single-writer leases, keep-by-default retention, export-before-purge, review gates, restricted edits, validation, cancellation, redacted audit export, guarded Git/PR actions, supervised queue grants, repository-scoped routing, diagnostics, and reliability baselines are real. |
+| Trust/runtime foundation | 94-97% | Local runtime, task state, safety-classified migrations, verified pre-destructive backup/offline restore, single-writer leases, keep-by-default retention, export-before-purge, bounded/revocable command approvals, review gates, restricted edits, validation, cancellation, redacted audit export, guarded Git/PR actions, supervised queue grants, repository-scoped routing, diagnostics, and reliability baselines are real. |
 | Coding-agent demo V0 behavior | 100% | All documented functional acceptance criteria are implemented and smoke-covered. |
 | Primary V0 handoff UI | 100% | All five primary screens are `Verified` with rendered-comparison evidence in `docs/verification/`. |
 | Full 43-screen handoff UI | 95-97% | 41 of 43 screens Verified with rendered-comparison evidence (docs/verification/). Remaining: 6a Partial (OAuth configuration, Device Flow, standards-compliant polling, Keychain persistence, and connected UI are implemented and unit-tested; a live grant still needs the founder GitHub OAuth Client ID with Device Flow enabled); 35a a documented platform-blocked widget-signing descope (P6). |
 | Useful developer alpha | 72-80% | Forge repeats the reviewed lifecycle across deterministic local-provider and mock-OpenAI adapter corpora, including Unified Diff, approved commands, repair/rerun, fork-aware PR supervision, repository-scoped background command/Git review, and fair restart-safe dispatch; it still needs broader autonomous tool use and repeated live-model success on pinned public repositories. |
-| Commercial beta | 25-30% | Versioned migration, verified pre-destructive backup/offline restore, explicit command-output retention, and the first artifact-producing runtime performance gate now exist; Forge still needs signed packaging, production onboarding/GitHub/provider proof, broader workspace data-lifecycle policy, packaged-app profiling, operations polish, and repeated real-repository success. |
+| Commercial beta | 27-32% | Versioned migration, verified pre-destructive backup/offline restore, explicit command-output retention, bounded/revocable command approvals, and artifact-producing runtime performance/security gates now exist; Forge still needs signed packaging, production onboarding/GitHub/provider proof, broader workspace data-lifecycle policy, packaged-app profiling, operations polish, and repeated real-repository success. |
 | Polished v1 product | 27-33% | The real queue, local indexes, session-authorized runtimes, background task/command/Git review routing, fair supervised grants, bounded reconnect/crash recovery telemetry, reportable soak tooling, and a compiled action-level XCUITest harness exist; full-duration/passing evidence, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
 
 ## Component Gap Matrix
@@ -491,16 +500,16 @@ finish line.
 | Component | Readiness | Gap | Strongest evidence today | Largest remaining gap |
 | --- | ---: | ---: | --- | --- |
 | Product direction and task-first UX | 90-95% | 5-10% | Durable product principles, complete V0 flow, 41 rendered-verified handoff states. | Resolve the account/team boundary and validate the narrow daily-use task with external users. |
-| Runtime, task state, recovery | 95-97% | 3-5% | 61-route contract, SQLite schema v5 with safety-classified ordered transactions, v4 upgrade, verified pre-destructive snapshots, offline restore receipts, single-writer lease, atomic purge receipts, cancellation, watchdog and journal recovery. | Normalize run/tool tables, decide workspace-wide retention/export/purge, finish the full-duration soak, and add production telemetry. |
-| Security, permissions, and audit | 92-96% | 4-8% | Explicit plan/edit/command/git/PR gates, observer runtimes, owner-only writer/backup artifacts, verified offline restore, redacted exports with source receipts, export-before-command-output-purge, bounded PR refresh attempts. | Approval expiry/revocation, workspace/event/tool retention policy, broader secret detection, and signed-build threat review. |
+| Runtime, task state, recovery | 95-97% | 3-5% | 62-route contract, SQLite schema v5 with safety-classified ordered transactions, v4 upgrade, verified pre-destructive snapshots, offline restore receipts, single-writer lease, atomic purge receipts, cancellation, watchdog and journal recovery. | Normalize run/tool tables, decide workspace-wide retention/export/purge, finish the full-duration soak, and add production telemetry. |
+| Security, permissions, and audit | 95-97% | 3-5% | Explicit plan/edit/command/git/PR gates, bounded task command grants with expiry/append-only revocation/restart proof, observer runtimes, owner-only writer/backup artifacts, verified offline restore, redacted exports with source receipts, export-before-command-output-purge, bounded PR refresh attempts. | Workspace/event/tool retention policy, broader secret detection, repository/session approval stores only if product evidence needs them, and signed-build threat review. |
 | Handoff UI fidelity | 95-97% | 3-5% | Five primary screens and 41 of 43 total states are Verified. | Live `6a` OAuth evidence and signed `35a` WidgetKit packaging. |
 | Native macOS behavior and integrations | 83-90% | 10-17% | SwiftUI app, menus, shortcuts, notifications, Spotlight, CLI, onboarding, settings, managed runtimes, fair-queue state, rendered routed-tab transitions, three compiled `XCUIApplication` methods, and one passing action-level path. | Archive the full UI-test suite in an unattended window, final human-input checks, deeper Finder/IDE handoff, WidgetKit, and signed-package proof. |
 | Agent and live-model coding quality | 58-68% | 32-42% | Bounded plan/context/step loop, strict structured-output recovery, mock-OpenAI protocol campaign. | Pinned public-repository live-model evidence, broader tool choice, patch recovery, and measured quality/cost. |
-| Edit, command, validation, and repair | 84-91% | 9-16% | Reviewed multi-file create/modify/delete, Unified Diff, rollback, approved commands, repair/rerun, and repository-scoped background command control. | Broader source transformations, command catalogs, revocable approval memory, and post-rollback validation. |
+| Edit, command, validation, and repair | 88-93% | 7-12% | Reviewed multi-file create/modify/delete, Unified Diff, rollback, bounded/revocable approved commands, repair/rerun, and repository-scoped background command control. | Broader source transformations, command catalogs, evidence-led repository/session approval stores if needed, and post-rollback validation. |
 | Repository understanding | 68-78% | 22-32% | Durable file metadata, lightweight symbols, trigram text index, bounded live verification. | Semantic/hybrid retrieval, dependency relationships, higher-fidelity parsing, ranking evaluation, and large-repo budgets. |
 | Git and GitHub workflow | 88-93% | 7-12% | Status/diff, guarded commit/branch/push, routed background preflights/actions, fork-aware PR publication, reviews/checks/mergeability evidence, bounded background refresh. | Live OAuth proof, hosted auth/network/branch-protection fixtures, richer provider portability, and merge/update policy decisions. |
 | Multi-task and multi-repository supervision | 94-97% | 3-6% | Persisted queues, observers, session authorization, routed task/command/Git review, serialized mutations, fair grants, a passing 300-second/1,086-restart soak, one action-level UI path, capped reconnect backoff, and a passing process-level transport/termination/relaunch fixture with zero mutation requests. | Full six-hour soak and complete passing UI evidence under appropriate unattended/power conditions. |
-| Reliability, evaluation, and test evidence | 89-94% | 6-11% | 24 runtime unit files, 22 smoke scripts, 56 Swift tests, 3 compiled XCUITest methods, one passing action path, destructive-migration backup/CLI recovery, retention/restart E2E, fork/mock-GitHub E2E, two reliability campaigns, versioned runtime performance profiles with a hosted artifact gate, two-runtime fixtures, process reconnect coverage, and soak reports. | Live-model corpus, wider real repositories, hosted-network cases, complete UI archives, signed-app/real-repository performance evidence, and a completed multi-hour soak. |
+| Reliability, evaluation, and test evidence | 91-95% | 5-9% | 25 runtime unit files, 23 smoke scripts, 58 Swift tests, 3 compiled XCUITest methods, one passing action path, approval expiry/revocation/restart E2E, destructive-migration backup/CLI recovery, retention/restart E2E, fork/mock-GitHub E2E, two reliability campaigns, versioned runtime performance profiles with hosted artifact/security gates, two-runtime fixtures, process reconnect coverage, and soak reports. | Live-model corpus, wider real repositories, hosted-network cases, complete UI archives, signed-app/real-repository performance evidence, and a completed multi-hour soak. |
 | Distribution, updates, and operations | 25-35% | 65-75% | App-managed/bundled-runtime path, update UI/appcast client, diagnostics surfaces. | Developer ID, hardened runtime, notarization, DMG, signed appcast install/relaunch, crash reporting, release rehearsal. |
 | Account, sync, and collaboration services | 10-20% | 80-90% | Honest local-only continuation and GitHub/provider credentials in Keychain. | Decide whether accounts exist; if yes, build verified email identity, sync, sharing, tenancy, and deletion/privacy APIs. |
 | Pricing, packaging, and go-to-market | 20-30% | 70-80% | Product category, personas, positioning, and business-model hypotheses are documented. | Choose solo/team wedge, open-core boundary, packaging, price, entitlement/billing, support, and launch evidence. |
@@ -537,7 +546,8 @@ The hardest remaining work is not the app shell. The hardest remaining work is:
   with a founder Client ID and signed `35a` WidgetKit packaging in P6
 - repeated live-model patch/command/recovery success on pinned public repos
 - semantic or hybrid retrieval beyond the durable file/symbol/trigram indexes
-- broader project-command catalogs and revocable approval memory
+- broader project-command catalogs and evidence-led repository/session grant
+  stores only if task-scoped lifecycle data proves they are needed
 - native macOS distribution, signing, notarization, and updates
 - trust polish: permissions, audit trail, secret handling, and clear user
   control

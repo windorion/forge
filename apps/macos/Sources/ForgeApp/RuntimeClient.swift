@@ -645,7 +645,8 @@ struct RuntimeClient {
     func approveValidationPreset(
         taskID: ForgeTask.ID,
         presetID: ValidationPreset.ID,
-        note: String? = nil
+        note: String? = nil,
+        durationSeconds: Int = 3_600
     ) async throws -> ForgeTask {
         let url = baseURL
             .appending(path: "tasks")
@@ -654,7 +655,31 @@ struct RuntimeClient {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(ApproveValidationPresetRequest(presetID: presetID, note: note))
+        request.httpBody = try JSONEncoder().encode(ApproveValidationPresetRequest(
+            presetID: presetID,
+            note: note,
+            scope: "Task",
+            durationSeconds: durationSeconds
+        ))
+
+        let (data, response) = try await session.data(for: request)
+        try validate(response, data: data)
+        return try JSONDecoder().decode(ForgeTask.self, from: data)
+    }
+
+    func revokeValidationPresetApproval(
+        taskID: ForgeTask.ID,
+        presetID: ValidationPreset.ID,
+        note: String? = nil
+    ) async throws -> ForgeTask {
+        let url = baseURL
+            .appending(path: "tasks")
+            .appending(path: taskID)
+            .appending(path: "revoke-validation-preset-approval")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(RevokeValidationPresetApprovalRequest(presetID: presetID, note: note))
 
         let (data, response) = try await session.data(for: request)
         try validate(response, data: data)

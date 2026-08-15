@@ -552,6 +552,13 @@ struct MissionControlTaskDetailView: View {
                                         .foregroundStyle(ForgeDesign.muted)
                                 }
                                 Spacer()
+                                if permission.canRevoke == true && authorized {
+                                    Button("REVOKE PRESET") {
+                                        workspace.revokeMissionControlValidationPresetApproval(permission.id)
+                                    }
+                                    .buttonStyle(MissionRouteSecondaryButtonStyle())
+                                    .accessibilityIdentifier("mission-control-revoke-preset-\(permission.id)")
+                                }
                                 if permission.canApprove && authorized {
                                     Button("APPROVE PRESET") {
                                         workspace.approveMissionControlValidationPreset(permission.id)
@@ -569,6 +576,11 @@ struct MissionControlTaskDetailView: View {
                             }
                             Text(permission.preset.description)
                                 .font(.system(size: 11.5))
+                            if let approval = permission.approval {
+                                Text("\(approval.state ?? permission.approvalState) · \(approval.scope ?? "LEGACY") · expires \(approval.expiresAt ?? "unbounded/invalid")")
+                                    .font(ForgeDesign.mono(8.5))
+                                    .foregroundStyle(ForgeDesign.muted)
+                            }
                             Text(permission.preset.commands.map(\.command).joined(separator: "\n"))
                                 .font(ForgeDesign.mono(9))
                                 .foregroundStyle(ForgeDesign.muted)

@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { stat } from "node:fs/promises";
 import { HttpError } from "../runtime/runtimeError.js";
-import type { ApprovalRecord, ForgeTask, ValidationRun } from "../types.js";
+import type { ForgeTask, ValidationRun } from "../types.js";
+import { resolveValidationPresetApproval } from "./approvalLifecycle.js";
 import type { InternalValidationPreset, ValidationServiceOptions } from "./validationServiceTypes.js";
 import type { createProcessRunner } from "./processRunner.js";
 import type { createRepairEvidenceService } from "./repairEvidenceService.js";
@@ -48,8 +49,12 @@ async function runValidation(
   }
 
   const preset = await findValidationPreset(presetID);
-  if (preset.requiresApproval && !hasValidationPresetApproval(task, preset.id)) {
-    throw new HttpError(409, `Validation preset requires approval before it can run: ${preset.name}`);
+  const initialApproval = resolveValidationPresetApproval(task, preset.id);
+  if (preset.requiresApproval && initialApproval.state !== "Approved") {
+    throw new HttpError(
+      409,
+      initialApproval.reason ?? `Validation preset requires approval before it can run: ${preset.name}`
+    );
   }
 
   const startedAt = new Date().toISOString();
@@ -83,7 +88,17 @@ async function runValidation(
   started.createdAt = startedAt;
   saveAndBroadcast(task, started);
 
+  let approvalBecameInactive = false;
+  let approvalFailureReason: string | undefined;
   for (const command of preset.commands) {
+    if (preset.requiresApproval) {
+      const currentApproval = resolveValidationPresetApproval(task, preset.id);
+      if (currentApproval.state !== "Approved") {
+        approvalBecameInactive = true;
+        approvalFailureReason = currentApproval.reason ?? "Validation approval is no longer active.";
+        break;
+      }
+    }
     const result = await processRunner.runValidationCommand(command, task, validationRun.id);
     validationRun.commands.push(result);
     task.updatedAt = result.endedAt ?? new Date().toISOString();
@@ -100,13 +115,15 @@ async function runValidation(
   }
 
   const failedCommands = validationRun.commands.filter((command) => command.status === "Failed");
-  const cancelled = validationRun.commands.some((command) => command.status === "Cancelled") ||
+  const cancelled = approvalBecameInactive || validationRun.commands.some((command) => command.status === "Cancelled") ||
     processRunner.validationCancellationWasRequested(validationRun.id);
   const endedAt = new Date().toISOString();
   validationRun.endedAt = endedAt;
   validationRun.status = cancelled ? "Cancelled" : failedCommands.length === 0 ? "Passed" : "Failed";
   validationRun.summary = cancelled
-    ? `Validation cancelled after ${validationRun.commands.length} command(s); remaining commands were not started.`
+    ? approvalBecameInactive
+      ? `Validation stopped after ${validationRun.commands.length} command(s); remaining commands were not started because ${approvalFailureReason}`
+      : `Validation cancelled after ${validationRun.commands.length} command(s); remaining commands were not started.`
     : failedCommands.length === 0
       ? `Validation passed with ${validationRun.commands.length} command(s).`
       : `Validation failed: ${failedCommands.length} of ${validationRun.commands.length} command(s) failed.`;
@@ -218,19 +235,6 @@ async function findValidationPreset(presetID: string): Promise<InternalValidatio
   }
 
   return preset;
-}
-
-function hasValidationPresetApproval(task: ForgeTask, presetID: string): boolean {
-  return findValidationPresetApproval(task, presetID) !== undefined;
-}
-
-function findValidationPresetApproval(task: ForgeTask, presetID: string): ApprovalRecord | undefined {
-  return task.approvals.find(
-    (approval) =>
-      approval.action === "Approve Validation Preset" &&
-      approval.decision === "Approved" &&
-      approval.targetID === presetID
-  );
 }
 
 function hasRunningValidationRun(task: ForgeTask): boolean {

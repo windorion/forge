@@ -424,6 +424,20 @@ final class MissionControlRuntimeSupervisor {
         }
     }
 
+    func revokeValidationPresetApproval(
+        path: String,
+        taskID: ForgeTask.ID,
+        presetID: ValidationPreset.ID
+    ) async throws -> ForgeTask {
+        try await mutate(path: path) { client in
+            try await client.revokeValidationPresetApproval(
+                taskID: taskID,
+                presetID: presetID,
+                note: "Revoked from Mission Control command review"
+            )
+        }
+    }
+
     func runTaskCommand(
         path: String,
         taskID: ForgeTask.ID,

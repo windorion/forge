@@ -198,6 +198,7 @@ validationService = validationRuntime.validationService;
 validationCatalogService = validationRuntime.validationCatalogService;
 const {
   approveValidationPreset,
+  revokeValidationPresetApproval,
   rerunRepairCommand,
   runTaskCommand,
   cancelTaskCommand,
@@ -434,7 +435,7 @@ const server = createServer(createRuntimeRoutes({
   requestAgentRunLoopControl, resumeAgentRunLoop, generateEditProposal,
   reviseEditProposal, generateValidationRepairProposal, validateEditProposal,
   applyEditProposal, rollbackEditProposal, reviewEditProposalFile, rejectEditProposal,
-  approveValidationPreset, runValidation, runTaskCommand, rerunRepairCommand,
+  approveValidationPreset, revokeValidationPresetApproval, runValidation, runTaskCommand, rerunRepairCommand,
   cancelTaskCommand, cancelTask, saveTask, emit
 }));
 

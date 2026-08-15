@@ -2,7 +2,6 @@ import { readFile } from "node:fs/promises";
 
 import { HttpError } from "../runtime/runtimeError.js";
 import type {
-  ApprovalRecord,
   ForgeTask,
   TaskCommandPermission,
   ValidationCommandDefinition,
@@ -11,6 +10,11 @@ import type {
   ValidationPreset,
   ValidationPresetPermission
 } from "../types.js";
+import {
+  publicValidationPermissionApproval,
+  resolveValidationPresetApproval,
+  validationApprovalPolicy
+} from "./approvalLifecycle.js";
 import {
   compareTaskCommandPermissionDisplay,
   compareTaskCommandPermissionPriority,
@@ -44,7 +48,6 @@ export function createValidationCatalogService(options: {
   builtInValidationPresets: InternalValidationPreset[];
   validationCommandCatalog: Map<string, InternalValidationCommand>;
   validationPresetConfigPath: string;
-  findValidationPresetApproval: (task: ForgeTask, presetID: string) => ApprovalRecord | undefined;
   hasRunningValidationRun: (task: ForgeTask) => boolean;
   hasRunningTaskCommandRun: (task: ForgeTask) => boolean;
   findLastValidationRun: (task: ForgeTask, presetID: string) => ValidationPermissionLastRun | undefined;
@@ -55,7 +58,6 @@ const {
   builtInValidationPresets,
   validationCommandCatalog,
   validationPresetConfigPath,
-  findValidationPresetApproval,
   hasRunningValidationRun,
   hasRunningTaskCommandRun,
   findLastValidationRun,
@@ -81,25 +83,27 @@ async function listValidationPermissions(taskID: string): Promise<ValidationPerm
   }
 
   const registry = await loadValidationPresetRegistry();
+  const now = new Date();
   return {
     taskID: task.id,
     taskStatus: task.status,
     currentPhase: task.currentPhase,
-    permissions: registry.presets.map((preset) => buildValidationPermission(task, preset)),
-    taskCommands: buildTaskCommandPermissions(task, registry.presets)
+    permissions: registry.presets.map((preset) => buildValidationPermission(task, preset, now)),
+    taskCommands: buildTaskCommandPermissions(task, registry.presets, now),
+    approvalPolicy: validationApprovalPolicy
   };
 }
 
 function buildValidationPermission(
   task: ForgeTask,
-  preset: InternalValidationPreset
+  preset: InternalValidationPreset,
+  now = new Date()
 ): ValidationPresetPermission {
-  const approval = findValidationPresetApproval(task, preset.id);
+  const resolution = resolveValidationPresetApproval(task, preset.id, now);
+  const approval = resolution.state === "Approved" ? resolution.approval : undefined;
   const approvalState: ValidationPresetPermission["approvalState"] = !preset.requiresApproval
     ? "NotRequired"
-    : approval
-      ? "Approved"
-      : "NeedsApproval";
+    : resolution.state;
   const blockedReasons: string[] = [];
 
   if (task.editProposal?.status !== "Applied") {
@@ -111,7 +115,7 @@ function buildValidationPermission(
   }
 
   if (preset.requiresApproval && !approval) {
-    blockedReasons.push("Preset requires task-level approval before execution.");
+    blockedReasons.push(resolution.reason ?? "Preset requires task-level approval before execution.");
   }
 
   const executionState: ValidationPresetPermission["executionState"] = hasRunningValidationRun(task)
@@ -135,22 +139,18 @@ function buildValidationPermission(
     approvalState,
     executionState,
     canApprove: preset.requiresApproval && !approval,
+    canRevoke: preset.requiresApproval && resolution.state === "Approved",
     canRun: executionState === "Ready",
     blockedReasons,
-    approval: approval
-      ? {
-          id: approval.id,
-          decidedAt: approval.decidedAt,
-          summary: approval.summary
-        }
-      : undefined,
+    approval: preset.requiresApproval ? publicValidationPermissionApproval(resolution) : undefined,
     lastRun: findLastValidationRun(task, preset.id)
   };
 }
 
 function buildTaskCommandPermissions(
   task: ForgeTask,
-  presets: InternalValidationPreset[]
+  presets: InternalValidationPreset[],
+  now = new Date()
 ): TaskCommandPermission[] {
   const byCommandID = new Map<string, TaskCommandPermission>();
 
@@ -160,7 +160,7 @@ function buildTaskCommandPermissions(
         continue;
       }
 
-      const permission = buildTaskCommandPermission(task, preset, command);
+      const permission = buildTaskCommandPermission(task, preset, command, now);
       const existing = byCommandID.get(command.id);
       if (!existing || compareTaskCommandPermissionPriority(permission, existing) < 0) {
         byCommandID.set(command.id, permission);
@@ -174,14 +174,14 @@ function buildTaskCommandPermissions(
 function buildTaskCommandPermission(
   task: ForgeTask,
   preset: InternalValidationPreset,
-  command: InternalValidationCommand
+  command: InternalValidationCommand,
+  now = new Date()
 ): TaskCommandPermission {
-  const approval = findValidationPresetApproval(task, preset.id);
+  const resolution = resolveValidationPresetApproval(task, preset.id, now);
+  const approval = resolution.state === "Approved" ? resolution.approval : undefined;
   const approvalState: TaskCommandPermission["approvalState"] = !preset.requiresApproval
     ? "NotRequired"
-    : approval
-      ? "Approved"
-      : "NeedsApproval";
+    : resolution.state;
   const blockedReasons: string[] = [];
 
   if (hasRunningTaskCommandRun(task)) {
@@ -193,7 +193,7 @@ function buildTaskCommandPermission(
   }
 
   if (preset.requiresApproval && !approval) {
-    blockedReasons.push("Preset requires task-level approval before execution.");
+    blockedReasons.push(resolution.reason ?? "Preset requires task-level approval before execution.");
   }
 
   const executionState: TaskCommandPermission["executionState"] = hasRunningTaskCommandRun(task) || hasRunningValidationRun(task)
@@ -211,14 +211,9 @@ function buildTaskCommandPermission(
     approvalState,
     executionState,
     canRun: executionState === "Ready",
+    canRevoke: preset.requiresApproval && resolution.state === "Approved",
     blockedReasons,
-    approval: approval
-      ? {
-          id: approval.id,
-          decidedAt: approval.decidedAt,
-          summary: approval.summary
-        }
-      : undefined,
+    approval: preset.requiresApproval ? publicValidationPermissionApproval(resolution) : undefined,
     lastRun: findLastTaskCommandRun(task, command.id)
   };
 }
