@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "manifestID": "forge-macos-release",
+  "release": {
+    "version": "0.4.2",
+    "buildNumber": "42",
+    "minimumSystemVersion": "14.0",
+    "sourceDateEpoch": 1787356800
+  },
+  "application": {
+    "bundleName": "Forge",
+    "bundleIdentifier": "com.windorion.forge",
+    "executable": "ForgeApp",
+    "packageType": "APPL",
+    "swiftProduct": "ForgeApp"
+  },
+  "cli": {
+    "executable": "forge-cli",
+    "swiftProduct": "forge-cli",
+    "packaging": "standalone",
+    "bundlePath": null
+  },
+  "build": {
+    "swiftConfiguration": "release",
+    "runtimeCommand": [
+      "npm",
+      "run",
+      "build"
+    ],
+    "supportedArchitectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "archiveFormat": "ustar+gzip",
+    "archiveCompression": "gzip-9-no-name",
+    "signingState": "unsigned",
+    "excludedPathPatterns": [
+      "(^|/)Tests?(/|$)",
+      "(^|/)Fixtures?(/|$)",
+      "(^|/)DerivedData(/|$)",
+      "(^|/)\\.build(/|$)",
+      "(^|/)\\.swiftpm(/|$)",
+      "(^|/)node_modules(/|$)",
+      "(^|/)forge-.*-smoke-",
+      "\\.dSYM(/|$)",
+      "\\.swift(module|interface|doc|sourceinfo)$",
+      "\\.(map|ts|sqlite|db|log|xcresult)$"
+    ]
+  },
+  "layout": {
+    "application": "Forge.app",
+    "cli": "forge-cli",
+    "componentManifest": "manifests/components.json",
+    "sbom": "manifests/forge.spdx.json",
+    "runtimeSupplyChain": "manifests/runtime-supply-chain.json",
+    "checksums": "manifests/SHA256SUMS"
+  },
+  "runtime": {
+    "name": "Node.js",
+    "version": "22.18.0",
+    "license": "MIT",
+    "licensePathInArchive": "LICENSE",
+    "expectedExecutablePathInArchive": "bin/node",
+    "expectedBundlePath": "Forge.app/Contents/Resources/runtime/bin/node",
+    "packagingState": "manifest-only",
+    "downloadPolicy": "explicit-local-archive-only",
+    "signedChecksumsURL": "https://nodejs.org/download/release/v22.18.0/SHASUMS256.txt.asc",
+    "artifacts": [
+      {
+        "architecture": "arm64",
+        "fileName": "node-v22.18.0-darwin-arm64.tar.gz",
+        "sourceURL": "https://nodejs.org/download/release/v22.18.0/node-v22.18.0-darwin-arm64.tar.gz",
+        "sha256": "2c12913cba67af77ded8a399df3fd91c2e7f8628c7079da40bb9ff33bf00dfc0",
+        "archiveRoot": "node-v22.18.0-darwin-arm64"
+      },
+      {
+        "architecture": "x86_64",
+        "fileName": "node-v22.18.0-darwin-x64.tar.gz",
+        "sourceURL": "https://nodejs.org/download/release/v22.18.0/node-v22.18.0-darwin-x64.tar.gz",
+        "sha256": "9c8aa1e5ff5780b38cc1134e2263d84e2f4308eb84c02515e3af33936ca02cdc",
+        "archiveRoot": "node-v22.18.0-darwin-x64"
+      }
+    ],
+    "releaseSigningReview": {
+      "bundledExecutableSelected": false,
+      "entitlements": null,
+      "hardenedRuntime": null,
+      "sameTeamAsApplication": true
+    }
+  },
+  "sbom": {
+    "spdxVersion": "SPDX-2.3",
+    "dataLicense": "CC0-1.0",
+    "documentNamespaceBase": "https://windorion.com/spdx/forge",
+    "projectLicense": "NOASSERTION",
+    "fontPackage": {
+      "name": "JetBrains Mono",
+      "license": "OFL-1.1"
+    }
+  }
+}

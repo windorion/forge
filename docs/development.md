@@ -1019,7 +1019,9 @@ also prints the application-only LLVM coverage report:
 macOS distribution posture is API- and credential-free:
 
 ```bash
-node --test script/macos_distribution_policy_test.mjs
+node --test \
+  script/macos_distribution_policy_test.mjs \
+  script/macos_release_foundation_test.mjs
 node script/check_macos_distribution.mjs --source
 ./script/build_and_run.sh --build-only
 node script/check_macos_distribution.mjs \
@@ -1044,6 +1046,37 @@ The `developer-id-release` profile is expected to fail until the exact
 credential-dependent and structural blockers in
 `docs/macos_distribution_security.md` are complete. CI archives JSON posture
 reports and treats accidental release-profile acceptance as a failure.
+
+The separate production-shaped path builds optimized app and CLI executables,
+rebuilds only distributable Runtime JavaScript, and emits component/SPDX/
+checksum evidence plus a deterministic unsigned archive. It never launches or
+stops the application and never selects a signing identity:
+
+```bash
+RELEASE_ROOT="/private/tmp/forge-release-root"
+RELEASE_ARCHIVE="/private/tmp/forge-release-root.tar.gz"
+node script/build_macos_release.mjs \
+  --output "$RELEASE_ROOT" \
+  --archive "$RELEASE_ARCHIVE"
+node script/check_macos_release.mjs \
+  --root "$RELEASE_ROOT" \
+  --json-output build/distribution/release-foundation.json
+node script/archive_macos_release.mjs \
+  --root "$RELEASE_ROOT" \
+  --output "/private/tmp/forge-release-root-second.tar.gz"
+cmp \
+  "$RELEASE_ARCHIVE" \
+  "/private/tmp/forge-release-root-second.tar.gz"
+```
+
+Use new output paths: build and archive commands refuse overwrite. The output
+root contains `Forge.app`, standalone `forge-cli`, and `manifests/` with the
+component inventory, SPDX 2.3 SBOM, pinned Runtime supply-chain copy, and
+SHA-256 list. Node.js `22.18.0` arm64/x86_64 archives are pinned by official
+versioned URL and SHA-256, but this foundation does not download, extract,
+execute, or bundle them. `script/verify_pinned_runtime.mjs` verifies an explicit
+local archive before any future ingestion step. The unsigned archive is input
+to a later external signing system, not a distributable application.
 
 ```bash
 swift build

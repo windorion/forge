@@ -68,6 +68,7 @@ test("source inventory matches checked-in implementation without claiming releas
   assert.equal(report.observed.externalNodeRequired, true);
   assert.equal(report.observed.placeholderFeedSigned, false);
   assert.equal(report.observed.widgetExtensionPresent, false);
+  assert.equal(report.observed.releaseFoundationPresent, true);
   assert.ok(report.warnings.some((item) => item.code === "release.external-node"));
 });
 

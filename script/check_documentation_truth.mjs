@@ -47,6 +47,10 @@ const [
   signingCheckerSource,
   bundleBuildScript,
   signingStageScript,
+  releaseManifestSource,
+  releaseBuildScript,
+  releaseCheckerSource,
+  releaseFoundationSource,
   updaterSource,
   appcastSource
 ] = await Promise.all([
@@ -88,6 +92,10 @@ const [
   read("script/check_macos_distribution.mjs"),
   read("script/build_and_run.sh"),
   read("script/stage_macos_distribution.sh"),
+  read("distribution/macos-release-manifest.json"),
+  read("script/build_macos_release.mjs"),
+  read("script/check_macos_release.mjs"),
+  read("script/lib/macos_release_foundation.mjs"),
   read("apps/macos/Sources/ForgeApp/ForgeUpdater.swift"),
   read("apps/macos/Resources/appcast.xml")
 ]);
@@ -97,6 +105,7 @@ const performanceBudget = JSON.parse(performanceBudgetSource);
 const repositoryBaseline = JSON.parse(repositoryBaselineSource);
 const providerBaseline = JSON.parse(providerBaselineSource);
 const signingPolicy = JSON.parse(signingPolicySource);
+const releaseManifest = JSON.parse(releaseManifestSource);
 const failures = [];
 
 check("critical project documents share the current status date", () => {
@@ -249,6 +258,49 @@ check("macOS signing policy is versioned, fail-closed, documented, and enforced 
   assert.match(distributionWorkflow, /--profile development-ad-hoc/);
   assert.match(distributionWorkflow, /--profile developer-id-release/);
   assert.match(distributionWorkflow, /upload-artifact/);
+});
+
+check("release-shaped macOS signing input is pinned, reproducible, documented, and enforced in CI", () => {
+  assert.equal(releaseManifest.schemaVersion, 1);
+  assert.equal(releaseManifest.manifestID, "forge-macos-release");
+  assert.equal(releaseManifest.build.swiftConfiguration, "release");
+  assert.equal(releaseManifest.build.signingState, "unsigned");
+  assert.deepEqual(releaseManifest.build.supportedArchitectures, ["arm64", "x86_64"]);
+  assert.equal(releaseManifest.runtime.name, "Node.js");
+  assert.equal(releaseManifest.runtime.version, "22.18.0");
+  assert.equal(releaseManifest.runtime.license, "MIT");
+  assert.equal(releaseManifest.runtime.packagingState, "manifest-only");
+  assert.equal(releaseManifest.runtime.downloadPolicy, "explicit-local-archive-only");
+  assert.deepEqual(
+    releaseManifest.runtime.artifacts.map((artifact) => artifact.architecture),
+    ["arm64", "x86_64"]
+  );
+  for (const artifact of releaseManifest.runtime.artifacts) {
+    assert.match(artifact.sha256, /^[a-f0-9]{64}$/);
+    assert.match(artifact.sourceURL, /nodejs\.org\/download\/release\/v22\.18\.0/);
+    assert.doesNotMatch(artifact.sourceURL, /latest/i);
+  }
+  assert.equal(releaseManifest.sbom.spdxVersion, "SPDX-2.3");
+  assert.match(releaseBuildScript, /"build", "-c", manifest\.build\.swiftConfiguration/);
+  assert.match(releaseBuildScript, /removeCompilerSignature\(appExecutablePath\)/);
+  assert.match(releaseBuildScript, /removeCompilerSignature\(cliPath\)/);
+  assert.match(releaseBuildScript, /writeReleaseMetadata/);
+  assert.match(releaseBuildScript, /createDeterministicArchive/);
+  assert.doesNotMatch(releaseBuildScript, /\/usr\/bin\/open|pkill -x/);
+  assert.match(releaseCheckerSource, /inspectReleaseRoot/);
+  assert.match(releaseFoundationSource, /--no-xattrs/);
+  assert.match(releaseFoundationSource, /"-n", "-9"/);
+  assert.match(distributionWorkflow, /macos_release_foundation_test\.mjs/);
+  assert.match(distributionWorkflow, /build_macos_release\.mjs/);
+  assert.match(distributionWorkflow, /archive_macos_release\.mjs/);
+  assert.match(distributionWorkflow, /cmp/);
+  for (const source of [readme, projectStatus, todo, roadmap, development, distributionGuide]) {
+    assert.match(source, /Node\.js `?22\.18\.0`?/);
+    assert.match(source, /SPDX 2\.3/);
+    assert.match(source, /deterministic|byte-identical|byte-deterministic|reproduce byte-for-byte/i);
+  }
+  assert.doesNotMatch(todo, /Next code-only distribution task — release-shaped bundle foundation/);
+  assert.match(todo, /Next code-only distribution task — pinned Runtime ingestion boundary/);
 });
 
 const unitTestCount = (await readdir(resolve(repoRoot, "runtime", "scripts")))

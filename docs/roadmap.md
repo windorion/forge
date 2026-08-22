@@ -119,8 +119,8 @@ Proof point:
 
 ### Beta: Installable Mac Product
 
-Status: product surfaces exist; signed distribution and production services do
-not.
+Status: product surfaces and a release-shaped unsigned signing-input pipeline
+exist; signed distribution and production services do not.
 
 Goal: make Forge trustworthy outside the development checkout.
 
@@ -181,8 +181,9 @@ additive.
    weakening runtime ownership or human review.
 4. Archive full-duration Mission Control soak evidence and capture the existing
    true XCUITest suite in a user-approved unattended desktop window.
-5. Complete signed/notarized packaging, appcast install/relaunch, production
-   diagnostics, and commercial decisions.
+5. Ingest the pinned bundled Runtime through the reviewed nested-code boundary,
+   then complete signed/notarized packaging, appcast install/relaunch,
+   production diagnostics, and commercial decisions.
 
 ## Roadmap Gap Register
 
@@ -199,7 +200,7 @@ sequence rather than inventing another score.
 | Runtime history, retention, and migrations | Beta | SQLite schema v6 runs ordered safety-classified migrations; v4/v5 upgrades preserve tasks; fixture destructive v7 requires a verified owner-only `VACUUM INTO` manifest and the offline CLI preserves displaced data plus receipts. Policy v1 retains task events/tool calls/messages/indexes indefinitely, never auto-purges, exports deterministically with redaction and source/content hashes, preserves unfinished tasks, and atomically records terminal-task/index purge evidence. | Commercial privacy language and any future hosted deletion SLA depend on the founder's local-only versus hosted boundary. | Unit, HTTP, restart, raw-SQLite, observer, stale/forged receipt, backup, offline recovery, and native client/UI proofs pass. Beta exit requires matching product privacy text and signed-package threat review, not another runtime purge mechanism. |
 | Performance and resource budgets | Beta | Versioned smoke/standard/large runtime profiles now measure cold start, idle CPU/RSS, retained-task listing, cold/warm index, Git status/diff, and deterministic agent-step latency. Hard/advisory budgets, noise-aware same-profile comparisons, direct evaluator tests, and a hosted macOS artifact-producing CI gate are real. | Representative real large repositories and a signed-package profiling environment. | Synthetic runtime regression gate remains green; then add pinned real-repository index/Git evidence plus signed app/runtime launch, combined RSS, energy, and interactive native budgets. |
 | Security lifecycle | Beta | Explicit approvals, read-only observers, scoped authorization, Keychain secrets, bounded task-command grants, append-only revocation, restart proof, versioned Secret Redaction/workspace retention, and versioned fail-closed app/runtime/helper/widget signing, entitlement, nested-code, update, and notarization-boundary checks are enforced by hosted security workflows. | Repository/session validation grants remain deliberately unimplemented until evidence requires them; commercial privacy text and live signed-package proof need product/credential inputs. | Keep approval/redaction/retention/distribution regressions green and archive the exact final signed artifact's independent Developer ID, hardened-runtime, entitlement, nested-code, update-signature, notarization/stapling, and Gatekeeper proofs. |
-| Signed Mac distribution | Beta | App-managed Runtime resource path, onboarding/update UI, honest disabled placeholder feed, deterministic unsigned assembly and clean staging, explicit unsigned/ad-hoc profiles, and hosted release-negative control. | Pinned bundled Node, production archive/export setup, founder Developer ID and notarization credentials, appcast key/installer, DMG work, and Widget extension packaging. | Clean-machine DMG install, Gatekeeper/notarization pass, signed appcast install/relaunch, nested-code/team verification, and rollback/recovery rehearsal. |
+| Signed Mac distribution | Beta | App-managed Runtime resource path, onboarding/update UI, honest disabled placeholder feed, explicit unsigned/ad-hoc profiles, Node.js 22.18.0 arm64/x86_64 supply-chain pins, optimized app/standalone-CLI builds, debug/test exclusion, per-file component/SPDX 2.3/checksum evidence, byte-deterministic unsigned archives, hosted structural ad-hoc proof, and a release-negative control. | Safely ingest and re-sign pinned bundled Node, establish production archive/export signing, obtain founder Developer ID and notarization credentials, sign/install appcast updates, build the DMG, and package the Widget extension. | Clean-machine DMG install, Gatekeeper/notarization pass, signed appcast install/relaunch, nested-code/team verification, and rollback/recovery rehearsal. |
 | Account and commercial boundary | Beta | Honest local-only continuation; provider/GitHub credentials stay local. | Founder decision: local-only/open-core vs hosted account/team product. | Written decision plus matching UI, privacy/deletion behavior, packaging, pricing, entitlement, support, and launch evidence. |
 | Repository memory and semantic retrieval | v1 | Durable file/symbol/trigram indexes with live verification. | Evaluation corpus and privacy/resource budgets. | Hybrid retrieval beats text/symbol baseline on a versioned benchmark while remaining local, bounded, and inspectable. |
 | Complete native workflow | v1 | Menus, shortcuts, notifications, Spotlight, CLI, Mission Control, decision inbox, templates. | Signed package and final human-input checks. | Finder/IDE handoff, remappable shortcuts, Dock/menu/notification verification, signed WidgetKit or an explicit permanent descope. |
@@ -210,11 +211,13 @@ broad milestone labels: data lifecycle/migrations, measurable performance
 budgets, approval/audit lifecycle, and the account/commercial decision gate.
 The migration, command-output data-lifecycle, performance-budget, bounded
 task-approval lifecycle, broader Secret Redaction, and workspace-wide
-retention/export/purge and signed-build threat-review slices are now
-implemented. The remaining distribution work is an actual release-shaped and
-credential-proven artifact, not another paper threat model. It should not
-preempt the live-model Alpha corpus, and each remaining exit condition must be
-resolved before claiming the corresponding Beta or v1 finish line.
+retention/export/purge, signed-build threat-review, and release-shaped unsigned
+foundation slices are now implemented. The remaining distribution work begins
+with safely ingesting and reviewing the pinned Runtime executable, then proving
+the exact signed/notarized customer artifact; it is not another paper threat
+model or debug bundle. It should not preempt the live-model Alpha corpus, and
+each remaining exit condition must be resolved before claiming the
+corresponding Beta or v1 finish line.
 
 ## What Not To Optimize Next
 

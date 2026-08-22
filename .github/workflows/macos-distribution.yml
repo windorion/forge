@@ -34,8 +34,11 @@ jobs:
       - name: Install Runtime build dependencies
         run: npm ci --prefix runtime
 
-      - name: Verify policy fixtures
-        run: node --test script/macos_distribution_policy_test.mjs
+      - name: Verify policy and release-foundation fixtures
+        run: |
+          node --test \
+            script/macos_distribution_policy_test.mjs \
+            script/macos_release_foundation_test.mjs
 
       - name: Verify source posture
         run: |
@@ -43,14 +46,36 @@ jobs:
             --source \
             --json-output build/distribution/source-posture.json
 
-      - name: Assemble without launching or signing
-        run: ./script/build_and_run.sh --build-only
+      - name: Build optimized unsigned signing input
+        run: |
+          node script/build_macos_release.mjs \
+            --output "$RUNNER_TEMP/forge-release" \
+            --archive "$RUNNER_TEMP/forge-release.tar.gz"
+
+      - name: Verify release root and component evidence
+        run: |
+          node script/check_macos_release.mjs \
+            --root "$RUNNER_TEMP/forge-release" \
+            --json-output build/distribution/release-foundation.json
+
+      - name: Prove deterministic unsigned archive serialization
+        run: |
+          node script/archive_macos_release.mjs \
+            --root "$RUNNER_TEMP/forge-release" \
+            --output "$RUNNER_TEMP/forge-release-second.tar.gz"
+          cmp \
+            "$RUNNER_TEMP/forge-release.tar.gz" \
+            "$RUNNER_TEMP/forge-release-second.tar.gz"
 
       - name: Stage clean signing input
         run: |
           ./script/stage_macos_distribution.sh \
-            dist/Forge.app \
+            "$RUNNER_TEMP/forge-release/Forge.app" \
             "$RUNNER_TEMP/Forge.app"
+          ditto --norsrc --noextattr \
+            "$RUNNER_TEMP/forge-release/forge-cli" \
+            "$RUNNER_TEMP/forge-cli"
+          xattr -cr "$RUNNER_TEMP/forge-cli"
 
       - name: Verify unsigned development boundary
         run: |
@@ -63,6 +88,8 @@ jobs:
         run: |
           codesign --force --deep --sign - --timestamp=none "$RUNNER_TEMP/Forge.app"
           codesign --verify --deep --strict --verbose=2 "$RUNNER_TEMP/Forge.app"
+          codesign --force --sign - --timestamp=none "$RUNNER_TEMP/forge-cli"
+          codesign --verify --strict --verbose=2 "$RUNNER_TEMP/forge-cli"
 
       - name: Verify ad-hoc development boundary
         run: |
@@ -87,6 +114,9 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: macos-distribution-posture-${{ github.run_id }}
-          path: build/distribution/*.json
+          path: |
+            build/distribution/*.json
+            ${{ runner.temp }}/forge-release/manifests/*
+            ${{ runner.temp }}/forge-release.tar.gz
           if-no-files-found: error
           retention-days: 14

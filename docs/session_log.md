@@ -7184,3 +7184,84 @@ Next:
   debug/test exclusion, component/SBOM evidence, and deterministic unsigned
   archive without inventing credentials or downloading an arbitrary latest
   Node build.
+
+## 2026-08-22 20:50:28 +0200 (CEST)
+
+Conversation summary:
+
+- Completed the next roadmap task: a release-shaped unsigned macOS signing
+  input with pinned Runtime supply-chain policy, optimized app/CLI builds,
+  debug/test exclusion, component/SBOM evidence, deterministic archiving, and
+  hosted CI. Work was code/command-only; Forge was never launched and no
+  desktop or browser automation was used.
+
+Done:
+
+- Added versioned `forge-macos-release` policy v1. It pins Forge version/build/
+  minimum OS, arm64/x86_64 release inputs, output layout, exclusion rules,
+  source epoch, SPDX policy, and exact Node.js 22.18.0 official macOS archive
+  URLs/SHA-256 values, MIT license path, archive root, and `bin/node` path. No
+  `latest` alias or implicit network download is allowed.
+- Added explicit local Runtime archive verification. Exact filename and SHA-256
+  are required before any future ingestion; the current foundation does not
+  download, extract, execute, or bundle Node. A Node binary appearing early in
+  a release root fails because its nested-code entitlements/hardened-runtime
+  review remains unresolved.
+- Added a no-overwrite, no-GUI production builder. SwiftPM compiles optimized
+  `ForgeApp` and standalone `forge-cli`, Runtime TypeScript is checked and
+  rebuilt from a clean `dist`, compiler ad-hoc signatures are removed, and only
+  distributable assets enter the release root.
+- Added strict exclusion and release-root inspection for tests, fixtures,
+  source maps/TypeScript, databases, logs, dSYMs, Swift modules, `node_modules`,
+  smoke output, symlinks, metadata contradictions, signatures, architecture,
+  component hashes, SPDX, checksums, and signing-incompatible attributes.
+- Added per-file component evidence, SPDX 2.3 SBOM, Runtime supply-chain copy,
+  SHA256SUMS, payload-bound SPDX namespace, fixed locale-independent ordering,
+  normalized timestamps/root-wheel owners, and explicit omission of ACLs,
+  flags, AppleDouble/macOS metadata, and xattrs. Ustar plus `gzip -n -9`
+  serializes the same root byte-for-byte.
+- Extended the signing policy/source posture to require the release foundation.
+  Updated macOS Distribution Posture CI to build the optimized root, verify it,
+  re-archive and `cmp`, structurally ad-hoc-sign both app and standalone CLI,
+  retain the nine-reason Developer ID negative control, and archive JSON,
+  component, SPDX, checksum, supply-chain, and tarball evidence.
+- Built and inspected a real local arm64 signing input: 106 files, 19,151,613
+  payload bytes, unsigned app/CLI Mach-O code, no excluded archive paths, and
+  two independent 4,801,375-byte archives with identical SHA-256
+  `6e1a0bf33aede39504448f9bf12df10fb440b02088eb32d3080cf79997aa4d0e`.
+  This is dirty-source local evidence, not a published artifact.
+- Staged and ad-hoc-signed copies of both code boundaries; strict codesign and
+  the development-ad-hoc profile passed. The app correctly failed Developer ID
+  release acceptance on identity, team, hardened runtime, bundled Runtime,
+  Runtime signing policy, update signature, stapling, and Gatekeeper evidence.
+- Updated README, project status/readiness matrix, TODO, roadmap, development,
+  focused distribution security, and documentation-truth automation. Current
+  estimates are commercial beta 38-45%, polished v1 35-42%, native macOS
+  87-92%, and distribution/operations 45-55%.
+- Passed 15 distribution/release policy tests, source posture, documentation
+  truth, TypeScript check/build, workflow YAML parsing, diff checks, the real
+  release/artifact/ad-hoc/negative-control path, all 25 Runtime smoke scripts,
+  and all 62 Swift tests. The initial sandboxed smoke attempt could not bind
+  loopback; the identical approved headless run passed completely.
+
+Not done:
+
+- Node is pinned but not bundled. Safe archive listing/extraction, executable
+  and license receipts, bundled launch selection, re-signing/hardened-runtime/
+  entitlement decisions, and inside-out nested-code fixtures remain.
+- There is no Developer ID identity, production signed archive/export,
+  notarization/stapling, DMG, signed appcast install/relaunch, clean-machine
+  rehearsal, crash reporting, or packaged WidgetKit extension.
+- Live-model corpus, full-duration Mission Control soak, complete unattended
+  XCUITest archive, founder OAuth live grant, account/privacy decision, and
+  hosted CI for this exact final commit remain outstanding.
+
+Next:
+
+- Commit and push the release-foundation slice, then verify macOS Distribution
+  Posture, Runtime Security, Runtime Performance, and Swift Tests on the exact
+  final commit.
+- The next code-only distribution task is the pinned Runtime ingestion
+  boundary: safe archive traversal/extraction, exact executable/license
+  receipts, bundled-path launch preference, evidence-led signing decisions,
+  and credential-free inside-out ad-hoc nested-code validation.

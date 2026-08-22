@@ -85,6 +85,9 @@ export function validatePolicy(policy) {
     findings.push(finding("policy.widget", "The current SwiftPM widget experiment must not claim to be a packaged extension."));
   }
   const runtime = policy.components?.runtime;
+  if (runtime?.supplyChainManifest !== "distribution/macos-release-manifest.json") {
+    findings.push(finding("policy.runtime-supply-chain", "Runtime must reference the versioned macOS release supply-chain manifest."));
+  }
   if (runtime?.bundledNodeExecutable !== null &&
       (!Array.isArray(runtime?.bundledExecutableEntitlements) ||
        typeof runtime?.bundledExecutableHardenedRuntime !== "boolean")) {
@@ -112,6 +115,8 @@ export function inspectSourceTree(repoRoot, policy) {
   const findings = [...validatePolicy(policy)];
   const warnings = [];
   const buildScript = fs.readFileSync(path.join(repoRoot, "script/build_and_run.sh"), "utf8");
+  const releaseBuildScript = fs.readFileSync(path.join(repoRoot, "script/build_macos_release.mjs"), "utf8");
+  const releaseManifest = readJSON(path.join(repoRoot, "distribution/macos-release-manifest.json"));
   const stagingScript = fs.readFileSync(path.join(repoRoot, "script/stage_macos_distribution.sh"), "utf8");
   const updater = fs.readFileSync(path.join(repoRoot, "apps/macos/Sources/ForgeApp/ForgeUpdater.swift"), "utf8");
   const appcast = fs.readFileSync(path.join(repoRoot, "apps/macos/Resources/appcast.xml"), "utf8");
@@ -142,6 +147,26 @@ export function inspectSourceTree(repoRoot, policy) {
   }
   if (!stagingScript.includes("ditto --norsrc --noextattr") || !stagingScript.includes("refusing to overwrite")) {
     findings.push(finding("source.signing-stage", "Signing staging must omit extended attributes and refuse to overwrite an existing destination."));
+  }
+
+  const releaseFoundationPresent = releaseManifest.manifestID === "forge-macos-release" &&
+    releaseManifest.build?.swiftConfiguration === "release" &&
+    releaseManifest.build?.signingState === "unsigned" &&
+    releaseManifest.runtime?.packagingState === "manifest-only" &&
+    Array.isArray(releaseManifest.runtime?.artifacts) &&
+    releaseManifest.runtime.artifacts.length === 2 &&
+    releaseBuildScript.includes('"--product", manifest.application.swiftProduct') &&
+    releaseBuildScript.includes('"--product", manifest.cli.swiftProduct') &&
+    releaseBuildScript.includes("writeReleaseMetadata") &&
+    releaseBuildScript.includes("createDeterministicArchive");
+  if (releaseFoundationPresent !== policy.sourceAssertions.releaseFoundationPresent) {
+    findings.push(finding("source.release-foundation", "Release-shaped optimized build, manifest, SBOM, or deterministic archive state contradicts sourceAssertions."));
+  }
+  if (/\/usr\/bin\/open|pkill\s+-x/.test(releaseBuildScript)) {
+    findings.push(finding("source.release-desktop-side-effect", "Release assembly must never launch or stop the desktop application."));
+  }
+  if (/--sign(?:\s|=)/.test(releaseBuildScript)) {
+    findings.push(finding("source.release-implicit-signing", "Release-shaped code-only assembly must not choose a signing identity."));
   }
 
   const feedHasSignature = /sparkle:edSignature\s*=/.test(appcast);
@@ -217,6 +242,7 @@ export function inspectSourceTree(repoRoot, policy) {
       productionXcodeProjectPresent: false,
       xcodeProjectPurpose: "ui-test-host-only",
       widgetExtensionPresent: false,
+      releaseFoundationPresent,
       entitlementFiles,
     },
   };

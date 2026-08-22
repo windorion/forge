@@ -22,6 +22,7 @@
       "kind": "javascript-resource",
       "serverPath": "Contents/Resources/runtime/dist/server.js",
       "launcher": "/usr/bin/env node",
+      "supplyChainManifest": "distribution/macos-release-manifest.json",
       "bundledNodeExecutable": null,
       "bundledExecutableEntitlements": null,
       "bundledExecutableHardenedRuntime": null,
@@ -37,6 +38,7 @@
     "cli": {
       "kind": "standalone-swiftpm-executable",
       "bundledWithApp": false,
+      "releaseArchivePath": "forge-cli",
       "entitlements": []
     },
     "widget": {
@@ -105,6 +107,7 @@
     "placeholderFeedSigned": false,
     "updaterClaimsNotarization": false,
     "widgetExtensionPresent": false,
-    "externalNodeRequired": true
+    "externalNodeRequired": true,
+    "releaseFoundationPresent": true
   }
 }

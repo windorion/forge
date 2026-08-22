@@ -261,6 +261,14 @@ Implemented today:
   unsigned appcast no longer claims notarization and cannot enter the
   download/install path. Actual Developer ID signing, bundled Node, signed
   updates, notarization/stapling, DMG, and WidgetKit remain P6 work.
+- Release-shaped unsigned signing inputs now use optimized app/standalone-CLI
+  builds, pin the Node.js 22.18.0 arm64/x86_64 upstream archives and hashes,
+  exclude debug/test/source/database artifacts, and emit per-file component,
+  SPDX 2.3, Runtime supply-chain, and checksum evidence. Normalized ustar+gzip
+  archives reproduce byte-for-byte and CI rechecks both unsigned/ad-hoc code
+  boundaries plus the release-negative control. Node remains unbundled until
+  its nested-code signing review is explicit, so this is not yet a customer
+  package.
 - Versioned runtime performance and resource budgets. Dependency-free
   smoke/standard/large synthetic profiles measure cold startup, idle child
   CPU/RSS, retained-task listing, cold/unchanged repository indexing, Git
@@ -359,8 +367,8 @@ Product-readiness estimate:
 | Primary V0 handoff UI | 100% | The five primary screens are `Verified` with rendered-comparison evidence in `docs/verification/`. |
 | Full handoff UI | 95-97% | 41 of 43 named screens/states are `Verified` (rendered comparison on real data, evidence in `docs/verification/`). The two remaining: `6a` GitHub is `Partial` (configuration UI, Device Flow, polling, Keychain persistence, and connected state are implemented and tested; live GitHub authorization still needs a founder-owned OAuth App Client ID with Device Flow enabled); `35a` Widget is a documented platform-blocked descope (hand-assembled ad-hoc-signed extension not discovered by pluginkit; unblocks with P6 signing). |
 | Useful developer alpha | 72-80% | Forge repeats the reviewed lifecycle across deterministic local-provider and mock-OpenAI adapter corpora, including Unified Diff, approved commands, repair/rerun, fork-aware PR supervision, repository-scoped background command/Git review, and fair restart-safe background dispatch; it still needs broader autonomous tool use and live-model success on pinned public repositories. |
-| Commercial beta | 34-40% | Versioned migration/backup/restore, task- and workspace-wide retention/export/purge, bounded/revocable command approvals, centralized Secret Redaction, artifact-producing runtime performance/security gates, and a machine-checked macOS signing/update threat boundary exist; Forge still needs an actual signed package, production onboarding/GitHub/provider proof, packaged-app profiling, operations polish, and repeated real-repository success. |
-| Polished v1 | 32-38% | Queueing, local indexes, explicit data lifecycle, session-authorized runtimes, background task/command/Git review routing, fair supervised grants, bounded reconnect/crash recovery telemetry, reportable soak tooling, centralized Secret Redaction, a compiled action-level XCUITest harness, and versioned distribution posture checks are real; full-duration/passing evidence, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
+| Commercial beta | 38-45% | Versioned migration/backup/restore, retention/export/purge, bounded/revocable approvals, centralized Secret Redaction, performance/security gates, signing/update threat checks, and an optimized deterministic unsigned signing-input pipeline with pinned Runtime supply-chain/SBOM evidence exist; Forge still needs bundled Node, an actual signed/notarized package, production onboarding/GitHub/provider proof, packaged-app profiling, operations polish, and repeated real-repository success. |
+| Polished v1 | 35-42% | Queueing, local indexes, explicit data lifecycle, session-authorized runtimes, background task/command/Git review routing, fair supervised grants, bounded reconnect/crash recovery telemetry, reportable soak tooling, centralized Secret Redaction, compiled XCUITest harness, and a release-shaped distribution foundation are real; full-duration/passing evidence, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
 
 Short version: V0 behavior is complete, but the entire 43-screen product design
 is not. Alpha is the next cumulative horizon, followed by beta and then v1;
@@ -374,7 +382,7 @@ Top priorities are tracked in `docs/todo.md`. Current post-V0 themes:
 - use classified failures to widen safe provider tool/patch/recovery behavior
 - archive a full-duration supervision soak under stable AC power, capture the
   implemented Mission Control XCUITest in an unattended window, and prepare
-  signed Mac distribution
+  pinned-Runtime ingestion plus signed Mac distribution
 
 The subsystem-by-subsystem readiness and remaining-gap matrix lives in
 `docs/project_status.md` under **Component Gap Matrix**.

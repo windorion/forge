@@ -335,18 +335,37 @@ the core runtime smoke. Preserve these completed boundaries:
   - Confirmed explicit P6 blockers: external `node` is not a bundled signed
     Runtime, the Xcode project is a UI-test host rather than a production
     archive project, the appcast lacks EdDSA, and the Widget is not an `.appex`.
-- **Next code-only distribution task — release-shaped bundle foundation:**
-  - Define a pinned Runtime supply-chain manifest (version, architectures,
-    source URL, SHA-256, license, expected executable path) and fail if a
-    downloaded/bundled executable contradicts it; do not download an arbitrary
-    latest Node build.
-  - Add a production release configuration that builds optimized app/CLI code,
-    excludes debug/test artifacts, emits a component/SBOM manifest, and stages
-    a deterministic unsigned archive ready for an externally supplied signing
-    identity.
-  - Keep Developer ID credentials, notarization submission, live appcast
-    signing keys, DMG publication, and WidgetKit discovery out of the code-only
-    slice; validate them later against the exact staged archive.
+- [x] Complete the release-shaped bundle foundation:
+  - Versioned `forge-macos-release` policy pins Node.js 22.18.0 arm64/x86_64
+    official archive URLs and SHA-256 values, MIT license and expected
+    executable paths. Verification accepts only an explicit local archive with
+    the exact pinned filename/hash and never follows an arbitrary latest alias.
+  - The production builder compiles optimized release app/CLI Mach-O code,
+    rebuilds Runtime JavaScript, strips compiler signatures, and rejects test,
+    fixture, source-map, source, database, log, dSYM, Swift-module,
+    `node_modules`, and generated-smoke paths.
+  - The unsigned signing input contains separate `Forge.app` and `forge-cli`
+    boundaries, per-file component hashes, SPDX 2.3 SBOM, Runtime policy copy,
+    SHA256SUMS, normalized timestamps/owners, and ustar+gzip bytes that compare
+    identical when re-archived. Hosted CI builds, inspects, re-archives,
+    ad-hoc-signs both code boundaries structurally, and preserves the existing
+    Developer ID negative control.
+  - Node remains manifest-only: Forge does not download, extract, execute, or
+    bundle it until the nested-code signing review is explicit. Developer ID
+    credentials, notarization, appcast signing keys, DMG publication, and
+    WidgetKit remain outside this completed code-only slice.
+- **Next code-only distribution task — pinned Runtime ingestion boundary:**
+  - Accept only a locally supplied archive that already passes the pinned
+    filename/SHA-256 check; list and reject path traversal, links, unexpected
+    roots, missing `LICENSE`, or missing/non-Mach-O `bin/node` before extraction.
+  - Stage only the exact Node executable and license into a new release root,
+    record archive/executable/license hashes and architecture in a receipt, and
+    update app/supervisor launch resolution to prefer the bundled path without
+    weakening repository-root separation or falling back silently.
+  - Inspect the selected upstream executable, document the Forge re-signing
+    and hardened-runtime/entitlement decision from evidence, then add
+    credential-free inside-out ad-hoc nested-code fixtures. Keep Developer ID,
+    notarization, DMG, live appcast signing, and WidgetKit proofs external.
 
 ## P5: Native macOS Product
 

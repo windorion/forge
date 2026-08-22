@@ -6,17 +6,27 @@ between code-only packaging evidence and credential-dependent distribution.
 
 ## Status
 
-The signed-build threat review is implemented. It does **not** mean Forge has a
-shipping package. The repository can now prove what an unsigned development
-bundle is, what an explicit ad-hoc bundle is, and why neither can satisfy the
-Developer ID release profile. Developer ID signing, notarization submission,
-stapling, DMG assembly, a clean-machine rehearsal, a signed update artifact,
-and a real WidgetKit extension remain later P6 work.
+The signed-build threat review is implemented, and the release-shaped unsigned
+foundation is implemented as well. This does **not** mean Forge has a shipping package. The
+repository can now prove what an unsigned development bundle is, what an
+explicit ad-hoc bundle is, why neither can satisfy the Developer ID release
+profile, and how to produce an optimized per-architecture signing input with a
+standalone CLI, component manifest, SPDX SBOM, checksums, and deterministic
+archive bytes. Developer ID signing, bundled Runtime selection/signing,
+notarization submission, stapling, DMG assembly, a clean-machine rehearsal, a
+signed update artifact, and a real WidgetKit extension remain later P6 work.
 
 The versioned source of truth is
 `distribution/macos-signing-policy.json`. The checker is
 `script/check_macos_distribution.mjs`; CI runs it in
 `.github/workflows/macos-distribution.yml`.
+
+The release assembly source of truth is
+`distribution/macos-release-manifest.json`. It pins version/build/minimum OS,
+release configuration, supported architectures, excluded paths, archive
+normalization, output layout, SBOM policy, and the Runtime supply chain.
+`script/build_macos_release.mjs` assembles the signing input and
+`script/check_macos_release.mjs` independently re-hashes and inspects it.
 
 ## Threats And Security Properties
 
@@ -56,6 +66,45 @@ and fail-closed contradictions between policy, source, and built artifact.
 | Updater | Real feed fetch/parse/version comparison; placeholder feed; simulated UI states; no installer | The bundled appcast has no `sparkle:edSignature`. Parser reports that honestly. `installEnabled` is false and the model rejects download/install calls. An update signature never implies notarization. | Connect a signed artifact/install framework, verify EdDSA before install, verify the application package through Apple's distribution chain, and rehearse rollback/recovery. |
 | Keychain | Generic-password items scoped by service name | No access group and no cross-target sharing. | Keep the access-group list empty unless a real signed extension/helper requires sharing and the architecture is reviewed first. |
 | Local data | `.forge` SQLite/index/backups/reports under the selected repository | Owner-only runtime files, outside the application bundle. | Never copy repository data, credentials, reports, or migration backups into the distributable app/DMG. |
+
+## Release-Shaped Unsigned Foundation
+
+The production-shaped code-only path is deliberately separate from the debug
+assembly:
+
+- SwiftPM builds `ForgeApp` and `forge-cli` with `-c release` and strips the
+  compiler-generated ad-hoc signatures from the copied executables;
+- TypeScript is checked, `runtime/dist` is deleted and rebuilt, and only
+  compiled JavaScript plus `runtime/package.json` enter the app;
+- tests, fixtures, source maps, TypeScript sources, databases, logs, dSYMs,
+  Swift modules, `node_modules`, and generated smoke files fail the release
+  root check;
+- `Forge.app` and standalone `forge-cli` remain separate signing boundaries;
+- `manifests/components.json` records every payload file's path, mode, bytes,
+  and SHA-256 plus source revision/configuration evidence;
+- `manifests/forge.spdx.json` is an SPDX 2.3 document for the app, CLI,
+  JavaScript Runtime, Node requirement, and JetBrains Mono resources;
+- `manifests/runtime-supply-chain.json` copies the checked-in Runtime policy
+  and binds it to the SHA-256 of the release manifest;
+- `manifests/SHA256SUMS` covers every other file in the signing input;
+- all entry timestamps are normalized to `sourceDateEpoch`, owners are encoded
+  as root/wheel, and ustar plus `gzip -n -9` omits ACLs, flags, macOS metadata,
+  and extended attributes. Re-archiving the same root must produce identical
+  bytes.
+
+The current pinned Runtime is Node.js `22.18.0`, selected to match the present
+development/runtime line rather than an arbitrary `latest` alias. The official
+macOS arm64 and x86_64 `.tar.gz` URLs and SHA-256 values, MIT license path, and
+expected `bin/node` path are recorded. The verifier accepts only an explicitly
+provided local archive with the exact pinned filename and hash; it performs no
+network download. This slice intentionally does not extract or bundle that
+executable because its Forge re-signing, hardened-runtime, and exact entitlement
+decisions have not yet been reviewed. If a Node executable appears in the
+release root before that decision, validation fails.
+
+The archive is a signing input, not a customer package. It contains unsigned
+code, does not include Node, has no notarization ticket or appcast signature,
+and must never be labeled an installable release.
 
 ## Signing Profiles
 
@@ -140,6 +189,38 @@ node --test script/macos_distribution_policy_test.mjs
 node script/check_macos_distribution.mjs --source
 ```
 
+On macOS, build and verify a new optimized release root without launching the
+application:
+
+```bash
+RELEASE_ROOT="/private/tmp/forge-release-root"
+RELEASE_ARCHIVE="/private/tmp/forge-release-root.tar.gz"
+node script/build_macos_release.mjs \
+  --output "$RELEASE_ROOT" \
+  --archive "$RELEASE_ARCHIVE"
+node script/check_macos_release.mjs --root "$RELEASE_ROOT"
+```
+
+Both destinations must be new; the scripts refuse to overwrite them. To prove
+archive serialization against the exact same root, create a second new archive
+and compare it byte-for-byte:
+
+```bash
+node script/archive_macos_release.mjs \
+  --root "$RELEASE_ROOT" \
+  --output "/private/tmp/forge-release-root-second.tar.gz"
+cmp "$RELEASE_ARCHIVE" "/private/tmp/forge-release-root-second.tar.gz"
+```
+
+An already-downloaded Runtime archive can be checked without extracting or
+executing it:
+
+```bash
+node script/verify_pinned_runtime.mjs \
+  --archive /path/to/node-v22.18.0-darwin-arm64.tar.gz \
+  --architecture arm64
+```
+
 On macOS, assemble without UI side effects and verify the real unsigned
 artifact:
 
@@ -170,9 +251,10 @@ metadata and diagnostics, not credentials.
 
 ## Credential-Dependent Release Exit
 
-Code-only work may prepare a release-shaped project, pinned runtime manifest,
-DMG scripts, and dry-run validation, but it must not fabricate these external
-proofs:
+Code-only work now prepares an optimized release root, pinned Runtime manifest,
+SPDX/component evidence, and a deterministic unsigned signing-input archive.
+Future code-only work may prepare safe pinned-Runtime ingestion, DMG scripts,
+and dry-run validation, but it must not fabricate these external proofs:
 
 - founder Apple Developer Team and Developer ID Application identity;
 - notarization credentials and accepted submission;
