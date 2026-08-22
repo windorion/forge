@@ -15,6 +15,8 @@ final class ForgeUpdater: ObservableObject {
         var version: String
         var sizeMB: Double
         var signedNote: String
+        var updateSignaturePresent: Bool
+        var installEnabled: Bool
         var notes: [ReleaseNote]
         var changelogURL: String
     }
@@ -89,6 +91,10 @@ final class ForgeUpdater: ObservableObject {
     /// remainder, so this stops at "ready to restart" without mutating the
     /// installed app.
     func download(_ available: Available) {
+        guard available.installEnabled else {
+            state = .failed("Signed update download and installation are not connected yet.")
+            return
+        }
         state = .downloading(available, progress: 0)
         Task {
             for step in 1...20 {
@@ -132,6 +138,7 @@ private final class AppcastParser: NSObject, XMLParserDelegate {
     private var lengthBytes = 0.0
     private var descriptionText = ""
     private var changelogURL = ""
+    private var updateSignaturePresent = false
     private var current = ""
     private var captured = false
 
@@ -155,9 +162,13 @@ private final class AppcastParser: NSObject, XMLParserDelegate {
         return .init(
             version: version,
             sizeMB: (lengthBytes / 1_048_576).rounded(toPlaces: 1),
-            signedNote: "signed & notarized",
+            signedNote: updateSignaturePresent
+                ? "update signature present · notarization not verified here"
+                : "unsigned placeholder feed · install disabled",
+            updateSignaturePresent: updateSignaturePresent,
+            installEnabled: false,
             notes: notes,
-            changelogURL: changelogURL.isEmpty ? "windorion.com/changelog" : changelogURL
+            changelogURL: changelogURL.isEmpty ? "https://windorion.com/changelog" : changelogURL
         )
     }
 
@@ -167,6 +178,9 @@ private final class AppcastParser: NSObject, XMLParserDelegate {
         if elementName == "enclosure", !captured {
             version = attributeDict["sparkle:shortVersionString"] ?? attributeDict["sparkle:version"] ?? version
             lengthBytes = Double(attributeDict["length"] ?? "0") ?? 0
+            updateSignaturePresent = !(attributeDict["sparkle:edSignature"] ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .isEmpty
             captured = true
         }
     }

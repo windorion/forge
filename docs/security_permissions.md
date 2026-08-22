@@ -541,6 +541,29 @@ The user should be able to:
   confirmation
 - remove integrations
 
+## Signed-Build Boundary
+
+Signing is a separate trust boundary from runtime approval. The versioned
+`forge-macos-signing` policy inventories every current target and rejects
+source or artifact contradictions. Development assembly is explicitly
+unsigned and entitlement-free; an explicit ad-hoc signature remains local test
+evidence and can never satisfy the Developer ID release profile.
+
+The release profile requires a Developer ID Application identity, hardened
+runtime, the exact reviewed entitlement set, same-team nested Mach-O code, a
+bundled Runtime executable, a signed update enclosure, a stapled notarization
+ticket, and Gatekeeper acceptance. These are independent conjunctive proofs.
+Forge must not infer notarization from an appcast signature or infer release
+readiness from `codesign --verify` alone.
+
+The current entitlement set and Keychain access-group set are both empty.
+Security-relaxing entitlements, an undeclared `.entitlements` file, a stale
+smoke fixture inside the bundle, or an unsigned/mismatched nested executable
+fails closed. The current JavaScript Runtime still depends on external `node`,
+and the SwiftPM Widget is not an extension; both are explicit release blockers
+rather than silently accepted exceptions. See
+`docs/macos_distribution_security.md` for the complete inventory and commands.
+
 ## Product Promise
 
 Forge should feel powerful, but never sneaky.

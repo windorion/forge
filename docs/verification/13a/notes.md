@@ -18,3 +18,13 @@ appcast, notarized binary download, and actual install/relaunch are the
 Sparkle-integration + P6 signing remainder; the download state stops at
 "ready to restart" without mutating the installed app (the 28a banner
 takes over from there). Verified (with notes).
+
+Security-truth addendum (2026-08-22): the original rendered evidence remains a
+layout/state comparison, but its `signed & notarized` placeholder copy was not
+a valid trust claim. Current code says `unsigned placeholder feed · install
+disabled`, describes a present feed signature without inferring notarization,
+and keeps `installEnabled` false. The production download method fails closed
+when installation is unavailable. DEBUG can still place the view into
+download/restart states for design verification, but that is not shipping
+update evidence. No replacement screenshot was captured because this work was
+code-only and did not run desktop automation.

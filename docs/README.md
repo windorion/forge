@@ -30,6 +30,7 @@ Timestamped working history lives in `session_log.md`, not in the root README.
 | `workspace_design.md` | Product surface model, screen structure, panels, states, and interaction rules. |
 | `design_handoff_coverage.md` | Per-screen implementation and strict visual verification status for the delivered handoff. |
 | `macos_native.md` | macOS-specific features, permissions, distribution, and native integrations. |
+| `macos_distribution_security.md` | Signing inventory, entitlement decisions, unsigned/ad-hoc/Developer ID profiles, update trust, and release proof boundaries. |
 | `multi_agent.md` | Agent roles, responsibilities, handoffs, orchestration, and state transitions. |
 | `runtime_architecture.md` | Local runtime modules, app-runtime boundaries, tool execution, and event streams. |
 | `runtime_server_architecture.md` | Current server composition, UML component model, startup/request flows, and domain sequence diagrams. |

@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "policyID": "forge-macos-signing",
+  "bundle": {
+    "identifier": "com.windorion.forge",
+    "executable": "ForgeApp",
+    "packageType": "APPL",
+    "minimumSystemVersion": "14.0",
+    "entitlementsFile": null,
+    "expectedEntitlements": [],
+    "forbiddenEntitlements": [
+      "com.apple.security.app-sandbox",
+      "com.apple.security.get-task-allow",
+      "com.apple.security.cs.allow-dyld-environment-variables",
+      "com.apple.security.cs.allow-jit",
+      "com.apple.security.cs.allow-unsigned-executable-memory",
+      "com.apple.security.cs.disable-library-validation"
+    ]
+  },
+  "components": {
+    "runtime": {
+      "kind": "javascript-resource",
+      "serverPath": "Contents/Resources/runtime/dist/server.js",
+      "launcher": "/usr/bin/env node",
+      "bundledNodeExecutable": null,
+      "bundledExecutableEntitlements": null,
+      "bundledExecutableHardenedRuntime": null,
+      "requiresIndependentCodeSignature": false,
+      "releaseRequirement": "Bundle and inspect a pinned Node executable, or replace the JavaScript runtime with a signed native service. Record its exact hardened-runtime and entitlement requirements from the selected artifact before release acceptance."
+    },
+    "loginItem": {
+      "kind": "main-app-registration",
+      "api": "SMAppService.mainApp",
+      "separateHelper": false,
+      "entitlements": []
+    },
+    "cli": {
+      "kind": "standalone-swiftpm-executable",
+      "bundledWithApp": false,
+      "entitlements": []
+    },
+    "widget": {
+      "kind": "source-only-swiftpm-executable",
+      "packagedExtension": false,
+      "bundleIdentifier": null,
+      "appGroup": null,
+      "entitlements": [],
+      "releaseRequirement": "Create a real WidgetKit app extension target, choose an App Group, and sign the containing app and extension with the same team."
+    },
+    "updater": {
+      "kind": "check-only-placeholder-feed",
+      "feedPath": "Contents/Resources/appcast.xml",
+      "downloadInstallEnabled": false,
+      "requiresEdDSASignatureForRelease": true,
+      "notarizationInferredFromFeed": false
+    },
+    "keychain": {
+      "storage": "generic-password",
+      "accessGroups": [],
+      "sharedAcrossTargets": false
+    },
+    "localArtifacts": {
+      "ownerOnlyPaths": [
+        ".forge/forge.sqlite",
+        ".forge/index.sqlite",
+        ".forge/migration-backups",
+        ".forge/reports"
+      ],
+      "packagedInApplication": false
+    }
+  },
+  "profiles": {
+    "development-unsigned": {
+      "signatureClass": "unsigned",
+      "hardenedRuntime": false,
+      "notarization": "not-applicable",
+      "stapling": "not-applicable",
+      "updateSignature": "not-required",
+      "distributionReady": false
+    },
+    "development-ad-hoc": {
+      "signatureClass": "ad-hoc",
+      "hardenedRuntime": false,
+      "notarization": "not-applicable",
+      "stapling": "not-applicable",
+      "updateSignature": "not-required",
+      "distributionReady": false
+    },
+    "developer-id-release": {
+      "signatureClass": "developer-id",
+      "identityPrefix": "Developer ID Application:",
+      "hardenedRuntime": true,
+      "notarization": "required",
+      "stapling": "required",
+      "updateSignature": "required",
+      "bundledRuntime": "required",
+      "nestedCodeSameTeam": true,
+      "distributionReady": true
+    }
+  },
+  "sourceAssertions": {
+    "buildOnlyMode": true,
+    "productionXcodeProjectPresent": false,
+    "xcodeProjectPurpose": "ui-test-host-only",
+    "placeholderFeedSigned": false,
+    "updaterClaimsNotarization": false,
+    "widgetExtensionPresent": false,
+    "externalNodeRequired": true
+  }
+}

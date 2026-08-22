@@ -40,7 +40,15 @@ const [
   routeManifest,
   repositoryBaselineSource,
   providerBaselineSource,
-  workspaceRetentionSource
+  workspaceRetentionSource,
+  distributionGuide,
+  distributionWorkflow,
+  signingPolicySource,
+  signingCheckerSource,
+  bundleBuildScript,
+  signingStageScript,
+  updaterSource,
+  appcastSource
 ] = await Promise.all([
   read("README.md"),
   read("docs/project_status.md"),
@@ -73,13 +81,22 @@ const [
   read("runtime/src/http/routeManifest.ts"),
   read("docs/reliability/alpha-repository-baseline.json"),
   read("docs/reliability/alpha-provider-baseline.json"),
-  read("runtime/src/tasks/workspaceHistoryRetention.ts")
+  read("runtime/src/tasks/workspaceHistoryRetention.ts"),
+  read("docs/macos_distribution_security.md"),
+  read(".github/workflows/macos-distribution.yml"),
+  read("distribution/macos-signing-policy.json"),
+  read("script/check_macos_distribution.mjs"),
+  read("script/build_and_run.sh"),
+  read("script/stage_macos_distribution.sh"),
+  read("apps/macos/Sources/ForgeApp/ForgeUpdater.swift"),
+  read("apps/macos/Resources/appcast.xml")
 ]);
 
 const runtimePackage = JSON.parse(runtimePackageSource);
 const performanceBudget = JSON.parse(performanceBudgetSource);
 const repositoryBaseline = JSON.parse(repositoryBaselineSource);
 const providerBaseline = JSON.parse(providerBaselineSource);
+const signingPolicy = JSON.parse(signingPolicySource);
 const failures = [];
 
 check("critical project documents share the current status date", () => {
@@ -196,6 +213,41 @@ check("workspace retention is versioned, export-gated, terminal-safe, and enforc
   assert.match(swiftWorkspaceModel, /purgeExportedWorkspaceHistory/);
   assert.match(securityGuide, /forge-workspace-retention/);
   assert.match(runtimeSecurityWorkflow, /npm run smoke:workspace-retention/);
+});
+
+check("macOS signing policy is versioned, fail-closed, documented, and enforced in CI", () => {
+  assert.equal(signingPolicy.schemaVersion, 1);
+  assert.equal(signingPolicy.policyID, "forge-macos-signing");
+  assert.deepEqual(Object.keys(signingPolicy.profiles), [
+    "development-unsigned",
+    "development-ad-hoc",
+    "developer-id-release"
+  ]);
+  assert.deepEqual(signingPolicy.bundle.expectedEntitlements, []);
+  assert.equal(signingPolicy.components.runtime.bundledNodeExecutable, null);
+  assert.deepEqual(signingPolicy.components.keychain.accessGroups, []);
+  assert.equal(signingPolicy.components.widget.packagedExtension, false);
+  assert.equal(signingPolicy.components.updater.downloadInstallEnabled, false);
+  assert.equal(signingPolicy.profiles["developer-id-release"].hardenedRuntime, true);
+  assert.equal(signingPolicy.profiles["developer-id-release"].notarization, "required");
+  assert.match(distributionGuide, /signed-build threat review is implemented/i);
+  assert.match(distributionGuide, /development-unsigned/);
+  assert.match(distributionGuide, /developer-id-release/);
+  assert.match(signingCheckerSource, /inspectAppBundle/);
+  assert.match(bundleBuildScript, /--build-only/);
+  assert.match(bundleBuildScript, /codesign --remove-signature/);
+  assert.match(bundleBuildScript, /rm -rf "\$ROOT_DIR\/runtime\/dist"/);
+  assert.match(signingStageScript, /ditto --norsrc --noextattr/);
+  assert.match(signingStageScript, /refusing to overwrite/);
+  assert.match(updaterSource, /installEnabled: false/);
+  assert.match(updaterSource, /guard available\.installEnabled/);
+  assert.doesNotMatch(updaterSource, /signed\s*&\s*notarized/i);
+  assert.doesNotMatch(appcastSource, /sparkle:edSignature\s*=/);
+  assert.match(distributionWorkflow, /macos_distribution_policy_test\.mjs/);
+  assert.match(distributionWorkflow, /--profile development-unsigned/);
+  assert.match(distributionWorkflow, /--profile development-ad-hoc/);
+  assert.match(distributionWorkflow, /--profile developer-id-release/);
+  assert.match(distributionWorkflow, /upload-artifact/);
 });
 
 const unitTestCount = (await readdir(resolve(repoRoot, "runtime", "scripts")))

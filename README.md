@@ -251,6 +251,16 @@ Implemented today:
   evidence/index tables under SQLite schema v6, and appends a durable receipt.
   Native History exposes preview/export/confirmation/purge; observers may
   preview and export but cannot mutate.
+- Versioned macOS signing policy v1 inventories the app, JavaScript Runtime,
+  main-app login item, standalone CLI, source-only Widget experiment,
+  generic-password Keychain boundary, local artifacts, and placeholder update
+  feed. A non-launching clean assembly removes SwiftPM's debug ad-hoc signature
+  and stale Runtime fixtures; clean staging plus real artifact checks
+  distinguish unsigned, explicit ad-hoc, and Developer ID profiles. Hosted CI
+  proves unsigned/ad-hoc acceptance and release-profile rejection. The
+  unsigned appcast no longer claims notarization and cannot enter the
+  download/install path. Actual Developer ID signing, bundled Node, signed
+  updates, notarization/stapling, DMG, and WidgetKit remain P6 work.
 - Versioned runtime performance and resource budgets. Dependency-free
   smoke/standard/large synthetic profiles measure cold startup, idle child
   CPU/RSS, retained-task listing, cold/unchanged repository indexing, Git
@@ -349,8 +359,8 @@ Product-readiness estimate:
 | Primary V0 handoff UI | 100% | The five primary screens are `Verified` with rendered-comparison evidence in `docs/verification/`. |
 | Full handoff UI | 95-97% | 41 of 43 named screens/states are `Verified` (rendered comparison on real data, evidence in `docs/verification/`). The two remaining: `6a` GitHub is `Partial` (configuration UI, Device Flow, polling, Keychain persistence, and connected state are implemented and tested; live GitHub authorization still needs a founder-owned OAuth App Client ID with Device Flow enabled); `35a` Widget is a documented platform-blocked descope (hand-assembled ad-hoc-signed extension not discovered by pluginkit; unblocks with P6 signing). |
 | Useful developer alpha | 72-80% | Forge repeats the reviewed lifecycle across deterministic local-provider and mock-OpenAI adapter corpora, including Unified Diff, approved commands, repair/rerun, fork-aware PR supervision, repository-scoped background command/Git review, and fair restart-safe background dispatch; it still needs broader autonomous tool use and live-model success on pinned public repositories. |
-| Commercial beta | 31-36% | Versioned migration/backup/restore, task- and workspace-wide retention/export/purge, bounded/revocable command approvals, centralized Secret Redaction, and artifact-producing runtime performance/security gates exist; Forge still needs signed packaging, production onboarding/GitHub/provider proof, packaged-app profiling, operations polish, and repeated real-repository success. |
-| Polished v1 | 30-36% | Queueing, local indexes, explicit data lifecycle, session-authorized runtimes, background task/command/Git review routing, fair supervised grants, bounded reconnect/crash recovery telemetry, reportable soak tooling, centralized Secret Redaction, and a compiled action-level XCUITest harness are real; full-duration/passing evidence, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
+| Commercial beta | 34-40% | Versioned migration/backup/restore, task- and workspace-wide retention/export/purge, bounded/revocable command approvals, centralized Secret Redaction, artifact-producing runtime performance/security gates, and a machine-checked macOS signing/update threat boundary exist; Forge still needs an actual signed package, production onboarding/GitHub/provider proof, packaged-app profiling, operations polish, and repeated real-repository success. |
+| Polished v1 | 32-38% | Queueing, local indexes, explicit data lifecycle, session-authorized runtimes, background task/command/Git review routing, fair supervised grants, bounded reconnect/crash recovery telemetry, reportable soak tooling, centralized Secret Redaction, a compiled action-level XCUITest harness, and versioned distribution posture checks are real; full-duration/passing evidence, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
 
 Short version: V0 behavior is complete, but the entire 43-screen product design
 is not. Alpha is the next cumulative horizon, followed by beta and then v1;
@@ -410,6 +420,7 @@ Key implementation docs:
 - `docs/performance_budgets.md`
 - `docs/database.md`
 - `docs/security_permissions.md`
+- `docs/macos_distribution_security.md`
 
 ## Run Locally
 
@@ -465,6 +476,7 @@ Runtime and engineering:
 - `docs/git_workflow.md`
 - `docs/mcp.md`
 - `docs/security_permissions.md`
+- `docs/macos_distribution_security.md`
 - `docs/development.md`
 
 Project memory:

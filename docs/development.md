@@ -440,6 +440,18 @@ From the repository root, prefer the app bundle runner:
 
 This builds `dist/Forge.app` and launches it as a native macOS app.
 
+Build and assemble without launching the app or stopping any existing Forge
+process:
+
+```bash
+./script/build_and_run.sh --build-only
+```
+
+This mode cleans `runtime/dist`, compiles Swift and TypeScript, removes the
+SwiftPM compiler ad-hoc signature from the copied debug executable, strips
+inherited extended attributes, and writes an intentionally unsigned
+`dist/Forge.app`. The interactive modes retain their existing launch behavior.
+
 You can also build the SwiftPM target directly:
 
 ```bash
@@ -1003,6 +1015,35 @@ also prints the application-only LLVM coverage report:
 ```
 
 ## Build Checks
+
+macOS distribution posture is API- and credential-free:
+
+```bash
+node --test script/macos_distribution_policy_test.mjs
+node script/check_macos_distribution.mjs --source
+./script/build_and_run.sh --build-only
+node script/check_macos_distribution.mjs \
+  --app dist/Forge.app \
+  --profile development-unsigned
+```
+
+For ad-hoc signing, first copy into a new destination outside a Desktop/iCloud
+or other File Provider root:
+
+```bash
+STAGE_DIR="$(mktemp -d /private/tmp/forge-signing-stage.XXXXXX)"
+./script/stage_macos_distribution.sh dist/Forge.app "$STAGE_DIR/Forge.app"
+codesign --force --deep --sign - --timestamp=none "$STAGE_DIR/Forge.app"
+codesign --verify --deep --strict --verbose=2 "$STAGE_DIR/Forge.app"
+node script/check_macos_distribution.mjs \
+  --app "$STAGE_DIR/Forge.app" \
+  --profile development-ad-hoc
+```
+
+The `developer-id-release` profile is expected to fail until the exact
+credential-dependent and structural blockers in
+`docs/macos_distribution_security.md` are complete. CI archives JSON posture
+reports and treats accidental release-profile acceptance as a failure.
 
 ```bash
 swift build

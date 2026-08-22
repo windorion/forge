@@ -161,7 +161,8 @@ final class ForgeAppTests: XCTestCase {
         FIX: Preserved review gates
         OTHER: Ignored
             </description>
-            <enclosure sparkle:shortVersionString="1.2.3" length="1572864" />
+            <enclosure sparkle:shortVersionString="1.2.3" length="1572864"
+                       sparkle:edSignature="fixture-signature" />
           </item></channel>
         </rss>
         """
@@ -169,6 +170,9 @@ final class ForgeAppTests: XCTestCase {
         XCTAssertEqual(available?.version, "1.2.3")
         XCTAssertEqual(available?.sizeMB, 1.5)
         XCTAssertEqual(available?.changelogURL, "https://example.test/changelog")
+        XCTAssertEqual(available?.signedNote, "update signature present · notarization not verified here")
+        XCTAssertEqual(available?.updateSignaturePresent, true)
+        XCTAssertEqual(available?.installEnabled, false)
         XCTAssertEqual(available?.notes.map(\.kind), ["NEW", "FIX"])
         XCTAssertEqual(available?.notes.map(\.text), ["Added coverage reporting", "Preserved review gates"])
 
@@ -180,8 +184,21 @@ final class ForgeAppTests: XCTestCase {
         let fallback = ForgeUpdater.parse(Data(fallbackXML.utf8))
         XCTAssertEqual(fallback?.version, "7")
         XCTAssertEqual(fallback?.sizeMB, 0)
-        XCTAssertEqual(fallback?.changelogURL, "windorion.com/changelog")
+        XCTAssertEqual(fallback?.changelogURL, "https://windorion.com/changelog")
+        XCTAssertEqual(fallback?.signedNote, "unsigned placeholder feed · install disabled")
+        XCTAssertEqual(fallback?.updateSignaturePresent, false)
+        XCTAssertEqual(fallback?.installEnabled, false)
         XCTAssertNil(ForgeUpdater.parse(Data("<rss><channel /></rss>".utf8)))
+
+        if let available {
+            ForgeUpdater.shared.dismiss()
+            ForgeUpdater.shared.download(available)
+            XCTAssertEqual(
+                ForgeUpdater.shared.state,
+                .failed("Signed update download and installation are not connected yet.")
+            )
+            ForgeUpdater.shared.dismiss()
+        }
     }
 
     func testRuntimeClientErrorsRemainActionable() {

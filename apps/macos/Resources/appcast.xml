@@ -5,7 +5,7 @@
     <link>https://windorion.com/appcast.xml</link>
     <item>
       <title>Forge 0.5.0</title>
-      <sparkle:releaseNotesLink>windorion.com/changelog</sparkle:releaseNotesLink>
+      <sparkle:releaseNotesLink>https://windorion.com/changelog</sparkle:releaseNotesLink>
       <description>
 NEW: Mission Control — run agents across 3 repos side by side
 NEW: Quick capture panel on ⌥Space

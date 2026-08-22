@@ -63,8 +63,8 @@ the actual visual source of truth.
 | Recovery | `17a` No repository | Verified | Rendered comparison done (docs/verification/17a); subtitle truncation fixed; both actions real. |
 | Recovery | `29a` Offline | Verified | Rendered comparison done with cached tasks (docs/verification/29a); mid-session disconnect detection fixed en route. |
 | Recovery | `31a` Crash recovery | Verified | Rendered comparison done via a real interrupted-apply startup recovery (docs/verification/31a). |
-| Recovery | `13a` Update dialog | Verified | Custom update dialog on real appcast fetch/parse/compare (docs/verification/13a); signed appcast + install/relaunch are the Sparkle/P6 remainder. |
-| Recovery | `28a` Update ready | Verified | Deferred-restart banner honoring live running-task count (docs/verification/28a); restart-relaunch is the P6/Sparkle install remainder. |
+| Recovery | `13a` Update dialog | Verified | Custom update dialog on real appcast fetch/parse/compare (docs/verification/13a). Post-capture security copy labels the unsigned placeholder and disables install; signed appcast + install/relaunch remain P6. |
+| Recovery | `28a` Update ready | Verified | Deferred-restart banner honoring live running-task count (docs/verification/28a); it remains a DEBUG-verifiable design state until signed download/restart-relaunch exists in P6. |
 | Recovery | `23a` Share/collaboration | Verified | Real share popover + local opaque token/read-only export (docs/verification/23a); hosted forge.windorion.com viewer + comment reflux are the documented founder-level gap. |
 | Recovery | `2a` Task history | Verified | Rendered comparison done (docs/verification/2a). |
 | Recovery | `2b` Audit log | Verified | Rendered comparison done (docs/verification/2b). |

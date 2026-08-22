@@ -155,12 +155,12 @@ Current implementation:
   and repository root
 - slow stop attempts are surfaced with a user-facing message
 
-Future hardening:
+Remaining workspace hardening:
 
 - add a real workspace/repository picker for installed apps that no longer sit
   next to a checkout
-- add distribution-specific signing/notarization checks after packaging
-  decisions
+- keep installed-workspace selection separate from the signed application
+  installation directory
 
 ### Finder Integration
 
@@ -266,6 +266,28 @@ Expected infrastructure:
 - Sparkle updates
 - crash reporting policy
 - privacy policy
+
+Current distribution-security foundation:
+
+- `distribution/macos-signing-policy.json` versions the exact main app,
+  Runtime, login-item, CLI, Widget, Keychain, local-artifact, and update-feed
+  inventory
+- `./script/build_and_run.sh --build-only` assembles without launching Forge or
+  stopping a running app, removes SwiftPM's compiler ad-hoc signature, cleans
+  stale Runtime output, and produces an entitlement-free unsigned bundle
+- `script/stage_macos_distribution.sh` copies into a new signing stage without
+  extended attributes; this avoids Finder/File Provider metadata invalidating
+  code signing
+- the artifact checker distinguishes unsigned, explicit ad-hoc, and Developer
+  ID profiles, verifies exact entitlements and nested code, and keeps
+  notarization/stapling/Gatekeeper separate from appcast signatures
+- the current placeholder feed has no EdDSA signature, reports no notarization
+  claim, and cannot invoke the download/install path
+- hosted `macOS Distribution Posture` CI runs real unsigned/ad-hoc artifact
+  checks and proves the same bundle is rejected by the release profile
+
+The exact threat model, commands, and unresolved release prerequisites live in
+`docs/macos_distribution_security.md`.
 
 ## Native Quality Bar
 

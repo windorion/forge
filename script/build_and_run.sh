@@ -16,12 +16,26 @@ APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$APP_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
 RUNTIME_RESOURCE="$APP_RESOURCES/runtime"
+FORGE_SWIFT_MODULE_CACHE="${SWIFTPM_MODULECACHE_OVERRIDE:-$ROOT_DIR/.build/module-cache}"
+FORGE_CLANG_MODULE_CACHE="${CLANG_MODULE_CACHE_PATH:-$ROOT_DIR/.build/clang-module-cache}"
 
-pkill -x "$APP_NAME" >/dev/null 2>&1 || true
+case "$MODE" in
+  build|--build-only|run|--debug|debug|--logs|logs|--telemetry|telemetry|--verify|verify)
+    ;;
+  *)
+    echo "usage: $0 [build|--build-only|run|--debug|--logs|--telemetry|--verify]" >&2
+    exit 2
+    ;;
+esac
+
+mkdir -p "$FORGE_SWIFT_MODULE_CACHE" "$FORGE_CLANG_MODULE_CACHE"
+export SWIFTPM_MODULECACHE_OVERRIDE="$FORGE_SWIFT_MODULE_CACHE"
+export CLANG_MODULE_CACHE_PATH="$FORGE_CLANG_MODULE_CACHE"
 
 cd "$ROOT_DIR"
 swift build
 BUILD_BINARY="$(swift build --show-bin-path)/$APP_NAME"
+rm -rf "$ROOT_DIR/runtime/dist"
 (cd "$ROOT_DIR/runtime" && npm run build)
 
 rm -rf "$APP_BUNDLE"
@@ -30,6 +44,16 @@ mkdir -p "$RUNTIME_RESOURCE"
 mkdir -p "$APP_RESOURCES/Fonts"
 cp "$BUILD_BINARY" "$APP_BINARY"
 chmod +x "$APP_BINARY"
+# SwiftPM applies a compiler ad-hoc signature (including get-task-allow) to
+# debug executables. Assembly is intentionally unsigned; signing profiles are
+# applied and verified as a separate, explicit distribution step.
+if /usr/bin/codesign -d "$APP_BINARY" >/dev/null 2>&1; then
+  /usr/bin/codesign --remove-signature "$APP_BINARY"
+fi
+if /usr/bin/codesign -d "$APP_BINARY" >/dev/null 2>&1; then
+  echo "failed to produce an unsigned application executable" >&2
+  exit 1
+fi
 cp "$ROOT_DIR/runtime/package.json" "$RUNTIME_RESOURCE/package.json"
 cp -R "$ROOT_DIR/runtime/dist" "$RUNTIME_RESOURCE/dist"
 cp "$ROOT_DIR/design_handoff_forge/assets/forge-logo.png" "$APP_RESOURCES/forge-logo.png"
@@ -76,32 +100,46 @@ cat >"$INFO_PLIST" <<PLIST
 </plist>
 PLIST
 
+# Signing must see a deterministic bundle without Finder/resource-fork or
+# provenance metadata inherited from source assets.
+/usr/bin/xattr -cr "$APP_BUNDLE"
+
+if [[ "$MODE" == "build" || "$MODE" == "--build-only" ]]; then
+  echo "$APP_BUNDLE"
+  exit 0
+fi
+
+stop_running_app() {
+  pkill -x "$APP_NAME" >/dev/null 2>&1 || true
+}
+
 open_app() {
   /usr/bin/open -n "$APP_BUNDLE"
 }
 
 case "$MODE" in
   run)
+    stop_running_app
     open_app
     ;;
   --debug|debug)
+    stop_running_app
     lldb -- "$APP_BINARY"
     ;;
   --logs|logs)
+    stop_running_app
     open_app
     /usr/bin/log stream --info --style compact --predicate "process == \"$APP_NAME\""
     ;;
   --telemetry|telemetry)
+    stop_running_app
     open_app
     /usr/bin/log stream --info --style compact --predicate "subsystem == \"$BUNDLE_ID\""
     ;;
   --verify|verify)
+    stop_running_app
     open_app
     sleep 1
     pgrep -x "$APP_NAME" >/dev/null
-    ;;
-  *)
-    echo "usage: $0 [run|--debug|--logs|--telemetry|--verify]" >&2
-    exit 2
     ;;
 esac

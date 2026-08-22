@@ -7100,3 +7100,87 @@ Next:
   app/runtime/helper/widget entitlements, hardened-runtime and Keychain/update
   trust boundaries, then add machine-checkable unsigned/ad-hoc versus
   Developer-ID packaging checks without requiring signing credentials.
+
+## 2026-08-22 20:20:00 +0200 (CEST)
+
+Conversation summary:
+
+- Completed the next API-free roadmap task: a signed-build threat review with
+  versioned component/entitlement profiles, real bundle inspection, hosted
+  negative controls, update-trust corrections, and synchronized roadmap/status
+  documentation. Work remained code/command-only; no desktop or browser
+  automation was run and Forge was never launched.
+
+Done:
+
+- Added `forge-macos-signing` policy v1 and
+  `docs/macos_distribution_security.md`. The inventory covers the main app,
+  JavaScript Runtime, `SMAppService.mainApp`, standalone CLI, source-only
+  Widget, generic-password Keychain storage, owner-only local artifacts, and
+  placeholder update feed. The current main-app entitlement and Keychain
+  access-group sets are explicitly empty.
+- Defined exact `development-unsigned`, `development-ad-hoc`, and
+  `developer-id-release` profiles. The release profile independently requires
+  Developer ID identity/team, hardened runtime, exact entitlements, same-team
+  nested code, a selected/pinned bundled Runtime with separately reviewed
+  entitlements, update EdDSA, notarization/stapling, and Gatekeeper acceptance.
+- Added dependency-free source/artifact inspection and eight Node fixtures.
+  Checks reject policy contradictions, security-relaxing/undeclared
+  entitlements, stale smoke artifacts, mismatched bundle metadata, unresolved
+  Runtime signing policy, missing update/notarization proofs, and wrong-team
+  nested Mach-O code.
+- Added a non-launching `build`/`--build-only` mode. It no longer stops a
+  running Forge process, uses workspace-local Swift module caches, cleans
+  `runtime/dist`, removes SwiftPM's compiler ad-hoc/get-task-allow signature
+  from the copied executable, and assembles an intentionally unsigned bundle.
+  This exposed and removed 589 stale generated smoke files from prior Runtime
+  builds.
+- Added no-overwrite, extended-attribute-free signing staging. A real local
+  signing attempt exposed File Provider Finder metadata under Desktop; staging
+  through `ditto --norsrc --noextattr` into a new private path produced a valid
+  full-bundle ad-hoc signature without touching the user's desktop session.
+- Added the `macOS Distribution Posture` hosted workflow. It runs policy/source
+  fixtures, assembles without launch, verifies the real unsigned bundle, stages
+  and verifies an explicit ad-hoc bundle, and requires the same artifact to
+  fail the Developer ID release profile. JSON reports are uploaded for 14 days.
+- Corrected ForgeUpdater trust semantics. Feed parsing now records actual
+  `sparkle:edSignature` presence, never labels it notarization, labels the
+  unsigned placeholder honestly, fixes the changelog URL, keeps
+  `installEnabled` false, guards the model download boundary, and disables the
+  install button. Swift tests cover signed/unsigned parsing and the guarded
+  download call; historical rendered evidence now has a security-truth
+  addendum.
+- Extended documentation truth automation to cover the distribution policy,
+  scripts, update gate, placeholder feed, focused guide, and CI workflow.
+  Updated README, AGENTS, docs index, TODO, roadmap, project status, native,
+  security, development, handoff coverage, and verification notes. Readiness
+  now records commercial beta 34-40%, polished v1 32-38%, security/audit 99%,
+  native macOS 84-91%, and distribution/operations 35-45%.
+- Passed documentation truth, diff checks, TypeScript check/build, eight
+  distribution-policy fixtures, source posture, real unsigned artifact check,
+  real full-bundle ad-hoc `codesign --verify --deep --strict`, expected
+  nine-reason Developer ID rejection, all 62 Swift tests, and unsigned Xcode
+  app-host/XCUITest `build-for-testing`. Existing Xcode warnings remain
+  unrelated and non-fatal.
+
+Not done:
+
+- There is still no production archive/export project, selected/pinned bundled
+  Node executable, reviewed Runtime-executable entitlement set, Developer ID
+  identity, hardened release signature, notarization/stapling, DMG, signed
+  update installer/appcast, clean-machine release rehearsal, crash reporting,
+  or packaged WidgetKit extension.
+- Live provider corpus, full-duration Mission Control soak, complete
+  action-level UI archive, OAuth live grant, commercial privacy/account choice,
+  and hosted CI for this exact final commit remain outstanding.
+
+Next:
+
+- Commit and push this completed slice, then verify the new macOS Distribution
+  Posture workflow plus Runtime Security, Runtime Performance, and Swift Tests
+  on the exact final commit.
+- The next API-free roadmap task is a release-shaped bundle foundation: define
+  a pinned Runtime supply-chain manifest, optimized production app/CLI build,
+  debug/test exclusion, component/SBOM evidence, and deterministic unsigned
+  archive without inventing credentials or downloading an arbitrary latest
+  Node build.

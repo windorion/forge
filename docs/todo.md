@@ -316,14 +316,37 @@ the core runtime smoke. Preserve these completed boundaries:
     fixtures plus isolated Runtime evidence for command output, HTTP errors,
     diagnostic settings, audit metadata, raw SQLite inspection, and restart.
     Runtime Security CI now runs both approval lifecycle and Secret Redaction.
-- **Next code-only security/distribution task — signed-build threat review:**
-  - Inventory the exact app/runtime/helper/widget entitlements, hardened-runtime
-    requirements, Keychain access groups, update trust chain, and owner-only
-    local artifacts without requiring Developer ID credentials.
-  - Add machine-checkable unsigned/ad-hoc versus Developer-ID boundary checks
-    and fail closed when packaging inputs contradict the documented profile.
-  - Keep notarization submission and live WidgetKit discovery out of this slice;
-    those remain credential- and signing-infrastructure-dependent P6 work.
+- [x] Complete the signed-build threat review:
+  - Added versioned `forge-macos-signing` policy v1 and a focused threat model
+    covering the exact app, JavaScript Runtime, main-app login item, standalone
+    CLI, source-only Widget, Keychain, owner-only artifacts, and update chain.
+    The current main-app entitlement and Keychain access-group sets are both
+    explicitly empty; undeclared or security-relaxing entitlements fail closed.
+  - Added a non-launching build mode that cleans stale Runtime output and
+    removes SwiftPM's compiler ad-hoc/get-task-allow signature, plus a
+    no-overwrite extended-attribute-free signing stage. Real artifact checks
+    distinguish unsigned, explicit ad-hoc, and Developer ID profiles, inspect
+    nested Mach-O code, and keep notarization/stapling/Gatekeeper independent.
+  - Added pure negative fixtures and hosted macOS CI. CI accepts the exact
+    unsigned and ad-hoc profiles, then must reject that ad-hoc artifact as a
+    release. JSON evidence is archived. The update parser no longer claims
+    notarization; placeholder feed download/install is disabled and guarded in
+    the model.
+  - Confirmed explicit P6 blockers: external `node` is not a bundled signed
+    Runtime, the Xcode project is a UI-test host rather than a production
+    archive project, the appcast lacks EdDSA, and the Widget is not an `.appex`.
+- **Next code-only distribution task — release-shaped bundle foundation:**
+  - Define a pinned Runtime supply-chain manifest (version, architectures,
+    source URL, SHA-256, license, expected executable path) and fail if a
+    downloaded/bundled executable contradicts it; do not download an arbitrary
+    latest Node build.
+  - Add a production release configuration that builds optimized app/CLI code,
+    excludes debug/test artifacts, emits a component/SBOM manifest, and stages
+    a deterministic unsigned archive ready for an externally supplied signing
+    identity.
+  - Keep Developer ID credentials, notarization submission, live appcast
+    signing keys, DMG publication, and WidgetKit discovery out of the code-only
+    slice; validate them later against the exact staged archive.
 
 ## P5: Native macOS Product
 

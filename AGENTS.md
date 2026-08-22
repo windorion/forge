@@ -61,6 +61,8 @@ Experience and macOS design:
 - `docs/user_flows.md`: end-to-end flows from onboarding through task review.
 - `docs/macos_native.md`: native macOS features, permissions, distribution,
   and system integrations.
+- `docs/macos_distribution_security.md`: signing inventory, entitlement and
+  hardened-runtime policy, update trust chain, and package proof boundaries.
 - `docs/v0_scope.md`: first end-to-end demo target and V0 completion criteria.
 
 Runtime and engineering:
@@ -100,6 +102,9 @@ Runtime and engineering:
 - Performance/resource work: read `docs/performance_budgets.md`,
   `docs/runtime_architecture.md`, and `docs/development.md`, then the runtime
   benchmark/reporting code and CI workflow.
+- Signing/package work: read `docs/macos_distribution_security.md`,
+  `docs/macos_native.md`, and `docs/security_permissions.md`, then inspect the
+  versioned policy, assembly/staging scripts, and actual app artifact.
 - Database/persistence work: read `docs/database.md`,
   `docs/local_first.md`, then `runtime/src/taskStore.ts`.
 - Git workflow work: read `docs/git_workflow.md`,

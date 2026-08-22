@@ -64,7 +64,7 @@ struct UpdateDialogView: View {
     private func found(_ available: ForgeUpdater.Available, downloading: Double?) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Forge \(available.version) is ready.")
+                Text("Forge \(available.version) is listed in the update feed.")
                     .font(.system(size: 17, weight: .heavy))
                 Text("you have \(updater.currentVersion) · \(String(format: "%.1f", available.sizeMB)) MB · \(available.signedNote)")
                     .font(ForgeDesign.mono(10))
@@ -145,7 +145,7 @@ struct UpdateDialogView: View {
                     Button {
                         updater.download(available)
                     } label: {
-                        Text("▸ DOWNLOAD & INSTALL")
+                        Text(available.installEnabled ? "▸ DOWNLOAD & INSTALL" : "INSTALL PIPELINE NOT CONNECTED")
                             .font(ForgeDesign.mono(10.5, weight: .bold))
                             .tracking(0.5)
                             .foregroundStyle(ForgeDesign.accent)
@@ -154,6 +154,8 @@ struct UpdateDialogView: View {
                             .background(ForgeDesign.ink)
                     }
                     .buttonStyle(.plain)
+                    .disabled(!available.installEnabled)
+                    .opacity(available.installEnabled ? 1 : 0.62)
                 }
                 .padding(18)
             }
