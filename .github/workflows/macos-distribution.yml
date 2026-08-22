@@ -24,6 +24,16 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: runtime/package-lock.json
+
+      - name: Install Runtime build dependencies
+        run: npm ci --prefix runtime
+
       - name: Verify policy fixtures
         run: node --test script/macos_distribution_policy_test.mjs
 

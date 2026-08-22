@@ -244,6 +244,7 @@ check("macOS signing policy is versioned, fail-closed, documented, and enforced 
   assert.doesNotMatch(updaterSource, /signed\s*&\s*notarized/i);
   assert.doesNotMatch(appcastSource, /sparkle:edSignature\s*=/);
   assert.match(distributionWorkflow, /macos_distribution_policy_test\.mjs/);
+  assert.match(distributionWorkflow, /npm ci --prefix runtime/);
   assert.match(distributionWorkflow, /--profile development-unsigned/);
   assert.match(distributionWorkflow, /--profile development-ad-hoc/);
   assert.match(distributionWorkflow, /--profile developer-id-release/);
