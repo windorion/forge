@@ -106,7 +106,7 @@ async function assertRouteManifestMatchesHandler() {
   const implemented = ["OPTIONS /*", ...staticRoutes, ...detailRoutes, ...actionRoutes].sort();
   const manifested = runtimeRouteManifest.map((route) => `${route.method} ${route.path}`).sort();
 
-  assert.equal(runtimeRouteManifest.length, 62, "Route count changed; update the explicit contract intentionally.");
+  assert.equal(runtimeRouteManifest.length, 65, "Route count changed; update the explicit contract intentionally.");
   assert.deepEqual(manifested, [...new Set(manifested)].sort(), "Route manifest contains duplicates.");
   assert.deepEqual(manifested, implemented, "Route manifest and request handler branches differ.");
   for (const route of runtimeRouteManifest) {

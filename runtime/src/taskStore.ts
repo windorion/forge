@@ -1,7 +1,8 @@
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
-import type { ForgeTask, TaskHistoryPurgeReceipt } from "./types.js";
+import type { ForgeTask, TaskHistoryPurgeReceipt, WorkspaceHistoryPurgeReceipt } from "./types.js";
 import type { IndexedFile } from "./repositoryIndex.js";
 import type { ExtractedSymbol } from "./symbolExtract.js";
 import { DATABASE_MIGRATIONS, DATABASE_SCHEMA_VERSION } from "./databaseMigrations.js";
@@ -15,6 +16,16 @@ import {
 
 export type StoredSymbol = ExtractedSymbol & { path: string };
 
+export interface RepositoryIndexRetentionSnapshot {
+  meta: { lastIndexedAt: string | null; gitRoot: string | null };
+  files: IndexedFile[];
+  symbols: StoredSymbol[];
+  trigrams: { rowCount: number; fileCount: number; sourceSha256: string };
+  retainedRecords: number;
+  retainedBytes: number;
+  sourceSha256: string;
+}
+
 export class SqliteTaskStore {
   readonly dbPath: string;
 
@@ -22,6 +33,7 @@ export class SqliteTaskStore {
   private readonly selectTasks: StatementSync;
   private readonly upsertTask?: StatementSync;
   private readonly insertHistoryPurge?: StatementSync;
+  private readonly insertWorkspaceHistoryPurge?: StatementSync;
   private readonly readOnly: boolean;
   private readonly writerLease?: DatabaseWriterLease;
 
@@ -73,6 +85,13 @@ export class SqliteTaskStore {
           purged_at, records_affected, bytes_removed, details_json
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
+        this.insertWorkspaceHistoryPurge = this.db.prepare(`
+        INSERT INTO workspace_history_purges (
+          id, policy_id, policy_version, scopes_json, exported_at,
+          export_source_sha256, export_content_sha256, purged_at,
+          task_records_affected, index_records_affected, bytes_removed, details_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
       }
     } catch (error) {
       this.db?.close();
@@ -122,6 +141,53 @@ export class SqliteTaskStore {
       .prepare("SELECT details_json FROM task_history_purges WHERE task_id = ? ORDER BY purged_at")
       .all(taskID)
       .map((row) => JSON.parse(String(row.details_json)) as TaskHistoryPurgeReceipt);
+  }
+
+  saveWorkspaceHistoryPurge(
+    tasks: ForgeTask[],
+    receipt: WorkspaceHistoryPurgeReceipt,
+    clearRepositoryIndexes: boolean
+  ): void {
+    if (!this.upsertTask || !this.insertWorkspaceHistoryPurge) {
+      throw new Error("Task store is read-only in observer runtime mode.");
+    }
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      for (const task of tasks) this.runTaskUpsert(task);
+      if (clearRepositoryIndexes) {
+        this.db.exec(`
+          DELETE FROM repo_trigrams;
+          DELETE FROM repo_symbols;
+          DELETE FROM repo_index;
+          DELETE FROM repo_index_meta;
+        `);
+      }
+      this.insertWorkspaceHistoryPurge.run(
+        receipt.id,
+        receipt.policyID,
+        receipt.policyVersion,
+        JSON.stringify(receipt.scopes),
+        receipt.exportedAt,
+        receipt.exportSourceSha256,
+        receipt.exportContentSha256,
+        receipt.purgedAt,
+        receipt.taskRecordsAffected,
+        receipt.indexRecordsAffected,
+        receipt.bytesRemoved,
+        JSON.stringify(receipt)
+      );
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  loadWorkspaceHistoryPurgeReceipts(): WorkspaceHistoryPurgeReceipt[] {
+    return this.db
+      .prepare("SELECT details_json FROM workspace_history_purges ORDER BY purged_at")
+      .all()
+      .map((row) => JSON.parse(String(row.details_json)) as WorkspaceHistoryPurgeReceipt);
   }
 
   schemaStatus(): { currentVersion: number; expectedVersion: number; migrations: Array<{ version: number; name: string; appliedAt: string }> } {
@@ -285,6 +351,48 @@ export class SqliteTaskStore {
       contentHash: String(row.content_hash),
       indexedAt: String(row.indexed_at)
     }));
+  }
+
+  loadRepositoryIndexRetentionSnapshot(): RepositoryIndexRetentionSnapshot {
+    const files = this.loadIndexedFiles().sort((left, right) => left.path.localeCompare(right.path));
+    const symbols = this.db
+      .prepare("SELECT path, kind, name, line FROM repo_symbols ORDER BY path, line, kind, name")
+      .all()
+      .map((row) => ({
+        path: String(row.path),
+        kind: String(row.kind),
+        name: String(row.name),
+        line: Number(row.line)
+      }));
+    const meta = this.getIndexMeta();
+    const trigramHash = createHash("sha256");
+    let trigramRows = 0;
+    let trigramBytes = 0;
+    const trigramFiles = new Set<string>();
+    for (const row of this.db.prepare("SELECT path, trigram FROM repo_trigrams ORDER BY path, trigram").iterate()) {
+      const filePath = String(row.path);
+      const trigram = String(row.trigram);
+      trigramHash.update(`${JSON.stringify([filePath, trigram])}\n`);
+      trigramFiles.add(filePath);
+      trigramRows += 1;
+      trigramBytes += Buffer.byteLength(filePath) + Buffer.byteLength(trigram);
+    }
+    const trigrams = {
+      rowCount: trigramRows,
+      fileCount: trigramFiles.size,
+      sourceSha256: trigramHash.digest("hex")
+    };
+    const filesBytes = files.reduce((total, file) => total + Buffer.byteLength(JSON.stringify(file)), 0);
+    const symbolsBytes = symbols.reduce((total, symbol) => total + Buffer.byteLength(JSON.stringify(symbol)), 0);
+    const metaBytes = meta.lastIndexedAt || meta.gitRoot ? Buffer.byteLength(JSON.stringify(meta)) : 0;
+    const retainedRecords = files.length + symbols.length + trigramRows + (metaBytes > 0 ? 1 : 0);
+    const sourceRecord = { meta, files, symbols, trigrams };
+    return {
+      ...sourceRecord,
+      retainedRecords,
+      retainedBytes: filesBytes + symbolsBytes + trigramBytes + metaBytes,
+      sourceSha256: createHash("sha256").update(JSON.stringify(sourceRecord)).digest("hex")
+    };
   }
 
   upsertIndexedFile(file: IndexedFile): void {

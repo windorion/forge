@@ -11,6 +11,7 @@ import { createSettingsRoutes } from "./routes/settingsRoutes.js";
 import { createSystemRoutes } from "./routes/systemRoutes.js";
 import { createTaskRoutes } from "./routes/taskRoutes.js";
 import { createValidationRoutes } from "./routes/validationRoutes.js";
+import { createWorkspaceRoutes } from "./routes/workspaceRoutes.js";
 import type { createAgentOrchestrationService } from "../agent/agentOrchestrationService.js";
 import type { createLegacyAgentLoopService } from "../agent/legacyAgentLoopService.js";
 import type { createEditProposalService } from "../edits/editProposalService.js";
@@ -92,6 +93,7 @@ export function createRuntimeRoutes(options: RuntimeRouteOptions) {
   const routeGroups = [
     createSystemRoutes(options),
     createTaskRoutes(options),
+    createWorkspaceRoutes(options),
     createAgentRoutes(options),
     createEditRoutes(options),
     createValidationRoutes(options),

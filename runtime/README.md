@@ -22,6 +22,9 @@ This first slice is intentionally small:
 - `GET /settings/model-provider`
 - `POST /settings/model-provider`
 - `GET /tasks/:taskID/validation-permissions`
+- `GET /workspace/history-retention-preview`
+- `GET /workspace/history-export`
+- `POST /workspace/purge-history`
 - `POST /tasks`
 - `POST /tasks/:taskID/messages`
 - `POST /tasks/:taskID/generate-plan-revision`
@@ -45,6 +48,15 @@ This first slice is intentionally small:
 - `POST /tasks/:taskID/rerun-repair-command`
 - `POST /tasks/:taskID/cancel-task-command`
 - `GET /events` as a Server-Sent Events stream
+
+Workspace retention policy `forge-workspace-retention` v1 keeps task events,
+tool calls, messages, and repository indexes indefinitely by default and never
+auto-purges. Preview/export remain observer-readable. Deterministic JSON export
+applies Secret Redaction v1 and binds policy/scopes plus source/content SHA-256.
+Purge requires the still-current saved receipt, changes terminal tasks only,
+preserves all unfinished-task evidence, optionally clears rebuildable index
+tables, and atomically appends a schema-v6 receipt. Run `npm run
+smoke:workspace-retention` for the HTTP/restart/raw-SQLite/observer proof.
 
 Creating a task starts Agent Loop v0. It is deterministic for now: the Manager
 and Planner update task state, plan steps, events, task conversation, and the

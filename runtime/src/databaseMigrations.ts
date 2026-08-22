@@ -5,7 +5,7 @@ export interface DatabaseMigration {
   sql: string;
 }
 
-export const DATABASE_SCHEMA_VERSION = 5;
+export const DATABASE_SCHEMA_VERSION = 6;
 
 export const DATABASE_MIGRATIONS: readonly DatabaseMigration[] = [
   {
@@ -99,6 +99,30 @@ export const DATABASE_MIGRATIONS: readonly DatabaseMigration[] = [
 
       CREATE INDEX IF NOT EXISTS idx_task_history_purges_task_id
       ON task_history_purges(task_id, purged_at DESC);
+    `
+  },
+  {
+    version: 6,
+    name: "create_workspace_history_purge_receipts",
+    safety: "Additive",
+    sql: `
+      CREATE TABLE IF NOT EXISTS workspace_history_purges (
+        id TEXT PRIMARY KEY,
+        policy_id TEXT NOT NULL,
+        policy_version INTEGER NOT NULL,
+        scopes_json TEXT NOT NULL,
+        exported_at TEXT NOT NULL,
+        export_source_sha256 TEXT NOT NULL,
+        export_content_sha256 TEXT NOT NULL,
+        purged_at TEXT NOT NULL,
+        task_records_affected INTEGER NOT NULL,
+        index_records_affected INTEGER NOT NULL,
+        bytes_removed INTEGER NOT NULL,
+        details_json TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_workspace_history_purges_purged_at
+      ON workspace_history_purges(purged_at DESC);
     `
   }
 ];

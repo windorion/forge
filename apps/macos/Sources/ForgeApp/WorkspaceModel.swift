@@ -10,6 +10,7 @@ final class WorkspaceModel: ObservableObject {
     nonisolated private static let reopenLastWorkspacePreferenceKey = "forge.reopenLastWorkspace"
     nonisolated private static let missionControlRepositoriesKey = "forge.missionControlRepositories"
     nonisolated private static let missionControlFairQueueLimitKey = "forge.missionControlFairQueueLimit"
+    static let workspaceHistoryScopes = ["TaskEvents", "ToolCalls", "TaskMessages", "RepositoryIndexes"]
 
     @Published var tasks: [ForgeTask] = []
     @Published var selectedTaskID: ForgeTask.ID? {
@@ -90,6 +91,11 @@ final class WorkspaceModel: ObservableObject {
     @Published private var purgingAuditHistoryTaskIDs = Set<ForgeTask.ID>()
     @Published private var auditRetentionPreviews: [ForgeTask.ID: TaskHistoryRetentionPreview] = [:]
     @Published private var savedAuditExportReceipts: [ForgeTask.ID: TaskHistoryPurgeRequest.ExportReceipt] = [:]
+    @Published var workspaceHistoryRetentionPreview: WorkspaceHistoryRetentionPreview?
+    @Published private(set) var isLoadingWorkspaceHistoryRetention = false
+    @Published private(set) var isExportingWorkspaceHistory = false
+    @Published private(set) var isPurgingWorkspaceHistory = false
+    @Published private var savedWorkspaceHistoryExportReceipt: WorkspaceHistoryPurgeRequest.ExportReceipt?
     @Published private var approvingValidationPresetTaskIDs = Set<String>()
     @Published private var revokingValidationPresetTaskIDs = Set<String>()
     @Published private var refreshingGitStatus = false
@@ -1966,6 +1972,95 @@ final class WorkspaceModel: ObservableObject {
 
     func isPurgingAuditHistory(taskID: ForgeTask.ID) -> Bool {
         purgingAuditHistoryTaskIDs.contains(taskID)
+    }
+
+    func refreshWorkspaceHistoryRetention() {
+        guard !isLoadingWorkspaceHistoryRetention else { return }
+        isLoadingWorkspaceHistoryRetention = true
+        Task {
+            do {
+                workspaceHistoryRetentionPreview = try await runtime.workspaceHistoryRetentionPreview(
+                    scopes: Self.workspaceHistoryScopes
+                )
+            } catch {
+                statusMessage = "Load workspace retention failed: \(error.localizedDescription)"
+            }
+            isLoadingWorkspaceHistoryRetention = false
+        }
+    }
+
+    func exportWorkspaceHistory() {
+        guard !isExportingWorkspaceHistory else { return }
+        isExportingWorkspaceHistory = true
+        Task {
+            do {
+                let export = try await runtime.workspaceHistoryExport(scopes: Self.workspaceHistoryScopes)
+                let panel = NSSavePanel()
+                panel.canCreateDirectories = true
+                panel.isExtensionHidden = false
+                panel.nameFieldStringValue = export.filename
+                panel.message = "Known credential patterns are redacted. Private repository and task content may remain; review before sharing."
+                if panel.runModal() == .OK, let url = panel.url {
+                    try export.content.write(to: url, atomically: true, encoding: .utf8)
+                    savedWorkspaceHistoryExportReceipt = .init(
+                        generatedAt: export.generatedAt,
+                        policyID: export.policyID,
+                        policyVersion: export.policyVersion,
+                        scopes: export.scopes,
+                        sourceSha256: export.sourceSha256,
+                        contentSha256: export.contentSha256
+                    )
+                    statusMessage = "Workspace history exported to \(url.lastPathComponent)."
+                    refreshWorkspaceHistoryRetention()
+                } else {
+                    statusMessage = "Workspace history export cancelled."
+                }
+            } catch {
+                statusMessage = "Export workspace history failed: \(error.localizedDescription)"
+            }
+            isExportingWorkspaceHistory = false
+        }
+    }
+
+    var canPurgeExportedWorkspaceHistory: Bool {
+        guard let preview = workspaceHistoryRetentionPreview,
+              preview.eligible,
+              let receipt = savedWorkspaceHistoryExportReceipt
+        else { return false }
+        return receipt.policyID == preview.policy.id
+            && receipt.policyVersion == preview.policy.version
+            && receipt.scopes == preview.scopes
+    }
+
+    func purgeExportedWorkspaceHistory() {
+        guard !isPurgingWorkspaceHistory,
+              canPurgeExportedWorkspaceHistory,
+              let preview = workspaceHistoryRetentionPreview,
+              let receipt = savedWorkspaceHistoryExportReceipt
+        else { return }
+        isPurgingWorkspaceHistory = true
+        Task {
+            do {
+                let result = try await runtime.purgeWorkspaceHistory(
+                    requestBody: .init(
+                        policyVersion: preview.policy.version,
+                        scopes: preview.scopes,
+                        exportReceipt: receipt
+                    )
+                )
+                try await refreshTasks()
+                savedWorkspaceHistoryExportReceipt = nil
+                workspaceHistoryRetentionPreview = try await runtime.workspaceHistoryRetentionPreview(
+                    scopes: Self.workspaceHistoryScopes
+                )
+                let indexNote = result.repositoryIndexesCleared ? " Repository index rebuild is required." : ""
+                statusMessage = "Purged \(result.receipt.taskRecordsAffected) terminal-task and \(result.receipt.indexRecordsAffected) index record(s).\(indexNote)"
+            } catch {
+                statusMessage = "Purge workspace history failed: \(error.localizedDescription)"
+                refreshWorkspaceHistoryRetention()
+            }
+            isPurgingWorkspaceHistory = false
+        }
     }
 
     func validationPermissions(for taskID: ForgeTask.ID) -> [ValidationPresetPermission] {

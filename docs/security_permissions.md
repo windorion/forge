@@ -242,6 +242,21 @@ identity, status, exit code, timestamps, approvals, events, and an atomic
 schema-v5 receipt. Observer runtimes may preview retention but reject purge as
 they do every POST.
 
+Workspace data lifecycle is a separate versioned boundary under
+`forge-workspace-retention` v1. Its exact scopes are `TaskEvents`, `ToolCalls`,
+`TaskMessages`, and `RepositoryIndexes`; retention is indefinite and automatic
+purge is disabled. Preview and deterministic JSON export are GET-only and safe
+for observers, but the export may still contain arbitrary private task or
+repository metadata after known credentials are redacted. A purge must carry
+`PurgeWorkspaceHistory`, policy version, ordered scopes, and the source/content
+SHA-256 receipt from the saved current export. The runtime recomputes both
+hashes at that export timestamp, rejects stale/forged/mismatched evidence, and
+deletes selected history only from Completed, Failed, or Cancelled tasks.
+Unfinished-task evidence is never eligible. Repository index rows are explicitly
+rebuildable derived data. Changed task snapshots, index clears, and the
+append-only schema-v6 receipt commit in one transaction; no model tool or
+background timer can invoke this action.
+
 Database schema destruction has a separate startup/offline boundary. Every
 migration declares whether it is additive or destructive. A destructive
 migration cannot start until Forge has produced and verified an owner-only

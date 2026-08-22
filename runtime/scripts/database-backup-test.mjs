@@ -32,30 +32,30 @@ try {
   seedForgeDatabase(databasePath, "migration-proof-task");
   addLegacyNote(databasePath, "retain this pre-migration value");
 
-  const destructiveV6 = {
-    version: 6,
+  const destructiveV7 = {
+    version: 7,
     name: "fixture_drop_legacy_notes",
     safety: "Destructive",
     sql: "DROP TABLE legacy_notes;"
   };
-  const registry = [...DATABASE_MIGRATIONS, destructiveV6];
+  const registry = [...DATABASE_MIGRATIONS, destructiveV7];
   const database = new DatabaseSync(databasePath);
   const migration = applyDatabaseMigrations(database, databasePath, { migrations: registry });
   database.close();
 
-  ok(migration.appliedVersions.join(",") === "6", "only pending destructive v6 is applied");
+  ok(migration.appliedVersions.join(",") === "7", "only pending destructive v7 is applied");
   ok(migration.backups.length === 1, "destructive migration creates exactly one verified backup");
   const backup = migration.backups[0];
   const verified = verifyDatabaseBackup(backup.manifestPath);
-  ok(verified.manifest.sourceSchemaVersion === 5, "backup records the immediately prior schema");
-  ok(verified.manifest.targetSchemaVersion === 6, "backup records the destructive target schema");
+  ok(verified.manifest.sourceSchemaVersion === 6, "backup records the immediately prior schema");
+  ok(verified.manifest.targetSchemaVersion === 7, "backup records the destructive target schema");
   ok(verified.manifest.sourceTaskCount === 1, "backup records the source task count");
   ok(verified.manifest.integrityCheck === "ok", "backup records SQLite integrity evidence");
   ok((await stat(verified.manifest.backupPath)).mode % 0o1000 === 0o600, "backup file is owner-readable only");
   ok((await stat(backup.manifestPath)).mode % 0o1000 === 0o600, "backup manifest is owner-readable only");
 
   const migrated = new DatabaseSync(databasePath, { readOnly: true });
-  ok(schemaVersion(migrated) === 6, "fixture reaches destructive schema v6");
+  ok(schemaVersion(migrated) === 7, "fixture reaches destructive schema v7");
   ok(!tableExists(migrated, "legacy_notes"), "destructive fixture removes its legacy table");
   migrated.close();
 
@@ -140,14 +140,14 @@ try {
     confirmation: DATABASE_RESTORE_CONFIRMATION,
     restoredAt: "2026-08-11T00:30:00.000Z"
   });
-  ok(receipt.restoredSchemaVersion === 5, "restore receipt records schema v5");
+  ok(receipt.restoredSchemaVersion === 6, "restore receipt records schema v6");
   ok(receipt.restoredTaskCount === 1, "restore receipt records one recovered task");
   ok(receipt.restoredSha256 === verified.manifest.backupSha256, "restored database matches backup SHA-256");
-  ok(Boolean(receipt.displacedDatabasePath), "restore preserves the displaced v6 database");
+  ok(Boolean(receipt.displacedDatabasePath), "restore preserves the displaced v7 database");
   ok((await readFile(receipt.receiptPath, "utf8")).includes(receipt.id), "restore writes an auditable receipt");
 
   const restored = new DatabaseSync(databasePath, { readOnly: true });
-  ok(schemaVersion(restored) === 5, "offline restore returns the target to schema v5");
+  ok(schemaVersion(restored) === 6, "offline restore returns the target to schema v6");
   ok(restored.prepare("SELECT body FROM legacy_notes WHERE id = 1").get().body === "retain this pre-migration value", "offline restore recovers destructively removed data");
   restored.close();
   const restoredStore = new SqliteTaskStore(databasePath, { readOnly: true });
@@ -155,7 +155,7 @@ try {
   restoredStore.close();
 
   const displaced = new DatabaseSync(receipt.displacedDatabasePath, { readOnly: true });
-  ok(schemaVersion(displaced) === 6, "pre-restore rescue copy preserves the displaced schema v6 database");
+  ok(schemaVersion(displaced) === 7, "pre-restore rescue copy preserves the displaced schema v7 database");
   ok(!tableExists(displaced, "legacy_notes"), "pre-restore rescue copy preserves the displaced destructive result");
   displaced.close();
 
@@ -171,7 +171,7 @@ try {
     /backup.*failed; migration was not started/
   );
   assertions += 1;
-  ok(schemaVersion(blocked) === 5, "backup failure leaves schema version unchanged");
+  ok(schemaVersion(blocked) === 6, "backup failure leaves schema version unchanged");
   ok(tableExists(blocked, "legacy_notes"), "backup failure executes no destructive SQL");
   blocked.close();
 
@@ -180,29 +180,29 @@ try {
   addLegacyNote(rollbackPath, "transaction rollback must retain this");
   const rollback = new DatabaseSync(rollbackPath);
   const failingRegistry = [...DATABASE_MIGRATIONS, {
-    version: 6,
+    version: 7,
     name: "fixture_failed_destructive_migration",
     safety: "Destructive",
     sql: "DROP TABLE legacy_notes; INSERT INTO definitely_missing(value) VALUES ('fail');"
   }];
   assert.throws(
     () => applyDatabaseMigrations(rollback, rollbackPath, { migrations: failingRegistry }),
-    /migration 6.*failed; verified backup:/
+    /migration 7.*failed; verified backup:/
   );
   assertions += 1;
-  ok(schemaVersion(rollback) === 5, "failed destructive transaction keeps schema version v5");
+  ok(schemaVersion(rollback) === 6, "failed destructive transaction keeps schema version v6");
   ok(tableExists(rollback, "legacy_notes"), "failed destructive transaction rolls back removed data");
   rollback.close();
   const rollbackArtifacts = await readFileNames(join(tempRoot, "database-backups"));
   ok(rollbackArtifacts.some((name) => name.includes("fixture_failed_destructive_migration") && name.endsWith(".manifest.json")), "failed destructive migration preserves its verified backup manifest");
 
   assert.throws(
-    () => validateMigrationRegistry([...DATABASE_MIGRATIONS, { ...destructiveV6, version: 7 }]),
-    /contiguous.*expected 6, found 7/
+    () => validateMigrationRegistry([...DATABASE_MIGRATIONS, { ...destructiveV7, version: 8 }]),
+    /contiguous.*expected 7, found 8/
   );
   assertions += 1;
   assert.throws(
-    () => validateMigrationRegistry([...DATABASE_MIGRATIONS, { ...destructiveV6, safety: "Unknown" }]),
+    () => validateMigrationRegistry([...DATABASE_MIGRATIONS, { ...destructiveV7, safety: "Unknown" }]),
     /safety classification/
   );
   assertions += 1;
@@ -210,7 +210,7 @@ try {
   const pathMismatchDatabase = new DatabaseSync(databasePath, { readOnly: true });
   assert.throws(
     () => createVerifiedMigrationBackup(pathMismatchDatabase, join(tempRoot, "wrong-source.sqlite"), {
-      targetSchemaVersion: 6,
+      targetSchemaVersion: 7,
       targetMigrationName: "wrong_source_fixture"
     }),
     /path does not match the requested backup source/

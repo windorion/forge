@@ -3,7 +3,7 @@
 Document role: maintain the active backlog, priority order, and next concrete
 engineering tasks for Forge.
 
-Last updated: 2026-08-15
+Last updated: 2026-08-22
 
 ## Rule
 
@@ -207,8 +207,8 @@ the core runtime smoke. Preserve these completed boundaries:
 
 - [x] Execute the seven-phase, behavior-preserving `runtime/src/server.ts`
   decomposition in `docs/runtime_server_refactor.md`. The packaged entry is now
-  a one-line bootstrap; the current 62-route contracts, direct unit/coverage
-  gates, and all 24 smoke scripts pass without weakening approval or observer
+  a one-line bootstrap; the current 65-route contracts, direct unit/coverage
+  gates, and all 25 smoke scripts pass without weakening approval or observer
   boundaries.
 - [x] Complete the post-refactor readability pass: split Git workflow into five
   domain services, agent orchestration into queue/loop/step/inspection/recovery,
@@ -260,7 +260,18 @@ the core runtime smoke. Preserve these completed boundaries:
   summaries. Metadata/events remain, the task + receipt write is atomic, the
   native Audit surface exposes the flow, and `smoke:task-retention` proves
   forged/stale rejection plus restart recovery. Remaining product work is the
-  workspace/event/tool/memory policy.
+  broader workspace policy, completed below.
+- [x] Complete workspace-wide retention/export/purge policy v1. The four exact
+  scopes are task events, tool calls, task messages, and rebuildable repository
+  indexes. Defaults are keep indefinitely and never auto-purge. Preview and
+  deterministic Secret-Redaction-v1 export are read-only and observer-safe;
+  exports bind policy/scopes plus source/content SHA-256 and include all
+  unfinished-task evidence, full file/symbol metadata, and an exact trigram
+  digest. Purge requires the still-current saved export, mutates terminal tasks
+  only, preserves unfinished records, clears selected index tables, and commits
+  changed tasks plus an append-only schema-v6 receipt atomically. Native History
+  exposes preview/export/consequence confirmation/purge, focused unit/HTTP/
+  restart/SQLite fixtures pass, and Runtime Security CI runs the smoke.
 - [x] Complete destructive-migration backup/offline-restore proof. Every
   migration is explicitly `Additive` or `Destructive`; the registry is
   contiguous and recorded-name checked. Writable stores enforce one writer
@@ -271,7 +282,7 @@ the core runtime smoke. Preserve these completed boundaries:
   exact target and `RestoreForgeDatabaseBackup`, preserves the displaced
   database, verifies the final file, and writes a receipt. Unit coverage proves
   backup/corruption/lease/WAL/rollback failures; `smoke:database-recovery`
-  executes the real CLI against an isolated fixture-only destructive v6.
+  executes the real CLI against an isolated fixture-only destructive v7.
 - [x] Establish the first performance and resource budget system. A versioned
   local campaign now measures runtime cold start, idle child CPU/RSS,
   retained-task list latency, cold/unchanged repository indexing, Git status/
@@ -305,13 +316,14 @@ the core runtime smoke. Preserve these completed boundaries:
     fixtures plus isolated Runtime evidence for command output, HTTP errors,
     diagnostic settings, audit metadata, raw SQLite inspection, and restart.
     Runtime Security CI now runs both approval lifecycle and Secret Redaction.
-- **Next code-only security/data-lifecycle task — workspace retention:**
-  - Define versioned default retention and export/purge behavior for task
-    events, tool-call evidence, task messages, and repository-memory indexes.
-  - Extend the current export-receipt and offline/restart safeguards without
-    introducing automatic deletion before policy is explicit and reviewable.
-  - Keep account/cloud deletion and commercial privacy promises out of scope
-    until the founder chooses the local-only versus hosted product boundary.
+- **Next code-only security/distribution task — signed-build threat review:**
+  - Inventory the exact app/runtime/helper/widget entitlements, hardened-runtime
+    requirements, Keychain access groups, update trust chain, and owner-only
+    local artifacts without requiring Developer ID credentials.
+  - Add machine-checkable unsigned/ad-hoc versus Developer-ID boundary checks
+    and fail closed when packaging inputs contradict the documented profile.
+  - Keep notarization submission and live WidgetKit discovery out of this slice;
+    those remain credential- and signing-infrastructure-dependent P6 work.
 
 ## P5: Native macOS Product
 

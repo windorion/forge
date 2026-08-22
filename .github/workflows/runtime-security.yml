@@ -53,3 +53,7 @@ jobs:
       - name: Verify secret redaction across diagnostics, errors, output, audit, and persistence
         run: npm run smoke:secret-redaction
         working-directory: runtime
+
+      - name: Verify workspace export, terminal-only purge, index reset, and durable receipts
+        run: npm run smoke:workspace-retention
+        working-directory: runtime

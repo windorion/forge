@@ -285,6 +285,96 @@ struct TaskHistoryPurgeRequest: Encodable {
     var exportReceipt: ExportReceipt
 }
 
+struct WorkspaceHistoryRetentionPolicy: Codable, Hashable {
+    var id: String
+    var version: Int
+    var history: String
+    var defaultDuration: String
+    var automaticPurge: Bool
+    var exportRequired: Bool
+    var terminalTaskDataOnly: Bool
+    var repositoryIndexes: String
+    var supportedScopes: [String]
+}
+
+struct WorkspaceHistoryScopePreview: Codable, Hashable, Identifiable {
+    var id: String { scope }
+    var scope: String
+    var retainedRecords: Int
+    var removableRecords: Int
+    var preservedNonterminalRecords: Int
+    var removableBytes: Int
+    var exportMode: String
+}
+
+struct WorkspaceHistoryRetentionPreview: Codable, Hashable {
+    var policy: WorkspaceHistoryRetentionPolicy
+    var scopes: [String]
+    var eligible: Bool
+    var blocker: String?
+    var taskCount: Int
+    var terminalTaskCount: Int
+    var nonterminalTaskCount: Int
+    var removableRecords: Int
+    var preservedNonterminalRecords: Int
+    var removableBytes: Int
+    var scopePreviews: [WorkspaceHistoryScopePreview]
+    var priorPurges: Int
+}
+
+struct WorkspaceHistoryExportEnvelope: Codable, Hashable {
+    var filename: String
+    var contentType: String
+    var content: String
+    var generatedAt: String
+    var policyID: String
+    var policyVersion: Int
+    var scopes: [String]
+    var sourceSha256: String
+    var contentSha256: String
+    var redactionSummary: String
+    var recoveryBoundary: String
+}
+
+struct WorkspaceHistoryPurgeReceipt: Codable, Hashable, Identifiable {
+    var id: String
+    var policyID: String
+    var policyVersion: Int
+    var scopes: [String]
+    var exportedAt: String
+    var exportSourceSha256: String
+    var exportContentSha256: String
+    var purgedAt: String
+    var taskRecordsAffected: Int
+    var indexRecordsAffected: Int
+    var recordsAffectedByScope: [String: Int]
+    var bytesRemoved: Int
+    var preservedNonterminalRecords: Int
+    var summary: String
+}
+
+struct WorkspaceHistoryPurgeResult: Codable, Hashable {
+    var receipt: WorkspaceHistoryPurgeReceipt
+    var changedTaskIDs: [String]
+    var repositoryIndexesCleared: Bool
+}
+
+struct WorkspaceHistoryPurgeRequest: Encodable {
+    struct ExportReceipt: Encodable {
+        var generatedAt: String
+        var policyID: String
+        var policyVersion: Int
+        var scopes: [String]
+        var sourceSha256: String
+        var contentSha256: String
+    }
+
+    var confirmation = "PurgeWorkspaceHistory"
+    var policyVersion: Int
+    var scopes: [String]
+    var exportReceipt: ExportReceipt
+}
+
 struct TaskQueueEntry: Identifiable, Codable, Hashable {
     var id: String { taskID }
     var taskID: String

@@ -74,6 +74,39 @@ struct RuntimeClient {
         return try JSONDecoder().decode(TaskHistoryPurgeResult.self, from: data)
     }
 
+    func workspaceHistoryRetentionPreview(scopes: [String]) async throws -> WorkspaceHistoryRetentionPreview {
+        let url = try workspaceHistoryURL(path: "history-retention-preview", scopes: scopes)
+        let (data, response) = try await session.data(from: url)
+        try validate(response, data: data)
+        return try JSONDecoder().decode(WorkspaceHistoryRetentionPreview.self, from: data)
+    }
+
+    func workspaceHistoryExport(scopes: [String]) async throws -> WorkspaceHistoryExportEnvelope {
+        let url = try workspaceHistoryURL(path: "history-export", scopes: scopes)
+        let (data, response) = try await session.data(from: url)
+        try validate(response, data: data)
+        return try JSONDecoder().decode(WorkspaceHistoryExportEnvelope.self, from: data)
+    }
+
+    func purgeWorkspaceHistory(requestBody: WorkspaceHistoryPurgeRequest) async throws -> WorkspaceHistoryPurgeResult {
+        let url = baseURL.appending(path: "workspace/purge-history")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(requestBody)
+        let (data, response) = try await session.data(for: request)
+        try validate(response, data: data)
+        return try JSONDecoder().decode(WorkspaceHistoryPurgeResult.self, from: data)
+    }
+
+    private func workspaceHistoryURL(path: String, scopes: [String]) throws -> URL {
+        let url = baseURL.appending(path: "workspace").appending(path: path)
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        components?.queryItems = [URLQueryItem(name: "scopes", value: scopes.joined(separator: ","))]
+        guard let requestURL = components?.url else { throw RuntimeClientError.invalidResponse }
+        return requestURL
+    }
+
     /// Trigger a durable repository re-index (incremental) and return status.
     @discardableResult
     func rebuildIndex() async throws -> RuntimeIndexInfo {

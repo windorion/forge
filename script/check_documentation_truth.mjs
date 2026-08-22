@@ -39,7 +39,8 @@ const [
   runtimePackageSource,
   routeManifest,
   repositoryBaselineSource,
-  providerBaselineSource
+  providerBaselineSource,
+  workspaceRetentionSource
 ] = await Promise.all([
   read("README.md"),
   read("docs/project_status.md"),
@@ -71,7 +72,8 @@ const [
   read("runtime/package.json"),
   read("runtime/src/http/routeManifest.ts"),
   read("docs/reliability/alpha-repository-baseline.json"),
-  read("docs/reliability/alpha-provider-baseline.json")
+  read("docs/reliability/alpha-provider-baseline.json"),
+  read("runtime/src/tasks/workspaceHistoryRetention.ts")
 ]);
 
 const runtimePackage = JSON.parse(runtimePackageSource);
@@ -145,7 +147,7 @@ check("documented smoke count matches package scripts", () => {
 
 const routeCount = [...routeManifest.matchAll(/^\s*(?:get|post|options)\("/gm)].length;
 check("route manifest count remains explicit", () => {
-  assert.equal(routeCount, 62);
+  assert.equal(routeCount, 65);
 });
 
 check("validation approval lifecycle is bounded, documented, and enforced in CI", () => {
@@ -177,6 +179,23 @@ check("secret redaction policy is versioned, cross-layer, and enforced in CI", (
   assert.match(xcodeProject, /SecretRedaction\.swift in Sources/);
   assert.match(securityGuide, /classification evidence contains only kind and count/);
   assert.match(runtimeSecurityWorkflow, /npm run smoke:secret-redaction/);
+});
+
+check("workspace retention is versioned, export-gated, terminal-safe, and enforced in CI", () => {
+  assert.equal(
+    runtimePackage.scripts["smoke:workspace-retention"],
+    "npm run build && node scripts/workspace-history-retention-fixtures.mjs"
+  );
+  assert.match(workspaceRetentionSource, /id: "forge-workspace-retention"/);
+  assert.match(workspaceRetentionSource, /version: 1/);
+  assert.match(workspaceRetentionSource, /automaticPurge: false/);
+  assert.match(workspaceRetentionSource, /terminalTaskDataOnly: true/);
+  assert.match(workspaceRetentionSource, /ManifestWithRebuildableTrigramDigest/);
+  assert.match(workspaceRetentionSource, /confirmation !== "PurgeWorkspaceHistory"/);
+  assert.match(swiftWorkspaceModel, /exportWorkspaceHistory/);
+  assert.match(swiftWorkspaceModel, /purgeExportedWorkspaceHistory/);
+  assert.match(securityGuide, /forge-workspace-retention/);
+  assert.match(runtimeSecurityWorkflow, /npm run smoke:workspace-retention/);
 });
 
 const unitTestCount = (await readdir(resolve(repoRoot, "runtime", "scripts")))

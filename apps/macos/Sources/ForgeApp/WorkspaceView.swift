@@ -1467,11 +1467,13 @@ private struct TaskQueueView: View {
 }
 
 private struct TaskHistoryView: View {
+    @EnvironmentObject private var workspace: WorkspaceModel
     var tasks: [ForgeTask]
     var openTask: (ForgeTask) -> Void
 
     @State private var filter = HistoryFilter.all
     @State private var search = ""
+    @State private var showingWorkspacePurgeConfirmation = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1519,6 +1521,8 @@ private struct TaskHistoryView: View {
             .overlay(alignment: .bottom) {
                 Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
             }
+
+            workspaceRetentionBar
 
             HStack(spacing: 0) {
                 Text("ID").frame(width: 62, alignment: .leading)
@@ -1592,6 +1596,64 @@ private struct TaskHistoryView: View {
             }
         }
         .background(ForgeDesign.paper)
+        .onAppear { workspace.refreshWorkspaceHistoryRetention() }
+        .confirmationDialog(
+            "Purge exported workspace history?",
+            isPresented: $showingWorkspacePurgeConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Purge terminal history and indexes", role: .destructive) {
+                workspace.purgeExportedWorkspaceHistory()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This deletes selected events, tool calls, and messages only from terminal tasks, and clears the rebuildable repository index. Unfinished-task evidence, task metadata, and an append-only purge receipt remain. The saved export must still match current data.")
+        }
+    }
+
+    private var workspaceRetentionBar: some View {
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 7) {
+                    Text("WORKSPACE RETENTION")
+                        .font(.custom("JetBrains Mono", fixedSize: 9.5).weight(.bold))
+                        .tracking(0.8)
+                    Text("POLICY V\(workspace.workspaceHistoryRetentionPreview?.policy.version ?? 1)")
+                        .font(.custom("JetBrains Mono", fixedSize: 8.5).weight(.bold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(ForgeDesign.ink)
+                        .foregroundStyle(Color.white)
+                }
+                if let preview = workspace.workspaceHistoryRetentionPreview {
+                    Text("keep by default · \(preview.removableRecords) removable · \(preview.preservedNonterminalRecords) unfinished records preserved · \(preview.priorPurges) prior purges")
+                        .font(.custom("JetBrains Mono", fixedSize: 9.5))
+                        .foregroundStyle(ForgeDesign.muted)
+                } else {
+                    Text(workspace.isLoadingWorkspaceHistoryRetention ? "loading retained evidence…" : "retention preview unavailable")
+                        .font(.custom("JetBrains Mono", fixedSize: 9.5))
+                        .foregroundStyle(ForgeDesign.muted)
+                }
+            }
+            Spacer()
+            Button(workspace.isExportingWorkspaceHistory ? "EXPORTING…" : "EXPORT EVIDENCE") {
+                workspace.exportWorkspaceHistory()
+            }
+            .buttonStyle(ForgeSecondaryButtonStyle())
+            .disabled(workspace.isExportingWorkspaceHistory || workspace.isPurgingWorkspaceHistory)
+
+            Button(workspace.isPurgingWorkspaceHistory ? "PURGING…" : "PURGE EXPORTED") {
+                showingWorkspacePurgeConfirmation = true
+            }
+            .buttonStyle(ForgeSecondaryButtonStyle())
+            .disabled(!workspace.canPurgeExportedWorkspaceHistory || workspace.isPurgingWorkspaceHistory)
+        }
+        .padding(.horizontal, 20)
+        .frame(height: 58)
+        .background(Color(red: 252 / 255, green: 250 / 255, blue: 239 / 255))
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(ForgeDesign.ink).frame(height: 1.5)
+        }
     }
 
     private var filteredTasks: [ForgeTask] {

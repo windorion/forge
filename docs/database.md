@@ -58,6 +58,13 @@ source hash, purge time, affected-record count, removed-byte count, and the
 same bounded receipt JSON retained on the task snapshot. Task replacement and
 receipt insertion share one SQLite transaction.
 
+Schema v6 adds `workspace_history_purges`, the append-only receipt authority for
+policy `forge-workspace-retention` v1. A receipt binds exact scopes, policy
+version, export timestamp, source/content SHA-256, per-scope task/index record
+counts, estimated logical bytes removed, unfinished records preserved, and the
+full bounded receipt JSON. Terminal-task replacements, selected repository-index
+table clears, and receipt insertion share one `BEGIN IMMEDIATE` transaction.
+
 This is intentionally smaller than the full conceptual schema below. Future
 migrations should split runs, messages, tool calls, commands, file changes,
 and approvals into dedicated auditable tables.
@@ -333,8 +340,9 @@ Do not embed secrets or ignored files.
 
 ## Retention Rules
 
-- Keep task history by default. There is no timer, age threshold, background
-  cleanup, or startup purge while product retention policy is undecided.
+- Policy `forge-workspace-retention` v1 keeps task and workspace history
+  indefinitely by default. There is no timer, age threshold, background
+  cleanup, or startup purge; `automaticPurge` is explicitly false.
 - Each task-command run is already bounded to at most 80 output chunks and
   24,000 retained characters; each chunk is at most 4,000 characters.
 - `GET /tasks/:taskID/history-retention-preview` reports the current local
@@ -350,15 +358,39 @@ Do not embed secrets or ignored files.
   timestamps, approvals, events, proposal evidence, and a durable purge
   receipt. The macOS Audit surface unlocks the action only after the user has
   actually saved the current export in that app session.
-- Allow users to delete workspace memory.
+- Workspace scope is exact and ordered: `TaskEvents`, `ToolCalls`,
+  `TaskMessages`, and `RepositoryIndexes`. `GET
+  /workspace/history-retention-preview` reports retained/removable records,
+  estimated removable bytes, records protected because their tasks are not
+  terminal, and prior receipt count per selected scope.
+- `GET /workspace/history-export` returns deterministic JSON under Secret
+  Redaction v1 plus policy/scopes, generated time, source/content SHA-256, all
+  selected evidence for both terminal and unfinished tasks, full indexed-file
+  and symbol metadata, and an exact digest/count for rebuildable trigram
+  postings. It is portable audit evidence, not an automatic restore bundle.
+- `POST /workspace/purge-history` requires `PurgeWorkspaceHistory`, active
+  policy version, exact selected scopes, and a matching saved-export receipt.
+  It recomputes source and content hashes at the original export timestamp;
+  stale, forged, differently scoped, or differently versioned receipts fail
+  before mutation.
+- Workspace purge removes selected task arrays only from Completed, Failed, or
+  Cancelled tasks. It never rewrites an unfinished task's events, tool calls,
+  messages, objective, or other evidence. Repository index files, symbols,
+  trigrams, and metadata are rebuildable derived data and may be cleared when
+  explicitly selected; the index then reports rebuild required.
+- Primary runtime commits all changed task snapshots, selected index clears,
+  and one append-only schema-v6 receipt atomically. Observer runtimes may
+  preview and export committed state but reject purge as a mutation.
 - Respect `.gitignore` and future Forge ignore rules.
 - Do not retain sensitive command output forever without controls.
 - Secret Redaction v1 reduces credential exposure before retention, but does
-  not replace workspace-wide retention, deletion, or private-content policy.
+  not make arbitrary private repository/task prose safe to share. The save
+  panel and export metadata require user review before distribution.
 
-Still undecided: default retention duration, workspace-wide purge, event/tool
-history compaction, export/purge of repository memory, and commercial privacy
-policy. The current implementation deliberately does not infer those choices.
+Still undecided: commercial privacy language, hosted-account deletion SLAs,
+semantic-memory retention once that product exists, and explicit cleanup for
+migration backups/rescue artifacts. Policy v1 deliberately makes no cloud or
+commercial promise.
 
 ## Migration Rules
 
@@ -369,8 +401,8 @@ policy. The current implementation deliberately does not infer those choices.
   The registry must be contiguous from version 1; missing safety, gaps,
   mismatched recorded names, and newer unsupported versions fail closed.
 - Writable primary runtimes migrate missing supported versions in order.
-  Immediately prior schema v4 is rehearsed in `task-store-test.mjs`: the v5
-  receipt table is recreated while the existing task payload survives.
+  Prior schema v4 and v5 states are rehearsed in `task-store-test.mjs`: v5 and
+  v6 receipt tables are recreated while existing task payloads survive.
 - Read-only observers never migrate. They reject an older database with an
   actionable instruction to start the primary runtime first, then open the
   migrated database normally.
@@ -395,12 +427,12 @@ policy. The current implementation deliberately does not infer those choices.
   prepares and verifies a same-directory copy before atomically replacing the
   target, preserves the displaced database as a rescue artifact, verifies the
   final database again, and writes a restore receipt.
-- Schema v5 remains additive; the destructive v6 used by tests is an isolated
+- Schemas v5 and v6 remain additive; the destructive v7 used by tests is an isolated
   fixture, not a shipped product migration. `database-backup-test.mjs` covers
   the failure matrix, and `smoke:database-recovery` exercises the actual CLI.
 - Migrations must remain reversible when practical even though verified backup
   is mandatory for every destructive classification.
 - Migration backups, stale writer-lease evidence, displaced databases, and
-  restore receipts are not automatically deleted while workspace retention is
-  undecided. They can contain complete private task history and require an
-  explicit future retention/cleanup policy.
+  restore receipts are outside workspace policy v1 and are not automatically
+  deleted. They can contain complete private task history and require a
+  separate explicit artifact-cleanup policy.

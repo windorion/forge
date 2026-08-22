@@ -107,7 +107,7 @@ runtime/src/
     createRequestHandler.ts         CORS, OPTIONS, observer guard, error envelope
     runtimeRoutes.ts                seven-group route composer
     routes/                         system/task/agent/edit/validation/git/settings
-    routeManifest.ts                explicit 62-route public contract
+    routeManifest.ts                explicit 65-route public contract
     request.ts, response.ts         JSON transport primitives
   tasks/
     taskState.ts                    persistence + event publication owner

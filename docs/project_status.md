@@ -3,7 +3,7 @@
 Document role: record the current product state, objective completion estimate,
 major gaps, and what "finished" means at each product horizon.
 
-Last updated: 2026-08-15
+Last updated: 2026-08-22
 
 ## One-Line Status
 
@@ -92,6 +92,15 @@ Implemented:
   timestamps, events, and an atomic schema-v5 receipt remain. The native Audit
   surface exposes preview/export/confirm/purge, schema v4 → v5 is rehearsed,
   and read-only observers refuse to migrate older stores.
+- Workspace retention policy `forge-workspace-retention` v1 now makes the
+  broader lifecycle explicit for task events, tool calls, task messages, and
+  repository indexes: retain indefinitely by default, never auto-purge,
+  preview/export in observer mode, and require a current deterministic,
+  Secret-Redaction-v1 export receipt before mutation. Purge touches terminal
+  tasks only, preserves all unfinished evidence, clears selected rebuildable
+  index tables, and writes task/index changes plus an append-only receipt in
+  one schema-v6 transaction. Native History presents the preview, export,
+  consequence confirmation, and guarded purge.
 - Verified destructive-migration backup and offline restore. Every migration
   now declares `Additive` or `Destructive`, and writable stores hold a single
   owner-only writer lease while observers may continue reading. Before any
@@ -101,7 +110,7 @@ Implemented:
   live writers, non-empty WAL, wrong confirmation/target, and corrupt evidence,
   then verifies a prepared copy, preserves the displaced database, verifies
   the restored file, and writes a receipt. Unit coverage includes rollback and
-  every rejection boundary; a fixture-only destructive-v6 smoke restores its
+  every rejection boundary; a fixture-only destructive-v7 smoke restores its
   deleted data and persisted Forge task through the real CLI.
 - Repeatable Alpha repository reliability campaign. Four isolated committed
   Git repositories exercise TypeScript exact replacement, Python ordered
@@ -192,7 +201,7 @@ Implemented:
   services. A second readability pass split Git workflow, agent orchestration,
   edit operations, validation/process execution, route groups, and composition
   into narrower modules; `createForgeRuntime.ts` is now 476 lines. The
-  62-route executable contract, all 24 smoke scripts, and all 61 Swift tests
+  65-route executable contract, all 25 smoke scripts, and all 62 Swift tests
   pass.
 - Centralized Secret Redaction policy v1 now protects retained/copyable
   evidence rather than relying on audit-export-only regexes. Runtime command
@@ -491,13 +500,13 @@ use different denominators and must not be added together.
 
 | Horizon | Estimate | Meaning |
 | --- | ---: | --- |
-| Trust/runtime foundation | 95-98% | Local runtime, task state, safety-classified migrations, verified pre-destructive backup/offline restore, single-writer leases, keep-by-default retention, export-before-purge, bounded/revocable command approvals, centralized pre-persistence Secret Redaction, review gates, restricted edits, validation, cancellation, guarded Git/PR actions, supervised queue grants, repository-scoped routing, diagnostics, and reliability baselines are real. |
+| Trust/runtime foundation | 96-99% | Local runtime, task state, safety-classified migrations, verified pre-destructive backup/offline restore, single-writer leases, versioned task/workspace retention, deterministic export-before-purge, bounded/revocable command approvals, centralized pre-persistence Secret Redaction, review gates, restricted edits, validation, cancellation, guarded Git/PR actions, supervised queue grants, repository-scoped routing, diagnostics, and reliability baselines are real. |
 | Coding-agent demo V0 behavior | 100% | All documented functional acceptance criteria are implemented and smoke-covered. |
 | Primary V0 handoff UI | 100% | All five primary screens are `Verified` with rendered-comparison evidence in `docs/verification/`. |
 | Full 43-screen handoff UI | 95-97% | 41 of 43 screens Verified with rendered-comparison evidence (docs/verification/). Remaining: 6a Partial (OAuth configuration, Device Flow, standards-compliant polling, Keychain persistence, and connected UI are implemented and unit-tested; a live grant still needs the founder GitHub OAuth Client ID with Device Flow enabled); 35a a documented platform-blocked widget-signing descope (P6). |
 | Useful developer alpha | 72-80% | Forge repeats the reviewed lifecycle across deterministic local-provider and mock-OpenAI adapter corpora, including Unified Diff, approved commands, repair/rerun, fork-aware PR supervision, repository-scoped background command/Git review, and fair restart-safe dispatch; it still needs broader autonomous tool use and repeated live-model success on pinned public repositories. |
-| Commercial beta | 29-34% | Versioned migration, verified pre-destructive backup/offline restore, explicit command-output retention, bounded/revocable command approvals, centralized Secret Redaction, and artifact-producing runtime performance/security gates now exist; Forge still needs signed packaging, production onboarding/GitHub/provider proof, workspace-wide data-lifecycle policy, packaged-app profiling, operations polish, and repeated real-repository success. |
-| Polished v1 product | 28-34% | The real queue, local indexes, session-authorized runtimes, background task/command/Git review routing, fair supervised grants, bounded reconnect/crash recovery telemetry, reportable soak tooling, centralized Secret Redaction, and a compiled action-level XCUITest harness exist; full-duration/passing evidence, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
+| Commercial beta | 31-36% | Versioned migration/backup/restore, task- and workspace-wide retention/export/purge, bounded/revocable command approvals, centralized Secret Redaction, and artifact-producing runtime performance/security gates now exist; Forge still needs signed packaging, production onboarding/GitHub/provider proof, packaged-app profiling, operations polish, and repeated real-repository success. |
+| Polished v1 product | 30-36% | The real queue, local indexes, explicit data lifecycle, session-authorized runtimes, background task/command/Git review routing, fair supervised grants, bounded reconnect/crash recovery telemetry, reportable soak tooling, centralized Secret Redaction, and a compiled action-level XCUITest harness exist; full-duration/passing evidence, signed distribution, semantic memory, hosted collaboration, WidgetKit, and commercial polish remain. |
 
 ## Component Gap Matrix
 
@@ -509,8 +518,8 @@ finish line.
 | Component | Readiness | Gap | Strongest evidence today | Largest remaining gap |
 | --- | ---: | ---: | --- | --- |
 | Product direction and task-first UX | 90-95% | 5-10% | Durable product principles, complete V0 flow, 41 rendered-verified handoff states. | Resolve the account/team boundary and validate the narrow daily-use task with external users. |
-| Runtime, task state, recovery | 95-97% | 3-5% | 62-route contract, SQLite schema v5 with safety-classified ordered transactions, v4 upgrade, verified pre-destructive snapshots, offline restore receipts, single-writer lease, atomic purge receipts, cancellation, watchdog and journal recovery. | Normalize run/tool tables, decide workspace-wide retention/export/purge, finish the full-duration soak, and add production telemetry. |
-| Security, permissions, and audit | 97-99% | 1-3% | Explicit plan/edit/command/git/PR gates, bounded task command grants with expiry/append-only revocation/restart proof, observer runtimes, owner-only writer/backup artifacts, verified offline restore, centralized versioned Secret Redaction before command/SSE/SQLite/diagnostic evidence, redacted exports with source receipts, export-before-command-output-purge, bounded PR refresh attempts. | Workspace/event/tool retention policy, repository/session approval stores only if product evidence needs them, and signed-build threat review. |
+| Runtime, task state, recovery | 97-99% | 1-3% | 65-route contract, SQLite schema v6 with safety-classified ordered transactions, v4/v5 upgrades, verified pre-destructive snapshots, offline restore receipts, single-writer lease, atomic task/workspace purge receipts, cancellation, watchdog and journal recovery. | Normalize run/tool tables if query evidence requires it, finish the full-duration soak, and add production telemetry. |
+| Security, permissions, and audit | 98-99% | 1-2% | Explicit plan/edit/command/git/PR gates, bounded task grants, observer runtimes, owner-only writer/backup artifacts, verified restore, centralized Secret Redaction, deterministic versioned task/workspace export receipts, terminal-only history purge, unfinished-evidence preservation, and bounded PR refresh. | Repository/session approval stores only if product evidence needs them, commercial privacy text, and signed-build threat review. |
 | Handoff UI fidelity | 95-97% | 3-5% | Five primary screens and 41 of 43 total states are Verified. | Live `6a` OAuth evidence and signed `35a` WidgetKit packaging. |
 | Native macOS behavior and integrations | 83-90% | 10-17% | SwiftUI app, menus, shortcuts, notifications, Spotlight, CLI, onboarding, settings, managed runtimes, fair-queue state, rendered routed-tab transitions, three compiled `XCUIApplication` methods, and one passing action-level path. | Archive the full UI-test suite in an unattended window, final human-input checks, deeper Finder/IDE handoff, WidgetKit, and signed-package proof. |
 | Agent and live-model coding quality | 58-68% | 32-42% | Bounded plan/context/step loop, strict structured-output recovery, mock-OpenAI protocol campaign. | Pinned public-repository live-model evidence, broader tool choice, patch recovery, and measured quality/cost. |
@@ -518,7 +527,7 @@ finish line.
 | Repository understanding | 68-78% | 22-32% | Durable file metadata, lightweight symbols, trigram text index, bounded live verification. | Semantic/hybrid retrieval, dependency relationships, higher-fidelity parsing, ranking evaluation, and large-repo budgets. |
 | Git and GitHub workflow | 88-93% | 7-12% | Status/diff, guarded commit/branch/push, routed background preflights/actions, fork-aware PR publication, reviews/checks/mergeability evidence, bounded background refresh. | Live OAuth proof, hosted auth/network/branch-protection fixtures, richer provider portability, and merge/update policy decisions. |
 | Multi-task and multi-repository supervision | 94-97% | 3-6% | Persisted queues, observers, session authorization, routed task/command/Git review, serialized mutations, fair grants, a passing 300-second/1,086-restart soak, one action-level UI path, capped reconnect backoff, and a passing process-level transport/termination/relaunch fixture with zero mutation requests. | Full six-hour soak and complete passing UI evidence under appropriate unattended/power conditions. |
-| Reliability, evaluation, and test evidence | 92-96% | 4-8% | 26 runtime unit files, 24 smoke scripts, 61 Swift tests, 3 compiled XCUITest methods, one passing action path, approval expiry/revocation/restart E2E, direct/encoded/structured Secret Redaction plus SQLite restart E2E, destructive-migration backup/CLI recovery, retention/restart E2E, fork/mock-GitHub E2E, two reliability campaigns, versioned runtime performance profiles with hosted artifact/security gates, two-runtime fixtures, process reconnect coverage, and soak reports. | Live-model corpus, wider real repositories, hosted-network cases, complete UI archives, signed-app/real-repository performance evidence, and a completed multi-hour soak. |
+| Reliability, evaluation, and test evidence | 93-97% | 3-7% | 27 runtime unit files, 25 smoke scripts, 62 Swift tests, 3 compiled XCUITest methods, one passing action path, approval and Secret Redaction E2E, destructive-migration recovery, task/workspace retention and restart E2E, fork/mock-GitHub E2E, two reliability campaigns, hosted performance/security gates, two-runtime fixtures, process reconnect coverage, and soak reports. | Live-model corpus, wider real repositories, hosted-network cases, complete UI archives, signed-app/real-repository performance evidence, and a completed multi-hour soak. |
 | Distribution, updates, and operations | 25-35% | 65-75% | App-managed/bundled-runtime path, update UI/appcast client, diagnostics surfaces. | Developer ID, hardened runtime, notarization, DMG, signed appcast install/relaunch, crash reporting, release rehearsal. |
 | Account, sync, and collaboration services | 10-20% | 80-90% | Honest local-only continuation and GitHub/provider credentials in Keychain. | Decide whether accounts exist; if yes, build verified email identity, sync, sharing, tenancy, and deletion/privacy APIs. |
 | Pricing, packaging, and go-to-market | 20-30% | 70-80% | Product category, personas, positioning, and business-model hypotheses are documented. | Choose solo/team wedge, open-core boundary, packaging, price, entitlement/billing, support, and launch evidence. |

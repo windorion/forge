@@ -508,6 +508,38 @@ export interface TaskHistoryPurgeReceipt {
   summary: string;
 }
 
+export type WorkspaceHistoryScope =
+  | "TaskEvents"
+  | "ToolCalls"
+  | "TaskMessages"
+  | "RepositoryIndexes";
+
+export interface WorkspaceHistoryExportReceipt {
+  generatedAt?: string;
+  policyID?: string;
+  policyVersion?: number;
+  scopes?: WorkspaceHistoryScope[];
+  sourceSha256?: string;
+  contentSha256?: string;
+}
+
+export interface WorkspaceHistoryPurgeReceipt {
+  id: string;
+  policyID: string;
+  policyVersion: number;
+  scopes: WorkspaceHistoryScope[];
+  exportedAt: string;
+  exportSourceSha256: string;
+  exportContentSha256: string;
+  purgedAt: string;
+  taskRecordsAffected: number;
+  indexRecordsAffected: number;
+  recordsAffectedByScope: Record<WorkspaceHistoryScope, number>;
+  bytesRemoved: number;
+  preservedNonterminalRecords: number;
+  summary: string;
+}
+
 export interface CommandRerunEvidence {
   id: string;
   sourceTaskCommandRunID: string;
@@ -1254,6 +1286,13 @@ export interface PurgeTaskHistoryRequest {
     sourceTaskUpdatedAt?: string;
     sourceSha256?: string;
   };
+}
+
+export interface PurgeWorkspaceHistoryRequest {
+  confirmation?: string;
+  policyVersion?: number;
+  scopes?: WorkspaceHistoryScope[];
+  exportReceipt?: WorkspaceHistoryExportReceipt;
 }
 
 export interface RerunRepairCommandRequest {

@@ -207,6 +207,90 @@ final class RuntimeClientTests: XCTestCase {
         XCTAssertEqual(exportReceipt["sourceTaskUpdatedAt"] as? String, preview.taskUpdatedAt)
     }
 
+    func testWorkspaceHistoryPreviewExportAndPurgeUseVersionedReceiptContract() async throws {
+        let recorder = RequestRecorder()
+        let scopes = ["TaskEvents", "ToolCalls", "TaskMessages", "RepositoryIndexes"]
+        let (client, session) = makeClient { request in
+            recorder.record(request)
+            switch (request.httpMethod, request.url?.path) {
+            case ("GET", "/api/workspace/history-retention-preview"):
+                return Self.response(request, status: 200, body: """
+                {
+                  "policy":{"id":"forge-workspace-retention","version":1,"history":"KeepByDefault","defaultDuration":"IndefiniteUntilExplicitPurge","automaticPurge":false,"exportRequired":true,"terminalTaskDataOnly":true,"repositoryIndexes":"RebuildableDerivedData","supportedScopes":["TaskEvents","ToolCalls","TaskMessages","RepositoryIndexes"]},
+                  "scopes":["TaskEvents","ToolCalls","TaskMessages","RepositoryIndexes"],"eligible":true,
+                  "taskCount":3,"terminalTaskCount":2,"nonterminalTaskCount":1,"removableRecords":12,
+                  "preservedNonterminalRecords":4,"removableBytes":2048,
+                  "scopePreviews":[{"scope":"TaskEvents","retainedRecords":5,"removableRecords":4,"preservedNonterminalRecords":1,"removableBytes":512,"exportMode":"FullEvidence"}],
+                  "priorPurges":0
+                }
+                """)
+            case ("GET", "/api/workspace/history-export"):
+                return Self.response(request, status: 200, body: """
+                {
+                  "filename":"forge-workspace-history.json","contentType":"application/json","content":"{}\\n",
+                  "generatedAt":"2026-08-22T12:00:00Z","policyID":"forge-workspace-retention","policyVersion":1,
+                  "scopes":["TaskEvents","ToolCalls","TaskMessages","RepositoryIndexes"],
+                  "sourceSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "contentSha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "redactionSummary":"Known credentials are replaced.","recoveryBoundary":"Evidence export, not a restore bundle."
+                }
+                """)
+            default:
+                return Self.response(request, status: 200, body: """
+                {
+                  "receipt":{"id":"purge-1","policyID":"forge-workspace-retention","policyVersion":1,
+                    "scopes":["TaskEvents","ToolCalls","TaskMessages","RepositoryIndexes"],
+                    "exportedAt":"2026-08-22T12:00:00Z",
+                    "exportSourceSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "exportContentSha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "purgedAt":"2026-08-22T12:01:00Z","taskRecordsAffected":8,"indexRecordsAffected":4,
+                    "recordsAffectedByScope":{"TaskEvents":4,"ToolCalls":2,"TaskMessages":2,"RepositoryIndexes":4},
+                    "bytesRemoved":2048,"preservedNonterminalRecords":4,"summary":"Purged exported history."},
+                  "changedTaskIDs":["task-1"],"repositoryIndexesCleared":true
+                }
+                """)
+            }
+        }
+        defer { session.invalidateAndCancel() }
+
+        let preview = try await client.workspaceHistoryRetentionPreview(scopes: scopes)
+        XCTAssertEqual(preview.policy.version, 1)
+        XCTAssertEqual(preview.preservedNonterminalRecords, 4)
+        var components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(recorder.lastRequest?.url), resolvingAgainstBaseURL: false))
+        XCTAssertEqual(components.path, "/api/workspace/history-retention-preview")
+        XCTAssertEqual(components.queryItems, [URLQueryItem(name: "scopes", value: scopes.joined(separator: ","))])
+
+        let export = try await client.workspaceHistoryExport(scopes: scopes)
+        XCTAssertEqual(export.policyID, preview.policy.id)
+        XCTAssertEqual(export.contentSha256, String(repeating: "b", count: 64))
+        components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(recorder.lastRequest?.url), resolvingAgainstBaseURL: false))
+        XCTAssertEqual(components.path, "/api/workspace/history-export")
+
+        let receipt = WorkspaceHistoryPurgeRequest.ExportReceipt(
+            generatedAt: export.generatedAt,
+            policyID: export.policyID,
+            policyVersion: export.policyVersion,
+            scopes: export.scopes,
+            sourceSha256: export.sourceSha256,
+            contentSha256: export.contentSha256
+        )
+        let result = try await client.purgeWorkspaceHistory(
+            requestBody: .init(policyVersion: export.policyVersion, scopes: export.scopes, exportReceipt: receipt)
+        )
+        XCTAssertTrue(result.repositoryIndexesCleared)
+        let request = try XCTUnwrap(recorder.lastRequest)
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.url?.path, "/api/workspace/purge-history")
+        XCTAssertNil(request.url?.query)
+        let body = try jsonObject(try XCTUnwrap(recorder.lastBody))
+        XCTAssertEqual(body["confirmation"] as? String, "PurgeWorkspaceHistory")
+        XCTAssertEqual(body["policyVersion"] as? Int, 1)
+        XCTAssertEqual(body["scopes"] as? [String], scopes)
+        let exportReceipt = try XCTUnwrap(body["exportReceipt"] as? [String: Any])
+        XCTAssertEqual(exportReceipt["contentSha256"] as? String, export.contentSha256)
+        XCTAssertEqual(exportReceipt["policyID"] as? String, export.policyID)
+    }
+
     func testHTTPFailuresPreferJSONErrorThenPlainText() async throws {
         let (jsonClient, jsonSession) = makeClient { request in
             Self.response(request, status: 409, body: #"{"error":"  stale review  "}"#)

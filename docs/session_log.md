@@ -7033,3 +7033,70 @@ Next:
   retention and export/purge behavior for events, tool calls, task messages,
   and repository-memory indexes, without automatic deletion before policy is
   explicit.
+
+## 2026-08-22 18:08:43 +0200 (CEST)
+
+Conversation summary:
+
+- Completed the next API-free roadmap data-lifecycle task: versioned
+  workspace-wide retention, deterministic export, guarded purge, native History
+  controls, schema migration, regression coverage, and synchronized product
+  documentation. No desktop or browser automation was used.
+
+Done:
+
+- Added `forge-workspace-retention` policy v1 with four exact scopes:
+  `TaskEvents`, `ToolCalls`, `TaskMessages`, and `RepositoryIndexes`. The policy
+  keeps data indefinitely by default, disables automatic purge, requires export
+  before deletion, protects every unfinished-task record, and marks repository
+  indexes as rebuildable derived data.
+- Added observer-readable retention preview and deterministic JSON export.
+  Exports apply Secret Redaction v1, bind policy/scopes and source/content
+  SHA-256, include selected terminal and unfinished task evidence plus full
+  file/symbol metadata, and represent trigram postings with an exact digest.
+- Added the primary-only workspace purge endpoint with exact confirmation,
+  policy/scope checks, and stale/forged source/content receipt rejection. It
+  clears selected arrays only on Completed/Failed/Cancelled tasks and can clear
+  selected index tables; objectives and all unfinished-task evidence remain.
+- Advanced production SQLite to schema v6 with append-only workspace purge
+  receipts. Changed task snapshots, index-table clears, and receipt insertion
+  share one `BEGIN IMMEDIATE` transaction. Destructive migration fixtures moved
+  to isolated v7 while real backup/offline-restore proof continues to restore
+  production v6.
+- Added native RuntimeClient models/methods and a History retention bar with
+  policy preview, local save panel, session-bound export receipt, explicit
+  destructive confirmation, guarded purge, task refresh, and index-rebuild
+  messaging. Added a Swift HTTP contract test for preview/export/purge.
+- Added pure policy tests, TaskStore/migration/atomicity coverage, and an
+  isolated HTTP/restart/raw-SQLite/observer fixture. Added the workspace smoke
+  to `smoke:all` and Runtime Security CI. Updated the executable contract from
+  62 to 65 routes.
+- Updated README, TODO, roadmap, project status, database, local-first,
+  security, runtime architecture, development, refactor/architecture, Runtime
+  README, and documentation-truth checks. Current synchronized evidence is 65
+  routes, 25 smoke scripts, 27 runtime unit files, and 62 Swift tests. Readiness
+  now records trust/runtime 96-99%, commercial beta 31-36%, polished v1 30-36%,
+  runtime/recovery 97-99%, security/audit 98-99%, and reliability 93-97%.
+- Passed documentation truth and diff checks; TypeScript check/build; 34 Node
+  subtests across 27 unit files; unit coverage at 79.26% lines overall with
+  workspace retention at 96.17%; all 25 smoke scripts in one serial run; all 62
+  Swift tests; and unsigned Xcode app-host/XCUITest `build-for-testing`.
+
+Not done:
+
+- Policy v1 is local workspace lifecycle, not a commercial privacy policy,
+  hosted-account deletion SLA, semantic-memory policy, restore bundle, or
+  automatic cleanup for migration backups/displaced rescue databases.
+- Live provider corpus, signed/notarized packaging, full-duration Mission
+  Control soak, complete action-level UI archive, OAuth live grant, and signed
+  WidgetKit discovery remain external-input or later-roadmap work.
+- Hosted CI for the final commit has not yet run at this entry point.
+
+Next:
+
+- Commit and push this completed slice, then verify hosted Runtime Security,
+  Runtime Performance, and Swift Tests on the exact final commit.
+- The next API-free roadmap task is a signed-build threat review: inventory
+  app/runtime/helper/widget entitlements, hardened-runtime and Keychain/update
+  trust boundaries, then add machine-checkable unsigned/ad-hoc versus
+  Developer-ID packaging checks without requiring signing credentials.

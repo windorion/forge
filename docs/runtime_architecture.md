@@ -657,10 +657,27 @@ saves the task with an append-only schema-v5 purge receipt. `smoke:task-retentio
 proves forged receipt rejection, the retained boundary, atomic persistence,
 and restart recovery.
 
+Workspace retention is the versioned policy layer above that focused task
+control. `GET /workspace/history-retention-preview` and `GET
+/workspace/history-export` accept exact ordered scopes for task events, tool
+calls, task messages, and repository indexes. Policy v1 keeps data indefinitely,
+never auto-purges, protects unfinished-task evidence, applies Secret Redaction
+v1, exports full file/symbol metadata plus an exact rebuildable-trigram digest,
+and binds source/content SHA-256. Primary-only `POST
+/workspace/purge-history` recomputes the deterministic export at its original
+timestamp, requires `PurgeWorkspaceHistory`, and rejects policy/scope/hash
+drift. The task service changes selected arrays on terminal tasks only;
+`TaskStore.saveWorkspaceHistoryPurge` commits task upserts, selected index-table
+clears, and one append-only schema-v6 receipt atomically. The route emits
+`task.updated` per changed task and `workspace.history.purged` once. Observer
+GETs reload committed tasks; the global read-only boundary rejects POST.
+`smoke:workspace-retention` covers stale/forged receipts, raw SQLite evidence,
+restart durability, index rebuild state, and the observer boundary.
+
 SQLite schema changes now run from an ordered migration registry, one
-transaction per missing version. Schema v5 is additive. Unit coverage
-rehearses v4 → v5 with an existing task, rejects migration from a read-only
-observer, and verifies the recovered task plus new receipt table.
+transaction per missing version. Schemas v5 and v6 are additive. Unit coverage
+rehearses prior stores with existing tasks, rejects migration from a read-only
+observer, and verifies recovered tasks plus both receipt tables.
 
 Each migration also declares `Additive` or `Destructive`. Writable task stores
 hold an owner-only single-writer lease while still allowing observer reads. A
@@ -675,8 +692,8 @@ the exact manifest target and `RestoreForgeDatabaseBackup`, refuses active
 writer leases and non-empty WAL, verifies a prepared same-directory copy,
 atomically displaces the current database, verifies the restored file, and
 writes a receipt. The displaced database remains available as rescue evidence.
-The destructive v6 used by unit/smoke coverage is fixture-only; production
-schema remains v5.
+The destructive v7 used by unit/smoke coverage is fixture-only; production
+schema remains v6.
 
 ### Agent Run Step
 

@@ -99,19 +99,31 @@ stale task revision, mismatched receipt, active task, or observer runtime cannot
 purge. Status, exit codes, timestamps, approvals, events, and a schema-v5 purge
 receipt remain.
 
+The full-page History surface also loads the workspace policy-v1 preview for
+all four supported scopes. `EXPORT EVIDENCE` writes deterministic redacted JSON
+through a native save panel and keeps its source/content receipt only in the app
+session. `PURGE EXPORTED` remains disabled until that receipt matches the active
+policy/scopes, then presents the terminal-task/index consequences before the
+POST. After success the app refreshes tasks and reports that an explicitly
+cleared repository index requires rebuilding.
+
 Exercise the API-free retention and prior-schema paths with:
 
 ```bash
 cd runtime
 npm run smoke:task-retention
+npm run smoke:workspace-retention
 npm run smoke:database-recovery
 npm run test:unit
 ```
 
-The retention smoke covers preview, forged receipt rejection, explicit purge,
-SQLite receipt persistence, and restart recovery through real HTTP. The
-database recovery smoke creates a real v5 task store, applies an isolated
-destructive-v6 fixture only after a verified backup, rejects an incorrect CLI
+The task retention smoke covers preview, forged receipt rejection, explicit
+purge, SQLite receipt persistence, and restart recovery through real HTTP. The
+workspace smoke covers policy/scopes, deterministic redacted export,
+stale/forged receipt rejection, terminal-only deletion, unfinished-task
+preservation, rebuildable index reset, atomic schema-v6 receipt, restart, and
+observer refusal. The database recovery smoke creates a real v6 task store,
+applies an isolated destructive-v7 fixture only after a verified backup, rejects an incorrect CLI
 confirmation, then restores the removed data and task through the production
 offline command. The unit suite covers v4 → v5, writer-lease exclusion, stale
 lease recovery, backup failure before SQL, transaction rollback, corrupt and
@@ -951,7 +963,7 @@ routing, Mission Control access-policy negatives, and SSE frame parsing:
 swift test --enable-code-coverage
 ```
 
-This remains an early native test baseline. The 61 current tests include
+This remains an early native test baseline. The 62 current tests include
 three focused GitHub Device Flow tests covering local Client ID configuration,
 GitHub `slow_down` interval handling, user validation before token persistence,
 connected-state restoration, and actionable HTTP failures. The broader suite
@@ -1010,7 +1022,7 @@ cd runtime && npm run performance:smoke
 ```
 
 Before a release-shaped change, run every `smoke:*` script — the full suite is
-24 scripts and takes a few minutes. Both reliability campaigns are
+25 scripts and takes a few minutes. Both reliability campaigns are
 intentionally separate from `smoke:all`: each creates four isolated Git
 repositories and emits a staged scorecard. Use the corresponding `:baseline`
 variant only when intentionally refreshing durable evidence in
@@ -1139,12 +1151,15 @@ and follow-up real-repository/signed-package work.
   IDs, cancellation is limited to active runtime-owned task command runs by run
   id, and reviewed command-sourced self-fixes can be explicitly rerun through
   stored rerun evidence.
-- SQLite schema v5 stores full task snapshots plus task/index fields and
-  append-only command-output purge receipts. Migrations are ordered and
-  transactional, v4 → v5 recovery is rehearsed, and destructive migrations are
-  safety-classified behind verified snapshot manifests plus an offline restore
-  CLI. The full normalized runs/messages/tool-calls schema and workspace-wide
-  retention policy are still ahead.
+- SQLite schema v6 stores full task snapshots plus task/index fields and
+  append-only task/workspace purge receipts. Migrations are ordered and
+  transactional, prior-schema recovery is rehearsed, and destructive migrations
+  are safety-classified behind verified snapshot manifests plus an offline
+  restore CLI. Workspace retention v1 now covers task events, tool calls,
+  messages, and rebuildable indexes with deterministic export-before-purge,
+  terminal-only deletion, and unfinished-evidence preservation. Fully
+  normalized runs/messages/tool-call tables remain deferred until query or
+  scale evidence justifies the migration.
 - Repository context remains bounded, but it now has durable file metadata,
   lightweight symbols, and trigram text indexes with live-scan verification.
   It still does not use Tree-sitter, embeddings, dependency graphs, or

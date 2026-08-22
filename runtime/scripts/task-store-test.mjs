@@ -21,7 +21,7 @@ try {
   const store = new SqliteTaskStore(dbPath);
   ok(store.loadTasks().length === 0, "new store is empty");
   ok(store.getIndexMeta().lastIndexedAt === null, "new index metadata is empty");
-  ok(store.schemaStatus().currentVersion === 5 && store.schemaStatus().migrations.length === 5, "new store applies all versioned migrations");
+  ok(store.schemaStatus().currentVersion === 6 && store.schemaStatus().migrations.length === 6, "new store applies all versioned migrations");
 
   const legacyTask = {
     id: "legacy",
@@ -118,6 +118,9 @@ try {
 
   store.setIndexMeta({ lastIndexedAt: indexedAt, gitRoot: "/tmp/repo" });
   ok(store.getIndexMeta().lastIndexedAt === indexedAt && store.getIndexMeta().gitRoot === "/tmp/repo", "index metadata round-trips");
+  const retentionSnapshot = store.loadRepositoryIndexRetentionSnapshot();
+  ok(retentionSnapshot.files.length === 1 && retentionSnapshot.symbols.length === 0, "retention snapshot exposes bounded file and symbol metadata");
+  ok(retentionSnapshot.trigrams.rowCount === 2 && retentionSnapshot.sourceSha256.length === 64, "retention snapshot binds exact trigram/index state");
   store.close();
   ok(!existsSync(databaseWriterLeasePath(dbPath)), "clean writer close releases the database lease");
 
@@ -139,7 +142,8 @@ try {
   assert.throws(() => readOnly.saveTask(legacyTask), /read-only in observer runtime mode/);
   assert.throws(() => readOnly.replaceSymbolsForFile("x.ts", []), /Repository index is read-only/);
   assert.throws(() => readOnly.replaceTrigramsForFile("x.ts", []), /Repository index is read-only/);
-  count += 3;
+  assert.throws(() => readOnly.saveWorkspaceHistoryPurge([], {}, true), /read-only in observer runtime mode/);
+  count += 4;
   readOnly.close();
 
   const missingReadOnly = new SqliteTaskStore(join(tempRoot, "missing", "forge.sqlite"), { readOnly: true });
@@ -150,23 +154,48 @@ try {
 
   const priorSchemaPath = join(tempRoot, "prior-schema", "forge.sqlite");
   const priorStore = new SqliteTaskStore(priorSchemaPath);
-  priorStore.saveTask({ ...legacyTask, id: "prior-v4", title: "Prior schema task" });
+  priorStore.saveTask({ ...legacyTask, id: "prior-v5", title: "Prior schema task" });
   priorStore.close();
   const priorRaw = new DatabaseSync(priorSchemaPath);
   priorRaw.exec(`
-    DROP TABLE task_history_purges;
-    DELETE FROM schema_migrations WHERE version = 5;
+    DROP TABLE workspace_history_purges;
+    DELETE FROM schema_migrations WHERE version = 6;
   `);
   priorRaw.close();
   assert.throws(
     () => new SqliteTaskStore(priorSchemaPath, { readOnly: true }),
-    /requires migration 5.*primary runtime first/
+    /requires migration 6.*primary runtime first/
   );
   count += 1;
   const migratedPrior = new SqliteTaskStore(priorSchemaPath);
-  ok(migratedPrior.schemaStatus().currentVersion === 5, "writable runtime migrates the immediately prior schema to v5");
-  ok(migratedPrior.loadTasks()[0].id === "prior-v4", "prior-schema task payload survives migration");
-  ok(migratedPrior.loadTaskHistoryPurgeReceipts("prior-v4").length === 0, "new receipt table is readable after prior-schema recovery");
+  ok(migratedPrior.schemaStatus().currentVersion === 6, "writable runtime migrates the immediately prior schema to v6");
+  ok(migratedPrior.loadTasks()[0].id === "prior-v5", "prior-schema task payload survives migration");
+  ok(migratedPrior.loadWorkspaceHistoryPurgeReceipts().length === 0, "new workspace receipt table is readable after prior-schema recovery");
+  migratedPrior.upsertIndexedFile({ path: "src/private.ts", language: "TypeScript", byteSize: 12, lineCount: 1, contentHash: "c", indexedAt });
+  migratedPrior.replaceSymbolsForFile("src/private.ts", [{ kind: "function", name: "privateFixture", line: 1 }]);
+  migratedPrior.replaceTrigramsForFile("src/private.ts", ["pri", "riv"]);
+  migratedPrior.setIndexMeta({ lastIndexedAt: indexedAt, gitRoot: "/tmp/prior" });
+  const workspaceReceipt = {
+    id: "workspace-purge-1",
+    policyID: "forge-workspace-retention",
+    policyVersion: 1,
+    scopes: ["TaskEvents", "RepositoryIndexes"],
+    exportedAt: "2026-08-22T12:00:00.000Z",
+    exportSourceSha256: "b".repeat(64),
+    exportContentSha256: "c".repeat(64),
+    purgedAt: "2026-08-22T12:01:00.000Z",
+    taskRecordsAffected: 1,
+    indexRecordsAffected: 4,
+    recordsAffectedByScope: { TaskEvents: 1, ToolCalls: 0, TaskMessages: 0, RepositoryIndexes: 4 },
+    bytesRemoved: 128,
+    preservedNonterminalRecords: 0,
+    summary: "Purged workspace fixture evidence."
+  };
+  const priorTask = migratedPrior.loadTasks()[0];
+  migratedPrior.saveWorkspaceHistoryPurge([{ ...priorTask, events: [], updatedAt: workspaceReceipt.purgedAt }], workspaceReceipt, true);
+  ok(migratedPrior.loadWorkspaceHistoryPurgeReceipts()[0].bytesRemoved === 128, "workspace purge receipt persists atomically");
+  ok(migratedPrior.loadTasks()[0].events.length === 0, "workspace task-history mutation persists with its receipt");
+  ok(migratedPrior.loadRepositoryIndexRetentionSnapshot().retainedRecords === 0, "workspace purge clears all rebuildable index tables atomically");
   migratedPrior.close();
 
   const raw = new DatabaseSync(dbPath);

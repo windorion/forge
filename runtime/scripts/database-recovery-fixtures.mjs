@@ -38,13 +38,13 @@ try {
   raw.prepare("INSERT INTO fixture_private_history (id, body) VALUES (1, ?)").run("recover me exactly");
   const migration = applyDatabaseMigrations(raw, databasePath, {
     migrations: [...DATABASE_MIGRATIONS, {
-      version: 6,
+      version: 7,
       name: "fixture_destructive_history_rewrite",
       safety: "Destructive",
       sql: "DROP TABLE fixture_private_history;"
     }]
   });
-  assert.equal(schemaVersion(raw), 6);
+  assert.equal(schemaVersion(raw), 7);
   assert.equal(tableExists(raw, "fixture_private_history"), false);
   raw.close();
   assert.equal(migration.backups.length, 1);
@@ -54,19 +54,19 @@ try {
   assert.equal(refused.code, 64);
   assert.match(refused.stderr, /confirmation must be RestoreForgeDatabaseBackup/);
   const stillMigrated = new DatabaseSync(databasePath, { readOnly: true });
-  assert.equal(schemaVersion(stillMigrated), 6, "refused CLI restore must leave the migrated database unchanged");
+  assert.equal(schemaVersion(stillMigrated), 7, "refused CLI restore must leave the migrated database unchanged");
   stillMigrated.close();
 
   const restored = await runRestore(manifestPath, "RestoreForgeDatabaseBackup");
   assert.equal(restored.code, 0, restored.stderr);
   assert.match(restored.stdout, /restore completed and verified/);
-  assert.match(restored.stdout, /Schema version: 5/);
+  assert.match(restored.stdout, /Schema version: 6/);
   assert.match(restored.stdout, /Tasks: 1/);
   const receiptLine = restored.stdout.split("\n").find((line) => line.startsWith("- Receipt: "));
   assert(receiptLine, "restore CLI did not print its receipt path");
   const receiptPath = receiptLine.slice("- Receipt: ".length);
   const receipt = JSON.parse(await readFile(receiptPath, "utf8"));
-  assert.equal(receipt.restoredSchemaVersion, 5);
+  assert.equal(receipt.restoredSchemaVersion, 6);
   assert.equal(receipt.restoredTaskCount, 1);
   assert.match(receipt.restoredSha256, /^[a-f0-9]{64}$/);
   assert(receipt.displacedDatabasePath, "restore receipt did not preserve the displaced database");
@@ -75,22 +75,22 @@ try {
   assert.equal(recoveredStore.loadTasks()[0].id, "database-recovery-task");
   recoveredStore.close();
   const recovered = new DatabaseSync(databasePath, { readOnly: true });
-  assert.equal(schemaVersion(recovered), 5);
+  assert.equal(schemaVersion(recovered), 6);
   assert.equal(
     recovered.prepare("SELECT body FROM fixture_private_history WHERE id = 1").get().body,
     "recover me exactly"
   );
   recovered.close();
   const displaced = new DatabaseSync(receipt.displacedDatabasePath, { readOnly: true });
-  assert.equal(schemaVersion(displaced), 6);
+  assert.equal(schemaVersion(displaced), 7);
   assert.equal(tableExists(displaced, "fixture_private_history"), false);
   displaced.close();
 
   console.log("Database destructive-migration recovery fixture passed.");
-  console.log("- v5 task store and private fixture data captured before destructive v6");
+  console.log("- v6 task store and private fixture data captured before destructive v7");
   console.log("- Wrong CLI confirmation rejected with zero database replacement");
-  console.log("- Verified manifest restored schema v5, task payload, and removed data");
-  console.log("- Restore receipt and displaced schema-v6 rescue database preserved");
+  console.log("- Verified manifest restored schema v6, task payload, and removed data");
+  console.log("- Restore receipt and displaced schema-v7 rescue database preserved");
 } finally {
   await rm(tempRoot, { recursive: true, force: true });
 }

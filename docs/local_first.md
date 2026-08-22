@@ -26,13 +26,19 @@ Data that should be local by default:
 - embeddings when practical
 - context cache
 
-Task history is keep-by-default and has no automatic age-based cleanup. The
-first explicit retention control is local command-output purge for terminal
-tasks: Forge requires a successfully saved current audit export, exact source
-revision/hash receipt, and destructive confirmation. It keeps execution
-metadata, events, and an atomic SQLite purge receipt. Workspace-wide retention,
-memory deletion, and commercial privacy periods remain product decisions rather
-than inferred defaults.
+Task and workspace history follow `forge-workspace-retention` v1: keep
+indefinitely by default, never auto-purge, and require a saved deterministic
+export before explicit deletion. Task-level command-output purge remains
+available for terminal tasks. Workspace preview/export covers task events,
+tool calls, task messages, and repository indexes; exports remain local, apply
+Secret Redaction v1, bind policy/scopes and source/content SHA-256, preserve all
+unfinished-task evidence, and represent rebuildable trigram postings with an
+exact digest. Workspace purge mutates terminal-task arrays only, optionally
+clears selected index tables, preserves unfinished tasks, and commits an
+append-only schema-v6 receipt atomically. Observers can preview/export but not
+purge. Commercial privacy periods, hosted deletion, semantic memory, and backup
+artifact cleanup remain separate product decisions rather than inferred
+promises.
 
 Migration recovery remains local as well. Destructive migrations create an
 owner-only SQLite snapshot and JSON manifest beside the local database; no
